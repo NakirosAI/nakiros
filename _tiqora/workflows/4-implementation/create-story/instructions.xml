@@ -168,37 +168,71 @@ Choose:
   </step>
 
   <step n="7" goal="Create story in PM tool">
-    <critical>Use PM MCP to create the story in Jira/GitHub/GitLab with the info we discussed.</critical>
+    <critical>Use PM MCP to create the story in Jira with the info we discussed. Be explicit about MCP operations.</critical>
+
+    <check if="pm_tool is none">
+      <action>Skip MCP creation (pm_tool is "none").</action>
+      <action>Ensure directory exists: {story_artifact_dir}.</action>
+      <action>Persist story artifact locally to {created_story_file} (JSON) with all the details from our conversation.</action>
+      <output>[WORKFLOW] ⚠ Story saved locally (no PM tool configured)
+      Artifact: {created_story_file}
+      </output>
+      <action>GOTO step 8</action>
+    </check>
 
     <action if="pm_tool is not none">
-      Use PM MCP connector to create story:
-      - Title: {{story_title}}
-      - Description: {{story_description}}
-      - Project: {jira.project_key} or equivalent
+      Create issue in Jira via PM MCP connector:
+      - Action: Create new issue
+      - Project Key: {jira.project_key}
+      - Issue Type: "Story"
+      - Summary: {{story_title}}
+      - Description: {{story_description}} (formatted with all sections from our discussion)
       - Priority: {{priority}}
-      - Type: "Story"
+      - Additional fields: assignee (unassigned for now), labels (use pm_tool if needed)
     </action>
 
-    <check if="story creation succeeds">
-      <action>Capture returned story ID/key as {{ticketId}}.</action>
+    <check if="MCP Jira create issue succeeds">
+      <action>Capture returned issue key/ID as {{ticketId}} (e.g., "EX-123").</action>
       <action>Ensure directory exists: {story_artifact_dir}.</action>
-      <action>Persist story artifact to {created_story_file} (JSON) with all the details from our conversation.</action>
+      <action>Persist story artifact to {created_story_file} (JSON) with:
+        - All conversation details
+        - {{ticketId}} (reference to created Jira issue)
+        - jira_url (link to the issue in Jira)
+        - created_at timestamp
+        - status: "created_in_jira"
+      </action>
+      <action if="pm_tool is not none">Post creation comment to Jira issue (ENGLISH):
+        "✓ Story created via Tiqora create-story workflow
+
+        Ready for:
+        1. PM challenge gate (run /tiq:workflow:dev-story {{ticketId}})
+        2. Dev implementation (challenge + code)
+
+        Artifact: {created_story_file}"
+      </action>
       <output>[WORKFLOW] ✓ Story created in {{pm_tool}}
-      ID: {{ticketId}}
+      Key: {{ticketId}}
       Artifact: {created_story_file}
       </output>
     </check>
 
-    <check if="story creation fails">
+    <check if="MCP Jira create issue fails">
       <ask>Couldn't create the story in {{pm_tool}}. Want to:
       (retry) Try again?
-      (queue) Save locally and retry later?
+      (queue) Save locally and queue for retry?
       (skip) Just keep it locally for now?</ask>
 
       <check if="user chooses queue">
         <action>Persist story locally with status = "pending_sync".</action>
-        <action>Queue retry in .tiqora/sync/queue.json.</action>
-        <output>⚠ Story saved locally, will try to create in {{pm_tool}} later.</output>
+        <action>Queue retry in .tiqora/sync/queue.json with:
+          - story data: title, description, priority
+          - action: "create_jira_issue"
+          - project_key: {jira.project_key}
+          - retry_count: 0
+        </action>
+        <action>Ensure directory exists: {story_artifact_dir}.</action>
+        <action>Persist story artifact to {created_story_file} with status = "pending_sync".</action>
+        <output>⚠ Story saved locally, will try to create in {{pm_tool}} later via sync queue.</output>
       </check>
 
       <check if="user chooses retry">
@@ -206,8 +240,9 @@ Choose:
       </check>
 
       <check if="user chooses skip">
-        <action>Persist story locally (not created in PM tool yet).</action>
-        <output>Story saved locally. You can create it manually later if needed.</output>
+        <action>Ensure directory exists: {story_artifact_dir}.</action>
+        <action>Persist story locally (not created in PM tool yet) to {created_story_file} with status = "draft".</action>
+        <output>⚠ Story saved locally. Run `tiqora sync` later to create in {{pm_tool}}, or create manually.</output>
       </check>
     </check>
   </step>

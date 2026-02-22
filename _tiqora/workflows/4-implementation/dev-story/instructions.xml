@@ -161,71 +161,92 @@
          Fixes {{ticketId}}"
     </action>
 
+    <action>Push branch to remote immediately after commit: git push -u origin {{branchName}}</action>
+
     <action>Update run state: mark implementation_completed_at timestamp.</action>
 
     <output>[WORKFLOW] ✓ Implementation complete | Changes committed to {{branchName}}</output>
   </step>
 
   <step n="7" goal="Generate MR Report and request developer validation">
-    <critical>MR Report is mandatory and must be validated by the developer before pushing.</critical>
+    <critical>MR Report is MANDATORY. Create file, display to developer, and get explicit approval before proceeding.</critical>
 
-    <action>Analyze git diff from branch_base..HEAD to understand all changes made.</action>
+    <action>STEP 7.1: Analyze all changes made since branch creation.
+      1. Run: git diff {{branch_base}}..HEAD
+      2. Identify all modified files
+      3. Note test additions/modifications
+      4. Understand the overall implementation scope
+    </action>
 
-    <action>Generate MR Report at {workflow_runs_dir}/{{runId}}-mr-report.md in {{document_language}} with sections:
+    <action>STEP 7.2: Generate comprehensive MR Report content in {{document_language}}.
+      Use git diff analysis to fill in concrete details for each section:
 
-      **Title**: [Brief summary of what was implemented]
+      **Title**: [Brief summary of what was implemented, extracted from commit message and challenge scope]
 
       **Description**:
-      [1-2 paragraphs explaining the feature/fix and its purpose]
+      [1-2 paragraphs: What problem does this solve? What was implemented? Why this approach?]
 
       **Technical Choices**:
-      - [Key architecture decision 1 and why]
-      - [Key architecture decision 2 and why]
-      - [Any libraries/tools introduced and justification]
+      - [Key decision 1 with justification]
+      - [Key decision 2 with justification]
+      - [Libraries/tools introduced and why]
 
-      **Changes Made**:
-      - [File path 1]: [What was changed and why]
-      - [File path 2]: [What was changed and why]
-      [List all significant changes]
+      **Changes Made** (from git diff):
+      - [File 1]: [What changed and why]
+      - [File 2]: [What changed and why]
+      [List ALL significant files changed]
 
       **Testing**:
-      - Unit tests: [Where, what's tested]
-      - Integration tests: [Where, what's tested]
-      - Manual testing steps: [How to verify this works]
+      - Unit tests: [List files and what they test]
+      - Integration tests: [If applicable]
+      - Manual testing: [Step-by-step verification instructions]
 
       **How to Run**:
-      1. [Prerequisites/setup steps]
-      2. [Build/install command if needed]
-      3. [Running the feature/fix]
+      1. [Setup prerequisites]
+      2. [Build command]
+      3. [Run command to demonstrate feature]
       4. [Expected output/behavior]
 
       **Deployment Notes**:
-      - [Any database migrations? Yes/No]
-      - [Any environment variables needed? List]
-      - [Breaking changes? Yes/No, describe]
-      - [Rollback plan if needed]
+      - Migrations: [Yes/No - describe if yes]
+      - Environment variables: [List if any]
+      - Breaking changes: [Yes/No - describe if yes]
+      - Rollback plan: [How to rollback if needed]
 
       **Reviewed By**: [Developer name]
-      **Reviewed At**: [Timestamp]
+      **Reviewed At**: [Current timestamp]
     </action>
 
-    <action>Display the generated MR Report to the developer and ask for validation.</action>
+    <action>STEP 7.3: WRITE the MR Report file to {workflow_runs_dir}/{{runId}}-mr-report.md with the generated content.</action>
 
-    <ask>MR Report generated. Please review and validate:
-      [ ] Are technical choices explained clearly?
-      [ ] Are testing instructions complete and accurate?
-      [ ] Are deployment notes accurate?
+    <action>STEP 7.4: Display the MR Report to the developer and ask for explicit validation.</action>
 
-      Choose: (approve/edit/regenerate)</ask>
+    <ask>✓ MR Report generated and saved to: {workflow_runs_dir}/{{runId}}-mr-report.md
 
-    <check if="developer chooses edit or regenerate">
-      <action>If edit: Display prompt for developer to provide modifications. Apply changes to the report file.
-      If regenerate: Re-run the MR Report generation with developer guidance.</action>
+Please review carefully:
+- [ ] Title and description accurately reflect the work?
+- [ ] All files changed are documented?
+- [ ] Testing instructions are clear and complete?
+- [ ] Deployment notes are accurate?
+
+What would you like to do? (approve/edit/regenerate)</ask>
+
+    <check if="developer chooses edit">
+      <action>Ask developer what needs to be changed in the report.</action>
+      <action>Apply the requested edits to the MR Report file.</action>
+      <action>Display updated report and re-ask for validation.</action>
     </check>
 
-    <action>Once approved, mark run state: mr_report_approved_at = now.</action>
+    <check if="developer chooses regenerate">
+      <action>Ask developer for guidance on what should be different.</action>
+      <action>Re-generate MR Report with new guidance and save to file.</action>
+      <action>Display updated report and re-ask for validation.</action>
+    </check>
 
-    <output>[WORKFLOW] ✓ MR Report validated</output>
+    <check if="developer chooses approve">
+      <action>STEP 7.5: Mark run state: mr_report_approved_at = now, mr_report_path = {workflow_runs_dir}/{{runId}}-mr-report.md</action>
+      <output>[WORKFLOW] ✓ MR Report approved and saved</output>
+    </check>
   </step>
 
   <step n="8" goal="Validate definition of done checklist">
@@ -245,17 +266,33 @@
         Store as {{total_worklog_minutes}}.
       </action>
 
-      <!-- STEP 9.2: Create/Push MR -->
-      <action>Push branch to remote: git push -u origin {{branchName}}</action>
-
-      <action>Create MR/PR in {{git_host}}:
-        - Title: "[{{ticketId}}] " + [MR Report title]
-        - Description: [MR Report content from step 7]
-        - Link to challenge artifact: {workflow_steps_dir}/{{runId}}-challenge.md
-        - Link to implementation notes: available in branch
+      <!-- STEP 9.2: Create MR (branch already pushed in step 6) -->
+      <action>STEP 9.2a: Attempt to create MR/PR in {{git_host}} using available tools:
+        - If {{git_host}} == "github": Use GitHub CLI (gh pr create) or GitHub API MCP if available
+        - If {{git_host}} == "gitlab": Use GitLab CLI (gitlab) or GitLab API MCP if available
+        - If {{git_host}} == "gitea": Use Gitea API or CLI if available
+        - MR/PR Details:
+          * Title: "[{{ticketId}}] " + [MR Report title from step 7]
+          * Description: [Full MR Report content from {workflow_runs_dir}/{{runId}}-mr-report.md]
+          * Target branch: {{branch_base}} (usually main/master)
+          * Source branch: {{branchName}}
       </action>
 
-      <action>Capture MR/PR URL as {{mr_url}} for Jira comment.</action>
+      <check if="MR/PR creation succeeds via CLI or MCP">
+        <action>Capture MR/PR URL as {{mr_url}}.</action>
+      </check>
+
+      <check if="MR/PR creation fails or no tools available">
+        <action>STEP 9.2b (Fallback): Generate MR/PR draft template for manual creation.
+          1. Create {workflow_runs_dir}/{{runId}}-mr-draft.md with:
+             - MR URL template: https://gitlab.com/{{project}}/{{repo}}/-/merge_requests/new?merge_request[source_branch]={{branchName}}&merge_request[target_branch]={{branch_base}}
+             - Pre-filled MR details (title, description from MR Report)
+             - Instructions: "Copy the content below into GitLab to create the MR manually"
+          2. Display to user: "⚠️ MR/PR cannot be created automatically. Here's a draft for manual creation:"
+          3. Ask user to create MR manually and provide the URL when done.
+          4. Once user provides URL, capture as {{mr_url}}.
+        </action>
+      </check>
 
       <!-- STEP 9.3: Transition Jira to Review -->
       <action if="pm_tool is not none and ticket was retrieved">

@@ -70,10 +70,12 @@ validation-criticality: "HIGH"
 - [ ] Includes all discussion details (problem, outcome, ACs, scope, etc).
 - [ ] Includes metadata (pm_tool, git_host, document_language, created_at).
 
-## 9) Communication
+## 9) Communication and Languages
 
-- [ ] Conversation in `communication_language` (natural).
-- [ ] Story document in ENGLISH (clarity for dev).
+- [ ] Conversation with user in `communication_language` (from config).
+- [ ] Story content (Jira ticket, descriptions, comments) in `document_language`.
+- [ ] Internal JSON artifacts (.tiqora/ files) in ENGLISH (agent performance).
+- [ ] Commits in ENGLISH (dev standard).
 - [ ] Clear next steps offered (dev-story, view, etc).
 
 ## Final Result

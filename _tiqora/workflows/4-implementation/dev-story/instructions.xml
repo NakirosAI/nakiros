@@ -2,8 +2,9 @@
   <critical>The workflow execution engine is governed by: {project-root}/_tiqora/core/tasks/workflow.xml</critical>
   <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
   <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language resolved from merged tiqora config.</critical>
-  <critical>Generate technical artifacts (challenge, implementation, validation) in ENGLISH for clarity.</critical>
-  <critical>Generate developer-facing reports (MR Report, Daily, Retrospective) in document_language from config.</critical>
+  <critical>Generate technical agent artifacts (challenge.md, implementation notes, validation) in ENGLISH for agent performance.</critical>
+  <critical>Generate all PM-facing content (Jira comments, MR Report) in {{document_language}}.</critical>
+  <critical>Commits are ALWAYS in ENGLISH (dev standard). This is non-negotiable.</critical>
   <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
   <critical>Do not report "completed" until all implementation, validation, and PM sync activities are truly finished.</critical>
 
@@ -95,7 +96,7 @@
     </check>
 
     <check if="ticket is clear and challenge passes">
-      <action if="pm_tool is not none and ticket was retrieved">Post challenge summary comment on ticket (ENGLISH):
+      <action if="pm_tool is not none and ticket was retrieved">Post challenge summary comment on ticket in {{document_language}}:
         "✓ Challenge Gate PASSED
         - Scope: [1-2 sentences on what will be built]
         - Approach: [1-2 sentences on technical direction]
@@ -263,7 +264,7 @@
 
       <!-- STEP 9.4: Push Final Jira Sync -->
       <action if="pm_tool is not none and ticket was retrieved">
-        Add final completion comment to ticket (ENGLISH):
+        Add final completion comment to ticket in {{document_language}}:
         "✓ IMPLEMENTATION COMPLETE
 
         Branch: {{branchName}}

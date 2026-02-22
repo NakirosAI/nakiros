@@ -2,8 +2,9 @@
   <critical>The workflow execution engine is governed by: {project-root}/_tiqora/core/tasks/workflow.xml</critical>
   <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
   <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language resolved from merged tiqora config.</critical>
-  <critical>This is a CONVERSATIONAL workflow, not a form. Have a natural discussion with the user.</critical>
-  <critical>Generate story artifact in ENGLISH for clarity, but the conversation is in communication_language.</critical>
+  <critical>Generate all PM-facing content (Jira ticket, descriptions, comments) in {{document_language}}.</critical>
+  <critical>Keep internal data files (.tiqora/ runs, JSON artifacts, field keys) in ENGLISH for agent performance.</critical>
+  <critical>Commits are ALWAYS in ENGLISH (dev standard). This is non-negotiable.</critical>
   <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
 
   <step n="1" goal="Load configuration">
@@ -88,7 +89,7 @@ Tell me about what you want to build or fix. What's the idea?</ask>
       - Make it clear and searchable
     </action>
 
-    <action>Generate story description (ENGLISH) as a clean summary of our conversation:
+    <action>Generate story description in {{document_language}} as a clean summary of our conversation:
       "## Problem Statement
 
       {{problem_statement}}
@@ -201,7 +202,7 @@ Choose:
         - created_at timestamp
         - status: "created_in_jira"
       </action>
-      <action if="pm_tool is not none">Post creation comment to Jira issue (ENGLISH):
+      <action if="pm_tool is not none">Post creation comment to Jira issue in {{document_language}}:
         "✓ Story created via Tiqora create-story workflow
 
         Ready for:

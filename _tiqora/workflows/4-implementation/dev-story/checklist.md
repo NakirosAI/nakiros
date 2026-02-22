@@ -94,8 +94,10 @@ validation-criticality: "HIGHEST"
 ## 10) Communication and Languages
 
 - [ ] User-facing communication in `communication_language` (from config).
-- [ ] Technical artifacts (challenge, implementation) in ENGLISH for clarity.
-- [ ] Reports (MR Report, daily, retrospective) in `document_language` for team.
+- [ ] Technical agent artifacts (challenge.md, implementation notes) in ENGLISH for agent performance.
+- [ ] PM-facing content (Jira comments, MR Report) in `document_language`.
+- [ ] Internal data files (.tiqora/ runs, JSON) in ENGLISH (agent performance).
+- [ ] Commits in ENGLISH (dev standard).
 - [ ] Output concise; no unnecessary internal execution noise.
 
 ## 11) Final Artifact Structure

@@ -1,0 +1,35 @@
+{
+  "name": "@tiqora/tiqora",
+  "version": "0.0.1-dev",
+  "description": "Agentic delivery CLI for solo devs: challenge tickets, orchestrate PM/SM/Dev flows, and keep execution synced.",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "files": [
+    "dist",
+    "templates",
+    "_tiqora",
+    "README.md"
+  ],
+  "bin": {
+    "tiqora": "./dist/index.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "prepack": "npm run build",
+    "test": "npm run build && vitest run"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.0.0",
+    "commander": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}

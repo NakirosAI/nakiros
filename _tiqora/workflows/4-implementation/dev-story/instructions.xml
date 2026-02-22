@@ -1,0 +1,112 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: {project-root}/_tiqora/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language resolved from merged tiqora config.</critical>
+  <critical>Generate artifacts in document_language resolved from merged tiqora config, unless user explicitly asks otherwise.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+  <critical>Do not report "completed" until all implementation and validation activities are truly finished.</critical>
+
+  <step n="1" goal="Load and merge tiqora configuration">
+    <action>Load project config from {project_config} as required input.</action>
+    <action if="project config does not exist">HALT: "✗ No project .tiqora.yaml found. Run npx tiqora init in the project root."</action>
+
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Build effective config as: profile config (base) + project config (override).</action>
+    <action>Apply defaults when missing: user_name={default_user_name}, idle_threshold_minutes={default_idle_threshold_minutes}, communication_language={default_communication_language}, document_language={default_document_language}.</action>
+
+    <action>Validate required project keys: pm_tool, git_host, branch_pattern.</action>
+    <action if="any required project key is missing">HALT: "✗ Blocking configuration error in {project_config}: missing required keys pm_tool, git_host, and/or branch_pattern."</action>
+
+    <output>[WORKFLOW] dev-story config loaded — project + profile merged</output>
+  </step>
+
+  <step n="2" goal="Apply active run guard">
+    <action>Read {active_run_file} if present.</action>
+    <check if="an active run exists and is not completed">
+      <output>⚠ Active workflow run found for {{active_ticket_or_run}}.</output>
+      <ask>Do you want to resume this run or close it before starting another one? (resume/close)</ask>
+      <check if="user chooses resume">
+        <action>Resume existing run and continue.</action>
+      </check>
+      <check if="user chooses close">
+        <action>Mark previous run closed, then continue.</action>
+      </check>
+    </check>
+  </step>
+
+  <step n="3" goal="Resolve ticket context">
+    <action>If a ticket ID is provided, retrieve the ticket via configured PM MCP connector before challenge/implementation.</action>
+    <action>If pm_tool is configured and no ticket provided, ask user to choose: existing ticket or create ticket.</action>
+    <check if="MCP retrieval fails">
+      <ask>Ticket retrieval failed. Retry MCP fetch or continue in standalone short-description mode? (retry/standalone)</ask>
+      <check if="user chooses retry">
+        <action>Retry retrieval once and continue if successful.</action>
+      </check>
+      <check if="user chooses standalone">
+        <action>Continue with explicit ambiguity warning and queue sync retry metadata in .tiqora sync area.</action>
+      </check>
+    </check>
+  </step>
+
+  <step n="4" goal="Run mandatory challenge gate">
+    <critical>No implementation starts before challenge is passed.</critical>
+    <action>Capture current active persona as {{entry_persona}}.</action>
+    <action>Load PM persona from {project-root}/_tiqora/agents/pm.md for the challenge gate.</action>
+    <action>Run a PM-quality challenge on the current ticket before implementation with checks for: clarity, logical consistency, implementation completeness, dependency coverage, and acceptance testability.</action>
+    <action>Create challenge artifact at {workflow_steps_dir}/{{runId}}-challenge.md with: intent, AC checklist, PM challenge verdict, feasibility notes, risks/blockers, and high-level approach.</action>
+    <check if="PM challenge finds ticket quality gaps">
+      <action>Restore persona to {{entry_persona}} before waiting for user clarifications.</action>
+      <action>Set run state to awaiting_user.</action>
+      <ask>PM challenge found ticket gaps. Clarify or update the ticket before implementation proceeds.</ask>
+    </check>
+    <check if="ticket or acceptance criteria are ambiguous">
+      <action>Restore persona to {{entry_persona}} before waiting for user clarifications.</action>
+      <action>Set run state to awaiting_user.</action>
+      <ask>Provide clarifications to remove ambiguity before implementation proceeds.</ask>
+    </check>
+    <check if="challenge is clear">
+      <action>Restore persona to {{entry_persona}} before step 5+ implementation work.</action>
+      <output>[CHALLENGE] clarity passed — ready for implementation</output>
+    </check>
+  </step>
+
+  <step n="5" goal="Create/switch branch and persist run state">
+    <action>Resolve branch name from ticket ID + slug using branch_pattern from effective config.</action>
+    <action>Create or switch to target branch.</action>
+    <action>Ensure directories exist: {workflow_runs_dir} and {workflow_steps_dir}.</action>
+    <action>Persist active run state atomically to {active_run_file} and run artifact in {workflow_runs_dir}.</action>
+    <output>[WORKFLOW] dev-story started — {{ticketId}} | branch: {{branchName}}</output>
+    <output>[WORKFLOW] dev-story initialized — challenge in progress</output>
+  </step>
+
+  <step n="6" goal="Implement scope with test-first discipline">
+    <critical>Follow the approved challenge scope; do not implement out-of-scope features.</critical>
+    <action>Load Developer persona from {project-root}/_tiqora/agents/dev.md for implementation and test execution.</action>
+    <action>Plan concrete implementation tasks from challenge + ticket context.</action>
+    <action>Write failing tests first when feasible (red), implement minimal code (green), then refactor safely (refactor).</action>
+    <action>Run targeted and regression tests.</action>
+    <action>Update run artifacts and notes under .tiqora as work progresses.</action>
+    <action if="required dependency or architectural change exceeds scope">ASK user approval before proceeding.</action>
+  </step>
+
+  <step n="7" goal="Validate definition of done">
+    <action>Load and execute validation checklist from {validation}.</action>
+    <action>If checklist fails, return to implementation/validation until pass or HALT with explicit blockers.</action>
+  </step>
+
+  <step n="8" goal="Finalize run status and output">
+    <action>Restore persona to {{entry_persona}} before final workflow status communication.</action>
+    <check if="work is complete and validation passed">
+      <action>Mark run state as completed and persist atomically.</action>
+      <output>[WORKFLOW] dev-story completed — summary published</output>
+    </check>
+    <check if="waiting on user input">
+      <action>Mark run state as awaiting_user and persist atomically.</action>
+      <output>[WORKFLOW] dev-story awaiting_user — clarification required</output>
+    </check>
+    <check if="implementation remains in progress">
+      <action>Keep run state as in_progress and persist atomically.</action>
+      <output>[WORKFLOW] dev-story in_progress — next implementation step queued</output>
+    </check>
+  </step>
+</workflow>

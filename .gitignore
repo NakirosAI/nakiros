@@ -1,0 +1,9 @@
+.tiqora/
+_bmad*
+.claude/
+.codex/
+.cursor/
+.npm-cache/
+dist/
+node_modules/
+.tiqora.yaml

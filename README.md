@@ -56,8 +56,8 @@ npx @tiqora/tiqora@dev install -f
 ## Install (from source)
 
 ```bash
-git clone <your-fork-or-repo-url>
-cd timetrackerAgent
+git clone git@github.com:Tiqora/tiqora.git
+cd tiqora
 npm install
 npm run build
 npm link

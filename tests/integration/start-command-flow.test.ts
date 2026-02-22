@@ -43,14 +43,14 @@ describe("integration: namespaced tiq command workflow contract", () => {
 
     expect(yamlContent).toContain("project_config: \"{project-root}/.tiqora.yaml\"");
     expect(yamlContent).toContain("profile_config: \"~/.tiqora/config.yaml\"");
-    expect(instructions).toContain("Load and merge tiqora configuration");
+    expect(instructions).toContain("Load and validate tiqora configuration");
     expect(instructions).toContain("Validate required project keys: pm_tool, git_host, branch_pattern");
     expect(instructions).toContain("communication_language");
     expect(instructions).toContain("document_language");
 
-    const configStepIndex = instructions.indexOf("<step n=\"1\" goal=\"Load and merge tiqora configuration\">");
-    const ticketStepIndex = instructions.indexOf("<step n=\"3\" goal=\"Resolve ticket context\">");
-    const gitStepIndex = instructions.indexOf("<step n=\"5\" goal=\"Create/switch branch and persist run state\">");
+    const configStepIndex = instructions.indexOf("<step n=\"1\" goal=\"Load and validate tiqora configuration (silent mode)\">");
+    const ticketStepIndex = instructions.indexOf("<step n=\"3\" goal=\"Resolve ticket context and transition to In Progress\">");
+    const gitStepIndex = instructions.indexOf("<step n=\"5\" goal=\"Create/switch git branch and persist run state\">");
     expect(configStepIndex).toBeGreaterThan(-1);
     expect(ticketStepIndex).toBeGreaterThan(-1);
     expect(gitStepIndex).toBeGreaterThan(-1);
@@ -61,21 +61,21 @@ describe("integration: namespaced tiq command workflow contract", () => {
   it("enforces mandatory CHALLENGE gate before branching and implementation in instructions", () => {
     const instructions = read(WORKFLOW_DEV_STORY_INSTRUCTIONS_PATH);
 
-    expect(instructions).toContain("Run mandatory challenge gate");
-    expect(instructions).toContain("No implementation starts before challenge is passed.");
-    expect(instructions).toContain("Run a PM-quality challenge on the current ticket before implementation");
-    expect(instructions).toContain("[CHALLENGE] clarity passed — ready for implementation");
+    expect(instructions).toContain("Run mandatory PM challenge gate");
+    expect(instructions).toContain("No implementation starts before challenge is thoroughly passed. This is a critical gate.");
+    expect(instructions).toContain("Conduct rigorous PM-quality challenge on the ticket");
+    expect(instructions).toContain("[CHALLENGE] ✓ Gate PASSED");
     expect(instructions).toContain(
-      "Provide clarifications to remove ambiguity before implementation proceeds."
+      "Challenge gate FAILED"
     );
     expect(instructions).not.toContain("skip-challenge");
 
-    const ticketStepIndex = instructions.indexOf("<step n=\"3\" goal=\"Resolve ticket context\">");
+    const ticketStepIndex = instructions.indexOf("<step n=\"3\" goal=\"Resolve ticket context and transition to In Progress\">");
     const challengeStepIndex = instructions.indexOf(
-      "<step n=\"4\" goal=\"Run mandatory challenge gate\">"
+      "<step n=\"4\" goal=\"Run mandatory PM challenge gate (rigorous)\">"
     );
     const branchStepIndex = instructions.indexOf(
-      "<step n=\"5\" goal=\"Create/switch branch and persist run state\">"
+      "<step n=\"5\" goal=\"Create/switch git branch and persist run state\">"
     );
 
     expect(ticketStepIndex).toBeGreaterThan(-1);
@@ -91,17 +91,16 @@ describe("integration: namespaced tiq command workflow contract", () => {
     expect(instructions).toContain(
       "If a ticket ID is provided, retrieve the ticket via configured PM MCP connector before challenge/implementation."
     );
-    expect(instructions).toContain("Ticket retrieval failed. Retry MCP fetch or continue in standalone short-description mode?");
+    expect(instructions).toContain("Ticket retrieval failed. Retry MCP fetch or continue in standalone mode?");
     expect(instructions).toContain("(retry/standalone)");
   });
 
   it("documents concise workflow state outputs instead of verbose traces", () => {
     const instructions = read(WORKFLOW_DEV_STORY_INSTRUCTIONS_PATH);
 
-    expect(instructions).toContain("[WORKFLOW] dev-story started");
-    expect(instructions).toContain("[WORKFLOW] dev-story initialized");
-    expect(instructions).toContain("[WORKFLOW] dev-story completed");
-    expect(instructions).toContain("Do not report \"completed\" until all implementation and validation activities are truly finished.");
+    expect(instructions).toContain("[WORKFLOW] ✓ Config loaded and validated");
+    expect(instructions).toContain("[WORKFLOW] ✅ COMPLETE");
+    expect(instructions).toContain("Do not report \"completed\" until all implementation, validation, and PM sync activities are truly finished.");
   });
 
   it("keeps template command triggers fully namespaced", () => {

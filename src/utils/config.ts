@@ -7,8 +7,8 @@ export const GLOBAL_CONFIG_FILE = ".tiqora/config.yaml";
 export const MISSING_CONFIG_ERROR_MESSAGE =
   "✗ No .tiqora.yaml found. Run npx tiqora init first.";
 export const DEFAULT_USER_NAME = "Developer";
-export const DEFAULT_COMMUNICATION_LANGUAGE = "fr";
-export const DEFAULT_DOCUMENT_LANGUAGE = "fr";
+export const DEFAULT_COMMUNICATION_LANGUAGE = "Français";
+export const DEFAULT_DOCUMENT_LANGUAGE = "English";
 
 const REQUIRED_CONFIG_KEYS = [
   "pm_tool",

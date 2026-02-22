@@ -45,8 +45,8 @@ export interface ExistingInitConfig {
 
 export const DEFAULT_IDLE_THRESHOLD_MINUTES = 15;
 export const DEFAULT_USER_NAME = "Developer";
-export const DEFAULT_COMMUNICATION_LANGUAGE = "fr";
-export const DEFAULT_DOCUMENT_LANGUAGE = "fr";
+export const DEFAULT_COMMUNICATION_LANGUAGE = "Français";
+export const DEFAULT_DOCUMENT_LANGUAGE = "English";
 export const PROJECT_INIT_CONFIG_FILE = ".tiqora.yaml";
 export const GLOBAL_USER_CONFIG_FILE = ".tiqora/config.yaml";
 
@@ -61,10 +61,16 @@ export function createProjectInitConfigYaml(answers: InitWizardAnswers): string 
     throw new Error("Branch pattern cannot be empty.");
   }
 
+  const documentLanguage = normalizeLanguageValue(
+    answers.documentLanguage ?? DEFAULT_DOCUMENT_LANGUAGE,
+    "document_language"
+  );
+
   const lines = [
     `pm_tool: ${answers.pmTool}`,
     `git_host: ${answers.gitHost}`,
-    `branch_pattern: '${escapeSingleQuotes(branchPattern)}'`
+    `branch_pattern: '${escapeSingleQuotes(branchPattern)}'`,
+    `document_language: '${escapeSingleQuotes(documentLanguage)}'`
   ];
 
   if (answers.pmTool === "jira") {
@@ -102,16 +108,11 @@ export function createGlobalUserConfigYaml(answers: InitWizardAnswers): string {
     answers.communicationLanguage ?? DEFAULT_COMMUNICATION_LANGUAGE,
     "communication_language"
   );
-  const documentLanguage = normalizeLanguageValue(
-    answers.documentLanguage ?? DEFAULT_DOCUMENT_LANGUAGE,
-    "document_language"
-  );
 
   return [
     `user_name: '${escapeSingleQuotes(userName)}'`,
     `idle_threshold_minutes: ${idleThresholdMinutes}`,
     `communication_language: '${escapeSingleQuotes(communicationLanguage)}'`,
-    `document_language: '${escapeSingleQuotes(documentLanguage)}'`,
     ""
   ].join("\n");
 }

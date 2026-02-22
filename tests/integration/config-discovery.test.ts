@@ -61,8 +61,8 @@ describe("integration: config discovery chain", () => {
     expect(repoWinner.pm_tool).toBe("azure");
     expect(repoWinner.user_name).toBe("Repo User");
     expect(repoWinner.idle_threshold_minutes).toBe(30);
-    expect(repoWinner.communication_language).toBe("fr");
-    expect(repoWinner.document_language).toBe("fr");
+    expect(repoWinner.communication_language).toBe("Français");
+    expect(repoWinner.document_language).toBe("English");
 
     rmSync(resolve(repoDir, PROJECT_CONFIG_FILE));
     const parentWinner = loadRuntimeConfig({
@@ -72,8 +72,8 @@ describe("integration: config discovery chain", () => {
     expect(parentWinner.pm_tool).toBe("linear");
     expect(parentWinner.user_name).toBe("Parent User");
     expect(parentWinner.branch_pattern).toBe("chore/*");
-    expect(parentWinner.communication_language).toBe("fr");
-    expect(parentWinner.document_language).toBe("fr");
+    expect(parentWinner.communication_language).toBe("Français");
+    expect(parentWinner.document_language).toBe("English");
 
     rmSync(resolve(parentDir, PROJECT_CONFIG_FILE));
     const globalWinner = loadRuntimeConfig({
@@ -83,8 +83,8 @@ describe("integration: config discovery chain", () => {
     expect(globalWinner.pm_tool).toBe("jira");
     expect(globalWinner.user_name).toBe("Developer");
     expect(globalWinner.git_host).toBe("gitlab");
-    expect(globalWinner.communication_language).toBe("fr");
-    expect(globalWinner.document_language).toBe("fr");
+    expect(globalWinner.communication_language).toBe("Français");
+    expect(globalWinner.document_language).toBe("English");
 
     rmSync(sandbox, { recursive: true, force: true });
   });

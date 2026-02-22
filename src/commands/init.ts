@@ -202,7 +202,7 @@ async function defaultCollectInitAnswers(
 
   const branchPatternAnswer = await text({
     message: "Branch naming pattern:",
-    defaultValue: context.suggestedBranchPattern,
+    initialValue: context.suggestedBranchPattern,
     placeholder: "feature/*",
     validate(value) {
       if (value.trim().length === 0) {
@@ -247,11 +247,10 @@ async function defaultCollectInitAnswers(
   }
 
   const communicationLanguageAnswer = await text({
-    message: "Agent response language:",
-    defaultValue:
+    message: "Agent response language (e.g. Français, English, Español):",
+    initialValue:
       context.existingConfig?.communicationLanguage ??
       DEFAULT_COMMUNICATION_LANGUAGE,
-    placeholder: "fr",
     validate(value) {
       if (value.trim().length === 0) {
         return "Language cannot be empty.";
@@ -267,10 +266,9 @@ async function defaultCollectInitAnswers(
   }
 
   const documentLanguageAnswer = await text({
-    message: "Document output language:",
-    defaultValue:
+    message: "Document output language (e.g. Français, English, Español):",
+    initialValue:
       context.existingConfig?.documentLanguage ?? DEFAULT_DOCUMENT_LANGUAGE,
-    placeholder: "fr",
     validate(value) {
       if (value.trim().length === 0) {
         return "Language cannot be empty.";

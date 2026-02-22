@@ -36,8 +36,8 @@ describe("config discovery utilities", () => {
       git_host: "gitlab",
       branch_pattern: "feature/*",
       idle_threshold_minutes: 15,
-      communication_language: "fr",
-      document_language: "fr"
+      communication_language: "Français",
+      document_language: "English"
     });
 
     rmSync(sandbox, { recursive: true, force: true });

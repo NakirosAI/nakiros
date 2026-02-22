@@ -30,7 +30,7 @@ describe("unit: init-config", () => {
     expect(yaml).not.toContain("user_name:");
     expect(yaml).not.toContain("idle_threshold_minutes:");
     expect(yaml).not.toContain("communication_language:");
-    expect(yaml).not.toContain("document_language:");
+    expect(yaml).toContain("document_language: 'English'");
     expect(yaml).toContain("jira:");
     expect(yaml).toContain("project_key: PROJ");
     expect(yaml).toContain("board_id: '123'");
@@ -48,6 +48,7 @@ describe("unit: init-config", () => {
     expect(yaml).toContain("branch_pattern: 'feature/*'");
     expect(yaml).not.toContain("user_name:");
     expect(yaml).not.toContain("communication_language:");
+    expect(yaml).toContain("document_language: 'English'");
     expect(yaml).not.toContain("\njira:\n");
   });
 
@@ -65,7 +66,7 @@ describe("unit: init-config", () => {
     expect(yaml).toContain("user_name: 'Thomas Ailleaume'");
     expect(yaml).toContain("idle_threshold_minutes: 15");
     expect(yaml).toContain("communication_language: 'Français'");
-    expect(yaml).toContain("document_language: 'English'");
+    expect(yaml).not.toContain("document_language:");
   });
 
   it("writes .tiqora.yaml when file does not exist", () => {
@@ -115,8 +116,7 @@ describe("unit: init-config", () => {
       [
         "user_name: 'Thomas'",
         "idle_threshold_minutes: 25",
-        "communication_language: 'en'",
-        "document_language: 'fr'"
+        "communication_language: 'en'"
       ].join("\n"),
       "utf8"
     );
@@ -126,6 +126,7 @@ describe("unit: init-config", () => {
         "pm_tool: jira",
         "git_host: gitlab",
         "branch_pattern: 'feature/*'",
+        "document_language: 'fr'",
         "jira:",
         "  project_key: PROJ",
         "  board_id: '42'"
@@ -190,6 +191,7 @@ describe("unit: init-config", () => {
     expect(configPath).toBe(resolve(homeDir, ".tiqora", "config.yaml"));
     expect(readFileSync(configPath, "utf8")).toContain("user_name: 'Alice'");
     expect(readFileSync(configPath, "utf8")).toContain("idle_threshold_minutes: 20");
+    expect(readFileSync(configPath, "utf8")).not.toContain("document_language:");
     rmSync(sandbox, { recursive: true, force: true });
   });
 });

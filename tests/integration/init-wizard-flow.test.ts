@@ -82,9 +82,10 @@ describe("integration: init wizard flow", () => {
     expect(configContent).toContain("git_host: gitlab");
     expect(configContent).toContain("branch_pattern: 'story/*'");
     expect(configContent).not.toContain("user_name:");
+    expect(configContent).toContain("document_language: 'English'");
     expect(userConfigContent).toContain("user_name: 'Developer'");
-    expect(userConfigContent).toContain("communication_language: 'fr'");
-    expect(userConfigContent).toContain("document_language: 'fr'");
+    expect(userConfigContent).toContain("communication_language: 'Français'");
+    expect(userConfigContent).not.toContain("document_language:");
     expect(configContent).toContain("\njira:\n");
     expect(configContent).toContain("project_key: PROJ");
     expect(configContent).toContain("board_id: '77'");
@@ -124,9 +125,10 @@ describe("integration: init wizard flow", () => {
     expect(configContent).toContain("pm_tool: none");
     expect(configContent).toContain("git_host: github");
     expect(configContent).not.toContain("user_name:");
+    expect(configContent).toContain("document_language: 'English'");
     expect(userConfigContent).toContain("user_name: 'Developer'");
-    expect(userConfigContent).toContain("communication_language: 'fr'");
-    expect(userConfigContent).toContain("document_language: 'fr'");
+    expect(userConfigContent).toContain("communication_language: 'Français'");
+    expect(userConfigContent).not.toContain("document_language:");
     expect(configContent).not.toContain("\njira:\n");
 
     rmSync(sandbox, { recursive: true, force: true });
@@ -148,8 +150,7 @@ describe("integration: init wizard flow", () => {
       [
         "user_name: 'Thomas'",
         "idle_threshold_minutes: 20",
-        "communication_language: 'en'",
-        "document_language: 'fr'"
+        "communication_language: 'en'"
       ].join("\n"),
       "utf8"
     );
@@ -159,6 +160,7 @@ describe("integration: init wizard flow", () => {
         "pm_tool: jira",
         "git_host: gitlab",
         "branch_pattern: 'legacy/*'",
+        "document_language: 'fr'",
         "jira:",
         "  project_key: OLD",
         "  board_id: '10'"
@@ -202,10 +204,11 @@ describe("integration: init wizard flow", () => {
     expect(configContent).toContain("pm_tool: jira");
     expect(configContent).toContain("git_host: github");
     expect(configContent).toContain("branch_pattern: 'legacy/*'");
+    expect(configContent).toContain("document_language: 'fr'");
     expect(configContent).not.toContain("communication_language:");
     expect(userConfigContent).toContain("user_name: 'Thomas'");
     expect(userConfigContent).toContain("communication_language: 'en'");
-    expect(userConfigContent).toContain("document_language: 'fr'");
+    expect(userConfigContent).not.toContain("document_language:");
     expect(configContent).toContain("\njira:\n");
     expect(existsSync(resolve(targetDir, PRIMARY_COMMAND_FILE))).toBe(true);
     rmSync(sandbox, { recursive: true, force: true });

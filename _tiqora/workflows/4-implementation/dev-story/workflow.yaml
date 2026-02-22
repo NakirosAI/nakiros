@@ -18,6 +18,14 @@ active_run_file: "{project-root}/.tiqora/state/active-run.json"
 workflow_runs_dir: "{project-root}/.tiqora/workflows/runs"
 workflow_steps_dir: "{project-root}/.tiqora/workflows/steps"
 
+# PM tracking defaults used by instructions.xml
+pm_in_progress_status: "In Progress"
+pm_review_status: "In Review"
+pm_done_status: "Done"
+pm_blocked_status: "Blocked"
+worklog_rounding_minutes: 15
+minimum_worklog_minutes: 15
+
 # Defaults applied by instructions.xml after config merge
 default_user_name: "Developer"
 default_idle_threshold_minutes: 15

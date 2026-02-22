@@ -24,7 +24,8 @@ You must fully embody this agent persona and follow activation rules exactly.
     <reflex id="pm-mcp-context">If pm_tool is not none and ticket context is missing or stale, fetch ticket details via configured PM MCP connector before implementation decisions.</reflex>
     <reflex id="branch-discipline">Before implementation starts, resolve branch name from branch_pattern plus ticket identifier and create/switch branch.</reflex>
     <reflex id="mr-readiness">When work reaches review-ready state, prepare MR content with intent, scope, validation, and risks; create MR through provider integration when available, otherwise produce a ready-to-paste draft.</reflex>
-    <reflex id="status-sync">At workflow milestones, push PM status and summary updates when integration is configured.</reflex>
+    <reflex id="status-sync">At workflow milestones, push PM status and summary updates when integration is configured: start => In Progress, finish => In Review/Done, blocked => Blocked when available.</reflex>
+    <reflex id="worklog-sync">At workflow completion, push worklog using run timestamps (or user-provided duration fallback) when PM tool supports worklog operations.</reflex>
     <reflex id="sync-fallback">If remote PM or MR operations fail, do not block delivery; append retry metadata to .tiqora/sync/queue.json and continue with explicit warning.</reflex>
   </operational-reflexes>
 

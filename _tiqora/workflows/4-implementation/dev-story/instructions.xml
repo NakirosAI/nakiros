@@ -2,22 +2,23 @@
   <critical>The workflow execution engine is governed by: {project-root}/_tiqora/core/tasks/workflow.xml</critical>
   <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
   <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language resolved from merged tiqora config.</critical>
-  <critical>Generate artifacts in document_language resolved from merged tiqora config, unless user explicitly asks otherwise.</critical>
+  <critical>Generate technical artifacts (challenge, implementation, validation) in ENGLISH for clarity.</critical>
+  <critical>Generate developer-facing reports (MR Report, Daily, Retrospective) in document_language from config.</critical>
   <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
-  <critical>Do not report "completed" until all implementation and validation activities are truly finished.</critical>
+  <critical>Do not report "completed" until all implementation, validation, and PM sync activities are truly finished.</critical>
 
-  <step n="1" goal="Load and merge tiqora configuration">
+  <step n="1" goal="Load and validate tiqora configuration (silent mode)">
     <action>Load project config from {project_config} as required input.</action>
-    <action if="project config does not exist">HALT: "✗ No project .tiqora.yaml found. Run npx tiqora init in the project root."</action>
+    <action if="project config does not exist">HALT: "✗ No project .tiqora.yaml found. Run 'npx tiqora init' first."</action>
 
     <action>Load profile config from {profile_config} when available (optional).</action>
     <action>Build effective config as: profile config (base) + project config (override).</action>
     <action>Apply defaults when missing: user_name={default_user_name}, idle_threshold_minutes={default_idle_threshold_minutes}, communication_language={default_communication_language}, document_language={default_document_language}.</action>
 
     <action>Validate required project keys: pm_tool, git_host, branch_pattern.</action>
-    <action if="any required project key is missing">HALT: "✗ Blocking configuration error in {project_config}: missing required keys pm_tool, git_host, and/or branch_pattern."</action>
+    <action if="any required project key is missing">HALT: "✗ Blocking configuration error in {project_config}: missing pm_tool, git_host, or branch_pattern. Edit .tiqora.yaml and add these keys."</action>
 
-    <output>[WORKFLOW] dev-story config loaded — project + profile merged</output>
+    <output>[WORKFLOW] ✓ Config loaded and validated</output>
   </step>
 
   <step n="2" goal="Apply active run guard">
@@ -34,79 +35,280 @@
     </check>
   </step>
 
-  <step n="3" goal="Resolve ticket context">
+  <step n="3" goal="Resolve ticket context and transition to In Progress">
     <action>If a ticket ID is provided, retrieve the ticket via configured PM MCP connector before challenge/implementation.</action>
-    <action>If pm_tool is configured and no ticket provided, ask user to choose: existing ticket or create ticket.</action>
+    <action>If pm_tool is configured and no ticket provided, ask user to choose: work on existing ticket or create new ticket.</action>
+    <action if="pm_tool is not none and ticket was retrieved">Capture PM tracking identifiers (ticket key/id, workspace/project identifiers, available transitions) needed for status, comments, and worklog operations.</action>
+
     <check if="MCP retrieval fails">
-      <ask>Ticket retrieval failed. Retry MCP fetch or continue in standalone short-description mode? (retry/standalone)</ask>
+      <ask>Ticket retrieval failed. Retry MCP fetch or continue in standalone mode? (retry/standalone)</ask>
       <check if="user chooses retry">
         <action>Retry retrieval once and continue if successful.</action>
       </check>
       <check if="user chooses standalone">
-        <action>Continue with explicit ambiguity warning and queue sync retry metadata in .tiqora sync area.</action>
+        <action>Continue with explicit ambiguity warning and queue sync retry metadata in .tiqora/sync/queue.json.</action>
       </check>
     </check>
+
+    <action if="pm_tool is not none and ticket was retrieved">IMMEDIATELY transition ticket to {pm_in_progress_status} via PM MCP connector with comment: "Starting analysis and implementation. Branch: {{branchName}}, Run ID: {{runId}}"</action>
+    <action if="pm_tool is not none and ticket was retrieved">Capture timestamp as {{worklog_start_time}} for worklog calculation (includes challenge + implementation duration).</action>
+
+    <check if="PM In Progress transition fails">
+      <action>Log warning: "⚠ Could not transition ticket to In Progress. Queued in .tiqora/sync/queue.json for retry. Continuing with implementation."</action>
+    </check>
+
+    <output>[WORKFLOW] ✓ Ticket context resolved | Jira status: In Progress | Worklog tracking started</output>
   </step>
 
-  <step n="4" goal="Run mandatory challenge gate">
-    <critical>No implementation starts before challenge is passed.</critical>
+  <step n="4" goal="Run mandatory PM challenge gate (rigorous)">
+    <critical>No implementation starts before challenge is thoroughly passed. This is a critical gate.</critical>
     <action>Capture current active persona as {{entry_persona}}.</action>
-    <action>Load PM persona from {project-root}/_tiqora/agents/pm.md for the challenge gate.</action>
-    <action>Run a PM-quality challenge on the current ticket before implementation with checks for: clarity, logical consistency, implementation completeness, dependency coverage, and acceptance testability.</action>
-    <action>Create challenge artifact at {workflow_steps_dir}/{{runId}}-challenge.md with: intent, AC checklist, PM challenge verdict, feasibility notes, risks/blockers, and high-level approach.</action>
-    <check if="PM challenge finds ticket quality gaps">
-      <action>Restore persona to {{entry_persona}} before waiting for user clarifications.</action>
+    <action>Load PM persona from {project-root}/_tiqora/agents/pm.md for this challenge gate.</action>
+
+    <action>Conduct rigorous PM-quality challenge on the ticket analyzing:
+      1. CLARITY: Is the user story or ticket description clear and unambiguous?
+      2. CONSISTENCY: Do acceptance criteria align with ticket intent? Any contradictions?
+      3. SCOPE: Is the scope bounded and realistic? Any hidden dependencies?
+      4. ALIGNMENT: Does this ticket make sense in the project context? Check against project goals/architecture if available.
+      5. TESTABILITY: Are acceptance criteria measurable and testable? Can QA/user verify completion?
+      6. RISKS: What could go wrong? What dependencies exist? What's the impact of this work?
+    </action>
+
+    <action>Create challenge artifact at {workflow_steps_dir}/{{runId}}-challenge.md (ENGLISH) with these sections:
+      - **Ticket Intent**: What problem does this solve?
+      - **Acceptance Criteria** (checked): ✓ or ✗ for each AC
+      - **PM Challenge Verdict**: PASS or FAIL with justification
+      - **Scope Boundaries**: What's included, what's out-of-scope
+      - **Implementation Approach**: High-level technical direction
+      - **Risks & Blockers**: What could go wrong? Any known issues?
+      - **Dependencies**: Other tickets, external systems, prerequisites
+      - **Testability Notes**: How to verify implementation is complete
+    </action>
+
+    <check if="PM challenge identifies critical gaps or ambiguities">
+      <action>Restore persona to {{entry_persona}}.</action>
       <action>Set run state to awaiting_user.</action>
-      <ask>PM challenge found ticket gaps. Clarify or update the ticket before implementation proceeds.</ask>
+      <ask>⚠️ Challenge gate FAILED. Issues found:
+      [List the specific gaps/ambiguities]
+
+      Please clarify the ticket or update it in Jira before implementation can proceed. Waiting for your input.</ask>
     </check>
-    <check if="ticket or acceptance criteria are ambiguous">
-      <action>Restore persona to {{entry_persona}} before waiting for user clarifications.</action>
-      <action>Set run state to awaiting_user.</action>
-      <ask>Provide clarifications to remove ambiguity before implementation proceeds.</ask>
-    </check>
-    <check if="challenge is clear">
+
+    <check if="ticket is clear and challenge passes">
+      <action if="pm_tool is not none and ticket was retrieved">Post challenge summary comment on ticket (ENGLISH):
+        "✓ Challenge Gate PASSED
+        - Scope: [1-2 sentences on what will be built]
+        - Approach: [1-2 sentences on technical direction]
+        - Key Risks: [bullet points if any]
+        - Branch: {{branchName}} | Run: {{runId}}"
+      </action>
       <action>Restore persona to {{entry_persona}} before step 5+ implementation work.</action>
-      <output>[CHALLENGE] clarity passed — ready for implementation</output>
+      <output>[CHALLENGE] ✓ Gate PASSED — ready for implementation</output>
     </check>
   </step>
 
-  <step n="5" goal="Create/switch branch and persist run state">
+  <step n="5" goal="Create/switch git branch and persist run state">
     <action>Resolve branch name from ticket ID + slug using branch_pattern from effective config.</action>
-    <action>Create or switch to target branch.</action>
+    <action>Create or switch to target branch using git.</action>
     <action>Ensure directories exist: {workflow_runs_dir} and {workflow_steps_dir}.</action>
-    <action>Persist active run state atomically to {active_run_file} and run artifact in {workflow_runs_dir}.</action>
-    <output>[WORKFLOW] dev-story started — {{ticketId}} | branch: {{branchName}}</output>
-    <output>[WORKFLOW] dev-story initialized — challenge in progress</output>
+
+    <action>Persist active run state to {active_run_file} and run artifact to {workflow_runs_dir}/{{runId}}.json, including:
+      - ticketId, branchName, runId
+      - status: "in_progress"
+      - timestamps: challenge_started_at, implementation_started_at, last_activity_at
+      - worklog_start_time: {{worklog_start_time}} (for final worklog calculation)
+      - pm_tool, git_host, document_language (for later reporting)
+    </action>
+
+    <output>[WORKFLOW] ✓ Branch created: {{branchName}} | Run ID: {{runId}} | Worklog: tracking</output>
   </step>
 
-  <step n="6" goal="Implement scope with test-first discipline">
-    <critical>Follow the approved challenge scope; do not implement out-of-scope features.</critical>
+  <step n="6" goal="Implement scope with test-first discipline + mandatory commit">
+    <critical>Follow the approved challenge scope EXACTLY; do not implement out-of-scope features.</critical>
+    <critical>At the end of this step, you MUST make a git commit with conventional commit messages.</critical>
+
     <action>Load Developer persona from {project-root}/_tiqora/agents/dev.md for implementation and test execution.</action>
     <action>Plan concrete implementation tasks from challenge + ticket context.</action>
     <action>Write failing tests first when feasible (red), implement minimal code (green), then refactor safely (refactor).</action>
     <action>Run targeted and regression tests.</action>
     <action>Update run artifacts and notes under .tiqora as work progresses.</action>
-    <action if="required dependency or architectural change exceeds scope">ASK user approval before proceeding.</action>
+
+    <action if="pm_tool is not none and ticket was retrieved">Publish at least one progress comment during implementation with done/next/blockers. Format: "✓ Done: [X] | Next: [Y] | Blockers: [Z]" and update last_activity_at in run state.</action>
+
+    <check if="implementation is blocked and pm_tool is not none and ticket was retrieved">
+      <action>Transition ticket to {pm_blocked_status} via PM MCP (if available), otherwise add explicit blocker comment.</action>
+    </check>
+
+    <action if="required dependency or architectural change exceeds scope">ASK user approval: "This change exceeds approved scope. Approve to proceed? (yes/no)"</action>
+
+    <action>After all implementation is complete:
+      1. Run all tests one final time (regression check).
+      2. Generate conventional commit messages based on changes:
+         - Use "feat:" for new features (from ticket intent)
+         - Use "fix:" for bug fixes
+         - Use "refactor:" for code refactoring
+         - Use "test:" for test-only changes
+         - Add ticket ID in footer: "Fixes {{ticketId}}"
+      3. Stage all changes: git add .
+      4. Commit with message(s):
+         "feat: [brief description from ticket] ({{ticketId}})
+
+         - Implementation detail 1
+         - Implementation detail 2
+         - Testing notes
+
+         Fixes {{ticketId}}"
+    </action>
+
+    <action>Update run state: mark implementation_completed_at timestamp.</action>
+
+    <output>[WORKFLOW] ✓ Implementation complete | Changes committed to {{branchName}}</output>
   </step>
 
-  <step n="7" goal="Validate definition of done">
+  <step n="7" goal="Generate MR Report and request developer validation">
+    <critical>MR Report is mandatory and must be validated by the developer before pushing.</critical>
+
+    <action>Analyze git diff from branch_base..HEAD to understand all changes made.</action>
+
+    <action>Generate MR Report at {workflow_runs_dir}/{{runId}}-mr-report.md in {{document_language}} with sections:
+
+      **Title**: [Brief summary of what was implemented]
+
+      **Description**:
+      [1-2 paragraphs explaining the feature/fix and its purpose]
+
+      **Technical Choices**:
+      - [Key architecture decision 1 and why]
+      - [Key architecture decision 2 and why]
+      - [Any libraries/tools introduced and justification]
+
+      **Changes Made**:
+      - [File path 1]: [What was changed and why]
+      - [File path 2]: [What was changed and why]
+      [List all significant changes]
+
+      **Testing**:
+      - Unit tests: [Where, what's tested]
+      - Integration tests: [Where, what's tested]
+      - Manual testing steps: [How to verify this works]
+
+      **How to Run**:
+      1. [Prerequisites/setup steps]
+      2. [Build/install command if needed]
+      3. [Running the feature/fix]
+      4. [Expected output/behavior]
+
+      **Deployment Notes**:
+      - [Any database migrations? Yes/No]
+      - [Any environment variables needed? List]
+      - [Breaking changes? Yes/No, describe]
+      - [Rollback plan if needed]
+
+      **Reviewed By**: [Developer name]
+      **Reviewed At**: [Timestamp]
+    </action>
+
+    <action>Display the generated MR Report to the developer and ask for validation.</action>
+
+    <ask>MR Report generated. Please review and validate:
+      [ ] Are technical choices explained clearly?
+      [ ] Are testing instructions complete and accurate?
+      [ ] Are deployment notes accurate?
+
+      Choose: (approve/edit/regenerate)</ask>
+
+    <check if="developer chooses edit or regenerate">
+      <action>If edit: Display prompt for developer to provide modifications. Apply changes to the report file.
+      If regenerate: Re-run the MR Report generation with developer guidance.</action>
+    </check>
+
+    <action>Once approved, mark run state: mr_report_approved_at = now.</action>
+
+    <output>[WORKFLOW] ✓ MR Report validated</output>
+  </step>
+
+  <step n="8" goal="Validate definition of done checklist">
     <action>Load and execute validation checklist from {validation}.</action>
     <action>If checklist fails, return to implementation/validation until pass or HALT with explicit blockers.</action>
   </step>
 
-  <step n="8" goal="Finalize run status and output">
+  <step n="9" goal="Move to Review, push MR, sync Jira and finalize worklog">
+    <critical>This is the final step. Ensure all syncs are complete before marking done.</critical>
     <action>Restore persona to {{entry_persona}} before final workflow status communication.</action>
-    <check if="work is complete and validation passed">
-      <action>Mark run state as completed and persist atomically.</action>
-      <output>[WORKFLOW] dev-story completed — summary published</output>
+
+    <check if="work is complete and validation passed and MR report approved">
+      <!-- STEP 9.1: Compute Worklog -->
+      <action if="pm_tool is not none and ticket was retrieved">
+        Compute time spent from {{worklog_start_time}} to now, rounding to {worklog_rounding_minutes} minutes with minimum {minimum_worklog_minutes} minutes.
+        If timestamps unavailable, ask user: "How much time did you spend on this ticket (in minutes)?"
+        Store as {{total_worklog_minutes}}.
+      </action>
+
+      <!-- STEP 9.2: Create/Push MR -->
+      <action>Push branch to remote: git push -u origin {{branchName}}</action>
+
+      <action>Create MR/PR in {{git_host}}:
+        - Title: "[{{ticketId}}] " + [MR Report title]
+        - Description: [MR Report content from step 7]
+        - Link to challenge artifact: {workflow_steps_dir}/{{runId}}-challenge.md
+        - Link to implementation notes: available in branch
+      </action>
+
+      <action>Capture MR/PR URL as {{mr_url}} for Jira comment.</action>
+
+      <!-- STEP 9.3: Transition Jira to Review -->
+      <action if="pm_tool is not none and ticket was retrieved">
+        Transition ticket to {pm_review_status} (or {pm_done_status} if no review stage) via PM MCP connector.
+      </action>
+
+      <!-- STEP 9.4: Push Final Jira Sync -->
+      <action if="pm_tool is not none and ticket was retrieved">
+        Add final completion comment to ticket (ENGLISH):
+        "✓ IMPLEMENTATION COMPLETE
+
+        Branch: {{branchName}}
+        MR: {{mr_url}}
+        Time spent: {{total_worklog_minutes}} minutes
+
+        Delivered:
+        - All acceptance criteria met
+        - Tests passing (unit + regression)
+        - Code review ready
+
+        Next: Await code review"
+      </action>
+
+      <action if="pm_tool is not none and ticket was retrieved">
+        Push worklog via PM MCP: {{total_worklog_minutes}} minutes
+      </action>
+
+      <check if="final PM/MR sync fails">
+        <action>Log warning: "⚠ Final PM/MR sync failed. Queued in .tiqora/sync/queue.json for retry."</action>
+        <action>Queue retry metadata with MR URL, worklog, and status transition details.</action>
+      </check>
+
+      <!-- STEP 9.5: Mark Complete -->
+      <action>Mark run state as completed and persist to {active_run_file} and {workflow_runs_dir}/{{runId}}.json.</action>
+      <action>Update run state: completed_at = now, status = "completed", final_mr_url = {{mr_url}}</action>
+
+      <output>[WORKFLOW] ✅ COMPLETE
+      ├─ Ticket: {{ticketId}} → Review
+      ├─ Branch: {{branchName}}
+      ├─ MR: {{mr_url}}
+      ├─ Time: {{total_worklog_minutes}} minutes
+      └─ Artifacts: {workflow_runs_dir}/{{runId}}/
+      </output>
     </check>
+
+    <check if="validation failed">
+      <action>Restore run state to in_progress.</action>
+      <output>[WORKFLOW] ✗ DoD validation failed. Return to implementation.</output>
+    </check>
+
     <check if="waiting on user input">
+      <action if="pm_tool is not none and ticket was retrieved">Add ticket comment: "Awaiting clarification on [topic]. Paused implementation."</action>
       <action>Mark run state as awaiting_user and persist atomically.</action>
-      <output>[WORKFLOW] dev-story awaiting_user — clarification required</output>
-    </check>
-    <check if="implementation remains in progress">
-      <action>Keep run state as in_progress and persist atomically.</action>
-      <output>[WORKFLOW] dev-story in_progress — next implementation step queued</output>
+      <output>[WORKFLOW] ⏸ AWAITING_USER — clarification needed before proceeding</output>
     </check>
   </step>
 </workflow>

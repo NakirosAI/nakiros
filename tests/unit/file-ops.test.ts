@@ -1,4 +1,13 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  realpathSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -9,7 +18,8 @@ import {
   COMMAND_TEMPLATE_FILES,
   deployTiqoraRuntimeAssets,
   deployCommandTemplates,
-  patchGitignoreWithTiqora
+  patchGitignoreWithTiqora,
+  resolveTemplateSourceDir
 } from "../../src/utils/file-ops.js";
 
 const PRIMARY_COMMAND_FILE = COMMAND_TEMPLATE_FILES[0];
@@ -283,5 +293,67 @@ describe("file deployment utilities", () => {
     );
 
     rmSync(sandbox, { recursive: true, force: true });
+  });
+
+  it("resolves template source from real argv entry path when binary is symlinked", () => {
+    const sandbox = mkdtempSync(resolve(tmpdir(), "tiqora-fileops-unit-"));
+    const repoRoot = resolve(sandbox, "repo");
+    const packageRoot = resolve(sandbox, ".npx", "node_modules", "@tiqora", "tiqora");
+    const templateDir = resolve(packageRoot, "templates", "commands");
+    const distEntryPath = resolve(packageRoot, "dist", "index.cjs");
+    const binPath = resolve(repoRoot, "node_modules", ".bin", "tiqora");
+    const originalArgv1 = process.argv[1];
+
+    mkdirSync(repoRoot, { recursive: true });
+    mkdirSync(resolve(packageRoot, "dist"), { recursive: true });
+    mkdirSync(resolve(repoRoot, "node_modules", ".bin"), { recursive: true });
+    writeTemplateSet(templateDir);
+    writeFileSync(distEntryPath, "console.log('tiqora');\n", "utf8");
+    symlinkSync(distEntryPath, binPath);
+
+    process.argv[1] = binPath;
+    try {
+      const resolvedSourceDir = resolveTemplateSourceDir(repoRoot);
+      expect(resolvedSourceDir).toBe(realpathSync(templateDir));
+    } finally {
+      process.argv[1] = originalArgv1;
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("auto-detects runtime source from real argv entry path when binary is symlinked", () => {
+    const sandbox = mkdtempSync(resolve(tmpdir(), "tiqora-fileops-unit-"));
+    const repoRoot = resolve(sandbox, "repo");
+    const packageRoot = resolve(sandbox, ".npx", "node_modules", "@tiqora", "tiqora");
+    const runtimeSourceDir = resolve(packageRoot, "_tiqora");
+    const runtimeEnginePath = resolve(runtimeSourceDir, "core", "tasks", "workflow.xml");
+    const distEntryPath = resolve(packageRoot, "dist", "index.cjs");
+    const binPath = resolve(repoRoot, "node_modules", ".bin", "tiqora");
+    const originalArgv1 = process.argv[1];
+
+    mkdirSync(repoRoot, { recursive: true });
+    mkdirSync(resolve(packageRoot, "dist"), { recursive: true });
+    mkdirSync(resolve(repoRoot, "node_modules", ".bin"), { recursive: true });
+    mkdirSync(resolve(runtimeSourceDir, "core", "tasks"), { recursive: true });
+    writeFileSync(runtimeEnginePath, "<workflow-engine/>\n", "utf8");
+    writeFileSync(distEntryPath, "console.log('tiqora');\n", "utf8");
+    symlinkSync(distEntryPath, binPath);
+
+    process.argv[1] = binPath;
+    try {
+      const summary = deployTiqoraRuntimeAssets({
+        projectRoot: repoRoot
+      });
+
+      expect(summary.sourceFound).toBe(true);
+      expect(summary.sourcePath).toBe(realpathSync(runtimeSourceDir));
+      expect(summary.filesCopied).toContain("_tiqora/core/tasks/workflow.xml");
+      expect(readFileSync(resolve(repoRoot, "_tiqora", "core", "tasks", "workflow.xml"), "utf8")).toBe(
+        "<workflow-engine/>\n"
+      );
+    } finally {
+      process.argv[1] = originalArgv1;
+      rmSync(sandbox, { recursive: true, force: true });
+    }
   });
 });

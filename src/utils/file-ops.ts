@@ -3,6 +3,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  realpathSync,
   readFileSync,
   readdirSync,
   writeFileSync
@@ -114,18 +115,7 @@ export class MissingTemplateFileError extends Error {
 }
 
 export function resolveTemplateSourceDir(startDir?: string): string {
-  const startDirs = new Set<string>();
-
-  if (startDir) {
-    startDirs.add(resolve(startDir));
-  }
-  startDirs.add(resolve(process.cwd()));
-
-  if (process.argv[1]) {
-    const entryDir = dirname(resolve(process.argv[1]));
-    startDirs.add(entryDir);
-    startDirs.add(resolve(entryDir, ".."));
-  }
+  const startDirs = getSearchRoots(startDir);
 
   for (const initialCursor of startDirs) {
     let cursor = initialCursor;
@@ -401,18 +391,7 @@ function syncRuntimeTree(options: SyncRuntimeTreeOptions): void {
 }
 
 function resolveTiqoraRuntimeSourceDir(startDir?: string): string | null {
-  const startDirs = new Set<string>();
-
-  if (startDir) {
-    startDirs.add(resolve(startDir));
-  }
-  startDirs.add(resolve(process.cwd()));
-
-  if (process.argv[1]) {
-    const entryDir = dirname(resolve(process.argv[1]));
-    startDirs.add(entryDir);
-    startDirs.add(resolve(entryDir, ".."));
-  }
+  const startDirs = getSearchRoots(startDir);
 
   for (const initialCursor of startDirs) {
     let cursor = initialCursor;
@@ -434,6 +413,51 @@ function resolveTiqoraRuntimeSourceDir(startDir?: string): string | null {
   }
 
   return null;
+}
+
+function getSearchRoots(startDir?: string): Set<string> {
+  const startDirs = new Set<string>();
+
+  // Prioritize the currently executed package (npx/.bin, installed CLI) first.
+  addProcessEntrySearchRoots(startDirs);
+  addModuleSearchRoots(startDirs);
+
+  if (startDir) {
+    startDirs.add(resolve(startDir));
+  }
+  startDirs.add(resolve(process.cwd()));
+
+  return startDirs;
+}
+
+function addProcessEntrySearchRoots(startDirs: Set<string>): void {
+  const entryPath = process.argv[1];
+  if (!entryPath) {
+    return;
+  }
+
+  addPathAndParent(startDirs, resolve(entryPath));
+
+  try {
+    const realEntryPath = realpathSync(entryPath);
+    addPathAndParent(startDirs, resolve(realEntryPath));
+  } catch {
+    // Ignore non-resolvable entry paths.
+  }
+}
+
+function addModuleSearchRoots(startDirs: Set<string>): void {
+  if (typeof __filename !== "string" || __filename.length === 0) {
+    return;
+  }
+
+  addPathAndParent(startDirs, resolve(__filename));
+}
+
+function addPathAndParent(startDirs: Set<string>, path: string): void {
+  const pathDir = dirname(path);
+  startDirs.add(pathDir);
+  startDirs.add(resolve(pathDir, ".."));
 }
 
 function toProjectRelativePath(projectRoot: string, absolutePath: string): string {

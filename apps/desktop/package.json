@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@tiqora/shared": "workspace:*",
-    "electron-updater": "^6"
+    "electron-updater": "^6",
+    "lucide-react": "^0.575.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

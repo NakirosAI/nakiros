@@ -21,6 +21,7 @@ interface Props {
 
 export default function AddRepoForm({ onAdd }: Props) {
   const [detecting, setDetecting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
 
   async function handleClick() {
     setDetecting(true);
@@ -38,27 +39,34 @@ export default function AddRepoForm({ onAdd }: Props) {
         profile,
         llmDocs: ['CLAUDE.md'],
       });
+      setStatus(`Repo ajouté: ${name} (${PROFILE_LABELS[profile]})`);
+      setTimeout(() => setStatus(null), 1800);
     } finally {
       setDetecting(false);
     }
   }
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={detecting}
-      style={{
-        padding: '8px 16px',
-        background: '#0070f3',
-        color: '#fff',
-        border: 'none',
-        borderRadius: 6,
-        cursor: detecting ? 'not-allowed' : 'pointer',
-        opacity: detecting ? 0.6 : 1,
-      }}
-    >
-      {detecting ? 'Détection…' : '+ Ajouter un repo'}
-    </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <button
+        onClick={handleClick}
+        disabled={detecting}
+        style={{
+          padding: '8px 16px',
+          background: 'var(--primary)',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 2,
+          cursor: detecting ? 'not-allowed' : 'pointer',
+          opacity: detecting ? 0.65 : 1,
+          alignSelf: 'flex-start',
+          fontWeight: 700,
+        }}
+      >
+        {detecting ? 'Détection…' : '+ Ajouter un repo'}
+      </button>
+      {status && <span style={{ fontSize: 12, color: 'var(--success)' }}>{status}</span>}
+    </div>
   );
 }
 

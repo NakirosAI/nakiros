@@ -24,6 +24,12 @@ function buildYaml(workspace: StoredWorkspace): string {
   const keyLine = workspace.projectKey
     ? `\n  projectKey: ${workspace.projectKey}`
     : '';
+  const docLangLine = workspace.documentLanguage
+    ? `\n  document_language: ${workspace.documentLanguage}`
+    : '';
+  const branchLine = workspace.branchPattern
+    ? `\n  branch_pattern: ${workspace.branchPattern}`
+    : '';
 
   return [
     `# Géré par Tiqora Desktop — ne pas éditer manuellement`,
@@ -31,7 +37,7 @@ function buildYaml(workspace: StoredWorkspace): string {
     `  name: ${workspace.name}`,
     `  repos:`,
     reposYaml,
-    `${pmLine}${keyLine}`,
+    `${pmLine}${keyLine}${docLangLine}${branchLine}`,
   ]
     .join('\n')
     .trimEnd() + '\n';

@@ -21,13 +21,13 @@ export default function RepoCard({ repo }: Props) {
   return (
     <div
       style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
+        border: '1px solid var(--line)',
+        borderRadius: 2,
         padding: 16,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
-        background: '#fff',
+        background: 'var(--bg-soft)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -37,7 +37,7 @@ export default function RepoCard({ repo }: Props) {
             color: '#fff',
             fontSize: 11,
             padding: '2px 8px',
-            borderRadius: 12,
+            borderRadius: 2,
             fontWeight: 600,
           }}
         >
@@ -46,13 +46,13 @@ export default function RepoCard({ repo }: Props) {
         <strong style={{ fontSize: 15 }}>{repo.name}</strong>
       </div>
       {repo.role && (
-        <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>{repo.role}</p>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>{repo.role}</p>
       )}
       <p
         style={{
           margin: 0,
           fontSize: 12,
-          color: '#9ca3af',
+          color: 'var(--text-muted)',
           fontFamily: 'monospace',
         }}
         title={repo.localPath}
@@ -63,13 +63,14 @@ export default function RepoCard({ repo }: Props) {
         onClick={handleOpen}
         style={{
           marginTop: 4,
-          padding: '6px 12px',
-          background: '#f3f4f6',
-          border: '1px solid #e5e7eb',
-          borderRadius: 6,
+          padding: '7px 12px',
+          background: 'var(--bg-muted)',
+          border: '1px solid var(--line)',
+          borderRadius: 2,
           cursor: 'pointer',
           fontSize: 13,
           alignSelf: 'flex-start',
+          fontWeight: 600,
         }}
       >
         Ouvrir

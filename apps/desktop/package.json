@@ -2,13 +2,14 @@
   "name": "@tiqora/desktop",
   "version": "0.0.1",
   "private": true,
-  "main": "dist/main/index.js",
+  "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview"
   },
   "dependencies": {
+    "@tiqora/shared": "workspace:*",
     "electron-updater": "^6"
   },
   "devDependencies": {

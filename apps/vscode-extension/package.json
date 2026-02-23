@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "dev": "pnpm run build -- --watch"
+    "dev": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

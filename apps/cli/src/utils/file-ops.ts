@@ -19,8 +19,7 @@ export const COMMAND_TEMPLATE_FILES = [
   "tiq-agent-pm.md",
   "tiq-workflow-create-story.md",
   "tiq-workflow-dev-story.md",
-  "tiq-workflow-fetch-project-context.md",
-  "tiq-workflow-create-ticket.md"
+  "tiq-workflow-fetch-project-context.md"
 ] as const;
 
 export type CommandTemplateFile = (typeof COMMAND_TEMPLATE_FILES)[number];

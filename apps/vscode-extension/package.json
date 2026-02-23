@@ -1,0 +1,42 @@
+{
+  "name": "tiqora",
+  "displayName": "Tiqora",
+  "description": "Agentic delivery assistant for developers",
+  "version": "0.0.1",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["workspaceContains:.tiqora.yaml"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tiqora",
+          "title": "Tiqora",
+          "icon": "$(rocket)"
+        }
+      ]
+    },
+    "views": {
+      "tiqora": [
+        {
+          "id": "tiqora.workspace",
+          "name": "Workspace"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "dev": "pnpm run build -- --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0"
+  }
+}

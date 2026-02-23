@@ -187,7 +187,7 @@ Choose:
       - Project Key: {jira.project_key}
       - Issue Type: "Story"
       - Summary: {{story_title}}
-      - Description: {{story_description}} (formatted with all sections from our discussion)
+      - Description: {{story_document}} — CRITICAL: use the EXACT text from {{story_document}} as-is, which is already written in {{document_language}}. Do NOT translate or rewrite.
       - Priority: {{priority}}
       - Additional fields: assignee (unassigned for now), labels (use pm_tool if needed)
     </action>

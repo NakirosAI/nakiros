@@ -7,8 +7,6 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "types": ["node", "vitest/globals"]
-  },
-  "include": ["src", "tests", "vitest.config.ts", "tsup.config.ts"]
+    "resolveJsonModule": true
+  }
 }

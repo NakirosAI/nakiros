@@ -125,8 +125,7 @@ describe("integration: namespaced tiq command workflow contract", () => {
         "tiq-agent-pm.md",
         "tiq-workflow-create-story.md",
         "tiq-workflow-dev-story.md",
-        "tiq-workflow-fetch-project-context.md",
-        "tiq-workflow-create-ticket.md"
+        "tiq-workflow-fetch-project-context.md"
       ])
     );
   });

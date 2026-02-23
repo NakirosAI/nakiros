@@ -7,3 +7,16 @@ _bmad*
 dist/
 node_modules/
 .tiqora.yaml
+
+# Monorepo
+apps/*/dist/
+apps/*/node_modules/
+packages/*/dist/
+packages/*/node_modules/
+
+# Electron
+apps/desktop/out/
+apps/desktop/.vite/
+
+# VS Code Extension
+apps/vscode-extension/*.vsix

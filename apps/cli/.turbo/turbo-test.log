@@ -1,0 +1,55 @@
+
+> @tiqora/tiqora@0.0.6-dev test /Users/thomasailleaume/Perso/timetrackerAgent/apps/cli
+> pnpm run build && vitest run
+
+
+> @tiqora/tiqora@0.0.6-dev build /Users/thomasailleaume/Perso/timetrackerAgent/apps/cli
+> tsup
+
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /Users/thomasailleaume/Perso/timetrackerAgent/apps/cli/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+CJS Build start
+ESM Build start
+CJS dist/index.cjs 52.87 KB
+CJS ⚡️ Build success in 11ms
+ESM dist/index.mjs 50.11 KB
+ESM ⚡️ Build success in 11ms
+DTS Build start
+DTS ⚡️ Build success in 517ms
+DTS dist/index.d.cts 13.00 B
+DTS dist/index.d.ts  13.00 B
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/Users/thomasailleaume/Perso/timetrackerAgent/apps/cli[39m
+
+ [32m✓[39m tests/integration/start-command-flow.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/integration/cli-version.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 73[2mms[22m[39m
+ [32m✓[39m tests/unit/file-ops.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 53[2mms[22m[39m
+ [32m✓[39m tests/unit/env-detect.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/unit/jira-mcp.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/unit/config.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/unit/init-config.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/integration/config-discovery.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/integration/deployment-flow.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 742[2mms[22m[39m
+     [33m[2m✓[22m[39m init deploys templates after environment selection and patches .gitignore [33m 374[2mms[22m[39m
+     [33m[2m✓[22m[39m deployment summary reflects skipped files when overwrite is declined [33m 321[2mms[22m[39m
+ [32m✓[39m tests/unit/git-branch-pattern.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/unit/smoke.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 1[2mms[22m[39m
+ [32m✓[39m tests/integration/env-selection-flow.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 980[2mms[22m[39m
+     [33m[2m✓[22m[39m auto-selects when a single environment is detected [33m 383[2mms[22m[39m
+     [33m[2m✓[22m[39m prompts for multi-selection in init when multiple environments are detected [33m 332[2mms[22m[39m
+ [32m✓[39m tests/integration/init-wizard-flow.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 1111[2mms[22m[39m
+     [33m[2m✓[22m[39m omits jira fields when pm tool is not jira [33m 363[2mms[22m[39m
+     [33m[2m✓[22m[39m cancels safely without writing config [33m 337[2mms[22m[39m
+ [32m✓[39m tests/integration/install-config-validation.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 1241[2mms[22m[39m
+     [33m[2m✓[22m[39m fails with exact AC2 message and exit code 1 when config is missing [33m 402[2mms[22m[39m
+     [33m[2m✓[22m[39m fails with exact AC2 message and exit code 1 when required keys are missing [33m 350[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m14 passed[39m[22m[90m (14)[39m
+[2m      Tests [22m [1m[32m76 passed[39m[22m[90m (76)[39m
+[2m   Start at [22m 16:35:01
+[2m   Duration [22m 1.46s[2m (transform 439ms, setup 0ms, import 677ms, tests 4.24s, environment 1ms)[22m
+

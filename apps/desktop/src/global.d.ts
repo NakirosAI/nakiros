@@ -9,7 +9,61 @@ import type {
   AgentInstallSummary,
 } from '@tiqora/shared';
 
+interface JiraStatus {
+  connected: boolean;
+  cloudUrl?: string;
+  displayName?: string;
+}
+
+interface JiraSyncResult {
+  imported: number;
+  updated: number;
+  epicsImported: number;
+  error?: string;
+}
+
+interface JiraAuthCompletePayload {
+  wsId: string;
+  cloudUrl: string;
+  displayName: string;
+  workspace?: StoredWorkspace;
+}
+
+interface JiraAuthErrorPayload {
+  wsId: string;
+  error: string;
+}
+
 declare global {
+  interface StoredMessage {
+    role: 'user' | 'agent';
+    content: string;
+    tools: Array<{ name: string; display: string }>;
+  }
+
+  interface StoredConversation {
+    id: string;
+    sessionId: string;
+    repoPath: string;
+    repoName: string;
+    title: string;
+    createdAt: string;
+    lastUsedAt: string;
+    messages: StoredMessage[];
+  }
+
+  type AgentStreamEvent =
+    | { type: 'text'; text: string }
+    | { type: 'tool'; name: string; display: string }
+    | { type: 'session'; id: string };
+
+  interface JiraProject {
+    id: string;
+    key: string;
+    name: string;
+    projectTypeKey: string;
+  }
+
   interface Window {
     tiqora: {
       // Workspace
@@ -41,6 +95,36 @@ declare global {
       // Agent context + clipboard
       generateContext(wsId: string, ticketId: string, ws: StoredWorkspace): Promise<string>;
       writeClipboard(text: string): Promise<void>;
+
+      // Agent runner
+      agentRun(repoPath: string, message: string, sessionId?: string | null): Promise<string>;
+      agentCancel(runId: string): Promise<void>;
+      onAgentStart(cb: (event: { runId: string; command: string; cwd: string }) => void): () => void;
+      onAgentEvent(cb: (payload: { runId: string; event: AgentStreamEvent }) => void): () => void;
+      onAgentDone(cb: (event: { runId: string; exitCode: number; error?: string }) => void): () => void;
+
+      // Terminal
+      terminalCreate(repoPath: string): Promise<string>;
+      terminalWrite(terminalId: string, data: string): Promise<void>;
+      terminalResize(terminalId: string, cols: number, rows: number): Promise<void>;
+      terminalDestroy(terminalId: string): Promise<void>;
+      onTerminalData(cb: (event: { terminalId: string; data: string }) => void): () => void;
+      onTerminalExit(cb: (event: { terminalId: string; code: number }) => void): () => void;
+
+      // Conversations
+      getConversations(): Promise<StoredConversation[]>;
+      saveConversation(conv: StoredConversation): Promise<void>;
+      deleteConversation(id: string): Promise<void>;
+      readConversationMessages(sessionId: string, repoPath: string): Promise<StoredMessage[]>;
+
+      // Jira OAuth
+      jiraStartAuth(wsId: string): Promise<void>;
+      jiraDisconnect(wsId: string): Promise<StoredWorkspace | null>;
+      jiraGetStatus(wsId: string): Promise<JiraStatus>;
+      jiraSyncTickets(wsId: string, workspace: StoredWorkspace): Promise<JiraSyncResult>;
+      onJiraAuthComplete(cb: (data: JiraAuthCompletePayload) => void): () => void;
+      onJiraAuthError(cb: (data: JiraAuthErrorPayload) => void): () => void;
+      jiraGetProjects(wsId: string): Promise<JiraProject[]>;
     };
   }
 }

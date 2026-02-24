@@ -13,6 +13,7 @@ import TicketDetail from '../components/TicketDetail';
 import RepoCard from '../components/RepoCard';
 import GlobalSettings from '../components/GlobalSettings';
 import ProjectSettings from '../components/ProjectSettings';
+import AgentPanel from '../components/AgentPanel';
 import appIcon from '../assets/icon.svg';
 import { Settings2 } from 'lucide-react';
 import { MESSAGES } from '../i18n';
@@ -298,6 +299,7 @@ export default function Dashboard({
           labels={{
             board: msg.sidebar.board,
             repos: msg.sidebar.repos,
+            agents: msg.sidebar.agents,
             settings: msg.sidebar.settings,
           }}
         />
@@ -365,11 +367,30 @@ export default function Dashboard({
             </div>
           )}
 
+          {activeTab === 'agents' && (
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              {workspace.repos.length === 0 ? (
+                <div style={{ padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>
+                  {msg.dashboard.noRepo}
+                </div>
+              ) : (
+                <AgentPanel
+                  repos={workspace.repos}
+                  initialRepoPath={workspace.repos[0]?.localPath}
+                />
+              )}
+            </div>
+          )}
+
           {activeTab === 'settings' && (
             <ProjectSettings
               workspace={workspace}
               language={language}
               onUpdate={onUpdateWorkspace}
+              onTicketsRefresh={() => {
+                void window.tiqora.getTickets(workspace.id).then(setTickets);
+                void window.tiqora.getEpics(workspace.id).then(setEpics);
+              }}
             />
           )}
         </div>

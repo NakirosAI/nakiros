@@ -17,6 +17,7 @@ interface Props {
   workspace: StoredWorkspace;
   language: ResolvedLanguage;
   onUpdate(workspace: StoredWorkspace): Promise<void>;
+  onTicketsRefresh?(): void;
 }
 
 function uid() {
@@ -25,7 +26,7 @@ function uid() {
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
-export default function ProjectSettings({ workspace, language, onUpdate }: Props) {
+export default function ProjectSettings({ workspace, language, onUpdate, onTicketsRefresh }: Props) {
   const s = MESSAGES[language].settings;
   const [section, setSection] = useState<SettingsSection>('general');
 
@@ -83,7 +84,7 @@ export default function ProjectSettings({ workspace, language, onUpdate }: Props
         <div style={{ maxWidth: 640 }}>
           {section === 'general' && <GeneralSection workspace={workspace} language={language} onUpdate={onUpdate} />}
           {section === 'git'     && <GitSection workspace={workspace} language={language} onUpdate={onUpdate} />}
-          {section === 'pm'      && <PMSection workspace={workspace} language={language} onUpdate={onUpdate} />}
+          {section === 'pm'      && <PMSection workspace={workspace} language={language} onUpdate={onUpdate} onTicketsRefresh={onTicketsRefresh} />}
           {section === 'mcps'    && <MCPSection workspace={workspace} onUpdate={onUpdate} msg={MESSAGES[language].settings} />}
           {section === 'context' && <DocsSection workspace={workspace} onUpdate={onUpdate} msg={MESSAGES[language].settings} />}
         </div>
@@ -357,25 +358,99 @@ function RemoteIcon({ url, size }: { url: string; size: number }) {
 
 // ─── PM Tool ──────────────────────────────────────────────────────────────────
 
-function PMSection({ workspace, language, onUpdate }: Props) {
+function PMSection({ workspace, language, onUpdate, onTicketsRefresh }: Props) {
   const s = MESSAGES[language].settings;
   const [jiraUrl, setJiraUrl] = useState(workspace.jiraUrl ?? '');
-  const [projectKey, setProjectKey] = useState(workspace.projectKey ?? '');
-  const [boardId, setBoardId] = useState(workspace.pmBoardId ?? '');
+
+  const [jiraStatus, setJiraStatus] = useState<{ connected: boolean; cloudUrl?: string; displayName?: string } | null>(null);
+  const [jiraStatusLoading, setJiraStatusLoading] = useState(false);
+  const [jiraConnecting, setJiraConnecting] = useState(false);
+
+  const [projects, setProjects] = useState<JiraProject[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+
+  const [jiraSyncing, setJiraSyncing] = useState(false);
+  const [jiraSyncResult, setJiraSyncResult] = useState<{ imported: number; updated: number } | null>(null);
+  const [jiraError, setJiraError] = useState<string | null>(null);
 
   useEffect(() => {
     setJiraUrl(workspace.jiraUrl ?? '');
-    setProjectKey(workspace.projectKey ?? '');
-    setBoardId(workspace.pmBoardId ?? '');
+    setJiraError(null);
+    setJiraSyncResult(null);
   }, [workspace.id]);
 
-  async function saveJiraFields() {
-    await onUpdate({
-      ...workspace,
-      jiraUrl: jiraUrl.trim() || undefined,
-      projectKey: projectKey.trim() || undefined,
-      pmBoardId: boardId.trim() || undefined,
+  // Load Jira connection status when Jira is selected
+  useEffect(() => {
+    if (workspace.pmTool !== 'jira') return;
+    setJiraStatusLoading(true);
+    void window.tiqora.jiraGetStatus(workspace.id)
+      .then((status) => {
+        setJiraStatus(status);
+        if (status.connected) loadProjects();
+      })
+      .finally(() => setJiraStatusLoading(false));
+  }, [workspace.id, workspace.pmTool]);
+
+  // Listen for OAuth completion / error events
+  useEffect(() => {
+    if (workspace.pmTool !== 'jira') return;
+    const unsubComplete = window.tiqora.onJiraAuthComplete((data) => {
+      if (data.wsId !== workspace.id) return;
+      setJiraConnecting(false);
+      setJiraStatus({ connected: true, cloudUrl: data.cloudUrl, displayName: data.displayName });
+      setJiraError(null);
+      loadProjects();
+      if (data.workspace) void onUpdate(data.workspace);
     });
+    const unsubError = window.tiqora.onJiraAuthError((data) => {
+      if (data.wsId !== workspace.id && data.wsId !== '') return;
+      setJiraConnecting(false);
+      setJiraError(data.error);
+    });
+    return () => {
+      unsubComplete();
+      unsubError();
+    };
+  }, [workspace.id, workspace.pmTool]);
+
+  function loadProjects() {
+    setProjectsLoading(true);
+    void window.tiqora.jiraGetProjects(workspace.id)
+      .then(setProjects)
+      .catch(() => setProjects([]))
+      .finally(() => setProjectsLoading(false));
+  }
+
+  async function handleConnect() {
+    setJiraConnecting(true);
+    setJiraError(null);
+    await window.tiqora.jiraStartAuth(workspace.id);
+  }
+
+  async function handleDisconnect() {
+    const updated = await window.tiqora.jiraDisconnect(workspace.id);
+    setJiraStatus({ connected: false });
+    setProjects([]);
+    setJiraSyncResult(null);
+    if (updated) void onUpdate(updated);
+  }
+
+  async function handleProjectChange(key: string) {
+    await onUpdate({ ...workspace, projectKey: key || undefined });
+  }
+
+  async function handleSync() {
+    setJiraSyncing(true);
+    setJiraError(null);
+    setJiraSyncResult(null);
+    const result = await window.tiqora.jiraSyncTickets(workspace.id, workspace);
+    setJiraSyncing(false);
+    if (result.error) {
+      setJiraError(result.error);
+    } else {
+      setJiraSyncResult({ imported: result.imported, updated: result.updated });
+      onTicketsRefresh?.();
+    }
   }
 
   const PM_TOOLS: { id: 'jira' | 'github' | 'gitlab' | 'linear' | undefined; label: string }[] = [
@@ -409,56 +484,109 @@ function PMSection({ workspace, language, onUpdate }: Props) {
       </section>
 
       {workspace.pmTool === 'jira' && (
-        <section style={sectionStyle}>
-          <div
-            style={{
-              padding: '10px 12px',
-              background: 'var(--bg-muted)',
-              border: '1px solid var(--line)',
-              borderRadius: 2,
-              marginBottom: 14,
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              lineHeight: 1.5,
-            }}
-          >
-            {s.jiraOAuthSoon}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div>
-              <label style={fieldLabel}>{s.jiraUrl}</label>
-              <input
-                value={jiraUrl}
-                onChange={(e) => setJiraUrl(e.target.value)}
-                onBlur={() => void saveJiraFields()}
-                placeholder="https://my-team.atlassian.net"
-                style={inputStyle}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <label style={fieldLabel}>{s.jiraProjectKey}</label>
-                <input
-                  value={projectKey}
-                  onChange={(e) => setProjectKey(e.target.value.toUpperCase())}
-                  onBlur={() => void saveJiraFields()}
-                  placeholder="PROJ"
-                  style={inputStyle}
-                />
+        <>
+          {/* Authentication section */}
+          <section style={sectionStyle}>
+            <h3 style={sectionTitle}>{s.jiraAuthSection}</h3>
+            {jiraStatusLoading ? (
+              <p style={hintStyle}>{s.jiraStatusChecking}</p>
+            ) : jiraStatus?.connected ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success, #22c55e)', display: 'inline-block', flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.jiraConnectedAs(jiraStatus.displayName ?? '', jiraStatus.cloudUrl ?? '')}
+                  </span>
+                </div>
+                <div>
+                  <button onClick={() => void handleDisconnect()} style={secondaryBtn}>
+                    {s.jiraDisconnect}
+                  </button>
+                </div>
               </div>
-              <div style={{ flex: 1 }}>
-                <label style={fieldLabel}>{s.jiraBoardId}</label>
-                <input
-                  value={boardId}
-                  onChange={(e) => setBoardId(e.target.value)}
-                  onBlur={() => void saveJiraFields()}
-                  placeholder="21"
-                  style={inputStyle}
-                />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <label style={fieldLabel}>{s.jiraUrl}</label>
+                  <input
+                    value={jiraUrl}
+                    onChange={(e) => setJiraUrl(e.target.value)}
+                    onBlur={() => void onUpdate({ ...workspace, jiraUrl: jiraUrl.trim() || undefined })}
+                    placeholder="https://my-team.atlassian.net"
+                    style={inputStyle}
+                  />
+                  <p style={{ ...hintStyle, marginTop: 4 }}>
+                    Si tu as plusieurs sites Atlassian, précise l'URL pour choisir le bon.
+                  </p>
+                </div>
+                <div>
+                  <button
+                    onClick={() => void handleConnect()}
+                    disabled={jiraConnecting}
+                    style={primaryBtn(jiraConnecting)}
+                  >
+                    {jiraConnecting ? s.jiraConnecting : s.jiraConnectBtn}
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
-        </section>
+            )}
+            {jiraError && (
+              <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--danger)', fontFamily: 'monospace' }}>{jiraError}</p>
+            )}
+          </section>
+
+          {/* Project & Board pickers — only if connected */}
+          {jiraStatus?.connected && (
+            <section style={sectionStyle}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={fieldLabel}>{s.jiraProjectLabel}</label>
+                  {projectsLoading ? (
+                    <p style={hintStyle}>{s.jiraProjectLoading}</p>
+                  ) : (
+                    <select
+                      value={workspace.projectKey ?? ''}
+                      onChange={(e) => void handleProjectChange(e.target.value)}
+                      style={selectStyle}
+                    >
+                      <option value="">{s.jiraProjectPlaceholder}</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.key}>
+                          {p.name} ({p.key})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+              </div>
+            </section>
+          )}
+
+          {/* Sync section — only if connected and project selected */}
+          {jiraStatus?.connected && workspace.projectKey && (
+            <section style={sectionStyle}>
+              <h3 style={sectionTitle}>{s.jiraSyncSection}</h3>
+              <p style={{ ...hintStyle, marginBottom: 12 }}>
+                Importe les tickets Jira dans le board Kanban. Jira est la source de vérité — les tickets existants sont mis à jour.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => void handleSync()}
+                  disabled={jiraSyncing}
+                  style={primaryBtn(jiraSyncing)}
+                >
+                  {jiraSyncing ? s.jiraSyncing : s.jiraSyncBtn}
+                </button>
+                {jiraSyncResult && (
+                  <span style={{ fontSize: 12, color: 'var(--success, #22c55e)' }}>
+                    {s.jiraSyncSuccess(jiraSyncResult.imported, jiraSyncResult.updated)}
+                  </span>
+                )}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       {workspace.pmTool && workspace.pmTool !== 'jira' && (

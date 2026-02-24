@@ -67,3 +67,47 @@ export function removeEpic(workspaceId: string, id: string): void {
   const all = getEpics(workspaceId).filter((e) => e.id !== id);
   writeJson(join(getWorkspaceDir(workspaceId), 'epics.json'), all);
 }
+
+// --- Bulk operations (used by Jira sync) ---
+
+export function bulkSaveTickets(
+  workspaceId: string,
+  tickets: LocalTicket[],
+): { created: number; updated: number } {
+  const all = getTickets(workspaceId);
+  let created = 0;
+  let updated = 0;
+  for (const ticket of tickets) {
+    const idx = all.findIndex((t) => t.id === ticket.id);
+    if (idx >= 0) {
+      all[idx] = ticket;
+      updated++;
+    } else {
+      all.push(ticket);
+      created++;
+    }
+  }
+  writeJson(join(getWorkspaceDir(workspaceId), 'tickets.json'), all);
+  return { created, updated };
+}
+
+export function bulkSaveEpics(
+  workspaceId: string,
+  epics: LocalEpic[],
+): { created: number; updated: number } {
+  const all = getEpics(workspaceId);
+  let created = 0;
+  let updated = 0;
+  for (const epic of epics) {
+    const idx = all.findIndex((e) => e.id === epic.id);
+    if (idx >= 0) {
+      all[idx] = epic;
+      updated++;
+    } else {
+      all.push(epic);
+      created++;
+    }
+  }
+  writeJson(join(getWorkspaceDir(workspaceId), 'epics.json'), all);
+  return { created, updated };
+}

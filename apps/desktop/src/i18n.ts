@@ -33,6 +33,7 @@ type Dictionary = {
   sidebar: {
     board: string;
     repos: string;
+    agents: string;
     settings: string;
   };
   board: {
@@ -137,6 +138,23 @@ type Dictionary = {
     jiraBoardId: string;
     jiraOAuthSoon: string;
     pmComingSoon: string;
+    // Jira OAuth
+    jiraAuthSection: string;
+    jiraConnectBtn: string;
+    jiraConnecting: string;
+    jiraConnectedAs: (name: string, url: string) => string;
+    jiraDisconnect: string;
+    jiraSyncSection: string;
+    jiraSyncBtn: string;
+    jiraSyncing: string;
+    jiraSyncSuccess: (imported: number, updated: number) => string;
+    jiraSyncError: string;
+    jiraAuthError: string;
+    jiraStatusChecking: string;
+    // Jira project picker
+    jiraProjectLabel: string;
+    jiraProjectPlaceholder: string;
+    jiraProjectLoading: string;
   };
   toast: {
     contextCopied: (ticketId: string) => string;
@@ -177,6 +195,7 @@ const fr: Dictionary = {
   sidebar: {
     board: 'Board',
     repos: 'Repos',
+    agents: 'Agents',
     settings: 'Réglages',
   },
   board: {
@@ -276,6 +295,21 @@ const fr: Dictionary = {
     jiraBoardId: 'ID Board',
     jiraOAuthSoon: '🔗 Connexion OAuth bientôt disponible. Les informations sont stockées localement.',
     pmComingSoon: 'Bientôt disponible.',
+    jiraAuthSection: 'Connexion',
+    jiraConnectBtn: 'Se connecter à Jira',
+    jiraConnecting: 'Connexion en cours…',
+    jiraConnectedAs: (name, url) => `Connecté en tant que ${name} sur ${url}`,
+    jiraDisconnect: 'Déconnecter',
+    jiraSyncSection: 'Synchronisation',
+    jiraSyncBtn: 'Synchroniser les tickets',
+    jiraSyncing: 'Synchronisation…',
+    jiraSyncSuccess: (imported, updated) => `${imported} créé(s), ${updated} mis à jour`,
+    jiraSyncError: 'Erreur lors de la synchronisation.',
+    jiraAuthError: 'Erreur de connexion Jira.',
+    jiraStatusChecking: 'Vérification…',
+    jiraProjectLabel: 'Projet Jira',
+    jiraProjectPlaceholder: 'Sélectionner un projet…',
+    jiraProjectLoading: 'Chargement des projets…',
   },
   toast: {
     contextCopied: (ticketId) => `Contexte ${ticketId} copié`,
@@ -316,6 +350,7 @@ const en: Dictionary = {
   sidebar: {
     board: 'Board',
     repos: 'Repos',
+    agents: 'Agents',
     settings: 'Settings',
   },
   board: {
@@ -415,6 +450,21 @@ const en: Dictionary = {
     jiraBoardId: 'Board ID',
     jiraOAuthSoon: '🔗 OAuth connection coming soon. Information is stored locally for now.',
     pmComingSoon: 'Coming soon.',
+    jiraAuthSection: 'Authentication',
+    jiraConnectBtn: 'Connect to Jira',
+    jiraConnecting: 'Connecting…',
+    jiraConnectedAs: (name, url) => `Connected as ${name} on ${url}`,
+    jiraDisconnect: 'Disconnect',
+    jiraSyncSection: 'Sync',
+    jiraSyncBtn: 'Sync tickets',
+    jiraSyncing: 'Syncing…',
+    jiraSyncSuccess: (imported, updated) => `${imported} created, ${updated} updated`,
+    jiraSyncError: 'Sync failed.',
+    jiraAuthError: 'Jira authentication error.',
+    jiraStatusChecking: 'Checking…',
+    jiraProjectLabel: 'Jira project',
+    jiraProjectPlaceholder: 'Select a project…',
+    jiraProjectLoading: 'Loading projects…',
   },
   toast: {
     contextCopied: (ticketId) => `${ticketId} context copied`,

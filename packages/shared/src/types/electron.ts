@@ -27,4 +27,7 @@ export interface StoredWorkspace {
   branchPattern?: string;
   jiraUrl?: string;
   pmBoardId?: string;
+  jiraConnected?: boolean;
+  jiraCloudId?: string;
+  jiraCloudUrl?: string;
 }

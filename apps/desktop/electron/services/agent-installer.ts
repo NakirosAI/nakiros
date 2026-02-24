@@ -20,9 +20,11 @@ const COMMAND_TEMPLATE_FILES = [
   'tiq-agent-dev.md',
   'tiq-agent-sm.md',
   'tiq-agent-pm.md',
+  'tiq-agent-architect.md',
   'tiq-workflow-create-story.md',
   'tiq-workflow-dev-story.md',
   'tiq-workflow-fetch-project-context.md',
+  'tiq-workflow-generate-context.md',
 ] as const;
 
 const TIQORA_WORKSPACE_DIRECTORIES = [
@@ -33,6 +35,7 @@ const TIQORA_WORKSPACE_DIRECTORIES = [
   'workflows/steps',
   'sessions',
   'sprints',
+  'context',
   'reports/daily',
   'reports/retrospective',
   'reports/mr-context',

@@ -125,6 +125,11 @@ declare global {
       onJiraAuthComplete(cb: (data: JiraAuthCompletePayload) => void): () => void;
       onJiraAuthError(cb: (data: JiraAuthErrorPayload) => void): () => void;
       jiraGetProjects(wsId: string): Promise<JiraProject[]>;
+
+      // MCP Server
+      getServerStatus(): Promise<'starting' | 'running' | 'stopped'>;
+      restartServer(): Promise<void>;
+      onServerStatusChange(cb: (status: 'starting' | 'running' | 'stopped') => void): () => void;
     };
   }
 }

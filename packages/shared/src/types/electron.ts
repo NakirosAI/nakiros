@@ -1,5 +1,6 @@
 import type { AgentProfile } from './workspace.js';
 import type { WorkspaceMCP, WorkspaceDoc } from './workspace-settings.js';
+import type { WorkspaceContext } from './server.js';
 
 export interface StoredRepo {
   name: string;
@@ -30,4 +31,5 @@ export interface StoredWorkspace {
   jiraConnected?: boolean;
   jiraCloudId?: string;
   jiraCloudUrl?: string;
+  context?: WorkspaceContext;
 }

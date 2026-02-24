@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.0.0",
+    "@tiqora/server": "workspace:*",
     "@tiqora/shared": "workspace:*",
     "commander": "^14.0.0"
   },

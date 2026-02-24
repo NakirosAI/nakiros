@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import { registerInitCommand } from "./commands/init.js";
 import { registerInstallCommand } from "./commands/install.js";
+import { registerServerCommand } from "./commands/server.js";
 import { loadRuntimeConfigOrExit } from "./utils/config.js";
 
 const cli = new Command();
@@ -13,6 +14,7 @@ cli.description("Tiqora CLI scaffold");
 cli.version(readPackageVersion(), "-v, --version", "output the current version");
 registerInitCommand(cli);
 registerInstallCommand(cli);
+registerServerCommand(cli);
 
 if (shouldLoadRuntimeConfig(process.argv.slice(2))) {
   loadRuntimeConfigOrExit();
@@ -47,7 +49,7 @@ function shouldLoadRuntimeConfig(args: string[]): boolean {
   }
 
   const firstCommand = args.find((arg) => !arg.startsWith("-"));
-  const installerCommands = new Set(["init", "install"]);
+  const installerCommands = new Set(["init", "install", "server"]);
   if (firstCommand && installerCommands.has(firstCommand)) {
     return false;
   }

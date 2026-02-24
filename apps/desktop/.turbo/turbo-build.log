@@ -4,21 +4,21 @@
 
 vite v6.4.1 building SSR bundle for production...
 transforming...
-✓ 1 modules transformed.
+✓ 8 modules transformed.
 rendering chunks...
-out/main/index.js  0.61 kB
-✓ built in 33ms
+out/main/index.js  18.72 kB
+✓ built in 56ms
 vite v6.4.1 building SSR bundle for production...
 transforming...
 ✓ 1 modules transformed.
-Generated an empty chunk: "index".
 rendering chunks...
-out/preload/index.js  0.01 kB
-✓ built in 4ms
+out/preload/index.js  1.97 kB
+✓ built in 6ms
 vite v6.4.1 building for production...
 transforming...
-✓ 27 modules transformed.
+✓ 1741 modules transformed.
 rendering chunks...
-../out/renderer/index.html                  0.24 kB
-../out/renderer/assets/index-1tAWSkQ6.js  555.71 kB
-✓ built in 425ms
+../out/renderer/index.html                   0.39 kB
+../out/renderer/assets/index-CACtegjA.css    1.83 kB
+../out/renderer/assets/index-DJ2MaNuM.js   718.07 kB
+✓ built in 1.10s

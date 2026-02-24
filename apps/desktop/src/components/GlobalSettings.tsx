@@ -160,6 +160,33 @@ export default function GlobalSettings({
           </div>
         </section>
 
+        {/* MCP Server */}
+        <section>
+          <h3 style={sectionTitle}>{msg.settings.mcpServerTitle}</h3>
+          <input
+            type="text"
+            placeholder={msg.settings.mcpServerPlaceholder}
+            defaultValue={preferences.mcpServerUrl ?? ''}
+            onBlur={(e) => {
+              const val = e.currentTarget.value.trim();
+              void update({ mcpServerUrl: val || undefined });
+            }}
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              border: '1px solid var(--line)',
+              borderRadius: 2,
+              background: 'var(--bg-soft)',
+              color: 'var(--text)',
+              fontSize: 12,
+              boxSizing: 'border-box',
+            }}
+          />
+          <p style={{ margin: '5px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+            {msg.settings.mcpServerHint}
+          </p>
+        </section>
+
         {statusText && (
           <p style={{ margin: 0, fontSize: 11, color: status === 'error' ? 'var(--danger)' : 'var(--text-muted)' }}>
             {statusText}

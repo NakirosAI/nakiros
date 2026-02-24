@@ -5,6 +5,8 @@ import { existsSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 
 const execFileAsync = promisify(execFile);
+import { startServer, stopServer } from '@tiqora/server';
+import { DEFAULT_MCP_SERVER_URL } from '@tiqora/shared';
 import { getAll, save, remove } from './services/workspace.js';
 import { detectProfile } from './services/profile-detector.js';
 import { syncToRepos } from './services/workspace-sync.js';
@@ -248,7 +250,10 @@ ipcMain.handle('workspace:getAll', () => getAll());
 ipcMain.handle('workspace:save', (_, w: StoredWorkspace) => save(w));
 ipcMain.handle('workspace:delete', (_, id: string) => remove(id));
 ipcMain.handle('repo:detectProfile', (_, path: string) => detectProfile(path));
-ipcMain.handle('workspace:sync', (_, w: StoredWorkspace) => syncToRepos(w));
+ipcMain.handle('workspace:sync', (_, w: StoredWorkspace) => {
+  const prefs = getPreferences();
+  syncToRepos(w, prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL);
+});
 ipcMain.handle('shell:openPath', (_, path: string) => shell.openPath(path));
 ipcMain.handle('git:remoteUrl', async (_, repoPath: string) => {
   try {
@@ -392,10 +397,70 @@ ipcMain.handle('jira:getProjects', async (_, wsId: string) => {
 });
 
 
+// ─── MCP Server ───────────────────────────────────────────────────────────────
+
+type McpServerStatus = 'starting' | 'running' | 'stopped';
+
+function broadcastServerStatus(status: McpServerStatus): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('server:status-change', status);
+  }
+}
+
+ipcMain.handle('server:getStatus', async () => {
+  const prefs = getPreferences();
+  const baseUrl = prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL;
+  try {
+    const res = await fetch(`${baseUrl}/status`);
+    return res.ok ? 'running' : 'stopped';
+  } catch {
+    return 'stopped';
+  }
+});
+
+ipcMain.handle('server:restart', async () => {
+  broadcastServerStatus('starting');
+  stopServer();
+  await new Promise<void>((resolve) => setTimeout(resolve, 300));
+  try {
+    await startServer(3737);
+    broadcastServerStatus('running');
+  } catch (err) {
+    broadcastServerStatus('stopped');
+    console.error('[Tiqora] Failed to restart MCP server:', (err as Error).message);
+  }
+});
+
+async function ensureMcpServer(port: number): Promise<void> {
+  broadcastServerStatus('starting');
+
+  try {
+    const res = await fetch(`http://localhost:${port}/status`);
+    if (res.ok) {
+      console.log(`[Tiqora] MCP server already running on http://localhost:${port}`);
+      broadcastServerStatus('running');
+      return;
+    }
+  } catch {
+    // Nothing running on that port — start our own
+  }
+
+  try {
+    await startServer(port);
+    broadcastServerStatus('running');
+    console.log(`[Tiqora] MCP server running on http://localhost:${port}`);
+  } catch (err) {
+    broadcastServerStatus('stopped');
+    console.error('[Tiqora] Failed to start MCP server:', (err as Error).message);
+  }
+}
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   createWindow();
+
+  void ensureMcpServer(3737);
 
   // Process any URL that arrived before the app was ready (macOS)
   if (pendingProtocolUrl) {
@@ -409,6 +474,11 @@ app.whenReady().then(() => {
       });
     }
   }
+});
+
+app.on('before-quit', () => {
+  broadcastServerStatus('stopped');
+  stopServer();
 });
 
 app.on('window-all-closed', () => {

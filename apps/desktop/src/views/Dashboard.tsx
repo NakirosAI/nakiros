@@ -32,6 +32,8 @@ interface Props {
   onCloseWorkspaceTab(id: string): void;
   onNewWorkspace(): void;
   onGoHome(): void;
+  serverStatus: 'starting' | 'running' | 'stopped';
+  onRestartServer(): void;
 }
 
 export default function Dashboard({
@@ -48,8 +50,12 @@ export default function Dashboard({
   onCloseWorkspaceTab,
   onNewWorkspace,
   onGoHome,
+  serverStatus,
+  onRestartServer,
 }: Props) {
   const msg = MESSAGES[language];
+  const mcpUrl = preferences.mcpServerUrl || 'http://localhost:3737';
+  const isLocalServer = mcpUrl.includes('localhost') || mcpUrl.includes('127.0.0.1');
   const [activeTab, setActiveTab] = useState<SidebarTab>('board');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [tickets, setTickets] = useState<LocalTicket[]>([]);
@@ -271,6 +277,46 @@ export default function Dashboard({
               {workspace.mode === 'solo' ? msg.dashboard.modeSolo : msg.dashboard.modeConnected}
             </span>
           )}
+          <button
+            onClick={isLocalServer ? onRestartServer : undefined}
+            disabled={!isLocalServer || serverStatus === 'starting'}
+            title={
+              !isLocalServer
+                ? `MCP ${serverStatus === 'running' ? 'running' : 'stopped'} (remote server)`
+                : serverStatus === 'running'
+                ? 'MCP running — click to restart'
+                : serverStatus === 'starting'
+                ? 'MCP starting…'
+                : 'MCP stopped — click to restart'
+            }
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              background: 'none',
+              border: 'none',
+              cursor: !isLocalServer || serverStatus === 'starting' ? 'default' : 'pointer',
+              padding: '4px 8px',
+              borderRadius: 4,
+              opacity: !isLocalServer || serverStatus === 'starting' ? 0.6 : 1,
+            }}
+          >
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background:
+                  serverStatus === 'running'
+                    ? 'var(--success)'
+                    : serverStatus === 'starting'
+                    ? 'var(--warning)'
+                    : 'var(--danger)',
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>MCP</span>
+          </button>
           <button
             onClick={() => setShowGlobalSettings((prev) => !prev)}
             title={msg.settings.title}

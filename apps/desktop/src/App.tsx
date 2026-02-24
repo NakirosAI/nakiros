@@ -29,13 +29,15 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<AppPreferences>(FALLBACK_PREFERENCES);
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light');
+  const [serverStatus, setServerStatus] = useState<'starting' | 'running' | 'stopped'>('starting');
 
   useEffect(() => {
     void (async () => {
       try {
-        const [ws, prefs] = await Promise.all([
+        const [ws, prefs, status] = await Promise.all([
           window.tiqora.getWorkspaces(),
           window.tiqora.getPreferences(),
+          window.tiqora.getServerStatus(),
         ]);
         setWorkspaces(ws);
         setPreferences({
@@ -43,12 +45,17 @@ export default function App() {
           language: prefs.language ?? 'system',
           updatedAt: prefs.updatedAt ?? '',
         });
+        setServerStatus(status);
       } catch {
         setBootError(MESSAGES[resolveLanguage('system')].workspaceLoadError);
       } finally {
         setView({ name: 'home' });
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    return window.tiqora.onServerStatusChange(setServerStatus);
   }, []);
 
   useEffect(() => {
@@ -230,12 +237,14 @@ export default function App() {
         language={language}
         preferences={preferences}
         resolvedTheme={resolvedTheme}
+        serverStatus={serverStatus}
         onPreferencesChange={handlePreferencesChange}
         onUpdateWorkspace={handleUpdateWorkspace}
         onOpenWorkspaceTab={handleOpenWorkspaceTab}
         onCloseWorkspaceTab={handleCloseWorkspaceTab}
         onNewWorkspace={() => setView({ name: 'setup' })}
         onGoHome={() => setView({ name: 'home' })}
+        onRestartServer={() => { void window.tiqora.restartServer(); }}
       />
   );
 }

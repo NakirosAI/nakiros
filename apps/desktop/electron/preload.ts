@@ -94,4 +94,13 @@ contextBridge.exposeInMainWorld('tiqora', {
     ipcRenderer.on('jira:auth-error', listener);
     return () => ipcRenderer.removeListener('jira:auth-error', listener);
   },
+
+  // MCP Server
+  getServerStatus: () => ipcRenderer.invoke('server:getStatus'),
+  restartServer: () => ipcRenderer.invoke('server:restart'),
+  onServerStatusChange: (cb: (status: 'starting' | 'running' | 'stopped') => void) => {
+    const listener = (_: unknown, status: 'starting' | 'running' | 'stopped') => cb(status);
+    ipcRenderer.on('server:status-change', listener);
+    return () => ipcRenderer.removeListener('server:status-change', listener);
+  },
 });

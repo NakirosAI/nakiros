@@ -61,6 +61,10 @@ type Dictionary = {
     languageEnglish: string;
     saveSuccess: string;
     saveError: string;
+    mcpServerTitle: string;
+    mcpServerLabel: string;
+    mcpServerPlaceholder: string;
+    mcpServerHint: string;
     agentsTitle: string;
     agentsSubtitle: string;
     repoLabel: string;
@@ -223,6 +227,10 @@ const fr: Dictionary = {
     languageEnglish: 'English',
     saveSuccess: 'Préférences enregistrées.',
     saveError: "Impossible d'enregistrer les préférences.",
+    mcpServerTitle: 'Serveur MCP',
+    mcpServerLabel: 'URL du serveur MCP',
+    mcpServerPlaceholder: 'http://localhost:3737',
+    mcpServerHint: 'Laissez vide pour utiliser le serveur local.',
     agentsTitle: 'Agents CLI',
     agentsSubtitle: 'Installe ou mets à jour les commandes/agents Tiqora dans les repos du workspace.',
     repoLabel: 'Repo cible',
@@ -378,6 +386,10 @@ const en: Dictionary = {
     languageEnglish: 'English',
     saveSuccess: 'Preferences saved.',
     saveError: 'Unable to save preferences.',
+    mcpServerTitle: 'MCP Server',
+    mcpServerLabel: 'MCP Server URL',
+    mcpServerPlaceholder: 'http://localhost:3737',
+    mcpServerHint: 'Leave empty to use the local server.',
     agentsTitle: 'CLI Agents',
     agentsSubtitle: 'Install or update Tiqora commands/agents in workspace repositories.',
     repoLabel: 'Target repository',

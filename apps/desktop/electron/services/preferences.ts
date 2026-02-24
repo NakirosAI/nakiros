@@ -7,6 +7,7 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   theme: 'system',
   language: 'system',
   updatedAt: '',
+  mcpServerUrl: undefined,
 };
 
 function getStoragePath(): string {
@@ -26,6 +27,7 @@ export function getPreferences(): AppPreferences {
       theme: parsed.theme ?? 'system',
       language: parsed.language ?? 'system',
       updatedAt: parsed.updatedAt ?? '',
+      mcpServerUrl: parsed.mcpServerUrl,
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -37,6 +39,7 @@ export function savePreferences(prefs: AppPreferences): void {
     theme: prefs.theme ?? 'system',
     language: prefs.language ?? 'system',
     updatedAt: prefs.updatedAt || new Date().toISOString(),
+    mcpServerUrl: prefs.mcpServerUrl || undefined,
   };
   writeFileSync(getStoragePath(), JSON.stringify(next, null, 2), 'utf-8');
 }

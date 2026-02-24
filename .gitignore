@@ -9,6 +9,9 @@ node_modules/
 .tiqora.yaml
 
 # Monorepo
+.turbo/
+apps/*/.turbo/
+packages/*/.turbo/
 apps/*/dist/
 apps/*/node_modules/
 packages/*/dist/

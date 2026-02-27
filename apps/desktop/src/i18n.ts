@@ -20,6 +20,7 @@ type Dictionary = {
   };
   dashboard: {
     home: string;
+    chatAgent: string;
     newWorkspace: string;
     openWorkspace: string;
     closeTab: string;
@@ -31,10 +32,9 @@ type Dictionary = {
     noRepo: string;
   };
   sidebar: {
-    board: string;
-    repos: string;
-    agents: string;
-    context: string;
+    overview: string;
+    product: string;
+    delivery: string;
     settings: string;
   };
   board: {
@@ -127,6 +127,11 @@ type Dictionary = {
     navPM: string;
     navMCPs: string;
     navContext: string;
+    workflowAvailabilityTitle: string;
+    workflowAvailabilitySubtitle: string;
+    workflowStatusStable: string;
+    workflowStatusBeta: string;
+    workflowBetaHint: string;
     // General section
     projectNameLabel: string;
     docLangLabel: string;
@@ -202,6 +207,7 @@ const fr: Dictionary = {
   },
   dashboard: {
     home: 'Accueil',
+    chatAgent: 'Chat IA',
     newWorkspace: 'Nouveau',
     openWorkspace: 'Ouvrir un workspace',
     closeTab: 'Fermer',
@@ -213,10 +219,9 @@ const fr: Dictionary = {
     noRepo: 'Aucun repo dans ce workspace.',
   },
   sidebar: {
-    board: 'Board',
-    repos: 'Repos',
-    agents: 'Agents',
-    context: 'Context',
+    overview: 'Overview',
+    product: 'Product',
+    delivery: 'Delivery',
     settings: 'Réglages',
   },
   board: {
@@ -307,6 +312,11 @@ const fr: Dictionary = {
     navPM: 'PM Tool',
     navMCPs: 'MCPs',
     navContext: 'Contexte LLM',
+    workflowAvailabilityTitle: 'Disponibilité des workflows',
+    workflowAvailabilitySubtitle: 'Visibilité des workflows Tiqora dans cette version.',
+    workflowStatusStable: 'Stable',
+    workflowStatusBeta: 'Beta',
+    workflowBetaHint: 'Fallback:',
     projectNameLabel: 'Nom du projet',
     docLangLabel: 'Langue des documents',
     docLangHint: "Langue utilisée par les agents pour les commentaires, commits et documentation générée.",
@@ -377,6 +387,7 @@ const en: Dictionary = {
   },
   dashboard: {
     home: 'Home',
+    chatAgent: 'AI Chat',
     newWorkspace: 'New',
     openWorkspace: 'Open workspace',
     closeTab: 'Close',
@@ -388,10 +399,9 @@ const en: Dictionary = {
     noRepo: 'No repository in this workspace.',
   },
   sidebar: {
-    board: 'Board',
-    repos: 'Repos',
-    agents: 'Agents',
-    context: 'Context',
+    overview: 'Overview',
+    product: 'Product',
+    delivery: 'Delivery',
     settings: 'Settings',
   },
   board: {
@@ -482,6 +492,11 @@ const en: Dictionary = {
     navPM: 'PM Tool',
     navMCPs: 'MCPs',
     navContext: 'LLM Context',
+    workflowAvailabilityTitle: 'Workflow availability',
+    workflowAvailabilitySubtitle: 'Visibility of Tiqora workflows in this release.',
+    workflowStatusStable: 'Stable',
+    workflowStatusBeta: 'Beta',
+    workflowBetaHint: 'Fallback:',
     projectNameLabel: 'Project name',
     docLangLabel: 'Document language',
     docLangHint: 'Language used by agents for comments, commits and generated documentation.',

@@ -8,6 +8,7 @@ import type {
   WorkspaceMCP,
 } from '@tiqora/shared';
 import { MESSAGES } from '../i18n';
+import { WORKFLOW_CAPABILITIES } from '../utils/workflow-capabilities';
 
 type SettingsSection = 'general' | 'git' | 'pm' | 'mcps' | 'context';
 
@@ -96,6 +97,7 @@ export default function ProjectSettings({ workspace, language, onUpdate, onTicke
 
 function GeneralSection({ workspace, language, onUpdate, onDelete }: Props) {
   const s = MESSAGES[language].settings;
+  const isFr = language === 'fr';
   const [name, setName] = useState(workspace.name);
 
   useEffect(() => { setName(workspace.name); }, [workspace.id, workspace.name]);
@@ -136,6 +138,38 @@ function GeneralSection({ workspace, language, onUpdate, onDelete }: Props) {
             >
               {lang}
             </button>
+          ))}
+        </div>
+      </section>
+
+      <section style={sectionStyle}>
+        <label style={fieldLabel}>{s.workflowAvailabilityTitle}</label>
+        <p style={hintStyle}>{s.workflowAvailabilitySubtitle}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+          {WORKFLOW_CAPABILITIES.map((capability) => (
+            <div
+              key={capability.id}
+              style={{
+                border: '1px solid var(--line)',
+                borderRadius: 2,
+                background: 'var(--bg-card)',
+                padding: '8px 10px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <strong style={{ fontSize: 13 }}>{capability.label}</strong>
+                <span style={statusBadge(capability.status)}>{capability.status === 'stable' ? s.workflowStatusStable : s.workflowStatusBeta}</span>
+              </div>
+              <code style={{ fontSize: 11 }}>{capability.command}</code>
+              {capability.status === 'beta' && (
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+                  {isFr ? `${s.workflowBetaHint} ${capability.fallbackMessage}` : `${s.workflowBetaHint} ${capability.fallbackMessage}`}
+                </p>
+              )}
+            </div>
           ))}
         </div>
       </section>
@@ -897,4 +931,27 @@ function primaryBtn(disabled: boolean): React.CSSProperties {
 
 function chipStyle(active: boolean): React.CSSProperties {
   return { padding: '7px 11px', borderRadius: 2, border: `1px solid ${active ? 'var(--primary)' : 'var(--line)'}`, background: active ? 'var(--primary-soft)' : 'var(--bg-soft)', color: active ? 'var(--primary)' : 'var(--text)', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
+}
+
+function statusBadge(status: 'stable' | 'beta'): React.CSSProperties {
+  if (status === 'stable') {
+    return {
+      fontSize: 10,
+      fontWeight: 700,
+      color: '#065f46',
+      background: '#d1fae5',
+      border: '1px solid #10b981',
+      borderRadius: 2,
+      padding: '1px 6px',
+    };
+  }
+  return {
+    fontSize: 10,
+    fontWeight: 700,
+    color: '#92400e',
+    background: '#fef3c7',
+    border: '1px solid #f59e0b',
+    borderRadius: 2,
+    padding: '1px 6px',
+  };
 }

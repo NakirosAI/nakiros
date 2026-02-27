@@ -12,6 +12,10 @@ export interface LocalTicket {
   sprintId?: string;
   blockedBy: string[];
   repoName?: string;
+  lastRunAt?: string;
+  lastRunStatus?: 'idle' | 'running' | 'success' | 'failed';
+  lastRunProvider?: 'claude' | 'codex' | 'cursor';
+  lastRunCommand?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -903,7 +903,7 @@ export default function AgentPanel({
   const repoLocked = !!activeTab && activeTab.messages.some((msg) => msg.role === 'user');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', minWidth: 0, background: 'var(--bg)', overflow: 'hidden', position: 'relative' }}>
       <div style={headerStyle}>
         <Bot size={15} color="var(--primary)" />
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>Agents</span>

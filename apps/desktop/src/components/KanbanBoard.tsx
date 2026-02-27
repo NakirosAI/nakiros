@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { LocalTicket, LocalEpic, TicketStatus, StoredWorkspace } from '@tiqora/shared';
+import type { LocalTicket, LocalEpic, TicketPriority, TicketStatus, StoredWorkspace } from '@tiqora/shared';
 import type { ResolvedLanguage } from '@tiqora/shared';
 import TicketCard from './TicketCard';
 import TicketForm from './TicketForm';
@@ -39,18 +39,23 @@ export default function KanbanBoard({
   const [addingIn, setAddingIn] = useState<TicketStatus | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | TicketStatus>('all');
+  const [repoFilter, setRepoFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | TicketPriority>('all');
 
   const repoNames = workspace.repos.map((r) => r.name);
   const prefix = workspace.ticketPrefix ?? 'PROJ';
   const counter = workspace.ticketCounter ?? 0;
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleTickets = normalizedQuery
-    ? tickets.filter(
-        (ticket) =>
-          ticket.id.toLowerCase().includes(normalizedQuery) ||
-          ticket.title.toLowerCase().includes(normalizedQuery),
-      )
-    : tickets;
+  const visibleTickets = tickets.filter((ticket) => {
+    const queryMatch = normalizedQuery.length === 0
+      || ticket.id.toLowerCase().includes(normalizedQuery)
+      || ticket.title.toLowerCase().includes(normalizedQuery);
+    const statusMatch = statusFilter === 'all' || ticket.status === statusFilter;
+    const repoMatch = repoFilter === 'all' || ticket.repoName === repoFilter;
+    const priorityMatch = priorityFilter === 'all' || ticket.priority === priorityFilter;
+    return queryMatch && statusMatch && repoMatch && priorityMatch;
+  });
 
   async function handleContextCopy(ticket: LocalTicket) {
     setCopyingId(ticket.id);
@@ -95,6 +100,39 @@ export default function KanbanBoard({
             fontSize: 13,
           }}
         />
+        <select
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value as 'all' | TicketStatus)}
+          style={filterStyle}
+        >
+          <option value="all">Tous statuts</option>
+          <option value="backlog">Backlog</option>
+          <option value="todo">A faire</option>
+          <option value="in_progress">En cours</option>
+          <option value="done">Termine</option>
+        </select>
+        <select
+          value={repoFilter}
+          onChange={(event) => setRepoFilter(event.target.value)}
+          style={filterStyle}
+        >
+          <option value="all">Tous repos</option>
+          {repoNames.map((repoName) => (
+            <option key={repoName} value={repoName}>
+              {repoName}
+            </option>
+          ))}
+        </select>
+        <select
+          value={priorityFilter}
+          onChange={(event) => setPriorityFilter(event.target.value as 'all' | TicketPriority)}
+          style={filterStyle}
+        >
+          <option value="all">Toutes priorites</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
         <button
           onClick={() => setAddingIn('backlog')}
           style={{
@@ -245,3 +283,12 @@ export default function KanbanBoard({
     </div>
   );
 }
+
+const filterStyle: React.CSSProperties = {
+  border: '1px solid var(--line)',
+  borderRadius: 2,
+  padding: '8px 10px',
+  background: 'var(--bg-soft)',
+  color: 'var(--text)',
+  fontSize: 13,
+};

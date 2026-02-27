@@ -1,22 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import type {
-  StoredWorkspace,
-  LocalTicket,
-  LocalEpic,
   AppPreferences,
+  LocalEpic,
+  LocalTicket,
   ResolvedLanguage,
   ResolvedTheme,
+  StoredWorkspace,
 } from '@tiqora/shared';
-import Sidebar, { type SidebarTab } from '../components/Sidebar';
-import KanbanBoard from '../components/KanbanBoard';
-import TicketDetail from '../components/TicketDetail';
-import RepoCard from '../components/RepoCard';
-import GlobalSettings from '../components/GlobalSettings';
-import ProjectSettings from '../components/ProjectSettings';
-import AgentPanel from '../components/AgentPanel';
-import ContextPanel from '../components/ContextPanel';
-import appIcon from '../assets/icon.svg';
 import { Settings2 } from 'lucide-react';
+import appIcon from '../assets/icon.svg';
+import ContextPanel from '../components/ContextPanel';
+import GlobalSettings from '../components/GlobalSettings';
+import KanbanBoard from '../components/KanbanBoard';
+import ProjectSettings from '../components/ProjectSettings';
+import Sidebar, { type SidebarTab } from '../components/Sidebar';
+import TicketDetail from '../components/TicketDetail';
+import WorkspaceOverview from '../components/WorkspaceOverview';
 import { MESSAGES } from '../i18n';
 
 interface Props {
@@ -57,7 +56,9 @@ export default function Dashboard({
   const msg = MESSAGES[language];
   const mcpUrl = preferences.mcpServerUrl || 'http://localhost:3737';
   const isLocalServer = mcpUrl.includes('localhost') || mcpUrl.includes('127.0.0.1');
-  const [activeTab, setActiveTab] = useState<SidebarTab>('board');
+  const defaultProvider = preferences.agentProvider ?? 'claude';
+
+  const [activeTab, setActiveTab] = useState<SidebarTab>('overview');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [tickets, setTickets] = useState<LocalTicket[]>([]);
   const [epics, setEpics] = useState<LocalEpic[]>([]);
@@ -66,6 +67,11 @@ export default function Dashboard({
   const [toast, setToast] = useState<string | null>(null);
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [workspaceMenuSide, setWorkspaceMenuSide] = useState<'left' | 'right'>('right');
+  const [overviewDocsCount, setOverviewDocsCount] = useState(0);
+  const [overviewConversationCount, setOverviewConversationCount] = useState(0);
+  const [lastConversationAt, setLastConversationAt] = useState<string | null>(null);
+  const [openPrdAssistantSignal, setOpenPrdAssistantSignal] = useState(0);
+  const [openFreeChatSignal, setOpenFreeChatSignal] = useState(0);
   const toastTimerRef = useRef<number | null>(null);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceMenuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -74,6 +80,12 @@ export default function Dashboard({
     void window.tiqora.getTickets(workspace.id).then(setTickets);
     void window.tiqora.getEpics(workspace.id).then(setEpics);
     setSelectedTicket(null);
+  }, [workspace.id]);
+
+  useEffect(() => {
+    void refreshOverviewData();
+    setOverviewDocsCount(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace.id]);
 
   useEffect(() => {
@@ -103,8 +115,19 @@ export default function Dashboard({
     };
   }, [isWorkspaceMenuOpen]);
 
+  async function refreshOverviewData() {
+    const conversations = await window.tiqora.getConversations();
+    const repoPaths = new Set(workspace.repos.map((repo) => repo.localPath));
+    const workspaceConversations = conversations.filter((conversation) => {
+      if (conversation.workspaceId) return conversation.workspaceId === workspace.id;
+      return repoPaths.has(conversation.repoPath);
+    });
+    setOverviewConversationCount(workspaceConversations.length);
+    setLastConversationAt(workspaceConversations[0]?.lastUsedAt ?? null);
+  }
+
   function handleTicketUpdate(updated: LocalTicket) {
-    setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    setTickets((prev) => prev.map((ticket) => (ticket.id === updated.id ? updated : ticket)));
     if (selectedTicket?.id === updated.id) setSelectedTicket(updated);
   }
 
@@ -116,8 +139,8 @@ export default function Dashboard({
     if (!selectedTicket) return;
     setCopyingId(selectedTicket.id);
     try {
-      const ctx = await window.tiqora.generateContext(workspace.id, selectedTicket.id, workspace);
-      await window.tiqora.writeClipboard(ctx);
+      const context = await window.tiqora.generateContext(workspace.id, selectedTicket.id, workspace);
+      await window.tiqora.writeClipboard(context);
       pushToast(msg.toast.contextCopied(selectedTicket.id));
     } catch {
       pushToast(msg.toast.contextCopyError);
@@ -134,10 +157,10 @@ export default function Dashboard({
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2400);
   }
 
-  const repoNames = workspace.repos.map((r) => r.name);
+  const repoNames = workspace.repos.map((repo) => repo.name);
   const workspaceTopology = workspace.topology ?? (workspace.repos.length > 1 ? 'multi' : 'mono');
   const unopenedWorkspaces = allWorkspaces.filter(
-    (candidate) => !openWorkspaces.some((opened) => opened.id === candidate.id),
+    (candidate) => !openWorkspaces.some((openedWorkspace) => openedWorkspace.id === candidate.id),
   );
   const workspaceMenuPositionStyle =
     workspaceMenuSide === 'right'
@@ -153,9 +176,9 @@ export default function Dashboard({
     setIsWorkspaceMenuOpen((prev) => !prev);
   }
 
+  const deliverySelected = activeTab === 'delivery';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      {/* Header */}
       <div
         style={{
           display: 'flex',
@@ -170,19 +193,8 @@ export default function Dashboard({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-          <button
-            onClick={onGoHome}
-            title={msg.dashboard.home}
-            aria-label={msg.dashboard.home}
-            style={logoButton}
-          >
-            <img
-              src={appIcon}
-              alt="Logo Tiqora"
-              width={32}
-              height={32}
-              style={{ display: 'block' }}
-            />
+          <button onClick={onGoHome} title={msg.dashboard.home} aria-label={msg.dashboard.home} style={logoButton}>
+            <img src={appIcon} alt="Logo Tiqora" width={32} height={32} style={{ display: 'block' }} />
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <div
@@ -200,11 +212,7 @@ export default function Dashboard({
                 const isActive = openedWorkspace.id === activeWorkspaceId;
                 return (
                   <div key={openedWorkspace.id} style={tabItem(isActive)}>
-                    <button
-                      onClick={() => onOpenWorkspaceTab(openedWorkspace.id)}
-                      title={openedWorkspace.name}
-                      style={tabSelectButton}
-                    >
+                    <button onClick={() => onOpenWorkspaceTab(openedWorkspace.id)} title={openedWorkspace.name} style={tabSelectButton}>
                       {openedWorkspace.name}
                     </button>
                     <button
@@ -262,9 +270,28 @@ export default function Dashboard({
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {msg.dashboard.repoCount(workspace.repos.length)}
-          </span>
+          <button
+            onClick={() => {
+              setActiveTab('product');
+              setOpenFreeChatSignal((prev) => prev + 1);
+            }}
+            disabled={workspace.repos.length === 0}
+            title={workspace.repos.length === 0 ? msg.dashboard.noRepo : msg.dashboard.chatAgent}
+            style={{
+              border: '1px solid var(--line)',
+              background: 'var(--bg-soft)',
+              color: 'var(--text)',
+              borderRadius: 2,
+              padding: '6px 10px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: workspace.repos.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: workspace.repos.length === 0 ? 0.55 : 1,
+            }}
+          >
+            {msg.dashboard.chatAgent}
+          </button>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{msg.dashboard.repoCount(workspace.repos.length)}</span>
           <span
             style={{
               fontSize: 11,
@@ -284,10 +311,10 @@ export default function Dashboard({
               !isLocalServer
                 ? `MCP ${serverStatus === 'running' ? 'running' : 'stopped'} (remote server)`
                 : serverStatus === 'running'
-                ? 'MCP running — click to restart'
-                : serverStatus === 'starting'
-                ? 'MCP starting…'
-                : 'MCP stopped — click to restart'
+                  ? 'MCP running — click to restart'
+                  : serverStatus === 'starting'
+                    ? 'MCP starting…'
+                    : 'MCP stopped — click to restart'
             }
             style={{
               display: 'flex',
@@ -310,8 +337,8 @@ export default function Dashboard({
                   serverStatus === 'running'
                     ? 'var(--success)'
                     : serverStatus === 'starting'
-                    ? 'var(--warning)'
-                    : 'var(--danger)',
+                      ? 'var(--warning)'
+                      : 'var(--danger)',
                 flexShrink: 0,
               }}
             />
@@ -323,7 +350,7 @@ export default function Dashboard({
             aria-label={msg.settings.title}
             style={globalSettingsButton}
           >
-            <Settings2 size={14} color='var(--text-muted)' />
+            <Settings2 size={14} color="var(--text-muted)" />
           </button>
         </div>
         {showGlobalSettings && (
@@ -337,23 +364,57 @@ export default function Dashboard({
         )}
       </div>
 
-      {/* Body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <Sidebar
           active={activeTab}
           onChange={setActiveTab}
           labels={{
-            board: msg.sidebar.board,
-            repos: msg.sidebar.repos,
-            agents: msg.sidebar.agents,
-            context: msg.sidebar.context,
+            overview: msg.sidebar.overview,
+            product: msg.sidebar.product,
+            delivery: msg.sidebar.delivery,
             settings: msg.sidebar.settings,
           }}
         />
 
-        {/* Main content */}
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-          {activeTab === 'board' && (
+          {activeTab === 'overview' && (
+            <WorkspaceOverview
+              workspace={workspace}
+              tickets={tickets}
+              docsCount={overviewDocsCount}
+              conversationCount={overviewConversationCount}
+              lastConversationAt={lastConversationAt}
+              serverStatus={serverStatus}
+              onGoProduct={() => setActiveTab('product')}
+              onGoDelivery={() => setActiveTab('delivery')}
+              onOpenChat={() => {
+                setActiveTab('product');
+                setOpenFreeChatSignal((prev) => prev + 1);
+              }}
+              onCreateTicket={() => setActiveTab('delivery')}
+              onCreatePrd={() => {
+                setActiveTab('product');
+                setOpenPrdAssistantSignal((prev) => prev + 1);
+              }}
+              language={language}
+            />
+          )}
+
+          {activeTab === 'product' && (
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
+              <ContextPanel
+                workspace={workspace}
+                language={language}
+                onDocumentsChanged={(docsCount) => {
+                  setOverviewDocsCount(docsCount);
+                }}
+                openPrdAssistantSignal={openPrdAssistantSignal}
+                openFreeChatSignal={openFreeChatSignal}
+              />
+            </div>
+          )}
+
+          {deliverySelected && (
             <>
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <KanbanBoard
@@ -374,66 +435,19 @@ export default function Dashboard({
                   allTickets={tickets}
                   epics={epics}
                   repos={repoNames}
+                  storedRepos={workspace.repos}
                   workspaceId={workspace.id}
+                  workspace={workspace}
                   onUpdate={handleTicketUpdate}
                   onClose={() => setSelectedTicket(null)}
                   onContextCopy={handleContextCopy}
                   copying={copyingId === selectedTicket.id}
+                  defaultProvider={defaultProvider}
+                  language={language}
                 />
               )}
             </>
           )}
-
-          {activeTab === 'repos' && (
-            <div style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
-              {workspace.repos.length === 0 ? (
-                <div
-                  style={{
-                    border: '1px dashed var(--line-strong)',
-                    background: 'var(--bg-soft)',
-                    borderRadius: 2,
-                    padding: 16,
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  {msg.dashboard.noRepo}
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                    gap: 16,
-                  }}
-                >
-                  {workspace.repos.map((repo) => (
-                    <RepoCard key={repo.localPath} repo={repo} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'agents' && (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              {workspace.repos.length === 0 ? (
-                <div style={{ padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>
-                  {msg.dashboard.noRepo}
-                </div>
-              ) : (
-                <AgentPanel
-                  workspaceId={workspace.id}
-                  repos={workspace.repos}
-                  initialRepoPath={workspace.repos[0]?.localPath}
-                />
-              )}
-            </div>
-          )}
-
-          {/* Context panel — toujours monté pour préserver le cache de scan */}
-          <div style={{ display: activeTab === 'context' ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
-            <ContextPanel workspace={workspace} />
-          </div>
 
           {activeTab === 'settings' && (
             <ProjectSettings
@@ -443,6 +457,7 @@ export default function Dashboard({
               onTicketsRefresh={() => {
                 void window.tiqora.getTickets(workspace.id).then(setTickets);
                 void window.tiqora.getEpics(workspace.id).then(setEpics);
+                void refreshOverviewData();
               }}
               onDelete={onGoHome}
             />

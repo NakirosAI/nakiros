@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync } from 'fs';
+import type { Dirent } from 'fs';
 import { readdir } from 'fs/promises';
 import { homedir } from 'os';
-import { basename, dirname, join } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import type { StoredWorkspace } from '@tiqora/shared';
 
 export interface ScannedDoc {
@@ -39,53 +40,75 @@ function isExcluded(relPath: string): boolean {
   return normalized.split('/').some((part) => EXCLUDED_DIRS.has(part));
 }
 
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
 async function walkMarkdown(repoPath: string, llmDocs: string[]): Promise<ScannedDoc[]> {
-  const llmDocsSet = new Set(llmDocs.map((d) => join(repoPath, d)));
+  const repoRoot = resolve(repoPath);
+  const llmDocsSet = new Set(llmDocs.map((docPath) => normalizePath(resolve(repoRoot, docPath))));
   const seen = new Set<string>();
   const results: { priority: number; doc: ScannedDoc }[] = [];
+  const stack: Array<{ absPath: string; relPath: string }> = [{ absPath: repoRoot, relPath: '' }];
 
-  let allFiles: string[];
-  try {
-    allFiles = await readdir(repoPath, { recursive: true, encoding: 'utf-8' }) as string[];
-  } catch {
-    return [];
-  }
-
-  for (const relPath of allFiles) {
-    const normalized = relPath.replace(/\\/g, '/');
-    if (!normalized.endsWith('.md')) continue;
-    if (isExcluded(normalized)) continue;
-
-    const absolutePath = join(repoPath, relPath);
-    if (seen.has(absolutePath)) continue;
-    seen.add(absolutePath);
-
-    const fileName = basename(normalized);
-    const dirPart = dirname(normalized);
-    const isGenerated = normalized.startsWith('.tiqora/context/');
-
-    let priority: number;
-    if (llmDocsSet.has(absolutePath)) {
-      priority = 0; // configured llmDocs first
-    } else if (dirPart === '.' && PRIORITY_ROOT_FILES.has(fileName)) {
-      priority = 1; // known root docs
-    } else if (PRIORITY_DIRS.some((d) => normalized.startsWith(d + '/'))) {
-      priority = 2; // docs/ and _bmad-output/
-    } else if (isGenerated) {
-      priority = 50; // generated docs at end
-    } else {
-      continue; // not in whitelist — skip
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    let entries: Dirent[];
+    try {
+      entries = await readdir(current.absPath, { withFileTypes: true });
+    } catch {
+      continue;
     }
 
-    results.push({
-      priority,
-      doc: {
-        name: fileName.replace(/\.md$/i, ''),
-        relativePath: normalized,
-        absolutePath,
-        isGenerated,
-      },
-    });
+    for (const entry of entries) {
+      const nextRelPath = current.relPath ? `${current.relPath}/${entry.name}` : entry.name;
+
+      if (entry.isDirectory()) {
+        if (EXCLUDED_DIRS.has(entry.name) || isExcluded(nextRelPath)) continue;
+        stack.push({
+          absPath: join(current.absPath, entry.name),
+          relPath: nextRelPath,
+        });
+        continue;
+      }
+
+      if (!entry.isFile()) continue;
+      const normalized = nextRelPath.replace(/\\/g, '/');
+      if (!normalized.toLowerCase().endsWith('.md')) continue;
+      if (isExcluded(normalized)) continue;
+
+      const absolutePath = join(current.absPath, entry.name);
+      const normalizedAbsPath = normalizePath(resolve(absolutePath));
+      if (seen.has(normalizedAbsPath)) continue;
+      seen.add(normalizedAbsPath);
+
+      const fileName = basename(normalized);
+      const dirPart = dirname(normalized);
+      const isGenerated = normalized.startsWith('.tiqora/context/');
+
+      let priority: number;
+      if (llmDocsSet.has(normalizedAbsPath)) {
+        priority = 0;
+      } else if (dirPart === '.' && PRIORITY_ROOT_FILES.has(fileName)) {
+        priority = 1;
+      } else if (PRIORITY_DIRS.some((dirName) => normalized.startsWith(`${dirName}/`))) {
+        priority = 2;
+      } else if (isGenerated) {
+        priority = 50;
+      } else {
+        continue;
+      }
+
+      results.push({
+        priority,
+        doc: {
+          name: fileName.replace(/\.md$/i, ''),
+          relativePath: normalized,
+          absolutePath,
+          isGenerated,
+        },
+      });
+    }
   }
 
   results.sort((a, b) => {

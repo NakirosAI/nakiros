@@ -1,4 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { AgentProvider } from '@tiqora/shared';
+
+function isMissingHandlerError(err: unknown, channel: string): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.message.includes(`No handler registered for '${channel}'`);
+}
 
 contextBridge.exposeInMainWorld('tiqora', {
   // Workspace
@@ -7,15 +13,25 @@ contextBridge.exposeInMainWorld('tiqora', {
   getWorkspaces: () => ipcRenderer.invoke('workspace:getAll'),
   saveWorkspace: (w: unknown) => ipcRenderer.invoke('workspace:save', w),
   deleteWorkspace: (id: string) => ipcRenderer.invoke('workspace:delete', id),
+  createWorkspaceRoot: (parentDir: string, workspaceName: string) =>
+    ipcRenderer.invoke('workspace:createRoot', parentDir, workspaceName),
   detectProfile: (path: string) => ipcRenderer.invoke('repo:detectProfile', path),
+  copyLocalRepo: (sourcePath: string, targetParentDir: string) =>
+    ipcRenderer.invoke('repo:copyLocal', sourcePath, targetParentDir),
   syncWorkspace: (w: unknown) => ipcRenderer.invoke('workspace:sync', w),
+  syncWorkspaceYaml: (w: unknown) => ipcRenderer.invoke('workspace:syncYaml', w),
+  resetWorkspace: (w: unknown) => ipcRenderer.invoke('workspace:reset', w),
   openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
   gitRemoteUrl: (repoPath: string) => ipcRenderer.invoke('git:remoteUrl', repoPath),
   gitClone: (url: string, parentDir: string) => ipcRenderer.invoke('git:clone', url, parentDir),
+  gitInit: (repoPath: string) => ipcRenderer.invoke('git:init', repoPath),
   getPreferences: () => ipcRenderer.invoke('preferences:get'),
   savePreferences: (prefs: unknown) => ipcRenderer.invoke('preferences:save', prefs),
   getAgentInstallStatus: (repoPath: string) => ipcRenderer.invoke('agents:status', repoPath),
   installAgents: (request: unknown) => ipcRenderer.invoke('agents:install', request),
+  getGlobalInstallStatus: () => ipcRenderer.invoke('agents:global-status'),
+  installAgentsGlobal: () => ipcRenderer.invoke('agents:install-global'),
+  getAgentCliStatus: () => ipcRenderer.invoke('agents:cli-status'),
 
   // Tickets
   getTickets: (wsId: string) => ipcRenderer.invoke('ticket:getAll', wsId),
@@ -33,8 +49,13 @@ contextBridge.exposeInMainWorld('tiqora', {
   writeClipboard: (text: string) => ipcRenderer.invoke('clipboard:write', text),
 
   // Agent runner
-  agentRun: (repoPath: string, message: string, sessionId: string | null = null) =>
-    ipcRenderer.invoke('agent:run', repoPath, message, sessionId),
+  agentRun: (
+    repoPath: string,
+    message: string,
+    sessionId: string | null = null,
+    additionalDirs?: string[],
+    provider?: AgentProvider,
+  ) => ipcRenderer.invoke('agent:run', repoPath, message, sessionId, additionalDirs, provider),
   agentCancel: (runId: string) => ipcRenderer.invoke('agent:cancel', runId),
   onAgentStart: (cb: (event: { runId: string; command: string; cwd: string }) => void) => {
     const listener = (_: unknown, payload: { runId: string; command: string; cwd: string }) => cb(payload);
@@ -74,8 +95,32 @@ contextBridge.exposeInMainWorld('tiqora', {
   getConversations: () => ipcRenderer.invoke('conversation:getAll'),
   saveConversation: (conv: unknown) => ipcRenderer.invoke('conversation:save', conv),
   deleteConversation: (id: string) => ipcRenderer.invoke('conversation:delete', id),
-  readConversationMessages: (sessionId: string, repoPath: string) =>
-    ipcRenderer.invoke('conversation:readMessages', sessionId, repoPath),
+  readConversationMessages: (sessionId: string, repoPath: string, provider?: AgentProvider) =>
+    ipcRenderer.invoke('conversation:readMessages', sessionId, repoPath, provider),
+  getAgentTabs: async (workspaceId: string) => {
+    try {
+      return await ipcRenderer.invoke('agentTabs:get', workspaceId);
+    } catch (err) {
+      if (isMissingHandlerError(err, 'agentTabs:get')) return null;
+      throw err;
+    }
+  },
+  saveAgentTabs: async (workspaceId: string, state: unknown) => {
+    try {
+      await ipcRenderer.invoke('agentTabs:save', workspaceId, state);
+    } catch (err) {
+      if (isMissingHandlerError(err, 'agentTabs:save')) return;
+      throw err;
+    }
+  },
+  clearAgentTabs: async (workspaceId: string) => {
+    try {
+      await ipcRenderer.invoke('agentTabs:clear', workspaceId);
+    } catch (err) {
+      if (isMissingHandlerError(err, 'agentTabs:clear')) return;
+      throw err;
+    }
+  },
 
   // Jira OAuth
   jiraStartAuth: (wsId: string) => ipcRenderer.invoke('jira:startAuth', wsId),
@@ -94,6 +139,10 @@ contextBridge.exposeInMainWorld('tiqora', {
     ipcRenderer.on('jira:auth-error', listener);
     return () => ipcRenderer.removeListener('jira:auth-error', listener);
   },
+
+  // Docs
+  scanDocs: (workspace: unknown) => ipcRenderer.invoke('docs:scan', workspace),
+  readDoc: (absolutePath: string) => ipcRenderer.invoke('docs:read', absolutePath),
 
   // MCP Server
   getServerStatus: () => ipcRenderer.invoke('server:getStatus'),

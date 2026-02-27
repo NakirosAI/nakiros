@@ -3,6 +3,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StoredWorkspace } from "@tiqora/shared";
 
 export function registerWorkspaceTools(server: McpServer, workspace: StoredWorkspace): void {
+  const topology =
+    (workspace as StoredWorkspace & { topology?: "mono" | "multi" }).topology
+    ?? (workspace.repos.length > 1 ? "multi" : "mono");
+
   server.tool(
     "workspace_info",
     "Get the current workspace information including name, PM tool, and project key",
@@ -17,7 +21,7 @@ export function registerWorkspaceTools(server: McpServer, workspace: StoredWorks
               name: workspace.name,
               pmTool: workspace.pmTool ?? null,
               projectKey: workspace.projectKey ?? null,
-              mode: workspace.mode ?? "solo",
+              topology,
               repoCount: workspace.repos.length,
               documentLanguage: workspace.documentLanguage ?? "en"
             },

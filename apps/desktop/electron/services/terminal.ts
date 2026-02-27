@@ -1,7 +1,35 @@
-import { spawn } from 'node-pty';
-import type { IPty } from 'node-pty';
 import { existsSync } from 'fs';
 import { homedir, platform } from 'os';
+import { join } from 'path';
+
+type PtySpawn = typeof import('node-pty').spawn;
+type IPty = import('node-pty').IPty;
+
+let cachedSpawn: PtySpawn | null = null;
+
+function resolveNodePtySpawn(): PtySpawn {
+  if (cachedSpawn) return cachedSpawn;
+
+  const candidates = ['node-pty'];
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  if (resourcesPath) {
+    candidates.push(join(resourcesPath, 'node-pty'));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const mod = require(candidate) as { spawn?: PtySpawn };
+      if (mod.spawn) {
+        cachedSpawn = mod.spawn;
+        return cachedSpawn;
+      }
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  throw new Error('node-pty introuvable dans l’application packagée.');
+}
 
 function resolveShell(): string {
   if (platform() === 'win32') return 'powershell.exe';
@@ -56,8 +84,9 @@ export function createTerminal(
 
   // Fallback to home dir if cwd is empty or doesn't exist
   const cwd = repoPath && existsSync(repoPath) ? repoPath : homedir();
+  const spawnPty = resolveNodePtySpawn();
 
-  const pty = spawn(shell, [], {
+  const pty = spawnPty(shell, [], {
     name: 'xterm-256color',
     cols: 80,
     rows: 24,

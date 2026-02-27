@@ -1,17 +1,22 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeImage } from 'electron';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 
 const execFileAsync = promisify(execFile);
 import { startServer, stopServer } from '@tiqora/server';
 import { DEFAULT_MCP_SERVER_URL } from '@tiqora/shared';
 import { getAll, save, remove } from './services/workspace.js';
+import { syncWorkspaceYaml } from './services/workspace-yaml.js';
+import { resetWorkspace } from './services/workspace-reset.js';
 import { detectProfile } from './services/profile-detector.js';
 import { syncToRepos } from './services/workspace-sync.js';
+import { createWorkspaceRoot, copyRepoToDirectory, initGitRepo } from './services/workspace-bootstrap.js';
+import { scanWorkspaceDocs } from './services/doc-scanner.js';
 import { getPreferences, savePreferences } from './services/preferences.js';
-import { getAgentInstallStatus, installAgents } from './services/agent-installer.js';
+import { getAgentInstallStatus, getGlobalInstallStatus, installAgents, installAgentsGlobally } from './services/agent-installer.js';
+import { getAgentCliStatus } from './services/agent-cli.js';
 import {
   getTickets, saveTicket, removeTicket,
   getEpics, saveEpic, removeEpic,
@@ -20,7 +25,9 @@ import { generateContext } from './services/agent-context.js';
 import { createTerminal, writeToTerminal, resizeTerminal, destroyTerminal } from './services/terminal.js';
 import { runAgentCommand, cancelAgentRun } from './services/agent-runner.js';
 import { getConversations, saveConversation, deleteConversation } from './services/conversation-store.js';
+import { getAgentTabsState, saveAgentTabsState, clearAgentTabsState } from './services/agent-tabs-store.js';
 import { readClaudeHistory } from './services/claude-history.js';
+import { readCodexHistory } from './services/codex-history.js';
 import {
   generatePKCE,
   generateState,
@@ -33,6 +40,7 @@ import {
   saveTokens,
   clearTokens,
   getTokenMeta,
+  loadTokens,
   getValidAccessToken,
 } from './services/jira-token-store.js';
 import { syncJiraTickets } from './services/jira-sync.js';
@@ -43,6 +51,7 @@ import type {
   LocalEpic,
   AppPreferences,
   AgentInstallRequest,
+  AgentProvider,
 } from '@tiqora/shared';
 
 // ─── Single-instance lock (required for protocol handling on Windows/Linux) ───
@@ -169,7 +178,10 @@ async function handleOAuthCallback(url: string): Promise<void> {
 
 function loadAppIcon() {
   const candidates = [
+    join(process.resourcesPath, 'icon.svg'),
+    join(__dirname, '../../src/assets/icon.svg'),
     join(__dirname, '../../icon.svg'),
+    join(process.cwd(), 'apps/desktop/src/assets/icon.svg'),
     join(process.cwd(), 'icon.svg'),
   ];
 
@@ -249,11 +261,19 @@ ipcMain.handle('dialog:openFile', async () => {
 ipcMain.handle('workspace:getAll', () => getAll());
 ipcMain.handle('workspace:save', (_, w: StoredWorkspace) => save(w));
 ipcMain.handle('workspace:delete', (_, id: string) => remove(id));
+ipcMain.handle('workspace:createRoot', (_, parentDir: string, workspaceName: string) =>
+  createWorkspaceRoot(parentDir, workspaceName));
 ipcMain.handle('repo:detectProfile', (_, path: string) => detectProfile(path));
+ipcMain.handle('repo:copyLocal', (_, sourcePath: string, targetParentDir: string) =>
+  copyRepoToDirectory(sourcePath, targetParentDir));
+ipcMain.handle('workspace:syncYaml', (_, w: StoredWorkspace) => syncWorkspaceYaml(w));
+ipcMain.handle('workspace:reset', (_, w: StoredWorkspace) => resetWorkspace(w));
 ipcMain.handle('workspace:sync', (_, w: StoredWorkspace) => {
   const prefs = getPreferences();
   syncToRepos(w, prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL);
 });
+ipcMain.handle('docs:scan', (_, w: StoredWorkspace) => scanWorkspaceDocs(w));
+ipcMain.handle('docs:read', (_, absolutePath: string) => readFileSync(absolutePath, 'utf-8'));
 ipcMain.handle('shell:openPath', (_, path: string) => shell.openPath(path));
 ipcMain.handle('git:remoteUrl', async (_, repoPath: string) => {
   try {
@@ -265,6 +285,7 @@ ipcMain.handle('git:remoteUrl', async (_, repoPath: string) => {
 });
 ipcMain.handle('git:clone', async (_, url: string, parentDir: string) => {
   try {
+    mkdirSync(parentDir, { recursive: true });
     await execFileAsync('git', ['clone', url], { cwd: parentDir });
     const repoName = url.split('/').pop()?.replace(/\.git$/, '') ?? 'repo';
     return { success: true, repoPath: join(parentDir, repoName), repoName };
@@ -273,10 +294,22 @@ ipcMain.handle('git:clone', async (_, url: string, parentDir: string) => {
     return { success: false, repoPath: '', repoName: '', error };
   }
 });
+ipcMain.handle('git:init', async (_, repoPath: string) => {
+  try {
+    await initGitRepo(repoPath);
+    return { success: true };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    return { success: false, error };
+  }
+});
 ipcMain.handle('preferences:get', () => getPreferences());
 ipcMain.handle('preferences:save', (_, prefs: AppPreferences) => savePreferences(prefs));
 ipcMain.handle('agents:status', (_, repoPath: string) => getAgentInstallStatus(repoPath));
 ipcMain.handle('agents:install', (_, request: AgentInstallRequest) => installAgents(request));
+ipcMain.handle('agents:global-status', () => getGlobalInstallStatus());
+ipcMain.handle('agents:install-global', () => installAgentsGlobally());
+ipcMain.handle('agents:cli-status', () => getAgentCliStatus());
 
 // ─── IPC: Tickets ─────────────────────────────────────────────────────────────
 
@@ -320,14 +353,32 @@ ipcMain.handle('terminal:destroy', (_, terminalId: string) => {
   destroyTerminal(terminalId);
 });
 
-// ─── IPC: Agent runner (claude --output-format stream-json) ──────────────────
+// ─── IPC: Agent runner (provider: claude/codex/cursor) ───────────────────────
 
-ipcMain.handle('agent:run', (event, repoPath: string, message: string, sessionId: string | null) => {
+ipcMain.handle(
+  'agent:run',
+  (
+    event,
+    repoPath: string,
+    message: string,
+    sessionId: string | null,
+    additionalDirs?: string[],
+    requestedProvider?: AgentProvider,
+  ) => {
   const win = BrowserWindow.fromWebContents(event.sender);
+  const prefs = getPreferences();
+  const provider = (
+    requestedProvider === 'claude'
+    || requestedProvider === 'codex'
+    || requestedProvider === 'cursor'
+  )
+    ? requestedProvider
+    : (prefs.agentProvider ?? 'claude');
   // Use `let` + capture in onStart to avoid TDZ: onDone can fire synchronously
   // (e.g. spawn error) before the `const runId = ...` assignment completes.
   let runId = '';
   runId = runAgentCommand(
+    provider,
     repoPath,
     message,
     sessionId ?? null,
@@ -337,6 +388,7 @@ ipcMain.handle('agent:run', (event, repoPath: string, message: string, sessionId
     },
     (evt) => win?.webContents.send('agent:event', { runId, event: evt }),
     (exitCode, error) => win?.webContents.send('agent:done', { runId, exitCode, error }),
+    additionalDirs,
   );
   return runId;
 });
@@ -350,8 +402,21 @@ ipcMain.handle('agent:cancel', (_, runId: string) => {
 ipcMain.handle('conversation:getAll', () => getConversations());
 ipcMain.handle('conversation:save', (_, conv: unknown) => saveConversation(conv as Parameters<typeof saveConversation>[0]));
 ipcMain.handle('conversation:delete', (_, id: string) => deleteConversation(id));
-ipcMain.handle('conversation:readMessages', (_, sessionId: string, repoPath: string) =>
-  readClaudeHistory(sessionId, repoPath));
+ipcMain.handle(
+  'conversation:readMessages',
+  (_, sessionId: string, repoPath: string, provider?: AgentProvider) => {
+    if (provider === 'codex') return readCodexHistory(sessionId);
+    if (provider === 'claude') return readClaudeHistory(sessionId, repoPath);
+    return [];
+  },
+);
+
+// ─── IPC: Agent tabs (multi-conversations state) ────────────────────────────
+
+ipcMain.handle('agentTabs:get', (_, workspaceId: string) => getAgentTabsState(workspaceId));
+ipcMain.handle('agentTabs:save', (_, workspaceId: string, state: unknown) =>
+  saveAgentTabsState(workspaceId, state as Parameters<typeof saveAgentTabsState>[1]));
+ipcMain.handle('agentTabs:clear', (_, workspaceId: string) => clearAgentTabsState(workspaceId));
 
 // ─── IPC: Jira OAuth ─────────────────────────────────────────────────────────
 
@@ -392,8 +457,9 @@ ipcMain.handle('jira:getValidToken', (_, wsId: string) => getValidAccessToken(ws
 ipcMain.handle('jira:getProjects', async (_, wsId: string) => {
   const token = await getValidAccessToken(wsId);
   const workspace = getAll().find((w) => w.id === wsId);
-  if (!workspace?.jiraCloudId) throw new Error('Not connected to Jira');
-  return fetchProjects(token, workspace.jiraCloudId);
+  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
+  if (!cloudId) throw new Error('Not connected to Jira');
+  return fetchProjects(token, cloudId);
 });
 
 
@@ -483,4 +549,16 @@ app.on('before-quit', () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('activate', () => {
+  const existing = BrowserWindow.getAllWindows();
+  if (existing.length === 0) {
+    createWindow();
+    return;
+  }
+  const win = existing[0];
+  if (win?.isMinimized()) win.restore();
+  win?.show();
+  win?.focus();
 });

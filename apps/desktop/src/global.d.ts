@@ -4,6 +4,7 @@ import type {
   LocalTicket,
   LocalEpic,
   AppPreferences,
+  AgentProvider,
   AgentInstallStatus,
   AgentInstallRequest,
   AgentInstallSummary,
@@ -35,6 +36,24 @@ interface JiraAuthErrorPayload {
 }
 
 declare global {
+  interface ScannedDoc {
+    name: string;
+    relativePath: string;
+    absolutePath: string;
+    isGenerated: boolean;
+  }
+
+  interface ScannedRepo {
+    repoName: string;
+    repoPath: string;
+    docs: ScannedDoc[];
+  }
+
+  interface ScanResult {
+    repos: ScannedRepo[];
+    primaryRepoPath: string;
+  }
+
   interface StoredMessage {
     role: 'user' | 'agent';
     content: string;
@@ -46,10 +65,27 @@ declare global {
     sessionId: string;
     repoPath: string;
     repoName: string;
+    provider: AgentProvider;
+    workspaceId?: string;
     title: string;
     createdAt: string;
     lastUsedAt: string;
     messages: StoredMessage[];
+  }
+
+  interface StoredAgentTab {
+    tabId: string;
+    conversationId?: string;
+    repoPath: string;
+    provider: AgentProvider;
+    title: string;
+    sessionId?: string;
+  }
+
+  interface StoredAgentTabsState {
+    workspaceId: string;
+    activeTabId: string | null;
+    tabs: StoredAgentTab[];
   }
 
   type AgentStreamEvent =
@@ -72,15 +108,51 @@ declare global {
       getWorkspaces(): Promise<StoredWorkspace[]>;
       saveWorkspace(w: StoredWorkspace): Promise<void>;
       deleteWorkspace(id: string): Promise<void>;
+      createWorkspaceRoot(parentDir: string, workspaceName: string): Promise<string>;
       detectProfile(localPath: string): Promise<AgentProfile>;
+      copyLocalRepo(sourcePath: string, targetParentDir: string): Promise<{ repoPath: string; repoName: string }>;
       syncWorkspace(w: StoredWorkspace): Promise<void>;
+      syncWorkspaceYaml(workspace: StoredWorkspace): Promise<string>;
+      resetWorkspace(workspace: StoredWorkspace): Promise<{ deletedPaths: string[]; errors: Array<{ path: string; error: string }> }>;
       openPath(path: string): Promise<void>;
       gitRemoteUrl(repoPath: string): Promise<string | null>;
       gitClone(url: string, parentDir: string): Promise<{ success: boolean; repoPath: string; repoName: string; error?: string }>;
+      gitInit(repoPath: string): Promise<{ success: boolean; error?: string }>;
       getPreferences(): Promise<AppPreferences>;
       savePreferences(prefs: AppPreferences): Promise<void>;
       getAgentInstallStatus(repoPath: string): Promise<AgentInstallStatus>;
       installAgents(request: AgentInstallRequest): Promise<AgentInstallSummary>;
+      getAgentCliStatus(): Promise<Array<{
+        provider: 'claude' | 'codex' | 'cursor';
+        label: string;
+        command: string;
+        installed: boolean;
+        path?: string;
+        version?: string;
+        error?: string;
+      }>>;
+      getGlobalInstallStatus(): Promise<{
+        environments: Array<{
+          id: 'claude' | 'codex' | 'cursor';
+          label: string;
+          targetDir: string;
+          installed: number;
+          total: number;
+        }>;
+        totalInstalled: number;
+        totalExpected: number;
+      }>;
+      installAgentsGlobal(): Promise<{
+        environments: Array<{
+          id: 'claude' | 'codex' | 'cursor';
+          label: string;
+          targetDir: string;
+          commandFilesCopied: number;
+          commandFilesOverwritten: number;
+        }>;
+        commandFilesCopied: number;
+        commandFilesOverwritten: number;
+      }>;
 
       // Tickets
       getTickets(wsId: string): Promise<LocalTicket[]>;
@@ -97,7 +169,13 @@ declare global {
       writeClipboard(text: string): Promise<void>;
 
       // Agent runner
-      agentRun(repoPath: string, message: string, sessionId?: string | null): Promise<string>;
+      agentRun(
+        repoPath: string,
+        message: string,
+        sessionId?: string | null,
+        additionalDirs?: string[],
+        provider?: AgentProvider,
+      ): Promise<string>;
       agentCancel(runId: string): Promise<void>;
       onAgentStart(cb: (event: { runId: string; command: string; cwd: string }) => void): () => void;
       onAgentEvent(cb: (payload: { runId: string; event: AgentStreamEvent }) => void): () => void;
@@ -115,7 +193,10 @@ declare global {
       getConversations(): Promise<StoredConversation[]>;
       saveConversation(conv: StoredConversation): Promise<void>;
       deleteConversation(id: string): Promise<void>;
-      readConversationMessages(sessionId: string, repoPath: string): Promise<StoredMessage[]>;
+      readConversationMessages(sessionId: string, repoPath: string, provider?: AgentProvider): Promise<StoredMessage[]>;
+      getAgentTabs(workspaceId: string): Promise<StoredAgentTabsState | null>;
+      saveAgentTabs(workspaceId: string, state: StoredAgentTabsState): Promise<void>;
+      clearAgentTabs(workspaceId: string): Promise<void>;
 
       // Jira OAuth
       jiraStartAuth(wsId: string): Promise<void>;
@@ -125,6 +206,10 @@ declare global {
       onJiraAuthComplete(cb: (data: JiraAuthCompletePayload) => void): () => void;
       onJiraAuthError(cb: (data: JiraAuthErrorPayload) => void): () => void;
       jiraGetProjects(wsId: string): Promise<JiraProject[]>;
+
+      // Docs
+      scanDocs(workspace: StoredWorkspace): Promise<ScanResult>;
+      readDoc(absolutePath: string): Promise<string>;
 
       // MCP Server
       getServerStatus(): Promise<'starting' | 'running' | 'stopped'>;

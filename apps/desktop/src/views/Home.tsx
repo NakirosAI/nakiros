@@ -59,9 +59,9 @@ export default function Home({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'flex-start',
+        justifyContent: 'center',
         minHeight: '100vh',
-        padding: '48px 24px 32px',
+        padding: '24px',
         boxSizing: 'border-box',
       }}
     >

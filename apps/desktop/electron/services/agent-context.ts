@@ -30,7 +30,8 @@ export function generateContext(
     ? `${workspace.name} (${workspace.pmTool.toUpperCase()}${workspace.projectKey ? ` ${workspace.projectKey}` : ''})`
     : workspace.name;
   lines.push(`> Workspace : **${wsCtx}**`);
-  if (workspace.mode) lines.push(`> Mode : ${workspace.mode}`);
+  const topology = workspace.topology ?? (workspace.repos.length > 1 ? 'multi' : 'mono');
+  lines.push(`> Structure : ${topology}`);
   lines.push('');
 
   // Ticket

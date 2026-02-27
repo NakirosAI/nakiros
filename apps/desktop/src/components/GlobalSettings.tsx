@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { Download } from 'lucide-react';
 import type {
+  AgentProvider,
   AppPreferences,
   LanguagePreference,
   ResolvedLanguage,
@@ -17,6 +19,27 @@ interface Props {
 }
 
 type Status = 'idle' | 'saving' | 'saved' | 'error';
+type GlobalStatus = 'idle' | 'loading' | 'installing' | 'success' | 'error';
+type GlobalInstallStatus = {
+  environments: Array<{
+    id: 'claude' | 'codex' | 'cursor';
+    label: string;
+    targetDir: string;
+    installed: number;
+    total: number;
+  }>;
+  totalInstalled: number;
+  totalExpected: number;
+};
+type AgentCliStatus = {
+  provider: 'claude' | 'codex' | 'cursor';
+  label: string;
+  command: string;
+  installed: boolean;
+  path?: string;
+  version?: string;
+  error?: string;
+};
 
 export default function GlobalSettings({
   preferences,
@@ -28,6 +51,40 @@ export default function GlobalSettings({
   const msg = MESSAGES[language];
   const [status, setStatus] = useState<Status>('idle');
   const timerRef = useRef<number | null>(null);
+  const [globalInfo, setGlobalInfo] = useState<GlobalInstallStatus | null>(null);
+  const [globalStatus, setGlobalStatus] = useState<GlobalStatus>('idle');
+  const [globalMsg, setGlobalMsg] = useState<string>('');
+  const [cliInfo, setCliInfo] = useState<AgentCliStatus[] | null>(null);
+  const [cliLoading, setCliLoading] = useState(false);
+
+  useEffect(() => {
+    setGlobalStatus('loading');
+    void window.tiqora.getGlobalInstallStatus().then((info) => {
+      setGlobalInfo(info);
+      setGlobalStatus('idle');
+    }).catch(() => setGlobalStatus('idle'));
+  }, []);
+
+  useEffect(() => {
+    setCliLoading(true);
+    void window.tiqora.getAgentCliStatus().then((info) => {
+      setCliInfo(info);
+    }).finally(() => setCliLoading(false));
+  }, []);
+
+  async function handleInstallGlobal() {
+    setGlobalStatus('installing');
+    setGlobalMsg('');
+    try {
+      const r = await window.tiqora.installAgentsGlobal();
+      setGlobalInfo(await window.tiqora.getGlobalInstallStatus());
+      setGlobalMsg(msg.settings.globalAgentsSuccess(r.commandFilesCopied, r.commandFilesOverwritten));
+      setGlobalStatus('success');
+    } catch {
+      setGlobalMsg(msg.settings.globalAgentsError);
+      setGlobalStatus('error');
+    }
+  }
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -70,6 +127,9 @@ export default function GlobalSettings({
     status === 'saved' ? msg.settings.saveSuccess
       : status === 'error' ? msg.settings.saveError
         : '';
+  const providerAvailability = new Map((cliInfo ?? []).map((entry) => [entry.provider, entry.installed]));
+  const selectedProvider = preferences.agentProvider ?? 'claude';
+  const selectedProviderMissing = cliInfo != null && providerAvailability.get(selectedProvider) === false;
 
   return (
     <div
@@ -160,6 +220,58 @@ export default function GlobalSettings({
           </div>
         </section>
 
+        {/* Agent provider */}
+        <section>
+          <h3 style={sectionTitle}>{msg.settings.agentProviderTitle}</h3>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {([
+              ['claude', msg.settings.agentProviderClaude],
+              ['codex', msg.settings.agentProviderCodex],
+              ['cursor', msg.settings.agentProviderCursor],
+            ] as [AgentProvider, string][]).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => void update({ agentProvider: value })}
+                disabled={cliInfo != null && providerAvailability.get(value) === false}
+                style={{
+                  ...chipStyle((preferences.agentProvider ?? 'claude') === value),
+                  ...(cliInfo != null && providerAvailability.get(value) === false
+                    ? { opacity: 0.45, cursor: 'not-allowed' as const }
+                    : {}),
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {selectedProviderMissing && (
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--danger)' }}>
+              {msg.settings.agentCliStatusMissingWarning}
+            </p>
+          )}
+        </section>
+
+        {/* CLI status */}
+        <section>
+          <h3 style={sectionTitle}>{msg.settings.agentCliStatusTitle}</h3>
+          {cliLoading && (
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
+              {msg.settings.agentCliStatusChecking}
+            </p>
+          )}
+          {!cliLoading && cliInfo && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {cliInfo.map((entry) => (
+                <p key={entry.provider} style={{ margin: 0, fontSize: 11, color: entry.installed ? 'var(--text-muted)' : 'var(--danger)', fontFamily: 'monospace' }}>
+                  {entry.label}: {entry.installed ? msg.settings.envDetected : msg.settings.envNotDetected}
+                  {' · '}
+                  {entry.version ?? msg.settings.agentCliStatusVersionUnknown}
+                </p>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* MCP Server */}
         <section>
           <h3 style={sectionTitle}>{msg.settings.mcpServerTitle}</h3>
@@ -185,6 +297,52 @@ export default function GlobalSettings({
           <p style={{ margin: '5px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
             {msg.settings.mcpServerHint}
           </p>
+        </section>
+
+        {/* Global CLI commands */}
+        <section>
+          <h3 style={sectionTitle}>{msg.settings.globalAgentsTitle}</h3>
+          <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            {msg.settings.globalAgentsSubtitle}
+          </p>
+          {globalInfo && (
+            <div style={{ margin: '0 0 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <p style={{ margin: 0, fontSize: 11, color: globalInfo.totalInstalled === globalInfo.totalExpected ? 'var(--success, #22c55e)' : 'var(--text-muted)' }}>
+                {msg.settings.globalAgentsStatus(globalInfo.totalInstalled, globalInfo.totalExpected)}
+              </p>
+              {globalInfo.environments.map((env) => (
+                <p key={env.id} style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                  {env.label}: {env.installed}/{env.total} · {env.targetDir}
+                </p>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={() => void handleInstallGlobal()}
+            disabled={globalStatus === 'installing' || globalStatus === 'loading'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 10px',
+              background: 'var(--primary)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 2,
+              cursor: globalStatus === 'installing' || globalStatus === 'loading' ? 'default' : 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+              opacity: globalStatus === 'installing' || globalStatus === 'loading' ? 0.6 : 1,
+            }}
+          >
+            <Download size={13} />
+            {globalStatus === 'installing' ? msg.settings.globalAgentsInstalling : msg.settings.globalAgentsInstallAction}
+          </button>
+          {globalMsg && (
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: globalStatus === 'error' ? 'var(--danger)' : 'var(--text-muted)' }}>
+              {globalMsg}
+            </p>
+          )}
         </section>
 
         {statusText && (

@@ -1,0 +1,33 @@
+name: hotfix-story
+description: "Fast-track production incident workflow: triage, minimal-scope fix, expedited MR, production sync"
+author: "Tiqora"
+
+# Workflow engine bootstrap
+config_source: "{project-root}/.tiqora.yaml"
+date: system-generated
+
+# Workflow components
+installed_path: "{project-root}/_tiqora/workflows/4-implementation/hotfix-story"
+instructions: "{installed_path}/instructions.xml"
+
+# Runtime paths
+project_config: "{project-root}/.tiqora.yaml"
+profile_config: "~/.tiqora/config.yaml"
+workspace_config: "{project-root}/.tiqora.workspace.yaml"
+active_run_file: "{project-root}/.tiqora/state/active-run.json"
+workflow_runs_dir: "{project-root}/.tiqora/workflows/runs"
+
+# PM tracking
+pm_in_progress_status: "In Progress"
+pm_review_status: "In Review"
+pm_done_status: "Done"
+worklog_rounding_minutes: 15
+minimum_worklog_minutes: 15
+
+# Hotfix-specific
+hotfix_branch_prefix: "hotfix/"
+
+# Defaults
+default_user_name: "Developer"
+default_communication_language: "Français"
+default_document_language: "English"

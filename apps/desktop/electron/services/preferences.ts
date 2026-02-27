@@ -8,6 +8,7 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   language: 'system',
   updatedAt: '',
   mcpServerUrl: undefined,
+  agentProvider: 'claude',
 };
 
 function getStoragePath(): string {
@@ -28,6 +29,7 @@ export function getPreferences(): AppPreferences {
       language: parsed.language ?? 'system',
       updatedAt: parsed.updatedAt ?? '',
       mcpServerUrl: parsed.mcpServerUrl,
+      agentProvider: parsed.agentProvider ?? 'claude',
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -40,6 +42,7 @@ export function savePreferences(prefs: AppPreferences): void {
     language: prefs.language ?? 'system',
     updatedAt: prefs.updatedAt || new Date().toISOString(),
     mcpServerUrl: prefs.mcpServerUrl || undefined,
+    agentProvider: prefs.agentProvider ?? 'claude',
   };
   writeFileSync(getStoragePath(), JSON.stringify(next, null, 2), 'utf-8');
 }

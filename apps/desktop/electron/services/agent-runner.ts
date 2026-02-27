@@ -1,13 +1,44 @@
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { homedir, platform } from 'os';
+import { resolve } from 'path';
+import type { AgentProvider } from '@tiqora/shared';
 
 // ─── Env / shell resolution ───────────────────────────────────────────────────
+
+function collectManagerPaths(): string[] {
+  const home = homedir();
+  const paths: string[] = [
+    resolve(home, '.volta/bin'),
+    resolve(home, '.asdf/shims'),
+    resolve(home, '.nvm/current/bin'),
+    resolve(home, '.fnm'),
+  ];
+
+  const nvmVersionsDir = resolve(home, '.nvm/versions/node');
+  if (existsSync(nvmVersionsDir)) {
+    for (const entry of readdirSync(nvmVersionsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      paths.push(resolve(nvmVersionsDir, entry.name, 'bin'));
+    }
+  }
+
+  const fnmVersionsDir = resolve(home, '.local/share/fnm/node-versions');
+  if (existsSync(fnmVersionsDir)) {
+    for (const entry of readdirSync(fnmVersionsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      paths.push(resolve(fnmVersionsDir, entry.name, 'installation/bin'));
+    }
+  }
+
+  return paths.filter((p, i, arr) => existsSync(p) && arr.indexOf(p) === i);
+}
 
 const extraPaths = [
   `${homedir()}/.bun/bin`,
   `${homedir()}/.local/bin`,
   `${homedir()}/.npm-global/bin`,
+  ...collectManagerPaths(),
   '/opt/homebrew/bin',
   '/usr/local/bin',
   '/usr/bin',
@@ -32,7 +63,7 @@ function resolveShell(): string {
 const env = buildEnv();
 const userShell = resolveShell();
 
-// ─── Claude stream-json event types ──────────────────────────────────────────
+// ─── Stream event types ──────────────────────────────────────────────────────
 
 interface ClaudeSystemEvent {
   type: 'system';
@@ -67,6 +98,19 @@ type ClaudeStreamEvent =
   | ClaudeResultEvent
   | { type: string };
 
+interface CodexItem {
+  id?: string;
+  type?: string;
+  text?: string;
+  command?: string;
+}
+
+interface CodexStreamEvent {
+  type?: string;
+  thread_id?: string;
+  item?: CodexItem;
+}
+
 // ─── Public stream event types (sent to renderer) ────────────────────────────
 
 export type StreamEvent =
@@ -96,6 +140,131 @@ function formatTool(name: string, input: Record<string, unknown>): string {
   }
 }
 
+function shellEscape(value: string): string {
+  return value.replace(/'/g, "'\\''");
+}
+
+function formatProviderName(provider: AgentProvider): string {
+  if (provider === 'claude') return 'Claude';
+  if (provider === 'codex') return 'Codex';
+  return 'Cursor';
+}
+
+function buildRunnerCommand(args: {
+  provider: AgentProvider;
+  message: string;
+  sessionId: string | null;
+  additionalDirs: string[];
+  cwd: string;
+}): { shellCommand: string; displayCommand: string; addDirCount: number } {
+  const escapedMessage = shellEscape(args.message);
+  const addDirFlags = args.additionalDirs
+    .filter((d) => d && d !== args.cwd && existsSync(d))
+    .map((d) => `--add-dir '${shellEscape(d)}'`);
+  const addDirCount = addDirFlags.length;
+  const addDirPart = addDirCount > 0 ? `${addDirFlags.join(' ')} ` : '';
+
+  if (args.provider === 'codex') {
+    const resumePart = args.sessionId
+      ? `exec resume --json --skip-git-repo-check '${shellEscape(args.sessionId)}' '${escapedMessage}'`
+      : `exec --json --skip-git-repo-check ${addDirPart}'${escapedMessage}'`;
+    const shellCommand = `codex -a never ${resumePart}`;
+    const displayCommand = `codex ${args.sessionId ? 'resume ' : ''}--json '${args.message.slice(0, 80)}${args.message.length > 80 ? '…' : ''}'`;
+    return { shellCommand, displayCommand, addDirCount };
+  }
+
+  if (args.provider === 'cursor') {
+    const resumePart = args.sessionId ? `--resume '${shellEscape(args.sessionId)}' ` : '';
+    const workspacePart = `--workspace '${shellEscape(args.cwd)}' `;
+    // Cursor Agent does not support --add-dir; workspace is constrained to --workspace.
+    const shellCommand = `cursor-agent --print --output-format stream-json --stream-partial-output --force ${workspacePart}${resumePart}'${escapedMessage}'`;
+    const displayCommand = `cursor-agent ${args.sessionId ? 'resume ' : ''}--print '${args.message.slice(0, 80)}${args.message.length > 80 ? '…' : ''}'`;
+    return { shellCommand, displayCommand, addDirCount };
+  }
+
+  const resumeFlag = args.sessionId ? `--resume '${shellEscape(args.sessionId)}' ` : '';
+  // --dangerously-skip-permissions: required in --print mode for unattended writes.
+  const shellCommand = `claude --output-format stream-json --verbose --dangerously-skip-permissions ${addDirPart}${resumeFlag}--print '${escapedMessage}'`;
+  const displayCommand = `claude ${addDirCount > 0 ? `(+${addDirCount} repos) ` : ''}${resumeFlag}--print '${args.message.slice(0, 80)}${args.message.length > 80 ? '…' : ''}'`;
+  return { shellCommand, displayCommand, addDirCount };
+}
+
+function installHint(provider: AgentProvider): string {
+  if (provider === 'codex') {
+    return '`codex` CLI not found.\nInstall Codex CLI and ensure it is on PATH.';
+  }
+  if (provider === 'cursor') {
+    return '`cursor-agent` CLI not found.\nInstall Cursor Agent CLI and ensure it is on PATH.';
+  }
+  return '`claude` CLI not found.\nMake sure Claude Code is installed: https://claude.ai/code';
+}
+
+function handleClaudeLikeEvent(event: ClaudeStreamEvent, onEvent: (event: StreamEvent) => void, state: { hasEmittedText: boolean }): void {
+  switch (event.type) {
+    case 'system': {
+      const sys = event as ClaudeSystemEvent;
+      if (sys.session_id) {
+        onEvent({ type: 'session', id: sys.session_id });
+      }
+      return;
+    }
+
+    case 'assistant': {
+      const ast = event as ClaudeAssistantEvent;
+      if (ast.session_id) onEvent({ type: 'session', id: ast.session_id });
+
+      for (const block of ast.message.content ?? []) {
+        if (block.type === 'text' && block.text) {
+          state.hasEmittedText = true;
+          onEvent({ type: 'text', text: block.text });
+        } else if (block.type === 'tool_use') {
+          const display = formatTool(block.name, block.input ?? {});
+          onEvent({ type: 'tool', name: block.name, display });
+        }
+      }
+      return;
+    }
+
+    case 'result': {
+      const res = event as ClaudeResultEvent;
+      if (res.session_id) onEvent({ type: 'session', id: res.session_id });
+      if (!state.hasEmittedText && res.result) {
+        onEvent({ type: 'text', text: res.result });
+      }
+      return;
+    }
+
+    default:
+      return;
+  }
+}
+
+function handleCodexEvent(event: CodexStreamEvent, onEvent: (event: StreamEvent) => void, state: { hasEmittedText: boolean }): void {
+  if (event.type === 'thread.started' && typeof event.thread_id === 'string') {
+    onEvent({ type: 'session', id: event.thread_id });
+    return;
+  }
+
+  if (!event.item) return;
+
+  if (event.type === 'item.started' && event.item.type === 'command_execution' && event.item.command) {
+    onEvent({ type: 'tool', name: 'Bash', display: `$ ${event.item.command}` });
+    return;
+  }
+
+  if (event.type === 'item.completed') {
+    if (event.item.type === 'agent_message' && event.item.text) {
+      state.hasEmittedText = true;
+      onEvent({ type: 'text', text: event.item.text });
+      return;
+    }
+
+    if (event.item.type === 'command_execution' && event.item.command) {
+      onEvent({ type: 'tool', name: 'Bash', display: `$ ${event.item.command}` });
+    }
+  }
+}
+
 // ─── Runner ───────────────────────────────────────────────────────────────────
 
 interface RunEntry { kill: () => void }
@@ -110,25 +279,29 @@ export interface RunStartInfo {
 }
 
 export function runAgentCommand(
+  provider: AgentProvider,
   repoPath: string,
   message: string,
   sessionId: string | null,
   onStart: (info: RunStartInfo) => void,
   onEvent: (event: StreamEvent) => void,
   onDone: (exitCode: number, error?: string) => void,
+  additionalDirs?: string[],
 ): string {
   const runId = `run-${++runCounter}`;
   const cwd = repoPath && existsSync(repoPath) ? repoPath : homedir();
-  const escapedMessage = message.replace(/'/g, "'\\''");
+  const { shellCommand, displayCommand, addDirCount } = buildRunnerCommand({
+    provider,
+    message,
+    sessionId,
+    additionalDirs: additionalDirs ?? [],
+    cwd,
+  });
 
-  // Build the claude command
-  const resumeFlag = sessionId ? `--resume '${sessionId}' ` : '';
-  const shellCommand = `claude --output-format stream-json --verbose ${resumeFlag}--print '${escapedMessage}'`;
-  const displayCommand = `claude ${resumeFlag}--print '${message.slice(0, 80)}${message.length > 80 ? '…' : ''}'`;
-
-  console.log(`[agent-runner] Starting run ${runId} (session: ${sessionId ?? 'new'})`);
+  console.log(`[agent-runner] Starting run ${runId} (${formatProviderName(provider)}) (session: ${sessionId ?? 'new'})`);
   console.log(`[agent-runner] Shell: ${userShell}`);
   console.log(`[agent-runner] CWD: ${cwd}`);
+  console.log(`[agent-runner] Add-dirs: ${addDirCount > 0 ? addDirCount : '(none)'}`);
   console.log(`[agent-runner] Command: ${displayCommand}`);
 
   onStart({ runId, command: displayCommand, cwd });
@@ -149,51 +322,8 @@ export function runAgentCommand(
 
   // ── NDJSON stream parser ────────────────────────────────────────────────────
   let ndjsonBuffer = '';
-  let hasEmittedText = false; // track if any text came via assistant events
-
-  function handleClaudeEvent(event: ClaudeStreamEvent) {
-    switch (event.type) {
-      case 'system': {
-        const sys = event as ClaudeSystemEvent;
-        if (sys.session_id) {
-          console.log(`[agent-runner] Session: ${sys.session_id}`);
-          onEvent({ type: 'session', id: sys.session_id });
-        }
-        break;
-      }
-
-      case 'assistant': {
-        const ast = event as ClaudeAssistantEvent;
-        if (ast.session_id) onEvent({ type: 'session', id: ast.session_id });
-
-        for (const block of ast.message.content ?? []) {
-          if (block.type === 'text' && block.text) {
-            hasEmittedText = true;
-            onEvent({ type: 'text', text: block.text });
-          } else if (block.type === 'tool_use') {
-            const display = formatTool(block.name, block.input ?? {});
-            console.log(`[agent-runner] Tool: ${block.name} → ${display}`);
-            onEvent({ type: 'tool', name: block.name, display });
-          }
-        }
-        break;
-      }
-
-      case 'result': {
-        const res = event as ClaudeResultEvent;
-        if (res.session_id) onEvent({ type: 'session', id: res.session_id });
-        // Fallback: if no text came via assistant events (e.g. "Unknown skill",
-        // immediate exits), emit result.result directly to avoid blank messages.
-        if (!hasEmittedText && res.result) {
-          onEvent({ type: 'text', text: res.result });
-        }
-        break;
-      }
-
-      default:
-        break;
-    }
-  }
+  const streamState = { hasEmittedText: false };
+  let stderrBuffer = '';
 
   child.stdout?.on('data', (chunk: Buffer) => {
     ndjsonBuffer += chunk.toString('utf8');
@@ -205,7 +335,12 @@ export function runAgentCommand(
       if (!trimmed) continue;
       process.stdout.write(`[agent-runner][${runId}] ${trimmed}\n`);
       try {
-        handleClaudeEvent(JSON.parse(trimmed) as ClaudeStreamEvent);
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        if (provider === 'codex') {
+          handleCodexEvent(parsed as CodexStreamEvent, onEvent, streamState);
+        } else {
+          handleClaudeLikeEvent(parsed as ClaudeStreamEvent, onEvent, streamState);
+        }
       } catch {
         // Not JSON (startup messages, etc.) — ignore
       }
@@ -215,6 +350,7 @@ export function runAgentCommand(
   child.stderr?.on('data', (chunk: Buffer) => {
     const text = chunk.toString('utf8');
     if (text.trim()) {
+      stderrBuffer = `${stderrBuffer}\n${text}`.trim().slice(-4000);
       process.stderr.write(`[agent-runner][${runId}][stderr] ${text}`);
     }
   });
@@ -222,18 +358,29 @@ export function runAgentCommand(
   child.on('close', (code) => {
     // Flush remaining NDJSON buffer
     if (ndjsonBuffer.trim()) {
-      try { handleClaudeEvent(JSON.parse(ndjsonBuffer.trim()) as ClaudeStreamEvent); } catch {}
+      try {
+        const parsed = JSON.parse(ndjsonBuffer.trim()) as Record<string, unknown>;
+        if (provider === 'codex') {
+          handleCodexEvent(parsed as CodexStreamEvent, onEvent, streamState);
+        } else {
+          handleClaudeLikeEvent(parsed as ClaudeStreamEvent, onEvent, streamState);
+        }
+      } catch {
+        // Ignore non-JSON tail.
+      }
     }
     console.log(`[agent-runner] Run ${runId} exited with code ${String(code)}`);
     runs.delete(runId);
-    onDone(code ?? 0);
+    const exitCode = code ?? 0;
+    const error = exitCode !== 0 && stderrBuffer ? stderrBuffer : undefined;
+    onDone(exitCode, error);
   });
 
   child.on('error', (err) => {
     console.error(`[agent-runner] Process error: ${err.message}`);
     runs.delete(runId);
     if (err.message.includes('ENOENT') || err.message.includes('not found')) {
-      onDone(1, '`claude` CLI not found.\nMake sure Claude Code is installed: https://claude.ai/code');
+      onDone(1, installHint(provider));
     } else {
       onDone(1, err.message);
     }

@@ -14,6 +14,7 @@ import RepoCard from '../components/RepoCard';
 import GlobalSettings from '../components/GlobalSettings';
 import ProjectSettings from '../components/ProjectSettings';
 import AgentPanel from '../components/AgentPanel';
+import ContextPanel from '../components/ContextPanel';
 import appIcon from '../assets/icon.svg';
 import { Settings2 } from 'lucide-react';
 import { MESSAGES } from '../i18n';
@@ -134,6 +135,7 @@ export default function Dashboard({
   }
 
   const repoNames = workspace.repos.map((r) => r.name);
+  const workspaceTopology = workspace.topology ?? (workspace.repos.length > 1 ? 'multi' : 'mono');
   const unopenedWorkspaces = allWorkspaces.filter(
     (candidate) => !openWorkspaces.some((opened) => opened.id === candidate.id),
   );
@@ -263,20 +265,18 @@ export default function Dashboard({
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {msg.dashboard.repoCount(workspace.repos.length)}
           </span>
-          {workspace.mode && (
-            <span
-              style={{
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                background: 'var(--bg-muted)',
-                padding: '3px 8px',
-                borderRadius: 2,
-                border: '1px solid var(--line)',
-              }}
-            >
-              {workspace.mode === 'solo' ? msg.dashboard.modeSolo : msg.dashboard.modeConnected}
-            </span>
-          )}
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              background: 'var(--bg-muted)',
+              padding: '3px 8px',
+              borderRadius: 2,
+              border: '1px solid var(--line)',
+            }}
+          >
+            {workspaceTopology === 'mono' ? msg.dashboard.topologyMono : msg.dashboard.topologyMulti}
+          </span>
           <button
             onClick={isLocalServer ? onRestartServer : undefined}
             disabled={!isLocalServer || serverStatus === 'starting'}
@@ -346,6 +346,7 @@ export default function Dashboard({
             board: msg.sidebar.board,
             repos: msg.sidebar.repos,
             agents: msg.sidebar.agents,
+            context: msg.sidebar.context,
             settings: msg.sidebar.settings,
           }}
         />
@@ -421,12 +422,18 @@ export default function Dashboard({
                 </div>
               ) : (
                 <AgentPanel
+                  workspaceId={workspace.id}
                   repos={workspace.repos}
                   initialRepoPath={workspace.repos[0]?.localPath}
                 />
               )}
             </div>
           )}
+
+          {/* Context panel — toujours monté pour préserver le cache de scan */}
+          <div style={{ display: activeTab === 'context' ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
+            <ContextPanel workspace={workspace} />
+          </div>
 
           {activeTab === 'settings' && (
             <ProjectSettings
@@ -437,6 +444,7 @@ export default function Dashboard({
                 void window.tiqora.getTickets(workspace.id).then(setTickets);
                 void window.tiqora.getEpics(workspace.id).then(setEpics);
               }}
+              onDelete={onGoHome}
             />
           )}
         </div>

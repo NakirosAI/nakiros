@@ -26,14 +26,15 @@ type Dictionary = {
     noOtherWorkspace: string;
     openedWorkspaceTabs: string;
     repoCount: (n: number) => string;
-    modeSolo: string;
-    modeConnected: string;
+    topologyMono: string;
+    topologyMulti: string;
     noRepo: string;
   };
   sidebar: {
     board: string;
     repos: string;
     agents: string;
+    context: string;
     settings: string;
   };
   board: {
@@ -59,6 +60,14 @@ type Dictionary = {
     languageSystem: string;
     languageFrench: string;
     languageEnglish: string;
+    agentProviderTitle: string;
+    agentCliStatusTitle: string;
+    agentCliStatusChecking: string;
+    agentCliStatusMissingWarning: string;
+    agentCliStatusVersionUnknown: string;
+    agentProviderClaude: string;
+    agentProviderCodex: string;
+    agentProviderCursor: string;
     saveSuccess: string;
     saveError: string;
     mcpServerTitle: string;
@@ -82,6 +91,13 @@ type Dictionary = {
     installSuccess: string;
     installError: string;
     installResult: (summary: string) => string;
+    globalAgentsTitle: string;
+    globalAgentsSubtitle: string;
+    globalAgentsStatus: (installed: number, total: number) => string;
+    globalAgentsInstallAction: string;
+    globalAgentsInstalling: string;
+    globalAgentsSuccess: (added: number, updated: number) => string;
+    globalAgentsError: string;
     // Project settings
     projectTitle: string;
     projectSubtitle: string;
@@ -172,9 +188,9 @@ const fr: Dictionary = {
   appName: 'Tiqora',
   home: {
     title: 'Tiqora',
-    subtitle: "Orchestration multi-repo avec un flux local rapide. Ouvre un workspace existant ou démarre un setup en moins d'une minute.",
+    subtitle: "Orchestration multi-repo avec un flux local rapide. Les workspaces sont stockés localement par Tiqora, avec repos optionnels.",
     openWorkspace: 'Ouvrir un workspace',
-    openWorkspaceHint: 'Sélectionner un dossier déjà existant',
+    openWorkspaceHint: 'Sélectionner un dossier repo ou un dossier Tiqora',
     createWorkspace: 'Créer un workspace',
     createWorkspaceHint: 'Configurer un nouveau projet guidé',
     recent: 'Workspaces récents',
@@ -192,14 +208,15 @@ const fr: Dictionary = {
     noOtherWorkspace: 'Tous les workspaces sont déjà ouverts.',
     openedWorkspaceTabs: 'Workspaces ouverts',
     repoCount: (n) => `${n} repo${n > 1 ? 's' : ''}`,
-    modeSolo: '🚀 Solo',
-    modeConnected: '🔗 Connecté',
+    topologyMono: 'Mono-repo',
+    topologyMulti: 'Multi-repo',
     noRepo: 'Aucun repo dans ce workspace.',
   },
   sidebar: {
     board: 'Board',
     repos: 'Repos',
     agents: 'Agents',
+    context: 'Context',
     settings: 'Réglages',
   },
   board: {
@@ -225,6 +242,14 @@ const fr: Dictionary = {
     languageSystem: 'Système',
     languageFrench: 'Français',
     languageEnglish: 'English',
+    agentProviderTitle: "Moteur d'agent",
+    agentCliStatusTitle: 'CLIs détectés',
+    agentCliStatusChecking: 'Détection des CLIs…',
+    agentCliStatusMissingWarning: "Le provider sélectionné n'est pas installé localement.",
+    agentCliStatusVersionUnknown: 'version inconnue',
+    agentProviderClaude: 'Claude Code CLI',
+    agentProviderCodex: 'Codex CLI',
+    agentProviderCursor: 'Cursor Agent CLI',
     saveSuccess: 'Préférences enregistrées.',
     saveError: "Impossible d'enregistrer les préférences.",
     mcpServerTitle: 'Serveur MCP',
@@ -248,6 +273,13 @@ const fr: Dictionary = {
     installSuccess: 'Installation terminée.',
     installError: "Échec de l'installation.",
     installResult: (summary) => `Résultat: ${summary}`,
+    globalAgentsTitle: 'Commandes CLI globales',
+    globalAgentsSubtitle: 'Installe les commandes Tiqora dans ~/.claude/commands, ~/.codex/prompts et ~/.cursor/commands — disponibles dans tous les repos sans installation par repo.',
+    globalAgentsStatus: (installed, total) => `${installed}/${total} commandes installées`,
+    globalAgentsInstallAction: 'Installer globalement',
+    globalAgentsInstalling: 'Installation…',
+    globalAgentsSuccess: (added, updated) => `Terminé — ${added} ajoutées, ${updated} mises à jour`,
+    globalAgentsError: "Échec de l'installation globale.",
     projectTitle: 'Réglages projet',
     projectSubtitle: 'Configure les MCPs, la documentation LLM et les agents pour ce workspace.',
     mcpTitle: 'MCPs (Model Context Protocol)',
@@ -331,9 +363,9 @@ const en: Dictionary = {
   appName: 'Tiqora',
   home: {
     title: 'Tiqora',
-    subtitle: 'Multi-repo orchestration with a fast local workflow. Open an existing workspace or create one in under a minute.',
+    subtitle: 'Multi-repo orchestration with a fast local workflow. Workspaces are stored locally by Tiqora, with repos as optional links.',
     openWorkspace: 'Open workspace',
-    openWorkspaceHint: 'Select an existing folder',
+    openWorkspaceHint: 'Select a repo folder or Tiqora workspace folder',
     createWorkspace: 'Create workspace',
     createWorkspaceHint: 'Configure a new guided project',
     recent: 'Recent workspaces',
@@ -351,14 +383,15 @@ const en: Dictionary = {
     noOtherWorkspace: 'All workspaces are already open.',
     openedWorkspaceTabs: 'Opened workspaces',
     repoCount: (n) => `${n} repo${n > 1 ? 's' : ''}`,
-    modeSolo: '🚀 Solo',
-    modeConnected: '🔗 Connected',
+    topologyMono: 'Mono-repo',
+    topologyMulti: 'Multi-repo',
     noRepo: 'No repository in this workspace.',
   },
   sidebar: {
     board: 'Board',
     repos: 'Repos',
     agents: 'Agents',
+    context: 'Context',
     settings: 'Settings',
   },
   board: {
@@ -384,6 +417,14 @@ const en: Dictionary = {
     languageSystem: 'System',
     languageFrench: 'Français',
     languageEnglish: 'English',
+    agentProviderTitle: 'Agent engine',
+    agentCliStatusTitle: 'Detected CLIs',
+    agentCliStatusChecking: 'Detecting CLIs…',
+    agentCliStatusMissingWarning: 'The selected provider is not installed locally.',
+    agentCliStatusVersionUnknown: 'unknown version',
+    agentProviderClaude: 'Claude Code CLI',
+    agentProviderCodex: 'Codex CLI',
+    agentProviderCursor: 'Cursor Agent CLI',
     saveSuccess: 'Preferences saved.',
     saveError: 'Unable to save preferences.',
     mcpServerTitle: 'MCP Server',
@@ -407,6 +448,13 @@ const en: Dictionary = {
     installSuccess: 'Installation complete.',
     installError: 'Installation failed.',
     installResult: (summary) => `Result: ${summary}`,
+    globalAgentsTitle: 'Global CLI commands',
+    globalAgentsSubtitle: 'Install Tiqora commands in ~/.claude/commands, ~/.codex/prompts, and ~/.cursor/commands — available in all repos without per-repo installation.',
+    globalAgentsStatus: (installed, total) => `${installed}/${total} commands installed`,
+    globalAgentsInstallAction: 'Install globally',
+    globalAgentsInstalling: 'Installing…',
+    globalAgentsSuccess: (added, updated) => `Done — ${added} added, ${updated} updated`,
+    globalAgentsError: 'Global installation failed.',
     projectTitle: 'Project settings',
     projectSubtitle: 'Configure MCPs, LLM documentation and agents for this workspace.',
     mcpTitle: 'MCPs (Model Context Protocol)',

@@ -14,12 +14,13 @@ export interface StoredRepo {
 export interface StoredWorkspace {
   id: string;
   name: string;
+  workspacePath?: string;
   repos: StoredRepo[];
   pmTool?: 'jira' | 'github' | 'gitlab' | 'linear';
   projectKey?: string;
   createdAt: string;
   lastOpenedAt: string;
-  mode?: 'solo' | 'connected';
+  topology?: 'mono' | 'multi';
   ticketPrefix?: string;
   ticketCounter?: number;
   mcps?: WorkspaceMCP[];

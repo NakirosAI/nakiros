@@ -30,14 +30,17 @@ function buildYaml(workspace: StoredWorkspace): string {
   const branchLine = workspace.branchPattern
     ? `\n  branch_pattern: ${workspace.branchPattern}`
     : '';
+  const topologyLine = workspace.topology
+    ? `\n  topology: ${workspace.topology}`
+    : '';
 
   return [
-    `# Géré par Tiqora Desktop — ne pas éditer manuellement`,
+    `# Géré par Tiqora — ne pas éditer manuellement`,
     `workspace:`,
     `  name: ${workspace.name}`,
     `  repos:`,
     reposYaml,
-    `${pmLine}${keyLine}${docLangLine}${branchLine}`,
+    `${pmLine}${keyLine}${docLangLine}${branchLine}${topologyLine}`,
   ]
     .join('\n')
     .trimEnd() + '\n';
@@ -67,16 +70,23 @@ function writeClaudeJson(repoPath: string, workspaceId: string, mcpServerUrl: st
 
 export function syncToRepos(workspace: StoredWorkspace, mcpServerUrl: string): void {
   const content = buildYaml(workspace);
-  for (const repo of workspace.repos) {
-    // Existing: full workspace YAML at repo root
-    writeFileSync(join(repo.localPath, '.tiqora.workspace.yaml'), content, 'utf-8');
+  const workspaceRootPath = workspace.workspacePath ?? workspace.repos[0]?.localPath;
+  if (workspaceRootPath) {
+    writeFileSync(join(workspaceRootPath, '.tiqora.workspace.yaml'), content, 'utf-8');
+  }
 
-    // New: .tiqora/workspace.yaml — workspace_id for server cwd resolver
+  for (const repo of workspace.repos) {
+    // Compat: keep a local copy in each repo for workflows launched from repo cwd.
+    if (repo.localPath !== workspaceRootPath) {
+      writeFileSync(join(repo.localPath, '.tiqora.workspace.yaml'), content, 'utf-8');
+    }
+
+    // Required for server cwd resolver.
     const tiqoraDir = join(repo.localPath, '.tiqora');
     mkdirSync(tiqoraDir, { recursive: true });
     writeFileSync(join(tiqoraDir, 'workspace.yaml'), `workspace_id: ${workspace.id}\n`, 'utf-8');
 
-    // New: .claude/claude.json — MCP config for Claude Code
+    // MCP config for Claude Code
     writeClaudeJson(repo.localPath, workspace.id, mcpServerUrl);
   }
 }

@@ -1,6 +1,6 @@
-import { Bot, FolderGit2, Kanban, Settings2 } from 'lucide-react';
+import { BookOpen, Bot, FolderGit2, Kanban, Settings2 } from 'lucide-react';
 
-export type SidebarTab = 'board' | 'repos' | 'agents' | 'settings';
+export type SidebarTab = 'board' | 'repos' | 'agents' | 'context' | 'settings';
 
 interface Props {
   active: SidebarTab;
@@ -12,6 +12,7 @@ const navTabs: { id: SidebarTab; icon: React.ReactNode }[] = [
   { id: 'board', icon: <Kanban size={18} /> },
   { id: 'repos', icon: <FolderGit2 size={18} /> },
   { id: 'agents', icon: <Bot size={18} /> },
+  { id: 'context', icon: <BookOpen size={18} /> },
 ];
 
 export default function Sidebar({ active, onChange, labels }: Props) {

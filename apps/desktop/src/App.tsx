@@ -18,8 +18,26 @@ const FALLBACK_PREFERENCES: AppPreferences = {
 type View =
   | { name: 'loading' }
   | { name: 'home' }
-  | { name: 'setup' }
+  | { name: 'setup'; initialDirectory?: string }
   | { name: 'dashboard' };
+
+function normalizePath(path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  return normalized.length > 0 ? normalized : '/';
+}
+
+function isSameOrChildPath(path: string, basePath: string): boolean {
+  const candidate = normalizePath(path);
+  const base = normalizePath(basePath);
+  return candidate === base || candidate.startsWith(`${base}/`);
+}
+
+function isWorkspacePathMatch(workspace: StoredWorkspace, dir: string): boolean {
+  if (workspace.workspacePath && isSameOrChildPath(dir, workspace.workspacePath)) {
+    return true;
+  }
+  return workspace.repos.some((repo) => isSameOrChildPath(dir, repo.localPath));
+}
 
 export default function App() {
   const [view, setView] = useState<View>({ name: 'loading' });
@@ -98,21 +116,24 @@ export default function App() {
     const dir = await window.tiqora.selectDirectory();
     if (!dir) return;
 
-    // Chercher un workspace stocké qui contient ce dossier
-    const match = workspaces.find((ws) =>
-      ws.repos.some((r) => r.localPath === dir),
-    );
+    // Ouvrir si le dossier correspond à un repo connu ou au dossier local du workspace.
+    const match = workspaces.find((ws) => isWorkspacePathMatch(ws, dir));
 
     if (match) {
       await openWorkspace(match);
     } else {
-      // Aucun match → lancer le wizard avec ce dossier pré-sélectionné
-      setView({ name: 'setup' });
+      // Aucun match → lancer le setup avec ce dossier pré-sélectionné (import assisté)
+      setView({ name: 'setup', initialDirectory: dir });
     }
   }
 
   async function openWorkspace(ws: StoredWorkspace) {
-    const updated: StoredWorkspace = { ...ws, lastOpenedAt: new Date().toISOString() };
+    const workspacePath = ws.workspacePath ?? ws.repos[0]?.localPath;
+    const updated: StoredWorkspace = {
+      ...ws,
+      workspacePath,
+      lastOpenedAt: new Date().toISOString(),
+    };
     await window.tiqora.saveWorkspace(updated);
     setWorkspaces((prev) => {
       const found = prev.some((w) => w.id === updated.id);
@@ -211,6 +232,7 @@ export default function App() {
   if (view.name === 'setup') {
     return (
       <WorkspaceSetup
+        initialDirectory={view.initialDirectory}
         onCreated={handleWorkspaceCreated}
         onCancel={() => setView({ name: 'home' })}
       />
@@ -243,7 +265,13 @@ export default function App() {
         onOpenWorkspaceTab={handleOpenWorkspaceTab}
         onCloseWorkspaceTab={handleCloseWorkspaceTab}
         onNewWorkspace={() => setView({ name: 'setup' })}
-        onGoHome={() => setView({ name: 'home' })}
+        onGoHome={() => {
+          void window.tiqora.getWorkspaces().then((fresh) => {
+            setWorkspaces(fresh);
+            setOpenedWorkspaceIds((prev) => prev.filter((id) => fresh.some((w) => w.id === id)));
+          });
+          setView({ name: 'home' });
+        }}
         onRestartServer={() => { void window.tiqora.restartServer(); }}
       />
   );

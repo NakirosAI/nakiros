@@ -1,8 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FileText, Folder, GitBranch, LayoutDashboard, Link2, Plug, User } from 'lucide-react';
 import type {
-  AgentEnvironmentId,
-  AgentInstallStatus,
   AgentProfile,
   ResolvedLanguage,
   StoredWorkspace,
@@ -18,6 +16,7 @@ interface Props {
   language: ResolvedLanguage;
   onUpdate(workspace: StoredWorkspace): Promise<void>;
   onTicketsRefresh?(): void;
+  onDelete?(): void;
 }
 
 function uid() {
@@ -26,7 +25,7 @@ function uid() {
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
-export default function ProjectSettings({ workspace, language, onUpdate, onTicketsRefresh }: Props) {
+export default function ProjectSettings({ workspace, language, onUpdate, onTicketsRefresh, onDelete }: Props) {
   const s = MESSAGES[language].settings;
   const [section, setSection] = useState<SettingsSection>('general');
 
@@ -82,7 +81,7 @@ export default function ProjectSettings({ workspace, language, onUpdate, onTicke
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
         <div style={{ maxWidth: 640 }}>
-          {section === 'general' && <GeneralSection workspace={workspace} language={language} onUpdate={onUpdate} />}
+          {section === 'general' && <GeneralSection workspace={workspace} language={language} onUpdate={onUpdate} onDelete={onDelete} />}
           {section === 'git'     && <GitSection workspace={workspace} language={language} onUpdate={onUpdate} />}
           {section === 'pm'      && <PMSection workspace={workspace} language={language} onUpdate={onUpdate} onTicketsRefresh={onTicketsRefresh} />}
           {section === 'mcps'    && <MCPSection workspace={workspace} onUpdate={onUpdate} msg={MESSAGES[language].settings} />}
@@ -95,7 +94,7 @@ export default function ProjectSettings({ workspace, language, onUpdate, onTicke
 
 // ─── General ──────────────────────────────────────────────────────────────────
 
-function GeneralSection({ workspace, language, onUpdate }: Props) {
+function GeneralSection({ workspace, language, onUpdate, onDelete }: Props) {
   const s = MESSAGES[language].settings;
   const [name, setName] = useState(workspace.name);
 
@@ -141,7 +140,7 @@ function GeneralSection({ workspace, language, onUpdate }: Props) {
         </div>
       </section>
 
-      <AgentsSection workspace={workspace} onUpdate={onUpdate} msg={s} />
+      <DangerZone workspace={workspace} onDeleted={onDelete} />
     </div>
   );
 }
@@ -811,87 +810,68 @@ function DocsSection({ workspace, onUpdate, msg }: { workspace: StoredWorkspace;
   );
 }
 
-// ─── Agents ───────────────────────────────────────────────────────────────────
+// ─── Danger Zone ──────────────────────────────────────────────────────────────
 
-function AgentsSection({ workspace, onUpdate: _onUpdate, msg }: { workspace: StoredWorkspace; onUpdate(ws: StoredWorkspace): Promise<void>; msg: SMsg }) {
-  const [selectedRepoPath, setSelectedRepoPath] = useState(workspace.repos[0]?.localPath ?? '');
-  const [agentStatus, setAgentStatus] = useState<AgentInstallStatus | null>(null);
-  const [agentTargets, setAgentTargets] = useState<AgentEnvironmentId[]>([]);
-  const [loadingAgents, setLoadingAgents] = useState(false);
-  const [installingAgents, setInstallingAgents] = useState(false);
-  const [agentResult, setAgentResult] = useState<string | null>(null);
-  const [agentError, setAgentError] = useState<string | null>(null);
-  const timerRef = useRef<number | null>(null);
+function DangerZone({ workspace, onDeleted }: { workspace: StoredWorkspace; onDeleted?(): void }) {
+  const [confirm, setConfirm] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ deleted: number; errors: number } | null>(null);
 
-  useEffect(() => { return () => { if (timerRef.current) window.clearTimeout(timerRef.current); }; }, []);
-  useEffect(() => { setSelectedRepoPath(workspace.repos[0]?.localPath ?? ''); }, [workspace.id, workspace.repos]);
-
-  useEffect(() => {
-    if (!selectedRepoPath) { setAgentStatus(null); setAgentTargets([]); return; }
-    setLoadingAgents(true);
-    setAgentError(null);
-    void window.tiqora.getAgentInstallStatus(selectedRepoPath)
-      .then((next) => {
-        setAgentStatus(next);
-        const detected = next.environments.filter((e) => e.markerExists).map((e) => e.id);
-        setAgentTargets((prev) => (prev.length > 0 ? prev : detected.length > 0 ? detected : next.environments.map((e) => e.id)));
-      })
-      .catch(() => setAgentError(msg.installError))
-      .finally(() => setLoadingAgents(false));
-  }, [selectedRepoPath, msg.installError]);
-
-  const envLabels: Record<AgentEnvironmentId, string> = { cursor: msg.envCursor, codex: msg.envCodex, claude: msg.envClaude };
-
-  async function handleInstall() {
-    if (!selectedRepoPath || agentTargets.length === 0) return;
-    setInstallingAgents(true);
-    setAgentError(null);
-    setAgentResult(null);
-    try {
-      const r = await window.tiqora.installAgents({ repoPath: selectedRepoPath, targets: agentTargets, force: true });
-      setAgentResult(`${msg.installSuccess} ${msg.installResult(`cmd +${r.commandFilesCopied}/~${r.commandFilesOverwritten} · runtime +${r.runtimeFilesCopied}/~${r.runtimeFilesOverwritten}`)}`);
-      setAgentStatus(await window.tiqora.getAgentInstallStatus(selectedRepoPath));
-    } catch { setAgentError(msg.installError); }
-    finally { setInstallingAgents(false); }
+  async function handleReset() {
+    setRunning(true);
+    setResult(null);
+    const r = await window.tiqora.resetWorkspace(workspace);
+    await window.tiqora.deleteWorkspace(workspace.id);
+    setRunning(false);
+    setConfirm(false);
+    setResult({ deleted: r.deletedPaths.length, errors: r.errors.length });
+    onDeleted?.();
   }
 
   return (
-    <section style={sectionStyle}>
-      <h3 style={sectionTitle}>{msg.agentsTitle}</h3>
-      <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--text-muted)' }}>{msg.agentsSubtitle}</p>
-      {workspace.repos.length === 0 ? (
-        <p style={hintStyle}>{msg.noRepoConfigured}</p>
+    <section style={{ ...sectionStyle, borderColor: 'var(--danger, #ef4444)' }}>
+      <h3 style={{ ...sectionTitle, color: 'var(--danger, #ef4444)' }}>Zone de danger</h3>
+      <p style={{ ...hintStyle, marginBottom: 12 }}>
+        Supprime tous les fichiers Tiqora de chaque repo du workspace :
+        {' '}<code style={{ fontSize: 11 }}>_tiqora/</code>,{' '}
+        <code style={{ fontSize: 11 }}>.tiqora/</code>,{' '}
+        <code style={{ fontSize: 11 }}>.tiqora.yaml</code>,{' '}
+        <code style={{ fontSize: 11 }}>.tiqora.workspace.yaml</code>.
+        <br />
+        Les fichiers <code style={{ fontSize: 11 }}>CLAUDE.md</code>, <code style={{ fontSize: 11 }}>.cursorrules</code> et <code style={{ fontSize: 11 }}>llms.txt</code> ne sont pas touchés.
+      </p>
+
+      {!confirm ? (
+        <button
+          onClick={() => { setConfirm(true); setResult(null); }}
+          style={{ padding: '7px 12px', borderRadius: 2, border: '1px solid var(--danger, #ef4444)', background: 'transparent', color: 'var(--danger, #ef4444)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+        >
+          Réinitialiser les données Tiqora
+        </button>
       ) : (
-        <>
-          <label style={fieldLabel}>{msg.repoLabel}</label>
-          <select value={selectedRepoPath} onChange={(e) => setSelectedRepoPath(e.target.value)} style={selectStyle}>
-            {workspace.repos.map((r) => <option key={r.localPath} value={r.localPath}>{r.name}</option>)}
-          </select>
-          {loadingAgents && <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{msg.refreshing}</p>}
-          {agentStatus && !agentStatus.hasTiqoraConfig && <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--warning)' }}>{msg.noTiqoraConfig}</p>}
-          {agentStatus && (
-            <>
-              <label style={{ ...fieldLabel, marginTop: 12 }}>{msg.targetsLabel}</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {agentStatus.environments.map((env) => {
-                  const active = agentTargets.includes(env.id);
-                  return (
-                    <button key={env.id} onClick={() => setAgentTargets((prev) => prev.includes(env.id) ? prev.filter((id) => id !== env.id) : [...prev, env.id])} style={chipStyle(active)} title={env.targetPath}>
-                      {envLabels[env.id]} · {env.installedCount}/{env.totalExpected} · {env.markerExists ? msg.envDetected : msg.envNotDetected}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => void handleInstall()} disabled={!selectedRepoPath || agentTargets.length === 0 || installingAgents} style={primaryBtn(!selectedRepoPath || agentTargets.length === 0 || installingAgents)}>
-              {installingAgents ? msg.installing : msg.installAction}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--danger, #ef4444)', fontWeight: 600 }}>
+            ⚠ Cette action est irréversible. Confirmer la suppression sur {workspace.repos.length} repo(s) ?
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => void handleReset()}
+              disabled={running}
+              style={{ padding: '7px 12px', borderRadius: 2, border: 'none', background: 'var(--danger, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: running ? 'not-allowed' : 'pointer', opacity: running ? 0.6 : 1 }}
+            >
+              {running ? 'Suppression…' : 'Oui, supprimer'}
             </button>
-            {agentResult && <span style={{ fontSize: 12, color: 'var(--success)' }}>{agentResult}</span>}
-            {agentError && <span style={{ fontSize: 12, color: 'var(--danger)' }}>{agentError}</span>}
+            <button onClick={() => setConfirm(false)} style={secondaryBtn} disabled={running}>Annuler</button>
           </div>
-        </>
+        </div>
+      )}
+
+      {result && (
+        <p style={{ margin: '10px 0 0', fontSize: 12, color: result.errors > 0 ? 'var(--danger, #ef4444)' : 'var(--success, #22c55e)' }}>
+          {result.errors > 0
+            ? `Terminé avec ${String(result.errors)} erreur(s) — ${String(result.deleted)} élément(s) supprimé(s).`
+            : `✓ ${String(result.deleted)} élément(s) supprimé(s).`}
+        </p>
       )}
     </section>
   );

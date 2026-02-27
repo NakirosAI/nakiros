@@ -7,6 +7,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'fs';
+import { homedir } from 'os';
 import { dirname, resolve } from 'path';
 import type {
   AgentEnvironmentId,
@@ -15,16 +16,24 @@ import type {
   AgentInstallStatus,
   AgentInstallSummary,
 } from '@tiqora/shared';
+import { COMMAND_TEMPLATES } from '../templates-bundle';
 
 const COMMAND_TEMPLATE_FILES = [
   'tiq-agent-dev.md',
   'tiq-agent-sm.md',
   'tiq-agent-pm.md',
   'tiq-agent-architect.md',
+  'tiq-agent-brainstorming.md',
+  'tiq-agent-qa.md',
+  'tiq-agent-hotfix.md',
   'tiq-workflow-create-story.md',
   'tiq-workflow-dev-story.md',
   'tiq-workflow-fetch-project-context.md',
   'tiq-workflow-generate-context.md',
+  'tiq-workflow-create-ticket.md',
+  'tiq-workflow-hotfix-story.md',
+  'tiq-workflow-qa-review.md',
+  'tiq-workflow-sprint.md',
 ] as const;
 
 const TIQORA_WORKSPACE_DIRECTORIES = [
@@ -75,21 +84,15 @@ function findRepoRoot(startDir = process.cwd()): string {
   return resolve(startDir);
 }
 
-function getTemplatesDir(): string {
-  const repoRoot = findRepoRoot();
-  const candidates = [
-    resolve(repoRoot, 'templates/commands'),
-    resolve(repoRoot, 'apps/cli/templates/commands'),
-  ];
-  for (const path of candidates) {
-    if (COMMAND_TEMPLATE_FILES.every((file) => existsSync(resolve(path, file)))) return path;
-  }
-  throw new Error('Impossible de localiser les templates des commandes Tiqora.');
-}
 
 function getRuntimeDir(): string {
   const repoRoot = findRepoRoot();
-  const candidates = [resolve(repoRoot, '_tiqora'), resolve(repoRoot, 'apps/cli/_tiqora')];
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const candidates = [
+    ...(resourcesPath ? [resolve(resourcesPath, '_tiqora')] : []),
+    resolve(repoRoot, '_tiqora'),
+    resolve(repoRoot, 'apps/cli/_tiqora'),
+  ];
   for (const path of candidates) {
     if (existsSync(resolve(path, 'core/tasks/workflow.xml'))) return path;
   }
@@ -156,6 +159,96 @@ function getEnvironmentStatus(repoPath: string, id: AgentEnvironmentId): AgentEn
   };
 }
 
+export interface GlobalInstallStatus {
+  environments: Array<{
+    id: AgentEnvironmentId;
+    label: string;
+    targetDir: string;
+    installed: number;
+    total: number;
+  }>;
+  totalInstalled: number;
+  totalExpected: number;
+}
+
+export interface GlobalInstallSummary {
+  environments: Array<{
+    id: AgentEnvironmentId;
+    label: string;
+    targetDir: string;
+    commandFilesCopied: number;
+    commandFilesOverwritten: number;
+  }>;
+  commandFilesCopied: number;
+  commandFilesOverwritten: number;
+}
+
+export function getGlobalInstallStatus(): GlobalInstallStatus {
+  const home = homedir();
+  const ids: AgentEnvironmentId[] = ['claude', 'codex', 'cursor'];
+  const environments = ids.map((id) => {
+    const env = ENVIRONMENTS[id];
+    const targetDir = resolve(home, env.targetRelativePath);
+    const installed = COMMAND_TEMPLATE_FILES.filter(
+      (file) => existsSync(resolve(targetDir, file)),
+    ).length;
+    return {
+      id,
+      label: env.label,
+      targetDir,
+      installed,
+      total: COMMAND_TEMPLATE_FILES.length,
+    };
+  });
+
+  return {
+    environments,
+    totalInstalled: environments.reduce((acc, item) => acc + item.installed, 0),
+    totalExpected: environments.reduce((acc, item) => acc + item.total, 0),
+  };
+}
+
+export function installAgentsGlobally(): GlobalInstallSummary {
+  const home = homedir();
+  const ids: AgentEnvironmentId[] = ['claude', 'codex', 'cursor'];
+
+  const environments: GlobalInstallSummary['environments'] = [];
+  let commandFilesCopied = 0;
+  let commandFilesOverwritten = 0;
+
+  for (const id of ids) {
+    const env = ENVIRONMENTS[id];
+    const targetDir = resolve(home, env.targetRelativePath);
+    mkdirSync(targetDir, { recursive: true });
+
+    let copiedForEnv = 0;
+    let overwrittenForEnv = 0;
+
+    for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+      const targetPath = resolve(targetDir, fileName);
+      const targetExists = existsSync(targetPath);
+      writeFileSync(targetPath, content, 'utf8');
+      if (targetExists) {
+        overwrittenForEnv += 1;
+        commandFilesOverwritten += 1;
+      } else {
+        copiedForEnv += 1;
+        commandFilesCopied += 1;
+      }
+    }
+
+    environments.push({
+      id,
+      label: env.label,
+      targetDir,
+      commandFilesCopied: copiedForEnv,
+      commandFilesOverwritten: overwrittenForEnv,
+    });
+  }
+
+  return { environments, commandFilesCopied, commandFilesOverwritten };
+}
+
 export function getAgentInstallStatus(repoPath: string): AgentInstallStatus {
   const resolvedRepoPath = resolve(repoPath);
   const environments: AgentEnvironmentStatus[] = [
@@ -181,7 +274,6 @@ export function installAgents(request: AgentInstallRequest): AgentInstallSummary
   }
 
   const force = request.force ?? true;
-  const templatesDir = getTemplatesDir();
   const runtimeSourceDir = getRuntimeDir();
 
   let commandFilesCopied = 0;
@@ -195,12 +287,11 @@ export function installAgents(request: AgentInstallRequest): AgentInstallSummary
     const envTargetPath = resolve(repoPath, env.targetRelativePath);
     mkdirSync(envTargetPath, { recursive: true });
 
-    for (const templateFile of COMMAND_TEMPLATE_FILES) {
-      const sourcePath = resolve(templatesDir, templateFile);
-      const targetPath = resolve(envTargetPath, templateFile);
+    for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+      const targetPath = resolve(envTargetPath, fileName);
       const targetExists = existsSync(targetPath);
       if (targetExists && !force) continue;
-      copyFileSync(sourcePath, targetPath);
+      writeFileSync(targetPath, content, 'utf8');
       if (targetExists) commandFilesOverwritten += 1;
       else commandFilesCopied += 1;
     }

@@ -8,7 +8,7 @@ import type {
   AgentInstallStatus,
   AgentInstallRequest,
   AgentInstallSummary,
-} from '@tiqora/shared';
+} from '@nakiros/shared';
 
 interface JiraStatus {
   connected: boolean;
@@ -36,11 +36,46 @@ interface JiraAuthErrorPayload {
 }
 
 declare global {
+  interface DetectedEditor {
+    id: 'claude' | 'cursor' | 'codex';
+    label: string;
+    detected: boolean;
+    targetDir: string;
+  }
+
+  interface OnboardingProgressEvent {
+    label: string;
+    done: boolean;
+    error?: string;
+  }
+
+  interface OnboardingInstallResult {
+    success: boolean;
+    errors: string[];
+  }
+
+  interface UpdateManifestFile {
+    type: 'agent' | 'workflow' | 'core';
+    name: string;
+    filename: string;
+    version: string;
+    hash: string;
+    url: string;
+  }
+
+  interface UpdateCheckResult {
+    hasUpdate: boolean;
+    latestVersion: string;
+    changelog: string;
+    changedFiles: UpdateManifestFile[];
+  }
+
   interface ScannedDoc {
     name: string;
     relativePath: string;
     absolutePath: string;
     isGenerated: boolean;
+    lastModifiedAt?: number;
   }
 
   interface ScannedRepo {
@@ -49,15 +84,15 @@ declare global {
     docs: ScannedDoc[];
   }
 
-  interface ScanResult {
-    repos: ScannedRepo[];
-    primaryRepoPath: string;
+  interface GlobalSection {
+    docs: ScannedDoc[];
+    missingNames: string[];
   }
 
-  interface StoredMessage {
-    role: 'user' | 'agent';
-    content: string;
-    tools: Array<{ name: string; display: string }>;
+  interface ScanResult {
+    repos: ScannedRepo[];
+    globalSection: GlobalSection;
+    primaryRepoPath: string;
   }
 
   interface StoredConversation {
@@ -66,11 +101,13 @@ declare global {
     repoPath: string;
     repoName: string;
     provider: AgentProvider;
-    workspaceId?: string;
+    workspaceId: string;
     title: string;
+    agents: string[];
     createdAt: string;
     lastUsedAt: string;
-    messages: StoredMessage[];
+    /** Interleaved raw NDJSON agent events + { type: 'user', content, timestamp } messages */
+    messages: unknown[];
   }
 
   interface StoredAgentTab {
@@ -101,7 +138,7 @@ declare global {
   }
 
   interface Window {
-    tiqora: {
+    nakiros: {
       // Workspace
       selectDirectory(): Promise<string | null>;
       openFilePicker(): Promise<string | null>;
@@ -179,7 +216,7 @@ declare global {
       agentCancel(runId: string): Promise<void>;
       onAgentStart(cb: (event: { runId: string; command: string; cwd: string }) => void): () => void;
       onAgentEvent(cb: (payload: { runId: string; event: AgentStreamEvent }) => void): () => void;
-      onAgentDone(cb: (event: { runId: string; exitCode: number; error?: string }) => void): () => void;
+      onAgentDone(cb: (event: { runId: string; exitCode: number; error?: string; rawLines?: unknown[] }) => void): () => void;
 
       // Terminal
       terminalCreate(repoPath: string): Promise<string>;
@@ -190,10 +227,9 @@ declare global {
       onTerminalExit(cb: (event: { terminalId: string; code: number }) => void): () => void;
 
       // Conversations
-      getConversations(): Promise<StoredConversation[]>;
+      getConversations(workspaceId: string): Promise<StoredConversation[]>;
       saveConversation(conv: StoredConversation): Promise<void>;
-      deleteConversation(id: string): Promise<void>;
-      readConversationMessages(sessionId: string, repoPath: string, provider?: AgentProvider): Promise<StoredMessage[]>;
+      deleteConversation(id: string, workspaceId: string): Promise<void>;
       getAgentTabs(workspaceId: string): Promise<StoredAgentTabsState | null>;
       saveAgentTabs(workspaceId: string, state: StoredAgentTabsState): Promise<void>;
       clearAgentTabs(workspaceId: string): Promise<void>;
@@ -206,6 +242,8 @@ declare global {
       onJiraAuthComplete(cb: (data: JiraAuthCompletePayload) => void): () => void;
       onJiraAuthError(cb: (data: JiraAuthErrorPayload) => void): () => void;
       jiraGetProjects(wsId: string): Promise<JiraProject[]>;
+      jiraGetBoardType(wsId: string, projectKey: string): Promise<{ boardType: 'scrum' | 'kanban' | 'unknown'; boardId: string | null }>;
+      jiraCountTickets(wsId: string, projectKey: string, syncFilter: string, boardType: string): Promise<{ count: number; hasMore: boolean }>;
 
       // Docs
       scanDocs(workspace: StoredWorkspace): Promise<ScanResult>;
@@ -215,6 +253,18 @@ declare global {
       getServerStatus(): Promise<'starting' | 'running' | 'stopped'>;
       restartServer(): Promise<void>;
       onServerStatusChange(cb: (status: 'starting' | 'running' | 'stopped') => void): () => void;
+
+      // Onboarding
+      nakirosConfigExists(): Promise<boolean>;
+      onboardingDetectEditors(): Promise<DetectedEditor[]>;
+      onboardingInstall(editors: DetectedEditor[]): Promise<OnboardingInstallResult>;
+      onOnboardingProgress(cb: (event: OnboardingProgressEvent) => void): () => void;
+
+      // Updates
+      checkForUpdates(force?: boolean): Promise<UpdateCheckResult>;
+      applyUpdate(files: UpdateManifestFile[]): Promise<void>;
+      onUpdatesAvailable(cb: (result: UpdateCheckResult) => void): () => void;
+      onUpdatesProgress(cb: (event: { file: string; done: boolean; error?: string }) => void): () => void;
     };
   }
 }

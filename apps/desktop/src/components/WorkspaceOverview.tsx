@@ -1,4 +1,4 @@
-import type { LocalTicket, ResolvedLanguage, StoredWorkspace } from '@tiqora/shared';
+import type { LocalTicket, ResolvedLanguage, StoredWorkspace } from '@nakiros/shared';
 
 interface Props {
   workspace: StoredWorkspace;
@@ -197,7 +197,7 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 
 const panel: React.CSSProperties = {
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   background: 'var(--bg-soft)',
   padding: 16,
 };
@@ -210,7 +210,7 @@ const panelTitle: React.CSSProperties = {
 
 const metricCard: React.CSSProperties = {
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   padding: '10px 12px',
   background: 'var(--bg-card)',
   display: 'flex',
@@ -225,7 +225,7 @@ const actionButton: React.CSSProperties = {
   flexDirection: 'column',
   gap: 5,
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   padding: '10px 12px',
   cursor: 'pointer',
 };

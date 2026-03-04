@@ -1,19 +1,19 @@
 {
-  "name": "tiqora",
+  "name": "nakiros",
   "private": true,
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
     "test": "turbo test",
     "lint": "turbo lint",
-    "desktop:package": "pnpm --filter @tiqora/desktop package",
-    "desktop:make": "pnpm --filter @tiqora/desktop make",
-    "desktop:make:all": "pnpm --filter @tiqora/desktop make:all",
-    "desktop:make:dmg": "pnpm --filter @tiqora/desktop make:dmg",
-    "desktop:make:dmg:arm64": "pnpm --filter @tiqora/desktop make:dmg:arm64",
-    "desktop:make:dmg:x64": "pnpm --filter @tiqora/desktop make:dmg:x64",
-    "desktop:make:zip:arm64": "pnpm --filter @tiqora/desktop make:zip:arm64",
-    "desktop:make:zip:x64": "pnpm --filter @tiqora/desktop make:zip:x64"
+    "desktop:package": "pnpm --filter @nakiros/desktop package",
+    "desktop:make": "pnpm --filter @nakiros/desktop make",
+    "desktop:make:all": "pnpm --filter @nakiros/desktop make:all",
+    "desktop:make:dmg": "pnpm --filter @nakiros/desktop make:dmg",
+    "desktop:make:dmg:arm64": "pnpm --filter @nakiros/desktop make:dmg:arm64",
+    "desktop:make:dmg:x64": "pnpm --filter @nakiros/desktop make:dmg:x64",
+    "desktop:make:zip:arm64": "pnpm --filter @nakiros/desktop make:zip:arm64",
+    "desktop:make:zip:x64": "pnpm --filter @nakiros/desktop make:zip:x64"
   },
   "devDependencies": {
     "turbo": "^2",

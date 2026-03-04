@@ -8,7 +8,7 @@ import type {
   StoredWorkspace,
   TicketPriority,
   TicketStatus,
-} from '@tiqora/shared';
+} from '@nakiros/shared';
 import AgentPanel from './AgentPanel';
 
 const STATUS_LABELS: Record<TicketStatus, string> = {
@@ -89,7 +89,7 @@ export default function TicketDetail({
   useEffect(() => {
     if (activeTab !== 'context') return;
     setContextLoading(true);
-    void window.tiqora
+    void window.nakiros
       .generateContext(workspaceId, t.id, workspace)
       .then(setContextPreview)
       .catch(() => setContextPreview(isFr ? 'Impossible de generer le contexte.' : 'Unable to generate context.'))
@@ -99,7 +99,7 @@ export default function TicketDetail({
   async function save(updated: LocalTicket) {
     const next = { ...updated, updatedAt: new Date().toISOString() };
     setT(next);
-    await window.tiqora.saveTicket(workspaceId, next);
+    await window.nakiros.saveTicket(workspaceId, next);
     onUpdate(next);
   }
 
@@ -110,7 +110,7 @@ export default function TicketDetail({
   async function refreshContext() {
     setContextLoading(true);
     try {
-      const generated = await window.tiqora.generateContext(
+      const generated = await window.nakiros.generateContext(
         workspaceId,
         t.id,
         workspace,
@@ -130,7 +130,7 @@ export default function TicketDetail({
     }
     setExecutionError(null);
     setExecutionRunning(true);
-    const command = '/tiq-workflow-dev-story';
+    const command = '/nak-workflow-dev-story';
     const nextMessage = [
       command,
       '',
@@ -158,7 +158,7 @@ export default function TicketDetail({
       lastRunStatus: 'success',
       lastRunAt: new Date().toISOString(),
       lastRunProvider: defaultProvider,
-      lastRunCommand: t.lastRunCommand ?? '/tiq-workflow-dev-story',
+      lastRunCommand: t.lastRunCommand ?? '/nak-workflow-dev-story',
     });
   }
 
@@ -373,11 +373,12 @@ export default function TicketDetail({
             </div>
             {executionError && <p style={{ margin: 0, color: 'var(--danger)', fontSize: 12 }}>{executionError}</p>}
             {executionMessage ? (
-              <div style={{ flex: 1, border: '1px solid var(--line)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ flex: 1, border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
                 <AgentPanel
                   key={`${t.id}-${executionLaunchKey}`}
                   workspaceId={workspaceId}
                   repos={storedRepos}
+                  workspacePath={workspace.workspacePath}
                   initialRepoPath={selectedRepoPath}
                   initialMessage={executionMessage}
                   hideRepoSelector
@@ -408,9 +409,9 @@ export default function TicketDetail({
             </div>
             <div style={artifactBlock}>
               <h4 style={artifactTitle}>Artifacts & Contexte</h4>
-              <div style={artifactLine}><code>.tiqora/context/brainstorming.md</code></div>
-              <div style={artifactLine}><code>.tiqora/context/tickets/{t.id}.md</code></div>
-              <div style={artifactLine}><code>.tiqora/context/dev-notes/{t.id}.md</code></div>
+              <div style={artifactLine}><code>.nakiros/context/brainstorming.md</code></div>
+              <div style={artifactLine}><code>.nakiros/context/tickets/{t.id}.md</code></div>
+              <div style={artifactLine}><code>.nakiros/context/dev-notes/{t.id}.md</code></div>
             </div>
           </div>
         )}
@@ -424,7 +425,7 @@ function TabButton({ active, onClick, label }: { active: boolean; onClick(): voi
     <button
       onClick={onClick}
       style={{
-        borderRadius: 0,
+        borderRadius: '10px 10px 0 0',
         border: 'none',
         borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
         background: 'transparent',
@@ -446,7 +447,7 @@ const titleInput: React.CSSProperties = {
   fontSize: 17,
   fontWeight: 600,
   border: '1px solid var(--line)',
-  borderRadius: 4,
+  borderRadius: 10,
   padding: '8px 10px',
   resize: 'none',
   width: '100%',
@@ -470,7 +471,7 @@ const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '9px 11px',
   border: '1px solid var(--line)',
-  borderRadius: 4,
+  borderRadius: 10,
   fontSize: 13,
   color: 'var(--text)',
   background: 'var(--bg-soft)',
@@ -480,7 +481,7 @@ const inputStyle: React.CSSProperties = {
 const selectStyle: React.CSSProperties = {
   padding: '7px 9px',
   border: '1px solid var(--line)',
-  borderRadius: 4,
+  borderRadius: 10,
   fontSize: 12,
   color: 'var(--text)',
   background: 'var(--bg-soft)',
@@ -499,7 +500,7 @@ const secondaryButton: React.CSSProperties = {
   border: '1px solid var(--line)',
   background: 'var(--bg-soft)',
   color: 'var(--text)',
-  borderRadius: 4,
+  borderRadius: 10,
   padding: '7px 11px',
   fontSize: 12,
   fontWeight: 600,
@@ -510,7 +511,7 @@ const primaryButton: React.CSSProperties = {
   border: 'none',
   background: 'var(--primary)',
   color: '#fff',
-  borderRadius: 4,
+  borderRadius: 10,
   padding: '9px 12px',
   fontSize: 12,
   fontWeight: 700,
@@ -538,7 +539,7 @@ const contextPreviewStyle: React.CSSProperties = {
   margin: 0,
   border: '1px solid var(--line)',
   background: 'var(--bg-card)',
-  borderRadius: 4,
+  borderRadius: 10,
   padding: 12,
   whiteSpace: 'pre-wrap',
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -555,14 +556,14 @@ const executionHeader: React.CSSProperties = {
   alignItems: 'flex-end',
   flexWrap: 'wrap',
   border: '1px solid var(--line)',
-  borderRadius: 4,
+  borderRadius: 10,
   padding: 12,
   background: 'var(--bg-card)',
 };
 
 const emptyExecution: React.CSSProperties = {
   border: '1px dashed var(--line-strong)',
-  borderRadius: 4,
+  borderRadius: 10,
   padding: 16,
   color: 'var(--text-muted)',
   fontSize: 13,
@@ -571,7 +572,7 @@ const emptyExecution: React.CSSProperties = {
 
 const artifactBlock: React.CSSProperties = {
   border: '1px solid var(--line)',
-  borderRadius: 4,
+  borderRadius: 10,
   background: 'var(--bg-card)',
   padding: 13,
   display: 'flex',
@@ -594,7 +595,7 @@ const artifactLine: React.CSSProperties = {
 
 const sectionCard: React.CSSProperties = {
   border: '1px solid var(--line)',
-  borderRadius: 4,
+  borderRadius: 10,
   background: 'var(--bg-card)',
   padding: 11,
 };
@@ -604,7 +605,7 @@ const headerBadge: React.CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.07em',
   fontWeight: 700,
-  borderRadius: 3,
+  borderRadius: 10,
   border: '1px solid var(--line)',
   background: 'var(--bg-card)',
   color: 'var(--text-muted)',
@@ -615,7 +616,7 @@ function statusPill(status: TicketStatus): React.CSSProperties {
   return {
     fontSize: 11,
     padding: '2px 6px',
-    borderRadius: 2,
+    borderRadius: 10,
     background: status === 'done' ? '#d1fae5' : '#fef3c7',
     color: status === 'done' ? '#065f46' : '#92400e',
   };

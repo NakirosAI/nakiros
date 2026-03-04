@@ -1,8 +1,8 @@
 import { spawn } from 'child_process';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync } from 'fs';
 import { homedir, platform } from 'os';
 import { resolve } from 'path';
-import type { AgentProvider } from '@tiqora/shared';
+import type { AgentProvider } from '@nakiros/shared';
 
 // ─── Env / shell resolution ───────────────────────────────────────────────────
 
@@ -165,11 +165,15 @@ function buildRunnerCommand(args: {
   const addDirPart = addDirCount > 0 ? `${addDirFlags.join(' ')} ` : '';
 
   if (args.provider === 'codex') {
+    // --dangerously-bypass-approvals-and-sandbox is a top-level flag (not a --sandbox mode value).
+    // --add-dir is also a top-level option and must appear before the exec subcommand.
+    // --dangerously-bypass-approvals-and-sandbox implies never asking for approval; -a must not be set.
+    const topLevelFlags = `--dangerously-bypass-approvals-and-sandbox${addDirCount > 0 ? ` ${addDirFlags.join(' ')}` : ''}`;
     const resumePart = args.sessionId
       ? `exec resume --json --skip-git-repo-check '${shellEscape(args.sessionId)}' '${escapedMessage}'`
-      : `exec --json --skip-git-repo-check ${addDirPart}'${escapedMessage}'`;
-    const shellCommand = `codex -a never ${resumePart}`;
-    const displayCommand = `codex ${args.sessionId ? 'resume ' : ''}--json '${args.message.slice(0, 80)}${args.message.length > 80 ? '…' : ''}'`;
+      : `exec --json --skip-git-repo-check '${escapedMessage}'`;
+    const shellCommand = `codex ${topLevelFlags} ${resumePart}`;
+    const displayCommand = `codex ${args.sessionId ? 'resume ' : ''}${addDirCount > 0 ? `(+${addDirCount} dirs) ` : ''}'${args.message.slice(0, 80)}${args.message.length > 80 ? '…' : ''}'`;
     return { shellCommand, displayCommand, addDirCount };
   }
 
@@ -177,7 +181,8 @@ function buildRunnerCommand(args: {
     const resumePart = args.sessionId ? `--resume '${shellEscape(args.sessionId)}' ` : '';
     const workspacePart = `--workspace '${shellEscape(args.cwd)}' `;
     // Cursor Agent does not support --add-dir; workspace is constrained to --workspace.
-    const shellCommand = `cursor-agent --print --output-format stream-json --stream-partial-output --force ${workspacePart}${resumePart}'${escapedMessage}'`;
+    // --trust avoids workspace trust prompt in headless/print mode.
+    const shellCommand = `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust ${workspacePart}${resumePart}'${escapedMessage}'`;
     const displayCommand = `cursor-agent ${args.sessionId ? 'resume ' : ''}--print '${args.message.slice(0, 80)}${args.message.length > 80 ? '…' : ''}'`;
     return { shellCommand, displayCommand, addDirCount };
   }
@@ -272,6 +277,12 @@ interface RunEntry { kill: () => void }
 const runs = new Map<string, RunEntry>();
 let runCounter = 0;
 
+function resolveAgentCwd(): string {
+  const cwd = resolve(homedir(), '.nakiros');
+  mkdirSync(cwd, { recursive: true });
+  return cwd;
+}
+
 export interface RunStartInfo {
   runId: string;
   command: string;
@@ -285,16 +296,23 @@ export function runAgentCommand(
   sessionId: string | null,
   onStart: (info: RunStartInfo) => void,
   onEvent: (event: StreamEvent) => void,
-  onDone: (exitCode: number, error?: string) => void,
+  onDone: (exitCode: number, error?: string, rawLines?: unknown[]) => void,
   additionalDirs?: string[],
+  onRawLine?: (raw: unknown) => void,
 ): string {
   const runId = `run-${++runCounter}`;
-  const cwd = repoPath && existsSync(repoPath) ? repoPath : homedir();
+  const cwd = resolveAgentCwd();
+  const mergedAdditionalDirs = Array.from(new Set([
+    ...(repoPath ? [resolve(repoPath)] : []),
+    ...((additionalDirs ?? []).filter((d) => d.trim().length > 0).map((d) => resolve(d))),
+  ]))
+    .filter((d) => d !== cwd && existsSync(d));
+
   const { shellCommand, displayCommand, addDirCount } = buildRunnerCommand({
     provider,
     message,
     sessionId,
-    additionalDirs: additionalDirs ?? [],
+    additionalDirs: mergedAdditionalDirs,
     cwd,
   });
 
@@ -324,6 +342,7 @@ export function runAgentCommand(
   let ndjsonBuffer = '';
   const streamState = { hasEmittedText: false };
   let stderrBuffer = '';
+  const collectedRawLines: unknown[] = [];
 
   child.stdout?.on('data', (chunk: Buffer) => {
     ndjsonBuffer += chunk.toString('utf8');
@@ -336,6 +355,8 @@ export function runAgentCommand(
       process.stdout.write(`[agent-runner][${runId}] ${trimmed}\n`);
       try {
         const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        collectedRawLines.push(parsed);
+        onRawLine?.(parsed);
         if (provider === 'codex') {
           handleCodexEvent(parsed as CodexStreamEvent, onEvent, streamState);
         } else {
@@ -360,6 +381,8 @@ export function runAgentCommand(
     if (ndjsonBuffer.trim()) {
       try {
         const parsed = JSON.parse(ndjsonBuffer.trim()) as Record<string, unknown>;
+        collectedRawLines.push(parsed);
+        onRawLine?.(parsed);
         if (provider === 'codex') {
           handleCodexEvent(parsed as CodexStreamEvent, onEvent, streamState);
         } else {
@@ -373,7 +396,7 @@ export function runAgentCommand(
     runs.delete(runId);
     const exitCode = code ?? 0;
     const error = exitCode !== 0 && stderrBuffer ? stderrBuffer : undefined;
-    onDone(exitCode, error);
+    onDone(exitCode, error, collectedRawLines);
   });
 
   child.on('error', (err) => {

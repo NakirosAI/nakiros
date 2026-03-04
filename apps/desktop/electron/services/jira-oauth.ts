@@ -3,7 +3,7 @@ import { shell } from 'electron';
 
 const JIRA_CLIENT_ID = 'Ue1CTYdgjQhaJMhNt7ICf7aIm72IzOFL';
 const JIRA_CLIENT_SECRET = 'ATOA8WyH72Ns19FdL3IWeFMbN0xHy3SeRTrwZz3f2LMJpSgVOO-if6rrLFWVbnMDBlM42DCA78ED';
-const JIRA_REDIRECT_URI = 'tiqora://oauth/jira';
+const JIRA_REDIRECT_URI = 'nakiros://oauth/jira';
 const JIRA_SCOPES = 'read:jira-user read:jira-work offline_access';
 
 export function generateState(): string {

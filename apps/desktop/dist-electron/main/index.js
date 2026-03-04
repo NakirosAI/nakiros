@@ -3,6 +3,7 @@ const electron = require("electron");
 const child_process = require("child_process");
 const require$$1$1 = require("util");
 const require$$1$2 = require("fs");
+const os = require("os");
 const require$$0$3 = require("path");
 const require$$0$4 = require("tty");
 const require$$4$1 = require("net");
@@ -21,7 +22,6 @@ const node_os = require("node:os");
 const node_path = require("node:path");
 const require$$0$a = require("process");
 const promises = require("fs/promises");
-const os = require("os");
 var commonjsGlobal = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : {};
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -39388,7 +39388,7 @@ function registerWorkspaceTools(server, workspace) {
       content: [
         {
           type: "text",
-          text: workspace.context != null ? JSON.stringify(workspace.context, null, 2) : "No context generated yet. Use the Discovery Workflow in Tiqora Desktop to generate workspace context."
+          text: workspace.context != null ? JSON.stringify(workspace.context, null, 2) : "No context generated yet. Use the Discovery Workflow in Nakiros Desktop to generate workspace context."
         }
       ]
     })
@@ -39420,7 +39420,7 @@ function registerWorkspaceTools(server, workspace) {
 }
 async function handleMcpRequest(req, res, workspace) {
   const server = new McpServer({
-    name: "tiqora",
+    name: "nakiros",
     version: "0.0.1"
   });
   registerWorkspaceTools(server, workspace);
@@ -39437,12 +39437,12 @@ async function handleMcpRequest(req, res, workspace) {
 function getDataPath() {
   const platform = process.platform;
   if (platform === "darwin") {
-    return node_path.join(node_os.homedir(), "Library", "Application Support", "Tiqora");
+    return node_path.join(node_os.homedir(), "Library", "Application Support", "Nakiros");
   }
   if (platform === "win32") {
-    return node_path.join(process.env["APPDATA"] ?? node_os.homedir(), "Tiqora");
+    return node_path.join(process.env["APPDATA"] ?? node_os.homedir(), "Nakiros");
   }
-  return node_path.join(node_os.homedir(), ".config", "Tiqora");
+  return node_path.join(node_os.homedir(), ".config", "Nakiros");
 }
 function getWorkspacesPath() {
   return node_path.join(getDataPath(), "workspaces.json");
@@ -46797,41 +46797,94 @@ function stopServer() {
   }
 }
 const DEFAULT_MCP_SERVER_URL = "http://localhost:3737";
-function getStoragePath$1() {
-  const dir = electron.app.getPath("userData");
-  if (!require$$1$2.existsSync(dir)) {
-    require$$1$2.mkdirSync(dir, { recursive: true });
-  }
-  return require$$0$3.join(dir, "workspaces.json");
+function toSlug(name) {
+  return name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "workspace";
 }
-function readAll$2() {
-  const path = getStoragePath$1();
-  if (!require$$1$2.existsSync(path)) return [];
+function getWorkspacesRoot() {
+  const dir = require$$0$3.join(os.homedir(), ".nakiros", "workspaces");
+  require$$1$2.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function findExistingDir(id2, root) {
+  if (!require$$1$2.existsSync(root)) return null;
+  for (const entry of require$$1$2.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const jsonPath = require$$0$3.join(root, entry.name, "workspace.json");
+    if (!require$$1$2.existsSync(jsonPath)) continue;
+    try {
+      const ws = JSON.parse(require$$1$2.readFileSync(jsonPath, "utf-8"));
+      if (ws.id === id2) return require$$0$3.join(root, entry.name);
+    } catch {
+    }
+  }
+  return null;
+}
+function uniqueSlugDir(name, root) {
+  const base = toSlug(name);
+  let slug = base;
+  let i = 2;
+  while (require$$1$2.existsSync(require$$0$3.join(root, slug))) {
+    slug = `${base}-${i++}`;
+  }
+  return require$$0$3.join(root, slug);
+}
+let migrationDone = false;
+function migrateIfNeeded() {
+  if (migrationDone) return;
+  migrationDone = true;
+  const oldPath = require$$0$3.join(electron.app.getPath("userData"), "workspaces.json");
+  if (!require$$1$2.existsSync(oldPath)) return;
   try {
-    return JSON.parse(require$$1$2.readFileSync(path, "utf-8"));
-  } catch {
-    return [];
+    const old = JSON.parse(require$$1$2.readFileSync(oldPath, "utf-8"));
+    for (const ws of old) {
+      save(ws);
+    }
+    require$$1$2.renameSync(oldPath, `${oldPath}.migrated`);
+    console.log(`[Nakiros] Migrated ${old.length} workspace(s) to ~/.nakiros/workspaces/`);
+  } catch (err) {
+    console.error("[Nakiros] Migration from userData failed:", err);
   }
-}
-function writeAll$2(workspaces) {
-  require$$1$2.writeFileSync(getStoragePath$1(), JSON.stringify(workspaces, null, 2), "utf-8");
 }
 function getAll() {
-  return readAll$2();
+  migrateIfNeeded();
+  const root = getWorkspacesRoot();
+  const result = [];
+  for (const entry of require$$1$2.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const jsonPath = require$$0$3.join(root, entry.name, "workspace.json");
+    if (!require$$1$2.existsSync(jsonPath)) continue;
+    try {
+      result.push(JSON.parse(require$$1$2.readFileSync(jsonPath, "utf-8")));
+    } catch {
+    }
+  }
+  return result;
 }
 function save(workspace) {
-  const all = readAll$2();
-  const idx = all.findIndex((w) => w.id === workspace.id);
-  if (idx >= 0) {
-    all[idx] = workspace;
+  const root = getWorkspacesRoot();
+  const existingDir = findExistingDir(workspace.id, root);
+  const newSlug = toSlug(workspace.name);
+  const newDir = require$$0$3.join(root, newSlug);
+  let targetDir;
+  if (existingDir) {
+    if (existingDir !== newDir && !require$$1$2.existsSync(newDir)) {
+      require$$1$2.renameSync(existingDir, newDir);
+      targetDir = newDir;
+    } else {
+      targetDir = existingDir;
+    }
   } else {
-    all.push(workspace);
+    targetDir = uniqueSlugDir(workspace.name, root);
+    require$$1$2.mkdirSync(targetDir, { recursive: true });
   }
-  writeAll$2(all);
+  require$$1$2.writeFileSync(require$$0$3.join(targetDir, "workspace.json"), JSON.stringify(workspace, null, 2), "utf-8");
 }
 function remove(id2) {
-  const all = readAll$2().filter((w) => w.id !== id2);
-  writeAll$2(all);
+  const root = getWorkspacesRoot();
+  const dir = findExistingDir(id2, root);
+  if (dir) {
+    require$$1$2.rmSync(dir, { recursive: true, force: true });
+  }
 }
 function getWorkspaceAppDir(wsId) {
   const dir = require$$0$3.join(electron.app.getPath("userData"), wsId);
@@ -46845,16 +46898,23 @@ function buildWorkspaceYaml(workspace) {
     `      localPath: ${repo.localPath}`,
     `      profile: ${repo.profile}`
   ].join("\n")).join("\n");
+  const jiraBlock = workspace.pmTool === "jira" && workspace.projectKey ? [
+    `  jira:`,
+    `    project_key: ${workspace.projectKey}`,
+    workspace.pmBoardId ? `    board_id: '${workspace.pmBoardId}'` : "",
+    workspace.boardType ? `    board_type: ${workspace.boardType}` : "",
+    workspace.syncFilter ? `    sync_filter: ${workspace.syncFilter}` : ""
+  ].filter(Boolean).join("\n") : "";
   return [
-    `# Géré par Tiqora`,
+    `# Géré par Nakiros`,
     `workspace:`,
     `  name: ${workspace.name}`,
+    workspace.topology ? `  structure: ${workspace.topology === "mono" ? "mono-repo" : "multi-repo"}` : "",
+    workspace.pmTool ? `  pm_tool: ${workspace.pmTool}` : "",
+    jiraBlock,
     `  repos:`,
     reposYaml,
-    workspace.pmTool ? `  pmTool: ${workspace.pmTool}` : "",
-    workspace.projectKey ? `  projectKey: ${workspace.projectKey}` : "",
-    workspace.documentLanguage ? `  document_language: ${workspace.documentLanguage}` : "",
-    workspace.topology ? `  topology: ${workspace.topology}` : ""
+    workspace.documentLanguage ? `  document_language: ${workspace.documentLanguage}` : ""
   ].filter(Boolean).join("\n") + "\n";
 }
 function syncWorkspaceYaml(workspace) {
@@ -46863,28 +46923,28 @@ function syncWorkspaceYaml(workspace) {
   require$$1$2.writeFileSync(require$$0$3.join(appDir, "workspace.yaml"), yaml, "utf-8");
   if (workspace.workspacePath) {
     require$$1$2.mkdirSync(workspace.workspacePath, { recursive: true });
-    require$$1$2.writeFileSync(require$$0$3.join(workspace.workspacePath, ".tiqora.workspace.yaml"), yaml, "utf-8");
+    require$$1$2.writeFileSync(require$$0$3.join(workspace.workspacePath, ".nakiros.workspace.yaml"), yaml, "utf-8");
     for (const repo of workspace.repos) {
       if (repo.localPath !== workspace.workspacePath) {
-        require$$1$2.writeFileSync(require$$0$3.join(repo.localPath, ".tiqora.workspace.yaml"), yaml, "utf-8");
+        require$$1$2.writeFileSync(require$$0$3.join(repo.localPath, ".nakiros.workspace.yaml"), yaml, "utf-8");
       }
     }
     return workspace.workspacePath;
   }
   const primaryRepoPath = workspace.repos[0]?.localPath;
   if (primaryRepoPath) {
-    require$$1$2.writeFileSync(require$$0$3.join(primaryRepoPath, ".tiqora.workspace.yaml"), yaml, "utf-8");
+    require$$1$2.writeFileSync(require$$0$3.join(primaryRepoPath, ".nakiros.workspace.yaml"), yaml, "utf-8");
     return primaryRepoPath;
   }
   return appDir;
 }
-const TIQORA_DIRS = ["_tiqora", ".tiqora"];
-const TIQORA_FILES = [".tiqora.yaml", ".tiqora.workspace.yaml"];
+const NAKIROS_DIRS = ["_nakiros"];
+const NAKIROS_FILES = [".nakiros.yaml", ".nakiros.workspace.yaml"];
 function resetWorkspace(workspace) {
   const deletedPaths = [];
   const errors2 = [];
   if (workspace.workspacePath) {
-    const rootYamlPath = require$$0$3.join(workspace.workspacePath, ".tiqora.workspace.yaml");
+    const rootYamlPath = require$$0$3.join(workspace.workspacePath, ".nakiros.workspace.yaml");
     if (require$$1$2.existsSync(rootYamlPath)) {
       try {
         require$$1$2.rmSync(rootYamlPath, { force: true });
@@ -46896,7 +46956,7 @@ function resetWorkspace(workspace) {
   }
   for (const repo of workspace.repos) {
     const base = repo.localPath;
-    for (const dir of TIQORA_DIRS) {
+    for (const dir of NAKIROS_DIRS) {
       const fullPath = require$$0$3.join(base, dir);
       if (!require$$1$2.existsSync(fullPath)) continue;
       try {
@@ -46906,7 +46966,7 @@ function resetWorkspace(workspace) {
         errors2.push({ path: fullPath, error: err.message });
       }
     }
-    for (const file of TIQORA_FILES) {
+    for (const file of NAKIROS_FILES) {
       const fullPath = require$$0$3.join(base, file);
       if (!require$$1$2.existsSync(fullPath)) continue;
       try {
@@ -46968,7 +47028,7 @@ function buildYaml(workspace) {
   const topologyLine = workspace.topology ? `
   topology: ${workspace.topology}` : "";
   return [
-    `# Géré par Tiqora — ne pas éditer manuellement`,
+    `# Géré par Nakiros — ne pas éditer manuellement`,
     `workspace:`,
     `  name: ${workspace.name}`,
     `  repos:`,
@@ -46988,7 +47048,7 @@ function writeClaudeJson(repoPath, workspaceId, mcpServerUrl) {
     }
   }
   const mcpServers = existing["mcpServers"] ?? {};
-  mcpServers["tiqora"] = {
+  mcpServers["nakiros"] = {
     type: "http",
     url: `${mcpServerUrl}/ws/${workspaceId}/mcp`
   };
@@ -46999,15 +47059,15 @@ function syncToRepos(workspace, mcpServerUrl) {
   const content = buildYaml(workspace);
   const workspaceRootPath = workspace.workspacePath ?? workspace.repos[0]?.localPath;
   if (workspaceRootPath) {
-    require$$1$2.writeFileSync(require$$0$3.join(workspaceRootPath, ".tiqora.workspace.yaml"), content, "utf-8");
+    require$$1$2.writeFileSync(require$$0$3.join(workspaceRootPath, ".nakiros.workspace.yaml"), content, "utf-8");
   }
   for (const repo of workspace.repos) {
     if (repo.localPath !== workspaceRootPath) {
-      require$$1$2.writeFileSync(require$$0$3.join(repo.localPath, ".tiqora.workspace.yaml"), content, "utf-8");
+      require$$1$2.writeFileSync(require$$0$3.join(repo.localPath, ".nakiros.workspace.yaml"), content, "utf-8");
     }
-    const tiqoraDir = require$$0$3.join(repo.localPath, ".tiqora");
-    require$$1$2.mkdirSync(tiqoraDir, { recursive: true });
-    require$$1$2.writeFileSync(require$$0$3.join(tiqoraDir, "workspace.yaml"), `workspace_id: ${workspace.id}
+    const nakirosDir = require$$0$3.join(repo.localPath, "_nakiros");
+    require$$1$2.mkdirSync(nakirosDir, { recursive: true });
+    require$$1$2.writeFileSync(require$$0$3.join(nakirosDir, "workspace.yaml"), `workspace_id: ${workspace.id}
 `, "utf-8");
     writeClaudeJson(repo.localPath, workspace.id, mcpServerUrl);
   }
@@ -47062,52 +47122,87 @@ const PRIORITY_ROOT_FILES = /* @__PURE__ */ new Set([
   "CHANGELOG.md",
   "llms.txt"
 ]);
-const PRIORITY_DIRS = ["docs", "_bmad-output"];
+const PRIORITY_DIRS = ["docs", "_bmad-output", "_nakiros"];
+const GENERATED_TIQUORA_PREFIXES = [
+  ".nakiros/context/",
+  ".nakiros/workspace/",
+  "_nakiros/"
+];
+const GLOBAL_EXPECTED_FILES = ["global-context.md", "inter-repo.md", "pm-context.md"];
 function isExcluded(relPath) {
   const normalized = relPath.replace(/\\/g, "/");
   return normalized.split("/").some((part) => EXCLUDED_DIRS.has(part));
 }
+function normalizePath(path) {
+  return path.replace(/\\/g, "/");
+}
 async function walkMarkdown(repoPath, llmDocs) {
-  const llmDocsSet = new Set(llmDocs.map((d) => require$$0$3.join(repoPath, d)));
+  const repoRoot = require$$0$3.resolve(repoPath);
+  const llmDocsSet = new Set(llmDocs.map((docPath) => normalizePath(require$$0$3.resolve(repoRoot, docPath))));
   const seen = /* @__PURE__ */ new Set();
   const results = [];
-  let allFiles;
-  try {
-    allFiles = await promises.readdir(repoPath, { recursive: true, encoding: "utf-8" });
-  } catch {
-    return [];
-  }
-  for (const relPath of allFiles) {
-    const normalized = relPath.replace(/\\/g, "/");
-    if (!normalized.endsWith(".md")) continue;
-    if (isExcluded(normalized)) continue;
-    const absolutePath = require$$0$3.join(repoPath, relPath);
-    if (seen.has(absolutePath)) continue;
-    seen.add(absolutePath);
-    const fileName = require$$0$3.basename(normalized);
-    const dirPart = require$$0$3.dirname(normalized);
-    const isGenerated = normalized.startsWith(".tiqora/context/");
-    let priority;
-    if (llmDocsSet.has(absolutePath)) {
-      priority = 0;
-    } else if (dirPart === "." && PRIORITY_ROOT_FILES.has(fileName)) {
-      priority = 1;
-    } else if (PRIORITY_DIRS.some((d) => normalized.startsWith(d + "/"))) {
-      priority = 2;
-    } else if (isGenerated) {
-      priority = 50;
-    } else {
+  const stack = [{ absPath: repoRoot, relPath: "" }];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries;
+    try {
+      entries = await promises.readdir(current.absPath, { withFileTypes: true });
+    } catch {
       continue;
     }
-    results.push({
-      priority,
-      doc: {
-        name: fileName.replace(/\.md$/i, ""),
-        relativePath: normalized,
-        absolutePath,
-        isGenerated
+    for (const entry of entries) {
+      const nextRelPath = current.relPath ? `${current.relPath}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (EXCLUDED_DIRS.has(entry.name) || isExcluded(nextRelPath)) continue;
+        stack.push({
+          absPath: require$$0$3.join(current.absPath, entry.name),
+          relPath: nextRelPath
+        });
+        continue;
       }
-    });
+      if (!entry.isFile()) continue;
+      const normalized = nextRelPath.replace(/\\/g, "/");
+      const lowerName = entry.name.toLowerCase();
+      if (!lowerName.endsWith(".md") && lowerName !== "llms.txt") continue;
+      if (isExcluded(normalized)) continue;
+      const absolutePath = require$$0$3.join(current.absPath, entry.name);
+      const normalizedAbsPath = normalizePath(require$$0$3.resolve(absolutePath));
+      if (seen.has(normalizedAbsPath)) continue;
+      seen.add(normalizedAbsPath);
+      const fileName = require$$0$3.basename(normalized);
+      const dirPart = require$$0$3.dirname(normalized);
+      const isGenerated = GENERATED_TIQUORA_PREFIXES.some(
+        (prefix) => normalized.startsWith(prefix)
+      );
+      let priority;
+      if (llmDocsSet.has(normalizedAbsPath)) {
+        priority = 0;
+      } else if (dirPart === "." && PRIORITY_ROOT_FILES.has(fileName)) {
+        priority = 1;
+      } else if (PRIORITY_DIRS.some((dirName) => normalized.startsWith(`${dirName}/`))) {
+        priority = 2;
+      } else if (isGenerated) {
+        priority = 50;
+      } else {
+        continue;
+      }
+      let lastModifiedAt;
+      try {
+        const filestat = await promises.stat(absolutePath);
+        lastModifiedAt = filestat.mtimeMs;
+      } catch {
+      }
+      results.push({
+        priority,
+        doc: {
+          name: fileName.replace(/\.md$/i, ""),
+          relativePath: normalized,
+          absolutePath,
+          isGenerated,
+          lastModifiedAt
+        }
+      });
+    }
   }
   results.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
@@ -47119,20 +47214,69 @@ function getPrimaryRepoPath(workspace) {
   if (workspace.repos.length > 0) {
     return workspace.repos[0].localPath;
   }
-  const scratchDir = require$$0$3.join(os.homedir(), ".tiqora", "workspaces", workspace.id);
+  const scratchDir = require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspace.id);
   require$$1$2.mkdirSync(scratchDir, { recursive: true });
   return scratchDir;
 }
+async function scanGlobalSection(workspaceId) {
+  const contextDir = require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceId, "context");
+  const docs = [];
+  const missingNames = [];
+  for (const filename of GLOBAL_EXPECTED_FILES) {
+    const absolutePath = require$$0$3.join(contextDir, filename);
+    if (require$$1$2.existsSync(absolutePath)) {
+      let lastModifiedAt;
+      try {
+        const metaPath = require$$0$3.join(contextDir, "meta.json");
+        if (require$$1$2.existsSync(metaPath)) {
+          const raw = await promises.readFile(metaPath, "utf-8");
+          const meta = JSON.parse(raw);
+          lastModifiedAt = meta[filename]?.generatedAt;
+        }
+        if (!lastModifiedAt) {
+          const filestat = await promises.stat(absolutePath);
+          lastModifiedAt = filestat.mtimeMs;
+        }
+      } catch {
+      }
+      docs.push({
+        name: filename.replace(/\.md$/i, ""),
+        relativePath: `context/${filename}`,
+        absolutePath,
+        isGenerated: true,
+        lastModifiedAt
+      });
+    } else {
+      missingNames.push(filename.replace(/\.md$/i, ""));
+    }
+  }
+  return { docs, missingNames };
+}
 async function scanWorkspaceDocs(workspace) {
   const primaryRepoPath = getPrimaryRepoPath(workspace);
-  const repoResults = await Promise.all(
-    workspace.repos.filter((repo) => require$$1$2.existsSync(repo.localPath)).map(async (repo) => ({
-      repoName: repo.name,
-      repoPath: repo.localPath,
-      docs: await walkMarkdown(repo.localPath, repo.llmDocs)
-    }))
-  );
+  const [repoResults, globalSection] = await Promise.all([
+    Promise.all(
+      workspace.repos.filter((repo) => require$$1$2.existsSync(repo.localPath)).map(async (repo) => ({
+        repoName: repo.name,
+        repoPath: repo.localPath,
+        docs: await walkMarkdown(repo.localPath, repo.llmDocs)
+      }))
+    ),
+    scanGlobalSection(workspace.id)
+  ]);
   const repos = repoResults.filter((r) => r.docs.length > 0);
+  const workspaceRootPath = workspace.workspacePath?.trim();
+  const hasDistinctWorkspaceRoot = Boolean(workspaceRootPath) && !workspace.repos.some((repo) => require$$0$3.resolve(repo.localPath) === require$$0$3.resolve(workspaceRootPath)) && require$$1$2.existsSync(workspaceRootPath);
+  if (hasDistinctWorkspaceRoot && workspaceRootPath) {
+    const workspaceDocs = await walkMarkdown(workspaceRootPath, []);
+    if (workspaceDocs.length > 0) {
+      repos.unshift({
+        repoName: `${workspace.name} (workspace)`,
+        repoPath: workspaceRootPath,
+        docs: workspaceDocs
+      });
+    }
+  }
   if (workspace.repos.length === 0 && require$$1$2.existsSync(primaryRepoPath)) {
     const scratchDocs = await walkMarkdown(primaryRepoPath, []);
     if (scratchDocs.length > 0) {
@@ -47143,7 +47287,7 @@ async function scanWorkspaceDocs(workspace) {
       });
     }
   }
-  return { repos, primaryRepoPath };
+  return { repos, globalSection, primaryRepoPath };
 }
 const DEFAULT_PREFERENCES = {
   theme: "system",
@@ -47185,70 +47329,62 @@ function savePreferences(prefs) {
   };
   require$$1$2.writeFileSync(getStoragePath(), JSON.stringify(next, null, 2), "utf-8");
 }
-const tiqAgentDev = "---\ndescription: 'Launch the tiqora Developer agent for implementation guidance and execution support'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:agent:dev`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Developer agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/agents/dev.md\n2. READ its entire contents and apply activation, persona, menu, and rules exactly\n3. Resolve config using project `.tiqora.yaml` (required) + `~/.tiqora/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate artifacts in `document_language` unless user explicitly requests otherwise\n6. When a workflow menu item is selected, execute via @_tiqora/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const tiqAgentSm = "---\ndescription: 'Launch the tiqora Scrum Master agent for planning, sequencing, and sprint flow'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:agent:sm`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Scrum Master agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/agents/sm.md\n2. READ its entire contents and apply activation, persona, menu, and rules exactly\n3. Resolve config using project `.tiqora.yaml` (required) + `~/.tiqora/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate artifacts in `document_language` unless user explicitly requests otherwise\n6. Do not execute coding tasks directly; route implementation to `/tiq:workflow:dev-story`\n7. When a workflow menu item is selected, execute via @_tiqora/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const tiqAgentPm = "---\ndescription: 'Launch the tiqora Product Manager agent for requirement clarity and prioritization'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:agent:pm`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Product Manager agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/agents/pm.md\n2. READ its entire contents and apply activation, persona, menu, and rules exactly\n3. Resolve config using project `.tiqora.yaml` (required) + `~/.tiqora/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate artifacts in `document_language` unless user explicitly requests otherwise\n6. Keep decisions anchored on user value, measurable outcomes, and explicit scope boundaries\n7. When a workflow menu item is selected, execute via @_tiqora/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const tiqAgentArchitect = "---\ndescription: 'Launch the Tiqora Architect agent for codebase analysis and context generation'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:agent:architect`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Architect agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/agents/architect.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Resolve config using project `.tiqora.yaml` (required) + `~/.tiqora/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate architecture artifacts in `document_language` unless user explicitly requests otherwise\n6. Apply the architecture-scan reflex BEFORE any analysis: read entry points, dependency manifests, top-level README\n7. Every architectural claim must cite a specific file path — never speculate without grounding\n8. When a workflow menu item is selected, execute via @_tiqora/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const tiqAgentBrainstorming = "---\ndescription: 'Launch the Tiqora Brainstorming agent for project vision and scope exploration'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:agent:brainstorming`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Brainstorming agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/agents/brainstorming.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Try to load project config from `.tiqora.yaml` if present; load `~/.tiqora/config.yaml` as optional base\n4. If `.tiqora.workspace.yaml` exists, load it for workspace context (existing repos as constraints)\n5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n6. Open with a SINGLE focused question about vision or the problem being solved — never a list of questions\n7. Apply the vision-first reflex: explore WHY before WHAT before HOW\n8. At session closure, save conclusions to `.tiqora/context/brainstorming.md` via the context-output reflex\n9. When a workflow menu item is selected, execute via @_tiqora/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const tiqAgentQa = "---\ndescription: 'Launch the Tiqora QA agent for test strategy, coverage analysis, and quality gates'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:agent:qa`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the QA agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/agents/qa.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Resolve config using project `.tiqora.yaml` (required) + `~/.tiqora/config.yaml` (optional base)\n4. If `.tiqora.workspace.yaml` exists, load it for cross-repo test coverage scope\n5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n6. Apply the ac-validation reflex BEFORE any test work: verify acceptance criteria are explicit and testable\n7. Apply the coverage-scan reflex to enumerate existing test files and identify gaps\n8. Every quality assessment must cite specific file paths or test file references — never speculate\n9. When a workflow menu item is selected, execute via @_tiqora/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const tiqAgentHotfix = "---\ndescription: 'Launch the Tiqora Hotfix agent for rapid production incident response'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:agent:hotfix`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Hotfix agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/agents/hotfix.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Resolve config using project `.tiqora.yaml` (required) + `~/.tiqora/config.yaml` (optional base)\n4. If `.tiqora.workspace.yaml` exists, identify ALL impacted repos immediately\n5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n6. HOTFIX MODE IS ACTIVE: move fast, skip non-critical steps, minimize scope\n7. Apply incident-scope reflex: fix ONLY what is broken — flag everything else as follow-up\n8. Apply fast-track-branch reflex: branch from main/master with hotfix/ prefix\n9. Apply production-sync reflex: push PM status at start and on MR ready\n10. When a workflow menu item is selected, execute via @_tiqora/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const tiqWorkflowCreateStory = "---\ndescription: 'Run the tiqora create-story workflow to produce implementation-ready story specs via conversational elicitation'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:workflow:create-story`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded, taking a PM persona for the conversational elicitation and story structuring:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @_tiqora/workflows/4-implementation/create-story/workflow.yaml\n3. Pass the yaml path _tiqora/workflows/4-implementation/create-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>\n";
-const tiqWorkflowDevStory = "---\ndescription: 'Execute tiqora dev-story workflow (config merge, ticket context, challenge gate, branch/run-state, implementation flow)'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:workflow:dev-story`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded, except when workflow instructions explicitly require loading PM persona for challenge and Developer persona for implementation:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @_tiqora/workflows/4-implementation/dev-story/workflow.yaml\n3. Pass the yaml path _tiqora/workflows/4-implementation/dev-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>\n";
-const tiqWorkflowFetchProjectContext = "---\ndescription: 'Run the tiqora fetch-project-context workflow to gather scoped project/tool context'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:workflow:fetch-project-context`\n\n## Workflow Intent\n\nCollect project metadata, tool configuration, active branch details, and relevant prior decisions.\n\n## Required Inputs\n\n- `.tiqora.yaml`\n- Current repository state\n- Optional PM ticket id\n\n## Output\n\n- Context artifact in `.tiqora/workflows/steps/`\n- Reusable context pointer for subsequent workflow steps\n";
-const tiqWorkflowGenerateContext = "---\ndescription: 'Analyse l''architecture et le contexte PM de tous les repos du workspace. Présente les findings pour validation, puis génère les fichiers de contexte.'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq-workflow-generate-context`\n\n## Workflow Intent\n\nProduce context files for the workspace:\n- Per-repo: `{repo}/.tiqora/context/architecture.md`\n- Workspace-level (in primary repo): `.tiqora/workspace/global-context.md`, `.tiqora/workspace/pm-context.md`\n\nThis workflow is **interactive**: it presents its findings before generating any files, and waits for explicit user confirmation.\n\n---\n\n## Execution\n\nRead fully and follow: `{project-root}/_tiqora/workflows/4-implementation/generate-context/steps/step-01-discovery.md`\n";
-const tiqWorkflowCreateTicket = "---\ndescription: 'Run the Tiqora create-ticket workflow to create a structured ticket (bug, feature, task) in the PM tool'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:workflow:create-ticket`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @_tiqora/workflows/4-implementation/create-ticket/workflow.yaml\n3. Pass the yaml path _tiqora/workflows/4-implementation/create-ticket/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>\n";
-const tiqWorkflowHotfixStory = "---\ndescription: 'Run the Tiqora hotfix-story workflow to triage, fix, and ship a production incident as fast as possible'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:workflow:hotfix-story`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Hotfix agent, prioritizing speed and minimal scope:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @_tiqora/workflows/4-implementation/hotfix-story/workflow.yaml\n3. Pass the yaml path _tiqora/workflows/4-implementation/hotfix-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. HOTFIX MODE: move fast, skip non-critical steps, fix ONLY what is broken — flag all out-of-scope improvements as follow-up tickets\n</steps>\n";
-const tiqWorkflowQaReview = "---\ndescription: 'Run the Tiqora QA review workflow: acceptance criteria validation, test coverage analysis, regression scope, and sign-off'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:workflow:qa-review`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the QA agent persona:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @_tiqora/workflows/4-implementation/qa-review/workflow.yaml\n3. Pass the yaml path _tiqora/workflows/4-implementation/qa-review/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Apply the AC gate strictly — never proceed to coverage analysis if acceptance criteria are ambiguous\n6. Every coverage and regression assessment must cite specific file paths — never speculate\n</steps>\n";
-const tiqWorkflowSprint = "---\ndescription: 'Run the Tiqora sprint workflow: retrospective and/or sprint planning with PM sync'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/tiq:workflow:sprint`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Scrum Master agent persona:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @_tiqora/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @_tiqora/workflows/5-reporting/sprint/workflow.yaml\n3. Pass the yaml path _tiqora/workflows/5-reporting/sprint/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save sprint artifacts (retro and plan) after each section — never wait until the end to write\n</steps>\n";
+const AgentNakiros = '---\ndescription: \'Launch Nakiros — CTO meta-agent and multi-specialist conversation orchestrator\'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-nakiros`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS — as the Nakiros CTO meta-agent:\n\n<steps CRITICAL="TRUE">\n1. Always LOAD the FULL @~/.nakiros/agents/nakiros.md\n2. READ its entire contents and apply activation, persona, specialists, conversation-protocol, and operational-reflexes exactly\n3. Communicate in communication_language (default: Français)\n4. On every user message, apply the domain-analysis reflex to identify which specialists to involve (maximum 2-3 per turn)\n5. For each relevant specialist, invoke them as a Task subagent:\n   - Load their agent file: @~/.nakiros/agents/{specialist}.md (pm, architect, dev, sm, qa, hotfix, or brainstorming)\n   - Pass the full conversation history and the current user message as context\n   - Collect their response and prefix it with their identity tag: [PM], [Architect], [Dev], [SM], [QA], [Hotfix], or [Brainstorming]\n6. Apply the challenge-facilitation reflex: after a specialist responds, other active specialists may react with "↳ @[Tag] —" format (max 2 rounds before Nakiros synthesizes)\n7. Apply synthesis-discipline: synthesize as [Nakiros] only when 2+ specialists diverge, when a decision is needed, or when the user has not addressed a specific agent — otherwise stay silent\n8. When @mention is detected in user message (@PM, @Architect, etc.), skip domain-analysis and route directly to the named specialist first; others may challenge only if their domain is directly impacted\n9. When a significant decision emerges, trigger decision-log-trigger: announce "[Nakiros] Décision prise — je documente." and write the Decision Log to {primary_repo}/.nakiros/decisions/{YYYY-MM-DD}-{slug}.md\n10. Never make product, architectural, or delivery decisions alone — always involve the relevant specialist before committing to any direction\n11. When user types /nak:cto:invite @[agent], /nak:cto:dismiss @[agent], /nak:cto:decision, /nak:cto:handoff @[agent], or /nak:cto:summary — execute the corresponding conversation management action as defined in the menu\n</steps>\n';
+const AgentDev = "---\ndescription: 'Launch the Nakiros Developer agent for implementation guidance and execution support'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-dev`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Developer agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/dev.md\n2. READ its entire contents and apply activation, persona, menu, and rules exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate artifacts in `document_language` unless user explicitly requests otherwise\n6. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
+const AgentSm = "---\ndescription: 'Launch the Nakiros Scrum Master agent for planning, sequencing, and sprint flow'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-sm`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Scrum Master agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/sm.md\n2. READ its entire contents and apply activation, persona, menu, and rules exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate artifacts in `document_language` unless user explicitly requests otherwise\n6. Do not execute coding tasks directly; route implementation to `/nak-workflow-dev-story`\n7. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
+const AgentPm = "---\ndescription: 'Launch the Nakiros Product Manager agent for requirement clarity and prioritization'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-pm`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Product Manager agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/pm.md\n2. READ its entire contents and apply activation, persona, menu, and rules exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate artifacts in `document_language` unless user explicitly requests otherwise\n6. Keep decisions anchored on user value, measurable outcomes, and explicit scope boundaries\n7. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
+const AgentArchitect = "---\ndescription: 'Launch the Nakiros Architect agent for codebase analysis and context generation'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-architect`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Architect agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/architect.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate architecture artifacts in `document_language` unless user explicitly requests otherwise\n6. Apply the architecture-scan reflex BEFORE any analysis: read entry points, dependency manifests, top-level README\n7. Every architectural claim must cite a specific file path — never speculate without grounding\n8. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
+const AgentBrainstorming = "---\ndescription: 'Launch the Nakiros Brainstorming agent for project vision and scope exploration'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-brainstorming`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Brainstorming agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/brainstorming.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Try to load project config from `.nakiros.yaml` if present; load `~/.nakiros/config.yaml` as optional base\n4. If `.nakiros.workspace.yaml` exists, load it for workspace context (existing repos as constraints)\n5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n6. Open with a SINGLE focused question about vision or the problem being solved — never a list of questions\n7. Apply the vision-first reflex: explore WHY before WHAT before HOW\n8. At session closure, save conclusions to `.nakiros/context/brainstorming.md` via the context-output reflex\n9. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
+const AgentQa = "---\ndescription: 'Launch the Nakiros QA agent for test strategy, coverage analysis, and quality gates'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-qa`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the QA agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/qa.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. If `.nakiros.workspace.yaml` exists, load it for cross-repo test coverage scope\n5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n6. Apply the ac-validation reflex BEFORE any test work: verify acceptance criteria are explicit and testable\n7. Apply the coverage-scan reflex to enumerate existing test files and identify gaps\n8. Every quality assessment must cite specific file paths or test file references — never speculate\n9. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
+const AgentHotfix = "---\ndescription: 'Launch the Nakiros Hotfix agent for rapid production incident response'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-hotfix`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Hotfix agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/hotfix.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. If `.nakiros.workspace.yaml` exists, identify ALL impacted repos immediately\n5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n6. HOTFIX MODE IS ACTIVE: move fast, skip non-critical steps, minimize scope\n7. Apply incident-scope reflex: fix ONLY what is broken — flag everything else as follow-up\n8. Apply fast-track-branch reflex: branch from main/master with hotfix/ prefix\n9. Apply production-sync reflex: push PM status at start and on MR ready\n10. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
+const WorkflowCreateStory = "---\ndescription: 'Run the Nakiros create-story workflow to produce implementation-ready story specs via conversational elicitation'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-create-story`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded, taking a PM persona for the conversational elicitation and story structuring:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/create-story/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/create-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>\n";
+const WorkflowDevStory = "---\ndescription: 'Execute Nakiros dev-story workflow (config merge, ticket context, challenge gate, branch/run-state, implementation flow)'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-dev-story`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded, except when workflow instructions explicitly require loading PM persona for challenge and Developer persona for implementation:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/dev-story/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/dev-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>\n";
+const WorkflowFetchProjectContext = "---\ndescription: 'Run the Nakiros fetch-project-context workflow to gather scoped project/tool context'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-fetch-project-context`\n\n## Workflow Intent\n\nCollect project metadata, tool configuration, active branch details, and relevant prior decisions.\n\n## Required Inputs\n\n- `.nakiros.yaml`\n- Current repository state\n- Optional PM ticket id\n\n## Output\n\n- Context artifact in `.nakiros/workflows/steps/`\n- Reusable context pointer for subsequent workflow steps\n";
+const WorkflowGenerateContext = "---\ndescription: 'Analyse l''architecture et le contexte PM de tous les repos du workspace. Présente les findings pour validation, puis génère les fichiers de contexte.'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-generate-context`\n\n## Workflow Intent\n\nProduce context files for the workspace:\n- Per-repo: `{repo}/.nakiros/context/architecture.md`\n- Workspace-level (in primary repo): `.nakiros/workspace/global-context.md`, `.nakiros/workspace/pm-context.md`\n\nThis workflow is **interactive**: it presents its findings before generating any files, and waits for explicit user confirmation.\n\n---\n\n## Execution\n\nRead fully and follow: `~/.nakiros/workflows/4-implementation/generate-context/steps/step-01-discovery.md`\n";
+const WorkflowCreateTicket = "---\ndescription: 'Run the Nakiros create-ticket workflow to create a structured ticket (bug, feature, task) in the PM tool'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-create-ticket`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/create-ticket/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/create-ticket/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>\n";
+const WorkflowHotfixStory = "---\ndescription: 'Run the Nakiros hotfix-story workflow to triage, fix, and ship a production incident as fast as possible'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-hotfix-story`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Hotfix agent, prioritizing speed and minimal scope:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/hotfix-story/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/hotfix-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. HOTFIX MODE: move fast, skip non-critical steps, fix ONLY what is broken — flag all out-of-scope improvements as follow-up tickets\n</steps>\n";
+const WorkflowQaReview = "---\ndescription: 'Run the Nakiros QA review workflow: acceptance criteria validation, test coverage analysis, regression scope, and sign-off'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-qa-review`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the QA agent persona:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/qa-review/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/qa-review/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Apply the AC gate strictly — never proceed to coverage analysis if acceptance criteria are ambiguous\n6. Every coverage and regression assessment must cite specific file paths — never speculate\n</steps>\n";
+const WorkflowSprint = "---\ndescription: 'Run the Nakiros sprint workflow: retrospective and/or sprint planning with PM sync'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-sprint`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Scrum Master agent persona:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/5-reporting/sprint/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/5-reporting/sprint/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save sprint artifacts (retro and plan) after each section — never wait until the end to write\n</steps>\n";
+const WorkflowProjectUnderstandingConfidence = "---\ndescription: 'Run the Nakiros project-understanding-confidence workflow to score AI understanding readiness and identify missing context'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-project-understanding-confidence`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/project-understanding-confidence/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/project-understanding-confidence/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Enforce workspace-control artifact location (`{project-root}/.nakiros/...`) for this workflow\n6. Enforce strict multi-repo coverage gate before assigning any confident verdict\n7. Save confidence outputs in `{project-root}/.nakiros/workspace/confidence/` and workflow snapshots in `{project-root}/.nakiros/workflows/steps/`\n</steps>\n";
 const COMMAND_TEMPLATES = {
-  "tiq-agent-dev.md": tiqAgentDev,
-  "tiq-agent-sm.md": tiqAgentSm,
-  "tiq-agent-pm.md": tiqAgentPm,
-  "tiq-agent-architect.md": tiqAgentArchitect,
-  "tiq-agent-brainstorming.md": tiqAgentBrainstorming,
-  "tiq-agent-qa.md": tiqAgentQa,
-  "tiq-agent-hotfix.md": tiqAgentHotfix,
-  "tiq-workflow-create-story.md": tiqWorkflowCreateStory,
-  "tiq-workflow-dev-story.md": tiqWorkflowDevStory,
-  "tiq-workflow-fetch-project-context.md": tiqWorkflowFetchProjectContext,
-  "tiq-workflow-generate-context.md": tiqWorkflowGenerateContext,
-  "tiq-workflow-create-ticket.md": tiqWorkflowCreateTicket,
-  "tiq-workflow-hotfix-story.md": tiqWorkflowHotfixStory,
-  "tiq-workflow-qa-review.md": tiqWorkflowQaReview,
-  "tiq-workflow-sprint.md": tiqWorkflowSprint
+  "nak-agent-nakiros.md": AgentNakiros,
+  "nak-agent-dev.md": AgentDev,
+  "nak-agent-sm.md": AgentSm,
+  "nak-agent-pm.md": AgentPm,
+  "nak-agent-architect.md": AgentArchitect,
+  "nak-agent-brainstorming.md": AgentBrainstorming,
+  "nak-agent-qa.md": AgentQa,
+  "nak-agent-hotfix.md": AgentHotfix,
+  "nak-workflow-create-story.md": WorkflowCreateStory,
+  "nak-workflow-dev-story.md": WorkflowDevStory,
+  "nak-workflow-fetch-project-context.md": WorkflowFetchProjectContext,
+  "nak-workflow-generate-context.md": WorkflowGenerateContext,
+  "nak-workflow-create-ticket.md": WorkflowCreateTicket,
+  "nak-workflow-hotfix-story.md": WorkflowHotfixStory,
+  "nak-workflow-qa-review.md": WorkflowQaReview,
+  "nak-workflow-sprint.md": WorkflowSprint,
+  "nak-workflow-project-understanding-confidence.md": WorkflowProjectUnderstandingConfidence
 };
 const COMMAND_TEMPLATE_FILES = [
-  "tiq-agent-dev.md",
-  "tiq-agent-sm.md",
-  "tiq-agent-pm.md",
-  "tiq-agent-architect.md",
-  "tiq-agent-brainstorming.md",
-  "tiq-agent-qa.md",
-  "tiq-agent-hotfix.md",
-  "tiq-workflow-create-story.md",
-  "tiq-workflow-dev-story.md",
-  "tiq-workflow-fetch-project-context.md",
-  "tiq-workflow-generate-context.md",
-  "tiq-workflow-create-ticket.md",
-  "tiq-workflow-hotfix-story.md",
-  "tiq-workflow-qa-review.md",
-  "tiq-workflow-sprint.md"
+  "nak-agent-nakiros.md",
+  "nak-agent-dev.md",
+  "nak-agent-sm.md",
+  "nak-agent-pm.md",
+  "nak-agent-architect.md",
+  "nak-agent-brainstorming.md",
+  "nak-agent-qa.md",
+  "nak-agent-hotfix.md",
+  "nak-workflow-create-story.md",
+  "nak-workflow-dev-story.md",
+  "nak-workflow-fetch-project-context.md",
+  "nak-workflow-generate-context.md",
+  "nak-workflow-create-ticket.md",
+  "nak-workflow-hotfix-story.md",
+  "nak-workflow-qa-review.md",
+  "nak-workflow-sprint.md",
+  "nak-workflow-project-understanding-confidence.md"
 ];
-const TIQORA_WORKSPACE_DIRECTORIES = [
-  "config",
-  "state",
-  "agents/sessions",
-  "workflows/runs",
-  "workflows/steps",
-  "sessions",
-  "sprints",
-  "context",
-  "reports/daily",
-  "reports/retrospective",
-  "reports/mr-context",
-  "sync",
-  "migrations"
-];
+require$$0$3.resolve(os.homedir(), ".nakiros");
 const ENVIRONMENTS = {
   cursor: {
     label: "Cursor",
@@ -47276,32 +47412,18 @@ function findRepoRoot(startDir = process.cwd()) {
   }
   return require$$0$3.resolve(startDir);
 }
-function getRuntimeDir() {
+function getRuntimeSourceDir() {
   const repoRoot = findRepoRoot();
   const resourcesPath = process.resourcesPath;
   const candidates = [
-    ...resourcesPath ? [require$$0$3.resolve(resourcesPath, "_tiqora")] : [],
-    require$$0$3.resolve(repoRoot, "_tiqora"),
-    require$$0$3.resolve(repoRoot, "apps/cli/_tiqora")
+    ...resourcesPath ? [require$$0$3.resolve(resourcesPath, "_nakiros")] : [],
+    require$$0$3.resolve(repoRoot, "_nakiros"),
+    require$$0$3.resolve(repoRoot, "apps/desktop/_nakiros")
   ];
   for (const path of candidates) {
     if (require$$1$2.existsSync(require$$0$3.resolve(path, "core/tasks/workflow.xml"))) return path;
   }
-  throw new Error("Impossible de localiser le runtime _tiqora.");
-}
-function patchGitignore(repoPath) {
-  const gitignorePath = require$$0$3.resolve(repoPath, ".gitignore");
-  if (!require$$1$2.existsSync(gitignorePath)) {
-    require$$1$2.writeFileSync(gitignorePath, ".tiqora/\n", "utf8");
-    return true;
-  }
-  const content = require$$1$2.readFileSync(gitignorePath, "utf8");
-  if (content.split(/\r?\n/).includes(".tiqora/")) return false;
-  const withTrailingNewline = content.endsWith("\n") ? content : `${content}
-`;
-  require$$1$2.writeFileSync(gitignorePath, `${withTrailingNewline}.tiqora/
-`, "utf8");
-  return true;
+  throw new Error("Impossible de localiser le runtime _nakiros.");
 }
 function copyDirectoryRecursive(sourceDir, targetDir, force) {
   require$$1$2.mkdirSync(targetDir, { recursive: true });
@@ -47311,33 +47433,28 @@ function copyDirectoryRecursive(sourceDir, targetDir, force) {
     const sourcePath = require$$0$3.resolve(sourceDir, entry.name);
     const targetPath = require$$0$3.resolve(targetDir, entry.name);
     if (entry.isDirectory()) {
-      const nested = copyDirectoryRecursive(sourcePath, targetPath, force);
+      const nested = copyDirectoryRecursive(sourcePath, targetPath);
       copied += nested.copied;
       overwritten += nested.overwritten;
       continue;
     }
     if (!entry.isFile()) continue;
     const targetExists = require$$1$2.existsSync(targetPath);
-    if (targetExists && !force) continue;
+    if (targetExists && true) continue;
     require$$1$2.copyFileSync(sourcePath, targetPath);
     if (targetExists) overwritten += 1;
     else copied += 1;
   }
   return { copied, overwritten };
 }
-function getEnvironmentStatus(repoPath, id2) {
-  const env2 = ENVIRONMENTS[id2];
-  const markerExists = require$$1$2.existsSync(require$$0$3.resolve(repoPath, env2.markerRelativePath));
-  const targetPath = require$$0$3.resolve(repoPath, env2.targetRelativePath);
-  const installedCount = COMMAND_TEMPLATE_FILES.filter((file) => require$$1$2.existsSync(require$$0$3.resolve(targetPath, file))).length;
-  return {
-    id: id2,
-    label: env2.label,
-    targetPath,
-    markerExists,
-    installedCount,
-    totalExpected: COMMAND_TEMPLATE_FILES.length
-  };
+function ensureRuntimeInDir(targetDir) {
+  const runtimeTargetDir = require$$0$3.resolve(targetDir, "_nakiros");
+  if (require$$1$2.existsSync(runtimeTargetDir)) return;
+  try {
+    const runtimeSourceDir = getRuntimeSourceDir();
+    copyDirectoryRecursive(runtimeSourceDir, runtimeTargetDir, false);
+  } catch {
+  }
 }
 function getGlobalInstallStatus() {
   const home = os.homedir();
@@ -47396,6 +47513,20 @@ function installAgentsGlobally() {
   }
   return { environments, commandFilesCopied, commandFilesOverwritten };
 }
+function getEnvironmentStatus(repoPath, id2) {
+  const env2 = ENVIRONMENTS[id2];
+  const markerExists = require$$1$2.existsSync(require$$0$3.resolve(repoPath, env2.markerRelativePath));
+  const targetPath = require$$0$3.resolve(repoPath, env2.targetRelativePath);
+  const installedCount = COMMAND_TEMPLATE_FILES.filter((file) => require$$1$2.existsSync(require$$0$3.resolve(targetPath, file))).length;
+  return {
+    id: id2,
+    label: env2.label,
+    targetPath,
+    markerExists,
+    installedCount,
+    totalExpected: COMMAND_TEMPLATE_FILES.length
+  };
+}
 function getAgentInstallStatus(repoPath) {
   const resolvedRepoPath = require$$0$3.resolve(repoPath);
   const environments = [
@@ -47405,7 +47536,7 @@ function getAgentInstallStatus(repoPath) {
   ];
   return {
     repoPath: resolvedRepoPath,
-    hasTiqoraConfig: require$$1$2.existsSync(require$$0$3.resolve(resolvedRepoPath, ".tiqora.yaml")),
+    hasNakirosConfig: require$$1$2.existsSync(require$$0$3.resolve(resolvedRepoPath, ".nakiros.yaml")),
     environments
   };
 }
@@ -47418,12 +47549,8 @@ function installAgents(request2) {
     throw new Error("Sélectionne au moins un environnement cible.");
   }
   const force = request2.force ?? true;
-  const runtimeSourceDir = getRuntimeDir();
   let commandFilesCopied = 0;
   let commandFilesOverwritten = 0;
-  let runtimeFilesCopied = 0;
-  let runtimeFilesOverwritten = 0;
-  let workspaceDirsCreated = 0;
   for (const target of request2.targets) {
     const env2 = ENVIRONMENTS[target];
     const envTargetPath = require$$0$3.resolve(repoPath, env2.targetRelativePath);
@@ -47437,27 +47564,275 @@ function installAgents(request2) {
       else commandFilesCopied += 1;
     }
   }
-  const runtimeTargetDir = require$$0$3.resolve(repoPath, "_tiqora");
-  const runtimeCopy = copyDirectoryRecursive(runtimeSourceDir, runtimeTargetDir, force);
-  runtimeFilesCopied += runtimeCopy.copied;
-  runtimeFilesOverwritten += runtimeCopy.overwritten;
-  const workspaceRoot = require$$0$3.resolve(repoPath, ".tiqora");
-  for (const relativeDir of TIQORA_WORKSPACE_DIRECTORIES) {
-    const target = require$$0$3.resolve(workspaceRoot, relativeDir);
-    if (!require$$1$2.existsSync(target)) workspaceDirsCreated += 1;
-    require$$1$2.mkdirSync(target, { recursive: true });
-  }
-  const gitignorePatched = patchGitignore(repoPath);
   return {
     repoPath,
     targets: request2.targets,
     commandFilesCopied,
     commandFilesOverwritten,
-    runtimeFilesCopied,
-    runtimeFilesOverwritten,
-    workspaceDirsCreated,
-    gitignorePatched
+    runtimeFilesCopied: 0,
+    runtimeFilesOverwritten: 0,
+    workspaceDirsCreated: 0,
+    gitignorePatched: false
   };
+}
+function ensureCommandsInRepo(repoPath, provider) {
+  const resolvedRepoPath = require$$0$3.resolve(repoPath);
+  if (!require$$1$2.existsSync(resolvedRepoPath) || !require$$1$2.lstatSync(resolvedRepoPath).isDirectory()) {
+    throw new Error(`Répertoire invalide: ${resolvedRepoPath}`);
+  }
+  const env2 = ENVIRONMENTS[provider];
+  const targetDir = require$$0$3.resolve(resolvedRepoPath, env2.targetRelativePath);
+  require$$1$2.mkdirSync(targetDir, { recursive: true });
+  for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+    const targetPath = require$$0$3.resolve(targetDir, fileName);
+    if (require$$1$2.existsSync(targetPath)) continue;
+    require$$1$2.writeFileSync(targetPath, content, "utf8");
+  }
+}
+const GLOBAL_DIR$1 = require$$0$3.join(os.homedir(), ".nakiros");
+const EDITOR_DEFS = {
+  claude: {
+    label: "Claude Code",
+    markerPaths: [require$$0$3.join(os.homedir(), ".claude")],
+    targetDir: require$$0$3.join(os.homedir(), ".claude", "commands")
+  },
+  cursor: {
+    label: "Cursor",
+    markerPaths: [
+      "/Applications/Cursor.app",
+      require$$0$3.join(os.homedir(), ".cursor"),
+      require$$0$3.join(os.homedir(), "AppData", "Local", "Programs", "cursor")
+    ],
+    targetDir: require$$0$3.join(os.homedir(), ".cursor", "commands")
+  },
+  codex: {
+    label: "Codex",
+    markerPaths: [require$$0$3.join(os.homedir(), ".codex")],
+    targetDir: require$$0$3.join(os.homedir(), ".codex", "prompts")
+  }
+};
+function detectEditors() {
+  return Object.entries(EDITOR_DEFS).map(
+    ([id2, def]) => ({
+      id: id2,
+      label: def.label,
+      detected: def.markerPaths.some((p) => require$$1$2.existsSync(p)),
+      targetDir: def.targetDir
+    })
+  );
+}
+function nakirosConfigExists() {
+  return require$$1$2.existsSync(require$$0$3.join(GLOBAL_DIR$1, "config.yaml"));
+}
+function findRuntimeSourceDir() {
+  const resourcesPath = process.resourcesPath;
+  let repoRoot = require$$0$3.resolve(__dirname);
+  for (let i = 0; i < 8; i++) {
+    if (require$$1$2.existsSync(require$$0$3.join(repoRoot, "package.json"))) break;
+    const parent = require$$0$3.dirname(repoRoot);
+    if (parent === repoRoot) break;
+    repoRoot = parent;
+  }
+  const candidates = [
+    ...resourcesPath ? [require$$0$3.join(resourcesPath, "_nakiros")] : [],
+    require$$0$3.join(repoRoot, "_nakiros"),
+    require$$0$3.join(repoRoot, "apps", "desktop", "_nakiros")
+  ];
+  for (const p of candidates) {
+    if (require$$1$2.existsSync(require$$0$3.join(p, "core", "tasks", "workflow.xml"))) return p;
+  }
+  throw new Error("Runtime _nakiros introuvable.");
+}
+function copyDirRecursive(src2, dst) {
+  require$$1$2.mkdirSync(dst, { recursive: true });
+  for (const entry of require$$1$2.readdirSync(src2, { withFileTypes: true })) {
+    const srcPath = require$$0$3.join(src2, entry.name);
+    const dstPath = require$$0$3.join(dst, entry.name);
+    if (entry.isDirectory()) copyDirRecursive(srcPath, dstPath);
+    else if (entry.isFile()) require$$1$2.copyFileSync(srcPath, dstPath);
+  }
+}
+function emit(win, event) {
+  win.webContents.send("onboarding:progress", event);
+}
+async function installNakiros(editors, commandTemplates, win) {
+  const errors2 = [];
+  try {
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "agents"), { recursive: true });
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "workflows"), { recursive: true });
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "core"), { recursive: true });
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "workspaces"), { recursive: true });
+    emit(win, { label: "~/.nakiros/ créé", done: true });
+  } catch (err) {
+    const msg = `Création ~/.nakiros/ : ${err.message}`;
+    errors2.push(msg);
+    emit(win, { label: msg, done: false, error: msg });
+  }
+  try {
+    const src2 = findRuntimeSourceDir();
+    copyDirRecursive(require$$0$3.join(src2, "agents"), require$$0$3.join(GLOBAL_DIR$1, "agents"));
+    copyDirRecursive(require$$0$3.join(src2, "workflows"), require$$0$3.join(GLOBAL_DIR$1, "workflows"));
+    copyDirRecursive(require$$0$3.join(src2, "core"), require$$0$3.join(GLOBAL_DIR$1, "core"));
+    const agentCount = require$$1$2.readdirSync(require$$0$3.join(GLOBAL_DIR$1, "agents")).length;
+    emit(win, { label: `Agents installés (${agentCount})`, done: true });
+    emit(win, { label: "Workflows installés", done: true });
+  } catch (err) {
+    const msg = `Copie runtime : ${err.message}`;
+    errors2.push(msg);
+    emit(win, { label: msg, done: false, error: msg });
+  }
+  try {
+    const configPath = require$$0$3.join(GLOBAL_DIR$1, "config.yaml");
+    if (!require$$1$2.existsSync(configPath)) {
+      require$$1$2.writeFileSync(
+        configPath,
+        [
+          "# Nakiros global config",
+          `nakiros_version: '1.0.0'`,
+          `communication_language: fr`,
+          `document_language: en`
+        ].join("\n") + "\n",
+        "utf-8"
+      );
+    }
+    emit(win, { label: "config.yaml créé", done: true });
+  } catch (err) {
+    const msg = `config.yaml : ${err.message}`;
+    errors2.push(msg);
+    emit(win, { label: msg, done: false, error: msg });
+  }
+  for (const editor of editors.filter((e) => e.detected)) {
+    try {
+      require$$1$2.mkdirSync(editor.targetDir, { recursive: true });
+      for (const [fileName, content] of Object.entries(commandTemplates)) {
+        require$$1$2.writeFileSync(require$$0$3.join(editor.targetDir, fileName), content, "utf8");
+      }
+      emit(win, { label: `${editor.label} : commandes déployées`, done: true });
+    } catch (err) {
+      const msg = `${editor.label} : ${err.message}`;
+      errors2.push(msg);
+      emit(win, { label: msg, done: false, error: msg });
+    }
+  }
+  try {
+    require$$1$2.writeFileSync(
+      require$$0$3.join(GLOBAL_DIR$1, "version.json"),
+      JSON.stringify(
+        {
+          nakiros_app: "1.0.0",
+          agents_version: "1.0.0",
+          workflows_version: "1.0.0",
+          last_check: (/* @__PURE__ */ new Date()).toISOString(),
+          files: {}
+        },
+        null,
+        2
+      ) + "\n",
+      "utf-8"
+    );
+    emit(win, { label: "version.json enregistré", done: true });
+  } catch (err) {
+    const msg = `version.json : ${err.message}`;
+    errors2.push(msg);
+    emit(win, { label: msg, done: false, error: msg });
+  }
+  return { success: errors2.length === 0, errors: errors2 };
+}
+const MANIFEST_URL = "https://updates.nakiros.com/agents/manifest.json";
+const GLOBAL_DIR = require$$0$3.join(os.homedir(), ".nakiros");
+const VERSION_FILE = require$$0$3.join(GLOBAL_DIR, "version.json");
+function readLocalVersion() {
+  if (!require$$1$2.existsSync(VERSION_FILE)) return null;
+  try {
+    return JSON.parse(require$$1$2.readFileSync(VERSION_FILE, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+function writeLocalVersion(info) {
+  require$$1$2.mkdirSync(GLOBAL_DIR, { recursive: true });
+  require$$1$2.writeFileSync(VERSION_FILE, JSON.stringify(info, null, 2) + "\n", "utf-8");
+}
+function shouldCheck(local) {
+  if (!local) return true;
+  const last = new Date(local.last_check).getTime();
+  return Date.now() - last > 24 * 60 * 60 * 1e3;
+}
+async function checkForUpdates(force = false) {
+  const noUpdate = {
+    hasUpdate: false,
+    latestVersion: "",
+    changelog: "",
+    changedFiles: []
+  };
+  const local = readLocalVersion();
+  if (!force && !shouldCheck(local)) return noUpdate;
+  let manifest;
+  try {
+    const res = await fetch(MANIFEST_URL, { signal: AbortSignal.timeout(8e3) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    manifest = await res.json();
+  } catch {
+    return noUpdate;
+  }
+  if (local) {
+    writeLocalVersion({ ...local, last_check: (/* @__PURE__ */ new Date()).toISOString() });
+  }
+  if (!local) return noUpdate;
+  const changedFiles = manifest.files.filter((f) => {
+    const installed = local.files[f.filename];
+    return !installed || installed.hash !== f.hash;
+  });
+  return {
+    hasUpdate: changedFiles.length > 0,
+    latestVersion: manifest.version,
+    changelog: manifest.changelog,
+    changedFiles
+  };
+}
+async function applyUpdate(files, win) {
+  const local = readLocalVersion();
+  for (const file of files) {
+    const subdirMap = {
+      agent: "agents",
+      workflow: "workflows",
+      core: "core"
+    };
+    const targetDir = require$$0$3.join(GLOBAL_DIR, subdirMap[file.type]);
+    const targetPath = require$$0$3.join(targetDir, file.filename);
+    try {
+      const res = await fetch(file.url, { signal: AbortSignal.timeout(3e4) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const expectedHash = file.hash.replace(/^sha256:/, "");
+      const actualHash = require$$0$9.createHash("sha256").update(buffer).digest("hex");
+      if (actualHash !== expectedHash) {
+        throw new Error(`Hash mismatch pour ${file.filename}`);
+      }
+      require$$1$2.mkdirSync(targetDir, { recursive: true });
+      require$$1$2.writeFileSync(targetPath, buffer);
+      win.webContents.send("updates:progress", { file: file.filename, done: true });
+    } catch (err) {
+      win.webContents.send("updates:progress", {
+        file: file.filename,
+        done: false,
+        error: err.message
+      });
+    }
+  }
+  if (local) {
+    const updatedFiles = { ...local.files };
+    for (const f of files) {
+      updatedFiles[f.filename] = { version: f.version, hash: f.hash };
+    }
+    writeLocalVersion({
+      ...local,
+      agents_version: files.find((f) => f.type === "agent")?.version ?? local.agents_version,
+      workflows_version: files.find((f) => f.type === "workflow")?.version ?? local.workflows_version,
+      last_check: (/* @__PURE__ */ new Date()).toISOString(),
+      files: updatedFiles
+    });
+  }
 }
 const PROVIDERS = [
   { provider: "claude", label: "Claude Code", command: "claude", versionArgs: ["--version"] },
@@ -47579,90 +47954,82 @@ function getAgentCliStatus() {
     };
   });
 }
-function getWorkspaceDir(workspaceId) {
-  const dir = require$$0$3.join(electron.app.getPath("userData"), workspaceId);
-  if (!require$$1$2.existsSync(dir)) {
-    require$$1$2.mkdirSync(dir, { recursive: true });
-  }
+function toWorkspaceSlug(name) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "workspace";
+}
+function getTicketsDir(workspaceSlug) {
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, "tickets");
+}
+function ensureTicketsDir(workspaceSlug) {
+  const dir = getTicketsDir(workspaceSlug);
+  if (!require$$1$2.existsSync(dir)) require$$1$2.mkdirSync(dir, { recursive: true });
   return dir;
 }
-function readJson(filePath) {
-  if (!require$$1$2.existsSync(filePath)) return [];
+function getEpicsDir(workspaceSlug) {
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, "epics");
+}
+function ensureEpicsDir(workspaceSlug) {
+  const dir = getEpicsDir(workspaceSlug);
+  if (!require$$1$2.existsSync(dir)) require$$1$2.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function readJsonFile(filePath) {
   try {
     return JSON.parse(require$$1$2.readFileSync(filePath, "utf-8"));
   } catch {
-    return [];
+    return null;
   }
 }
-function writeJson(filePath, data) {
-  require$$1$2.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+function readAllFromDir(dir) {
+  if (!require$$1$2.existsSync(dir)) return [];
+  return require$$1$2.readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => readJsonFile(require$$0$3.join(dir, f))).filter((item) => item !== null);
 }
-function getTickets(workspaceId) {
-  return readJson(require$$0$3.join(getWorkspaceDir(workspaceId), "tickets.json"));
+function getTickets(workspaceSlug) {
+  return readAllFromDir(getTicketsDir(workspaceSlug));
 }
-function saveTicket(workspaceId, ticket) {
-  const all = getTickets(workspaceId);
-  const idx = all.findIndex((t) => t.id === ticket.id);
-  if (idx >= 0) {
-    all[idx] = ticket;
-  } else {
-    all.push(ticket);
-  }
-  writeJson(require$$0$3.join(getWorkspaceDir(workspaceId), "tickets.json"), all);
+function saveTicket(workspaceSlug, ticket) {
+  const dir = ensureTicketsDir(workspaceSlug);
+  require$$1$2.writeFileSync(require$$0$3.join(dir, `${ticket.id}.json`), JSON.stringify(ticket, null, 2), "utf-8");
 }
-function removeTicket(workspaceId, id2) {
-  const all = getTickets(workspaceId).filter((t) => t.id !== id2);
-  writeJson(require$$0$3.join(getWorkspaceDir(workspaceId), "tickets.json"), all);
+function removeTicket(workspaceSlug, id2) {
+  const filePath = require$$0$3.join(getTicketsDir(workspaceSlug), `${id2}.json`);
+  if (require$$1$2.existsSync(filePath)) require$$1$2.unlinkSync(filePath);
 }
-function getEpics(workspaceId) {
-  return readJson(require$$0$3.join(getWorkspaceDir(workspaceId), "epics.json"));
+function getEpics(workspaceSlug) {
+  return readAllFromDir(getEpicsDir(workspaceSlug));
 }
-function saveEpic(workspaceId, epic) {
-  const all = getEpics(workspaceId);
-  const idx = all.findIndex((e) => e.id === epic.id);
-  if (idx >= 0) {
-    all[idx] = epic;
-  } else {
-    all.push(epic);
-  }
-  writeJson(require$$0$3.join(getWorkspaceDir(workspaceId), "epics.json"), all);
+function saveEpic(workspaceSlug, epic) {
+  const dir = ensureEpicsDir(workspaceSlug);
+  require$$1$2.writeFileSync(require$$0$3.join(dir, `${epic.id}.json`), JSON.stringify(epic, null, 2), "utf-8");
 }
-function removeEpic(workspaceId, id2) {
-  const all = getEpics(workspaceId).filter((e) => e.id !== id2);
-  writeJson(require$$0$3.join(getWorkspaceDir(workspaceId), "epics.json"), all);
+function removeEpic(workspaceSlug, id2) {
+  const filePath = require$$0$3.join(getEpicsDir(workspaceSlug), `${id2}.json`);
+  if (require$$1$2.existsSync(filePath)) require$$1$2.unlinkSync(filePath);
 }
-function bulkSaveTickets(workspaceId, tickets) {
-  const all = getTickets(workspaceId);
+function bulkSaveTickets(workspaceSlug, tickets) {
+  const dir = ensureTicketsDir(workspaceSlug);
   let created = 0;
   let updated = 0;
   for (const ticket of tickets) {
-    const idx = all.findIndex((t) => t.id === ticket.id);
-    if (idx >= 0) {
-      all[idx] = ticket;
-      updated++;
-    } else {
-      all.push(ticket);
-      created++;
-    }
+    const filePath = require$$0$3.join(dir, `${ticket.id}.json`);
+    const isUpdate = require$$1$2.existsSync(filePath);
+    require$$1$2.writeFileSync(filePath, JSON.stringify(ticket, null, 2), "utf-8");
+    if (isUpdate) updated++;
+    else created++;
   }
-  writeJson(require$$0$3.join(getWorkspaceDir(workspaceId), "tickets.json"), all);
   return { created, updated };
 }
-function bulkSaveEpics(workspaceId, epics) {
-  const all = getEpics(workspaceId);
+function bulkSaveEpics(workspaceSlug, epics) {
+  const dir = ensureEpicsDir(workspaceSlug);
   let created = 0;
   let updated = 0;
   for (const epic of epics) {
-    const idx = all.findIndex((e) => e.id === epic.id);
-    if (idx >= 0) {
-      all[idx] = epic;
-      updated++;
-    } else {
-      all.push(epic);
-      created++;
-    }
+    const filePath = require$$0$3.join(dir, `${epic.id}.json`);
+    const isUpdate = require$$1$2.existsSync(filePath);
+    require$$1$2.writeFileSync(filePath, JSON.stringify(epic, null, 2), "utf-8");
+    if (isUpdate) updated++;
+    else created++;
   }
-  writeJson(require$$0$3.join(getWorkspaceDir(workspaceId), "epics.json"), all);
   return { created, updated };
 }
 function generateContext(workspaceId, ticketId, workspace) {
@@ -47900,15 +48267,16 @@ function buildRunnerCommand(args) {
   const addDirCount = addDirFlags.length;
   const addDirPart = addDirCount > 0 ? `${addDirFlags.join(" ")} ` : "";
   if (args.provider === "codex") {
-    const resumePart = args.sessionId ? `exec resume --json --skip-git-repo-check '${shellEscape(args.sessionId)}' '${escapedMessage}'` : `exec --json --skip-git-repo-check ${addDirPart}'${escapedMessage}'`;
-    const shellCommand2 = `codex -a never ${resumePart}`;
-    const displayCommand2 = `codex ${args.sessionId ? "resume " : ""}--json '${args.message.slice(0, 80)}${args.message.length > 80 ? "…" : ""}'`;
+    const topLevelFlags = `--dangerously-bypass-approvals-and-sandbox${addDirCount > 0 ? ` ${addDirFlags.join(" ")}` : ""}`;
+    const resumePart = args.sessionId ? `exec resume --json --skip-git-repo-check '${shellEscape(args.sessionId)}' '${escapedMessage}'` : `exec --json --skip-git-repo-check '${escapedMessage}'`;
+    const shellCommand2 = `codex ${topLevelFlags} ${resumePart}`;
+    const displayCommand2 = `codex ${args.sessionId ? "resume " : ""}${addDirCount > 0 ? `(+${addDirCount} dirs) ` : ""}'${args.message.slice(0, 80)}${args.message.length > 80 ? "…" : ""}'`;
     return { shellCommand: shellCommand2, displayCommand: displayCommand2, addDirCount };
   }
   if (args.provider === "cursor") {
     const resumePart = args.sessionId ? `--resume '${shellEscape(args.sessionId)}' ` : "";
     const workspacePart = `--workspace '${shellEscape(args.cwd)}' `;
-    const shellCommand2 = `cursor-agent --print --output-format stream-json --stream-partial-output --force ${workspacePart}${resumePart}'${escapedMessage}'`;
+    const shellCommand2 = `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust ${workspacePart}${resumePart}'${escapedMessage}'`;
     const displayCommand2 = `cursor-agent ${args.sessionId ? "resume " : ""}--print '${args.message.slice(0, 80)}${args.message.length > 80 ? "…" : ""}'`;
     return { shellCommand: shellCommand2, displayCommand: displayCommand2, addDirCount };
   }
@@ -47984,14 +48352,23 @@ function handleCodexEvent(event, onEvent, state) {
 }
 const runs = /* @__PURE__ */ new Map();
 let runCounter = 0;
-function runAgentCommand(provider, repoPath, message, sessionId, onStart, onEvent, onDone, additionalDirs) {
+function resolveAgentCwd() {
+  const cwd = require$$0$3.resolve(os.homedir(), ".nakiros");
+  require$$1$2.mkdirSync(cwd, { recursive: true });
+  return cwd;
+}
+function runAgentCommand(provider, repoPath, message, sessionId, onStart, onEvent, onDone, additionalDirs, onRawLine) {
   const runId = `run-${++runCounter}`;
-  const cwd = repoPath && require$$1$2.existsSync(repoPath) ? repoPath : os.homedir();
+  const cwd = resolveAgentCwd();
+  const mergedAdditionalDirs = Array.from(/* @__PURE__ */ new Set([
+    ...repoPath ? [require$$0$3.resolve(repoPath)] : [],
+    ...(additionalDirs ?? []).filter((d) => d.trim().length > 0).map((d) => require$$0$3.resolve(d))
+  ])).filter((d) => d !== cwd && require$$1$2.existsSync(d));
   const { shellCommand, displayCommand, addDirCount } = buildRunnerCommand({
     provider,
     message,
     sessionId,
-    additionalDirs: additionalDirs ?? [],
+    additionalDirs: mergedAdditionalDirs,
     cwd
   });
   console.log(`[agent-runner] Starting run ${runId} (${formatProviderName(provider)}) (session: ${sessionId ?? "new"})`);
@@ -48016,6 +48393,7 @@ function runAgentCommand(provider, repoPath, message, sessionId, onStart, onEven
   let ndjsonBuffer = "";
   const streamState = { hasEmittedText: false };
   let stderrBuffer = "";
+  const collectedRawLines = [];
   child.stdout?.on("data", (chunk) => {
     ndjsonBuffer += chunk.toString("utf8");
     const lines = ndjsonBuffer.split("\n");
@@ -48027,6 +48405,8 @@ function runAgentCommand(provider, repoPath, message, sessionId, onStart, onEven
 `);
       try {
         const parsed = JSON.parse(trimmed);
+        collectedRawLines.push(parsed);
+        onRawLine?.(parsed);
         if (provider === "codex") {
           handleCodexEvent(parsed, onEvent, streamState);
         } else {
@@ -48048,6 +48428,8 @@ ${text}`.trim().slice(-4e3);
     if (ndjsonBuffer.trim()) {
       try {
         const parsed = JSON.parse(ndjsonBuffer.trim());
+        collectedRawLines.push(parsed);
+        onRawLine?.(parsed);
         if (provider === "codex") {
           handleCodexEvent(parsed, onEvent, streamState);
         } else {
@@ -48060,7 +48442,7 @@ ${text}`.trim().slice(-4e3);
     runs.delete(runId);
     const exitCode = code2 ?? 0;
     const error = exitCode !== 0 && stderrBuffer ? stderrBuffer : void 0;
-    onDone(exitCode, error);
+    onDone(exitCode, error, collectedRawLines);
   });
   child.on("error", (err) => {
     console.error(`[agent-runner] Process error: ${err.message}`);
@@ -48079,86 +48461,84 @@ function cancelAgentRun(runId) {
   runs.get(runId)?.kill();
   runs.delete(runId);
 }
-const TIQORA_DIR$1 = require$$0$3.join(os.homedir(), ".tiqora");
-const STORE_PATH$1 = require$$0$3.join(TIQORA_DIR$1, "conversations.json");
-const MAX_CONVERSATIONS = 50;
-function ensureDir$1() {
-  if (!require$$1$2.existsSync(TIQORA_DIR$1)) require$$1$2.mkdirSync(TIQORA_DIR$1, { recursive: true });
+const NAKIROS_DIR$1 = require$$0$3.join(os.homedir(), ".nakiros");
+function workspaceSessionsDir(workspaceId) {
+  return require$$0$3.join(NAKIROS_DIR$1, "workspaces", workspaceId, "sessions");
 }
-function normalizeProvider$1(value) {
-  if (value === "codex" || value === "cursor" || value === "claude") return value;
-  return "claude";
+function sessionPath(workspaceId, id2) {
+  return require$$0$3.join(workspaceSessionsDir(workspaceId), `${id2}.json`);
 }
-function normalizeMessage(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const item = raw;
-  const role = item["role"];
-  const content = item["content"];
-  if (role !== "user" && role !== "agent" || typeof content !== "string") return null;
-  const tools = Array.isArray(item["tools"]) ? item["tools"].map((tool) => {
-    if (!tool || typeof tool !== "object") return null;
-    const t = tool;
-    if (typeof t["name"] !== "string" || typeof t["display"] !== "string") return null;
-    return { name: t["name"], display: t["display"] };
-  }).filter(Boolean) : [];
-  return { role, content, tools };
+function ensureSessionsDir(workspaceId) {
+  const dir = workspaceSessionsDir(workspaceId);
+  if (!require$$1$2.existsSync(dir)) require$$1$2.mkdirSync(dir, { recursive: true });
 }
 function normalizeConversation(raw) {
   if (!raw || typeof raw !== "object") return null;
   const item = raw;
-  if (typeof item["id"] !== "string" || typeof item["sessionId"] !== "string" || typeof item["repoPath"] !== "string" || typeof item["repoName"] !== "string" || typeof item["title"] !== "string" || typeof item["createdAt"] !== "string" || typeof item["lastUsedAt"] !== "string") {
-    return null;
-  }
-  const messages = Array.isArray(item["messages"]) ? item["messages"].map(normalizeMessage).filter(Boolean) : [];
+  if (typeof item["id"] !== "string" || typeof item["sessionId"] !== "string" || typeof item["workspaceId"] !== "string" || typeof item["title"] !== "string" || typeof item["createdAt"] !== "string" || typeof item["lastUsedAt"] !== "string") return null;
+  const provider = item["provider"];
+  const normalizedProvider = provider === "codex" || provider === "cursor" || provider === "claude" ? provider : "claude";
   return {
     id: item["id"],
     sessionId: item["sessionId"],
-    repoPath: item["repoPath"],
-    repoName: item["repoName"],
-    provider: normalizeProvider$1(item["provider"]),
-    workspaceId: typeof item["workspaceId"] === "string" ? item["workspaceId"] : void 0,
+    repoPath: typeof item["repoPath"] === "string" ? item["repoPath"] : "",
+    repoName: typeof item["repoName"] === "string" ? item["repoName"] : "",
+    provider: normalizedProvider,
+    workspaceId: item["workspaceId"],
     title: item["title"],
+    agents: Array.isArray(item["agents"]) ? item["agents"].filter((a) => typeof a === "string") : [],
     createdAt: item["createdAt"],
     lastUsedAt: item["lastUsedAt"],
-    messages
+    messages: Array.isArray(item["messages"]) ? item["messages"] : []
   };
 }
-function readAll$1() {
+function readSession(workspaceId, id2) {
   try {
-    if (!require$$1$2.existsSync(STORE_PATH$1)) return [];
-    const parsed = JSON.parse(require$$1$2.readFileSync(STORE_PATH$1, "utf8"));
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(normalizeConversation).filter(Boolean);
+    const path = sessionPath(workspaceId, id2);
+    if (!require$$1$2.existsSync(path)) return null;
+    const parsed = JSON.parse(require$$1$2.readFileSync(path, "utf8"));
+    return normalizeConversation(parsed);
+  } catch {
+    return null;
+  }
+}
+function getConversations(workspaceId) {
+  const dir = workspaceSessionsDir(workspaceId);
+  if (!require$$1$2.existsSync(dir)) return [];
+  const sessions = [];
+  try {
+    for (const file of require$$1$2.readdirSync(dir)) {
+      if (!file.endsWith(".json")) continue;
+      const id2 = file.slice(0, -5);
+      const conv = readSession(workspaceId, id2);
+      if (conv) sessions.push(conv);
+    }
   } catch {
     return [];
   }
-}
-function writeAll$1(conversations) {
-  ensureDir$1();
-  require$$1$2.writeFileSync(STORE_PATH$1, JSON.stringify(conversations, null, 2), "utf8");
-}
-function getConversations() {
-  return readAll$1().sort(
+  return sessions.sort(
     (a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime()
   );
 }
-function saveConversation(conv) {
-  const all = readAll$1();
-  const idx = all.findIndex((c) => c.id === conv.id);
-  if (idx >= 0) {
-    all[idx] = conv;
-  } else {
-    all.unshift(conv);
+function saveConversation(conv, storageKey) {
+  const key = storageKey ?? conv.workspaceId;
+  ensureSessionsDir(key);
+  const path = sessionPath(key, conv.id);
+  require$$1$2.writeFileSync(path, JSON.stringify(conv, null, 2), "utf8");
+}
+function deleteConversation(id2, workspaceId) {
+  const path = sessionPath(workspaceId, id2);
+  if (require$$1$2.existsSync(path)) {
+    try {
+      require$$1$2.unlinkSync(path);
+    } catch {
+    }
   }
-  writeAll$1(all.slice(0, MAX_CONVERSATIONS));
 }
-function deleteConversation(id2) {
-  writeAll$1(readAll$1().filter((c) => c.id !== id2));
-}
-const TIQORA_DIR = require$$0$3.join(os.homedir(), ".tiqora");
-const STORE_PATH = require$$0$3.join(TIQORA_DIR, "agent-tabs.json");
+const NAKIROS_DIR = require$$0$3.join(os.homedir(), ".nakiros");
+const STORE_PATH = require$$0$3.join(NAKIROS_DIR, "agent-tabs.json");
 function ensureDir() {
-  if (!require$$1$2.existsSync(TIQORA_DIR)) require$$1$2.mkdirSync(TIQORA_DIR, { recursive: true });
+  if (!require$$1$2.existsSync(NAKIROS_DIR)) require$$1$2.mkdirSync(NAKIROS_DIR, { recursive: true });
 }
 function normalizeProvider(value) {
   if (value === "codex" || value === "cursor" || value === "claude") return value;
@@ -48224,136 +48604,9 @@ function clearAgentTabsState(workspaceId) {
   delete all[workspaceId];
   writeAll(all);
 }
-function encodeProjectPath(repoPath) {
-  return repoPath.replace(/\//g, "-");
-}
-function readClaudeHistory(sessionId, repoPath) {
-  const projectDir = encodeProjectPath(repoPath);
-  const jsonlPath = require$$0$3.join(os.homedir(), ".claude", "projects", projectDir, `${sessionId}.jsonl`);
-  if (!require$$1$2.existsSync(jsonlPath)) return [];
-  let raw;
-  try {
-    raw = require$$1$2.readFileSync(jsonlPath, "utf8");
-  } catch {
-    return [];
-  }
-  const lines = raw.split("\n").filter(Boolean);
-  const messages = [];
-  const agentByMsgId = /* @__PURE__ */ new Map();
-  for (const line of lines) {
-    let entry;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (entry["type"] === "queue-operation") continue;
-    if (entry["type"] === "user") {
-      if (entry["isMeta"]) continue;
-      const msg = entry["message"];
-      const content = msg?.content;
-      let text = "";
-      if (typeof content === "string") {
-        text = content;
-      } else if (Array.isArray(content)) {
-        if (content.some((c) => c.type === "tool_result")) continue;
-        text = content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
-      }
-      text = text.trim();
-      if (!text) continue;
-      if (text.includes("<command-message>") || text.includes("<command-name>")) continue;
-      messages.push({ role: "user", content: text, tools: [] });
-    }
-    if (entry["type"] === "assistant") {
-      const msg = entry["message"];
-      const msgId = msg?.id;
-      if (!msgId) continue;
-      const content = msg?.content;
-      if (!Array.isArray(content)) continue;
-      let agentMsg = agentByMsgId.get(msgId);
-      if (!agentMsg) {
-        agentMsg = { role: "agent", content: "", tools: [] };
-        agentByMsgId.set(msgId, agentMsg);
-        messages.push(agentMsg);
-      }
-      for (const block of content) {
-        const b = block;
-        if (b.type === "text" && b.text) {
-          agentMsg.content += b.text;
-        } else if (b.type === "tool_use" && b.name) {
-          const alreadyListed = agentMsg.tools.some((t) => t.name === b.name && t.display === b.name);
-          if (!alreadyListed) {
-            agentMsg.tools.push({ name: b.name, display: b.name });
-          }
-        }
-      }
-    }
-  }
-  return messages.filter((m) => m.content.trim() || m.tools.length > 0);
-}
-function findCodexSessionFile(sessionId) {
-  const root = require$$0$3.join(os.homedir(), ".codex", "sessions");
-  if (!require$$1$2.existsSync(root)) return null;
-  const candidates = [];
-  for (const year of require$$1$2.readdirSync(root, { withFileTypes: true })) {
-    if (!year.isDirectory()) continue;
-    const yearPath = require$$0$3.join(root, year.name);
-    for (const month of require$$1$2.readdirSync(yearPath, { withFileTypes: true })) {
-      if (!month.isDirectory()) continue;
-      const monthPath = require$$0$3.join(yearPath, month.name);
-      for (const day of require$$1$2.readdirSync(monthPath, { withFileTypes: true })) {
-        if (!day.isDirectory()) continue;
-        const dayPath = require$$0$3.join(monthPath, day.name);
-        for (const file of require$$1$2.readdirSync(dayPath, { withFileTypes: true })) {
-          if (!file.isFile()) continue;
-          if (!file.name.endsWith(".jsonl")) continue;
-          if (!file.name.includes(`-${sessionId}.jsonl`)) continue;
-          const fullPath = require$$0$3.join(dayPath, file.name);
-          candidates.push({ path: fullPath, mtimeMs: require$$1$2.statSync(fullPath).mtimeMs });
-        }
-      }
-    }
-  }
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return candidates[0]?.path ?? null;
-}
-function readCodexHistory(sessionId) {
-  const jsonlPath = findCodexSessionFile(sessionId);
-  if (!jsonlPath) return [];
-  let raw;
-  try {
-    raw = require$$1$2.readFileSync(jsonlPath, "utf8");
-  } catch {
-    return [];
-  }
-  const messages = [];
-  const lines = raw.split("\n").filter(Boolean);
-  for (const line of lines) {
-    let entry;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (entry.type !== "event_msg") continue;
-    const payloadType = entry.payload?.["type"];
-    const payloadMessage = entry.payload?.["message"];
-    if (payloadType === "user_message" && typeof payloadMessage === "string" && payloadMessage.trim()) {
-      messages.push({ role: "user", content: payloadMessage, tools: [] });
-    } else if (payloadType === "agent_message" && typeof payloadMessage === "string" && payloadMessage.trim()) {
-      messages.push({ role: "agent", content: payloadMessage, tools: [] });
-    }
-  }
-  return messages.filter((msg, index) => {
-    if (index === 0) return true;
-    const prev = messages[index - 1];
-    return !(prev?.role === msg.role && prev.content === msg.content);
-  });
-}
 const JIRA_CLIENT_ID = "Ue1CTYdgjQhaJMhNt7ICf7aIm72IzOFL";
 const JIRA_CLIENT_SECRET = "ATOA8WyH72Ns19FdL3IWeFMbN0xHy3SeRTrwZz3f2LMJpSgVOO-if6rrLFWVbnMDBlM42DCA78ED";
-const JIRA_REDIRECT_URI = "tiqora://oauth/jira";
+const JIRA_REDIRECT_URI = "nakiros://oauth/jira";
 const JIRA_SCOPES = "read:jira-user read:jira-work offline_access";
 function generateState() {
   return require$$0$9.randomBytes(16).toString("hex");
@@ -48597,9 +48850,49 @@ async function fetchProjects(accessToken, cloudId) {
   }
   return allProjects;
 }
-async function fetchAllIssues(accessToken, cloudId, projectKey) {
+async function fetchProjectBoardType(accessToken, cloudId, projectKey) {
+  try {
+    const data = await jiraGet(
+      accessToken,
+      cloudId,
+      `/rest/agile/1.0/board?projectKeyOrId=${projectKey}&maxResults=10`
+    );
+    const board = data.values[0];
+    if (!board) return { boardType: "unknown", boardId: null };
+    const boardType = board.type === "scrum" ? "scrum" : board.type === "kanban" ? "kanban" : "unknown";
+    return { boardType, boardId: String(board.id) };
+  } catch {
+    return { boardType: "unknown", boardId: null };
+  }
+}
+function buildJql(projectKey, syncFilter, boardType) {
+  switch (syncFilter) {
+    case "sprint_active":
+      if (boardType === "scrum") {
+        return `project = '${projectKey}' AND sprint in openSprints() ORDER BY created DESC`;
+      }
+      return `project = '${projectKey}' AND statusCategory != Done ORDER BY created DESC`;
+    case "last_3_months":
+      return `project = '${projectKey}' AND updated >= -90d ORDER BY created DESC`;
+    case "all":
+    default:
+      return `project = '${projectKey}' ORDER BY created DESC`;
+  }
+}
+const COUNT_SAMPLE = 200;
+async function countIssues(accessToken, cloudId, projectKey, syncFilter = "all", boardType = "unknown") {
+  const jql = buildJql(projectKey, syncFilter, boardType);
+  const data = await jiraPost(
+    accessToken,
+    cloudId,
+    "/rest/api/3/search/jql",
+    { jql, fields: ["id"], maxResults: COUNT_SAMPLE }
+  );
+  return { count: data.issues.length, hasMore: !!data.nextPageToken };
+}
+async function fetchAllIssues(accessToken, cloudId, projectKey, syncFilter = "all", boardType = "unknown") {
   const allIssues = [];
-  const jql = `project = '${projectKey}' ORDER BY created DESC`;
+  const jql = buildJql(projectKey, syncFilter, boardType);
   let nextPageToken;
   while (true) {
     const body = { jql, fields: ISSUE_FIELDS, maxResults: MAX_RESULTS };
@@ -48649,7 +48942,8 @@ function separateIssues(issues) {
   };
 }
 async function syncJiraTickets(wsId, workspace) {
-  const { projectKey, jiraCloudId } = workspace;
+  const { projectKey } = workspace;
+  const jiraCloudId = workspace.jiraCloudId ?? loadTokens(wsId)?.cloudId;
   if (!projectKey) {
     return { imported: 0, updated: 0, epicsImported: 0, error: "No project key configured" };
   }
@@ -48664,15 +48958,22 @@ async function syncJiraTickets(wsId, workspace) {
   }
   let allIssues;
   try {
-    allIssues = await fetchAllIssues(accessToken, jiraCloudId, projectKey);
+    allIssues = await fetchAllIssues(
+      accessToken,
+      jiraCloudId,
+      projectKey,
+      workspace.syncFilter ?? "all",
+      workspace.boardType ?? "unknown"
+    );
   } catch (err) {
     return { imported: 0, updated: 0, epicsImported: 0, error: String(err) };
   }
   const { epics, tickets } = separateIssues(allIssues);
   const localTickets = tickets.map(jiraIssueToLocalTicket);
   const localEpics = epics.map(jiraIssueToLocalEpic);
-  const ticketResult = bulkSaveTickets(wsId, localTickets);
-  const epicResult = bulkSaveEpics(wsId, localEpics);
+  const slug = toWorkspaceSlug(workspace.name);
+  const ticketResult = bulkSaveTickets(slug, localTickets);
+  const epicResult = bulkSaveEpics(slug, localEpics);
   return {
     imported: ticketResult.created,
     updated: ticketResult.updated,
@@ -48686,10 +48987,10 @@ if (!gotTheLock) {
 }
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
-    electron.app.setAsDefaultProtocolClient("tiqora", process.execPath, [require$$0$3.resolve(process.argv[1] ?? "")]);
+    electron.app.setAsDefaultProtocolClient("nakiros", process.execPath, [require$$0$3.resolve(process.argv[1] ?? "")]);
   }
 } else {
-  electron.app.setAsDefaultProtocolClient("tiqora");
+  electron.app.setAsDefaultProtocolClient("nakiros");
 }
 const pendingOAuth = /* @__PURE__ */ new Map();
 async function handleOAuthCallback(url) {
@@ -48699,7 +49000,7 @@ async function handleOAuthCallback(url) {
   } catch {
     return;
   }
-  if (parsed.protocol !== "tiqora:") return;
+  if (parsed.protocol !== "nakiros:") return;
   if (parsed.hostname !== "oauth") return;
   const win = electron.BrowserWindow.getAllWindows()[0];
   if (!win) return;
@@ -48815,7 +49116,7 @@ electron.app.on("open-url", (event, url) => {
   }
 });
 electron.app.on("second-instance", (_, argv) => {
-  const url = argv.find((arg) => arg.startsWith("tiqora://"));
+  const url = argv.find((arg) => arg.startsWith("nakiros://"));
   if (url) void handleOAuthCallback(url);
   const win = electron.BrowserWindow.getAllWindows()[0];
   if (win) {
@@ -48881,13 +49182,30 @@ electron.ipcMain.handle("agents:install", (_, request2) => installAgents(request
 electron.ipcMain.handle("agents:global-status", () => getGlobalInstallStatus());
 electron.ipcMain.handle("agents:install-global", () => installAgentsGlobally());
 electron.ipcMain.handle("agents:cli-status", () => getAgentCliStatus());
-electron.ipcMain.handle("ticket:getAll", (_, wsId) => getTickets(wsId));
-electron.ipcMain.handle("ticket:save", (_, wsId, t) => saveTicket(wsId, t));
-electron.ipcMain.handle("ticket:remove", (_, wsId, id2) => removeTicket(wsId, id2));
-electron.ipcMain.handle("epic:getAll", (_, wsId) => getEpics(wsId));
-electron.ipcMain.handle("epic:save", (_, wsId, e) => saveEpic(wsId, e));
-electron.ipcMain.handle("epic:remove", (_, wsId, id2) => removeEpic(wsId, id2));
-electron.ipcMain.handle("agent:context", (_, wsId, ticketId, ws) => generateContext(wsId, ticketId, ws));
+electron.ipcMain.handle("onboarding:detectEditors", () => detectEditors());
+electron.ipcMain.handle("onboarding:nakirosConfigExists", () => nakirosConfigExists());
+electron.ipcMain.handle("onboarding:install", async (event, editors) => {
+  const win = electron.BrowserWindow.fromWebContents(event.sender);
+  if (!win) return { success: false, errors: ["No window"] };
+  return installNakiros(editors, COMMAND_TEMPLATES, win);
+});
+electron.ipcMain.handle("updates:check", (_, force) => checkForUpdates(force));
+electron.ipcMain.handle("updates:apply", async (event, files) => {
+  const win = electron.BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  return applyUpdate(files, win);
+});
+function resolveSlug(wsId) {
+  const ws = getAll().find((w) => w.id === wsId);
+  return ws ? toWorkspaceSlug(ws.name) : wsId;
+}
+electron.ipcMain.handle("ticket:getAll", (_, wsId) => getTickets(resolveSlug(wsId)));
+electron.ipcMain.handle("ticket:save", (_, wsId, t) => saveTicket(resolveSlug(wsId), t));
+electron.ipcMain.handle("ticket:remove", (_, wsId, id2) => removeTicket(resolveSlug(wsId), id2));
+electron.ipcMain.handle("epic:getAll", (_, wsId) => getEpics(resolveSlug(wsId)));
+electron.ipcMain.handle("epic:save", (_, wsId, e) => saveEpic(resolveSlug(wsId), e));
+electron.ipcMain.handle("epic:remove", (_, wsId, id2) => removeEpic(resolveSlug(wsId), id2));
+electron.ipcMain.handle("agent:context", (_, wsId, ticketId, ws) => generateContext(resolveSlug(wsId), ticketId, ws));
 electron.ipcMain.handle("clipboard:write", (_, text) => electron.clipboard.writeText(text));
 electron.ipcMain.handle("terminal:create", (event, repoPath) => {
   const win = electron.BrowserWindow.fromWebContents(event.sender);
@@ -48913,6 +49231,14 @@ electron.ipcMain.handle(
     const win = electron.BrowserWindow.fromWebContents(event.sender);
     const prefs = getPreferences();
     const provider = requestedProvider === "claude" || requestedProvider === "codex" || requestedProvider === "cursor" ? requestedProvider : prefs.agentProvider ?? "claude";
+    const agentWorkspacePath = require$$0$3.resolve(os.homedir(), ".nakiros");
+    try {
+      ensureCommandsInRepo(agentWorkspacePath, provider);
+    } catch (err) {
+      console.warn(`[agent:run] Unable to ensure command templates in agent workspace: ${String(err)}`);
+    }
+    ensureRuntimeInDir(agentWorkspacePath);
+    const rawLines = [];
     let runId = "";
     runId = runAgentCommand(
       provider,
@@ -48924,8 +49250,9 @@ electron.ipcMain.handle(
         win?.webContents.send("agent:start", info);
       },
       (evt) => win?.webContents.send("agent:event", { runId, event: evt }),
-      (exitCode, error) => win?.webContents.send("agent:done", { runId, exitCode, error }),
-      additionalDirs
+      (exitCode, error, lines) => win?.webContents.send("agent:done", { runId, exitCode, error, rawLines: lines ?? [] }),
+      additionalDirs,
+      (raw) => rawLines.push(raw)
     );
     return runId;
   }
@@ -48933,20 +49260,15 @@ electron.ipcMain.handle(
 electron.ipcMain.handle("agent:cancel", (_, runId) => {
   cancelAgentRun(runId);
 });
-electron.ipcMain.handle("conversation:getAll", () => getConversations());
-electron.ipcMain.handle("conversation:save", (_, conv) => saveConversation(conv));
-electron.ipcMain.handle("conversation:delete", (_, id2) => deleteConversation(id2));
-electron.ipcMain.handle(
-  "conversation:readMessages",
-  (_, sessionId, repoPath, provider) => {
-    if (provider === "codex") return readCodexHistory(sessionId);
-    if (provider === "claude") return readClaudeHistory(sessionId, repoPath);
-    return [];
-  }
-);
-electron.ipcMain.handle("agentTabs:get", (_, workspaceId) => getAgentTabsState(workspaceId));
-electron.ipcMain.handle("agentTabs:save", (_, workspaceId, state) => saveAgentTabsState(workspaceId, state));
-electron.ipcMain.handle("agentTabs:clear", (_, workspaceId) => clearAgentTabsState(workspaceId));
+electron.ipcMain.handle("conversation:getAll", (_, workspaceId) => getConversations(resolveSlug(workspaceId)));
+electron.ipcMain.handle("conversation:save", (_, conv) => {
+  const typedConv = conv;
+  saveConversation(typedConv, resolveSlug(typedConv.workspaceId));
+});
+electron.ipcMain.handle("conversation:delete", (_, id2, workspaceId) => deleteConversation(id2, resolveSlug(workspaceId)));
+electron.ipcMain.handle("agentTabs:get", (_, workspaceId) => getAgentTabsState(resolveSlug(workspaceId)));
+electron.ipcMain.handle("agentTabs:save", (_, workspaceId, state) => saveAgentTabsState(resolveSlug(workspaceId), state));
+electron.ipcMain.handle("agentTabs:clear", (_, workspaceId) => clearAgentTabsState(resolveSlug(workspaceId)));
 electron.ipcMain.handle("jira:startAuth", (_, wsId) => {
   const state = generateState();
   const { codeVerifier, codeChallenge } = generatePKCE();
@@ -48982,6 +49304,20 @@ electron.ipcMain.handle("jira:getProjects", async (_, wsId) => {
   if (!cloudId) throw new Error("Not connected to Jira");
   return fetchProjects(token, cloudId);
 });
+electron.ipcMain.handle("jira:countTickets", async (_, wsId, projectKey, syncFilter, boardType) => {
+  const token = await getValidAccessToken(wsId);
+  const workspace = getAll().find((w) => w.id === wsId);
+  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
+  if (!cloudId) throw new Error("Not connected to Jira");
+  return countIssues(token, cloudId, projectKey, syncFilter, boardType);
+});
+electron.ipcMain.handle("jira:getBoardType", async (_, wsId, projectKey) => {
+  const token = await getValidAccessToken(wsId);
+  const workspace = getAll().find((w) => w.id === wsId);
+  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
+  if (!cloudId) return { boardType: "unknown", boardId: null };
+  return fetchProjectBoardType(token, cloudId, projectKey);
+});
 function broadcastServerStatus(status) {
   for (const win of electron.BrowserWindow.getAllWindows()) {
     win.webContents.send("server:status-change", status);
@@ -49006,7 +49342,7 @@ electron.ipcMain.handle("server:restart", async () => {
     broadcastServerStatus("running");
   } catch (err) {
     broadcastServerStatus("stopped");
-    console.error("[Tiqora] Failed to restart MCP server:", err.message);
+    console.error("[Nakiros] Failed to restart MCP server:", err.message);
   }
 });
 async function ensureMcpServer(port) {
@@ -49014,7 +49350,7 @@ async function ensureMcpServer(port) {
   try {
     const res = await fetch(`http://localhost:${port}/status`);
     if (res.ok) {
-      console.log(`[Tiqora] MCP server already running on http://localhost:${port}`);
+      console.log(`[Nakiros] MCP server already running on http://localhost:${port}`);
       broadcastServerStatus("running");
       return;
     }
@@ -49023,15 +49359,27 @@ async function ensureMcpServer(port) {
   try {
     await startServer(port);
     broadcastServerStatus("running");
-    console.log(`[Tiqora] MCP server running on http://localhost:${port}`);
+    console.log(`[Nakiros] MCP server running on http://localhost:${port}`);
   } catch (err) {
     broadcastServerStatus("stopped");
-    console.error("[Tiqora] Failed to start MCP server:", err.message);
+    console.error("[Nakiros] Failed to start MCP server:", err.message);
   }
 }
 electron.app.whenReady().then(() => {
   createWindow();
   void ensureMcpServer(3737);
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const result = await checkForUpdates();
+        if (result.hasUpdate) {
+          const win = electron.BrowserWindow.getAllWindows()[0];
+          win?.webContents.send("updates:available", result);
+        }
+      } catch {
+      }
+    })();
+  }, 5e3);
   if (pendingProtocolUrl) {
     const urlToProcess = pendingProtocolUrl;
     pendingProtocolUrl = null;

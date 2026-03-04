@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import type { AgentProfile } from '@tiqora/shared';
+import type { AgentProfile } from '@nakiros/shared';
 
 export function detectProfile(localPath: string): AgentProfile {
   const pkgPath = join(localPath, 'package.json');

@@ -1,4 +1,4 @@
-import type { StoredWorkspace } from '@tiqora/shared';
+import type { StoredWorkspace } from '@nakiros/shared';
 import { getTickets, getEpics } from './ticket-storage.js';
 
 export function generateContext(

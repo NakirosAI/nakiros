@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import type { StoredWorkspace } from '@tiqora/shared';
+import type { StoredWorkspace } from '@nakiros/shared';
 
 export function getWorkspaceAppDir(wsId: string): string {
   const dir = join(app.getPath('userData'), wsId);
@@ -17,22 +17,30 @@ function buildWorkspaceYaml(workspace: StoredWorkspace): string {
     `      profile: ${repo.profile}`,
   ].join('\n')).join('\n');
 
+  const jiraBlock = workspace.pmTool === 'jira' && workspace.projectKey ? [
+    `  jira:`,
+    `    project_key: ${workspace.projectKey}`,
+    workspace.pmBoardId ? `    board_id: '${workspace.pmBoardId}'` : '',
+    workspace.boardType ? `    board_type: ${workspace.boardType}` : '',
+    workspace.syncFilter ? `    sync_filter: ${workspace.syncFilter}` : '',
+  ].filter(Boolean).join('\n') : '';
+
   return [
-    `# Géré par Tiqora`,
+    `# Géré par Nakiros`,
     `workspace:`,
     `  name: ${workspace.name}`,
+    workspace.topology ? `  structure: ${workspace.topology === 'mono' ? 'mono-repo' : 'multi-repo'}` : '',
+    workspace.pmTool ? `  pm_tool: ${workspace.pmTool}` : '',
+    jiraBlock,
     `  repos:`,
     reposYaml,
-    workspace.pmTool ? `  pmTool: ${workspace.pmTool}` : '',
-    workspace.projectKey ? `  projectKey: ${workspace.projectKey}` : '',
     workspace.documentLanguage ? `  document_language: ${workspace.documentLanguage}` : '',
-    workspace.topology ? `  topology: ${workspace.topology}` : '',
   ].filter(Boolean).join('\n') + '\n';
 }
 
 /**
- * Écrit workspace.yaml dans app support ET dans workspacePath (.tiqora.workspace.yaml).
- * - App support = source de vérité Tiqora
+ * Écrit workspace.yaml dans app support ET dans workspacePath (.nakiros.workspace.yaml).
+ * - App support = source de vérité Nakiros
  * - workspacePath = cible user (mono: repo unique, multi: dossier parent workspace)
  * Returns: cwd à utiliser pour lancer l'agent
  */
@@ -46,11 +54,11 @@ export function syncWorkspaceYaml(workspace: StoredWorkspace): string {
   // 2. Propager dans la cible workspace utilisateur
   if (workspace.workspacePath) {
     mkdirSync(workspace.workspacePath, { recursive: true });
-    writeFileSync(join(workspace.workspacePath, '.tiqora.workspace.yaml'), yaml, 'utf-8');
+    writeFileSync(join(workspace.workspacePath, '.nakiros.workspace.yaml'), yaml, 'utf-8');
 
     for (const repo of workspace.repos) {
       if (repo.localPath !== workspace.workspacePath) {
-        writeFileSync(join(repo.localPath, '.tiqora.workspace.yaml'), yaml, 'utf-8');
+        writeFileSync(join(repo.localPath, '.nakiros.workspace.yaml'), yaml, 'utf-8');
       }
     }
 
@@ -60,7 +68,7 @@ export function syncWorkspaceYaml(workspace: StoredWorkspace): string {
   // Compat: fallback primary repo si ancien workspace sans workspacePath
   const primaryRepoPath = workspace.repos[0]?.localPath;
   if (primaryRepoPath) {
-    writeFileSync(join(primaryRepoPath, '.tiqora.workspace.yaml'), yaml, 'utf-8');
+    writeFileSync(join(primaryRepoPath, '.nakiros.workspace.yaml'), yaml, 'utf-8');
     return primaryRepoPath;
   }
 

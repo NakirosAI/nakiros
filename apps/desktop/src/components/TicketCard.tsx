@@ -1,4 +1,4 @@
-import type { LocalTicket, LocalEpic, TicketStatus } from '@tiqora/shared';
+import type { LocalTicket, LocalEpic, TicketStatus } from '@nakiros/shared';
 
 const PRIORITY_COLORS = { low: '#10b981', medium: '#f59e0b', high: '#ef4444' };
 const PRIORITY_LABELS = { low: 'Low', medium: 'Med', high: 'High' };
@@ -44,7 +44,7 @@ export default function TicketCard({
       style={{
         background: 'var(--bg-soft)',
         border: selected ? '1px solid var(--primary)' : '1px solid var(--line)',
-        borderRadius: 2,
+        borderRadius: 10,
         padding: '10px 12px',
         cursor: 'pointer',
         display: 'flex',
@@ -94,7 +94,7 @@ export default function TicketCard({
               padding: '1px 6px',
               background: epic.color + '22',
               color: epic.color,
-              borderRadius: 2,
+              borderRadius: 10,
               border: `1px solid ${epic.color}44`,
             }}
           >
@@ -150,7 +150,7 @@ export default function TicketCard({
 const arrowBtn: React.CSSProperties = {
   background: 'none',
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   padding: '2px 6px',
   cursor: 'pointer',
   fontSize: 12,

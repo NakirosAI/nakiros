@@ -33,4 +33,6 @@ export interface StoredWorkspace {
   jiraCloudId?: string;
   jiraCloudUrl?: string;
   context?: WorkspaceContext;
+  boardType?: 'scrum' | 'kanban' | 'unknown';
+  syncFilter?: 'sprint_active' | 'last_3_months' | 'all';
 }

@@ -1,39 +1,71 @@
+@font-face {
+  font-family: 'Space Mono';
+  src: url('./assets/fonts/SpaceMono-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  src: url('./assets/fonts/SpaceMono-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  src: url('./assets/fonts/SpaceMono-Italic.ttf') format('truetype');
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  src: url('./assets/fonts/SpaceMono-BoldItalic.ttf') format('truetype');
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
-  --bg: #ececec;
-  --bg-card: #f2f2f2;
-  --bg-soft: #f7f7f7;
-  --bg-muted: #e4e4e4;
-  --line: #bdbdbd;
-  --line-strong: #969696;
-  --text: #1f1f1f;
-  --text-muted: #5a5a5a;
-  --primary: #0f8f88;
-  --primary-soft: #d9ebe8;
-  --success: #1f9d68;
-  --warning: #b7791f;
-  --danger: #c53030;
-  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 14px 34px rgba(0, 0, 0, 0.18);
-  --grid-line: rgba(0, 0, 0, 0.05);
+  --bg: #080808;
+  --bg-card: #111111;
+  --bg-soft: #111111;
+  --bg-muted: #0d0d0d;
+  --line: #1a1a1a;
+  --line-strong: #2a2a2a;
+  --text: #f0f0f0;
+  --text-muted: rgba(240, 240, 240, 0.7);
+  --primary: #0d9e9e;
+  --primary-soft: rgba(13, 158, 158, 0.16);
+  --success: #2ecfcf;
+  --warning: #f0f0f0;
+  --danger: #ff8e8e;
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 20px 48px rgba(13, 158, 158, 0.18);
+  --grid-line: rgba(240, 240, 240, 0.05);
 }
 
 :root[data-theme='dark'] {
-  --bg: #181818;
-  --bg-card: #1f1f1f;
-  --bg-soft: #202020;
-  --bg-muted: #292929;
-  --line: #3d3d3d;
-  --line-strong: #555;
-  --text: #efefef;
-  --text-muted: #a9a9a9;
-  --primary: #29aba3;
-  --primary-soft: #203735;
-  --success: #38b981;
-  --warning: #f2b45a;
-  --danger: #f18c8c;
+  --bg: #080808;
+  --bg-card: #111111;
+  --bg-soft: #111111;
+  --bg-muted: #0d0d0d;
+  --line: #1a1a1a;
+  --line-strong: #2a2a2a;
+  --text: #f0f0f0;
+  --text-muted: rgba(240, 240, 240, 0.7);
+  --primary: #0d9e9e;
+  --primary-soft: rgba(13, 158, 158, 0.16);
+  --success: #2ecfcf;
+  --warning: #f0f0f0;
+  --danger: #ff8e8e;
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.58);
-  --grid-line: rgba(255, 255, 255, 0.045);
+  --shadow-lg: 0 20px 48px rgba(13, 158, 158, 0.18);
+  --grid-line: rgba(240, 240, 240, 0.05);
 }
 
 * {
@@ -50,17 +82,20 @@ body {
   margin: 0;
   color: var(--text);
   background:
-    radial-gradient(1000px 520px at 6% -20%, rgba(15, 143, 136, 0.08) 0%, transparent 58%),
+    radial-gradient(1000px 520px at 6% -20%, rgba(13, 158, 158, 0.12) 0%, transparent 58%),
     var(--bg);
-  font-family:
-    "Avenir Next",
-    "Segoe UI Variable",
-    "Segoe UI",
-    "Helvetica Neue",
-    "Noto Sans",
-    sans-serif;
+  font-family: 'DM Sans', 'Segoe UI Variable', 'Segoe UI', 'Helvetica Neue', 'Noto Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Space Mono', 'DM Sans', monospace;
 }
 
 button,
@@ -82,7 +117,7 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid #2f9de8;
+  outline: 2px solid #2ecfcf;
   outline-offset: 2px;
 }
 

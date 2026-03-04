@@ -1,6 +1,6 @@
 {
-  "name": "@tiqora/desktop",
-  "productName": "Tiqora",
+  "name": "@nakiros/desktop",
+  "productName": "Nakiros",
   "version": "0.0.1",
   "private": true,
   "main": "dist-electron/main/index.js",

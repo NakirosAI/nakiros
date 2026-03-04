@@ -1,4 +1,4 @@
-import type { AgentProfile } from '@tiqora/shared';
+import type { AgentProfile } from '@nakiros/shared';
 
 export const PROFILE_LABELS: Record<AgentProfile, string> = {
   'frontend-react': 'React',

@@ -1,13 +1,14 @@
 import { rmSync, existsSync } from 'fs';
 import { join } from 'path';
-import type { StoredWorkspace } from '@tiqora/shared';
+import type { StoredWorkspace } from '@nakiros/shared';
 
-// Dossiers Tiqora à supprimer dans chaque repo
-const TIQORA_DIRS = ['_tiqora', '.tiqora'];
+// Dossiers Nakiros à supprimer dans chaque repo lors d'un reset complet
+// Note: _nakiros/ contient des docs versionnées — ne supprimer qu'en cas de reset explicite
+const NAKIROS_DIRS = ['_nakiros'];
 
-// Fichiers Tiqora à supprimer dans chaque repo
+// Fichiers Nakiros à supprimer dans chaque repo
 // NB : CLAUDE.md, .cursorrules, llms.txt sont intentionnellement exclus
-const TIQORA_FILES = ['.tiqora.yaml', '.tiqora.workspace.yaml'];
+const NAKIROS_FILES = ['.nakiros.yaml', '.nakiros.workspace.yaml'];
 
 export interface ResetResult {
   deletedPaths: string[];
@@ -15,8 +16,9 @@ export interface ResetResult {
 }
 
 /**
- * Supprime tous les fichiers/dossiers Tiqora de tous les repos du workspace.
+ * Supprime tous les fichiers/dossiers Nakiros de tous les repos du workspace.
  * Ne touche PAS aux fichiers agent standards (CLAUDE.md, .cursorrules, llms.txt).
+ * Ne touche PAS à ~/.nakiros/ (runtime global).
  */
 export function resetWorkspace(workspace: StoredWorkspace): ResetResult {
   const deletedPaths: string[] = [];
@@ -24,7 +26,7 @@ export function resetWorkspace(workspace: StoredWorkspace): ResetResult {
 
   // Workspace-level YAML (mono: repo root, multi: workspace parent folder)
   if (workspace.workspacePath) {
-    const rootYamlPath = join(workspace.workspacePath, '.tiqora.workspace.yaml');
+    const rootYamlPath = join(workspace.workspacePath, '.nakiros.workspace.yaml');
     if (existsSync(rootYamlPath)) {
       try {
         rmSync(rootYamlPath, { force: true });
@@ -38,7 +40,7 @@ export function resetWorkspace(workspace: StoredWorkspace): ResetResult {
   for (const repo of workspace.repos) {
     const base = repo.localPath;
 
-    for (const dir of TIQORA_DIRS) {
+    for (const dir of NAKIROS_DIRS) {
       const fullPath = join(base, dir);
       if (!existsSync(fullPath)) continue;
       try {
@@ -49,7 +51,7 @@ export function resetWorkspace(workspace: StoredWorkspace): ResetResult {
       }
     }
 
-    for (const file of TIQORA_FILES) {
+    for (const file of NAKIROS_FILES) {
       const fullPath = join(base, file);
       if (!existsSync(fullPath)) continue;
       try {

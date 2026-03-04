@@ -2,17 +2,17 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { StoredWorkspace } from "@tiqora/shared";
+import type { StoredWorkspace } from "@nakiros/shared";
 
 function getDataPath(): string {
   const platform = process.platform;
   if (platform === "darwin") {
-    return join(homedir(), "Library", "Application Support", "Tiqora");
+    return join(homedir(), "Library", "Application Support", "Nakiros");
   }
   if (platform === "win32") {
-    return join(process.env["APPDATA"] ?? homedir(), "Tiqora");
+    return join(process.env["APPDATA"] ?? homedir(), "Nakiros");
   }
-  return join(homedir(), ".config", "Tiqora");
+  return join(homedir(), ".config", "Nakiros");
 }
 
 function getWorkspacesPath(): string {

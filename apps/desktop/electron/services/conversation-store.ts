@@ -1,13 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { AgentProvider } from '@tiqora/shared';
-
-export interface StoredMessage {
-  role: 'user' | 'agent';
-  content: string;
-  tools: Array<{ name: string; display: string }>;
-}
+import type { AgentProvider } from '@nakiros/shared';
 
 export interface StoredConversation {
   id: string;
@@ -15,43 +9,32 @@ export interface StoredConversation {
   repoPath: string;
   repoName: string;
   provider: AgentProvider;
-  workspaceId?: string;
-  title: string;       // first user message (truncated)
-  createdAt: string;   // ISO
-  lastUsedAt: string;  // ISO
-  messages: StoredMessage[];
+  workspaceId: string;
+  title: string;
+  agents: string[];
+  createdAt: string;
+  lastUsedAt: string;
+  /**
+   * Interleaved array of:
+   * - User messages: { type: 'user', content: string, timestamp: string }
+   * - Raw NDJSON objects from the agent CLI stream (Claude/Codex/Cursor)
+   */
+  messages: unknown[];
 }
 
-const TIQORA_DIR = join(homedir(), '.tiqora');
-const STORE_PATH = join(TIQORA_DIR, 'conversations.json');
-const MAX_CONVERSATIONS = 50;
+const NAKIROS_DIR = join(homedir(), '.nakiros');
 
-function ensureDir() {
-  if (!existsSync(TIQORA_DIR)) mkdirSync(TIQORA_DIR, { recursive: true });
+function workspaceSessionsDir(workspaceId: string): string {
+  return join(NAKIROS_DIR, 'workspaces', workspaceId, 'sessions');
 }
 
-function normalizeProvider(value: unknown): AgentProvider {
-  if (value === 'codex' || value === 'cursor' || value === 'claude') return value;
-  return 'claude';
+function sessionPath(workspaceId: string, id: string): string {
+  return join(workspaceSessionsDir(workspaceId), `${id}.json`);
 }
 
-function normalizeMessage(raw: unknown): StoredMessage | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const item = raw as Record<string, unknown>;
-  const role = item['role'];
-  const content = item['content'];
-  if ((role !== 'user' && role !== 'agent') || typeof content !== 'string') return null;
-  const tools = Array.isArray(item['tools'])
-    ? item['tools']
-      .map((tool) => {
-        if (!tool || typeof tool !== 'object') return null;
-        const t = tool as Record<string, unknown>;
-        if (typeof t['name'] !== 'string' || typeof t['display'] !== 'string') return null;
-        return { name: t['name'], display: t['display'] };
-      })
-      .filter(Boolean) as Array<{ name: string; display: string }>
-    : [];
-  return { role, content, tools };
+function ensureSessionsDir(workspaceId: string): void {
+  const dir = workspaceSessionsDir(workspaceId);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
 function normalizeConversation(raw: unknown): StoredConversation | null {
@@ -60,67 +43,73 @@ function normalizeConversation(raw: unknown): StoredConversation | null {
   if (
     typeof item['id'] !== 'string'
     || typeof item['sessionId'] !== 'string'
-    || typeof item['repoPath'] !== 'string'
-    || typeof item['repoName'] !== 'string'
+    || typeof item['workspaceId'] !== 'string'
     || typeof item['title'] !== 'string'
     || typeof item['createdAt'] !== 'string'
     || typeof item['lastUsedAt'] !== 'string'
-  ) {
-    return null;
-  }
+  ) return null;
 
-  const messages = Array.isArray(item['messages'])
-    ? item['messages'].map(normalizeMessage).filter(Boolean) as StoredMessage[]
-    : [];
+  const provider = item['provider'];
+  const normalizedProvider: AgentProvider =
+    provider === 'codex' || provider === 'cursor' || provider === 'claude' ? provider : 'claude';
 
   return {
     id: item['id'],
     sessionId: item['sessionId'],
-    repoPath: item['repoPath'],
-    repoName: item['repoName'],
-    provider: normalizeProvider(item['provider']),
-    workspaceId: typeof item['workspaceId'] === 'string' ? item['workspaceId'] : undefined,
+    repoPath: typeof item['repoPath'] === 'string' ? item['repoPath'] : '',
+    repoName: typeof item['repoName'] === 'string' ? item['repoName'] : '',
+    provider: normalizedProvider,
+    workspaceId: item['workspaceId'],
     title: item['title'],
+    agents: Array.isArray(item['agents']) ? item['agents'].filter((a) => typeof a === 'string') : [],
     createdAt: item['createdAt'],
     lastUsedAt: item['lastUsedAt'],
-    messages,
+    messages: Array.isArray(item['messages']) ? item['messages'] : [],
   };
 }
 
-function readAll(): StoredConversation[] {
+function readSession(workspaceId: string, id: string): StoredConversation | null {
   try {
-    if (!existsSync(STORE_PATH)) return [];
-    const parsed = JSON.parse(readFileSync(STORE_PATH, 'utf8')) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(normalizeConversation).filter(Boolean) as StoredConversation[];
+    const path = sessionPath(workspaceId, id);
+    if (!existsSync(path)) return null;
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    return normalizeConversation(parsed);
   } catch {
-    return [];
+    return null;
   }
 }
 
-function writeAll(conversations: StoredConversation[]) {
-  ensureDir();
-  writeFileSync(STORE_PATH, JSON.stringify(conversations, null, 2), 'utf8');
-}
+export function getConversations(workspaceId: string): StoredConversation[] {
+  const dir = workspaceSessionsDir(workspaceId);
+  if (!existsSync(dir)) return [];
 
-export function getConversations(): StoredConversation[] {
-  return readAll().sort(
+  const sessions: StoredConversation[] = [];
+  try {
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.json')) continue;
+      const id = file.slice(0, -5);
+      const conv = readSession(workspaceId, id);
+      if (conv) sessions.push(conv);
+    }
+  } catch {
+    return [];
+  }
+
+  return sessions.sort(
     (a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime(),
   );
 }
 
-export function saveConversation(conv: StoredConversation): void {
-  const all = readAll();
-  const idx = all.findIndex((c) => c.id === conv.id);
-  if (idx >= 0) {
-    all[idx] = conv;
-  } else {
-    all.unshift(conv);
-  }
-  // Keep only the most recent MAX_CONVERSATIONS
-  writeAll(all.slice(0, MAX_CONVERSATIONS));
+export function saveConversation(conv: StoredConversation, storageKey?: string): void {
+  const key = storageKey ?? conv.workspaceId;
+  ensureSessionsDir(key);
+  const path = sessionPath(key, conv.id);
+  writeFileSync(path, JSON.stringify(conv, null, 2), 'utf8');
 }
 
-export function deleteConversation(id: string): void {
-  writeAll(readAll().filter((c) => c.id !== id));
+export function deleteConversation(id: string, workspaceId: string): void {
+  const path = sessionPath(workspaceId, id);
+  if (existsSync(path)) {
+    try { unlinkSync(path); } catch { /* ignore */ }
+  }
 }

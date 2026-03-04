@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { AgentProvider } from '@tiqora/shared';
+import type { AgentProvider } from '@nakiros/shared';
 
 export interface StoredAgentTab {
   tabId: string;
@@ -20,11 +20,11 @@ export interface StoredAgentTabsState {
 
 type AgentTabsByWorkspace = Record<string, StoredAgentTabsState>;
 
-const TIQORA_DIR = join(homedir(), '.tiqora');
-const STORE_PATH = join(TIQORA_DIR, 'agent-tabs.json');
+const NAKIROS_DIR = join(homedir(), '.nakiros');
+const STORE_PATH = join(NAKIROS_DIR, 'agent-tabs.json');
 
 function ensureDir() {
-  if (!existsSync(TIQORA_DIR)) mkdirSync(TIQORA_DIR, { recursive: true });
+  if (!existsSync(NAKIROS_DIR)) mkdirSync(NAKIROS_DIR, { recursive: true });
 }
 
 function normalizeProvider(value: unknown): AgentProvider {

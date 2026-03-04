@@ -1,4 +1,4 @@
-.tiqora/
+.nakiros/
 _bmad*
 .claude/
 .codex/
@@ -6,7 +6,7 @@ _bmad*
 .npm-cache/
 dist/
 node_modules/
-.tiqora.yaml
+.nakiros.yaml
 
 # Monorepo
 .turbo/

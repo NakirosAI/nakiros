@@ -1,12 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AgentProvider } from '@tiqora/shared';
+import type { AgentProvider } from '@nakiros/shared';
 
 function isMissingHandlerError(err: unknown, channel: string): boolean {
   if (!(err instanceof Error)) return false;
   return err.message.includes(`No handler registered for '${channel}'`);
 }
 
-contextBridge.exposeInMainWorld('tiqora', {
+contextBridge.exposeInMainWorld('nakiros', {
   // Workspace
   selectDirectory: () => ipcRenderer.invoke('dialog:selectDirectory'),
   openFilePicker: () => ipcRenderer.invoke('dialog:openFile'),
@@ -67,8 +67,8 @@ contextBridge.exposeInMainWorld('tiqora', {
     ipcRenderer.on('agent:event', listener);
     return () => ipcRenderer.removeListener('agent:event', listener);
   },
-  onAgentDone: (cb: (event: { runId: string; exitCode: number; error?: string }) => void) => {
-    const listener = (_: unknown, payload: { runId: string; exitCode: number; error?: string }) => cb(payload);
+  onAgentDone: (cb: (event: { runId: string; exitCode: number; error?: string; rawLines?: unknown[] }) => void) => {
+    const listener = (_: unknown, payload: { runId: string; exitCode: number; error?: string; rawLines?: unknown[] }) => cb(payload);
     ipcRenderer.on('agent:done', listener);
     return () => ipcRenderer.removeListener('agent:done', listener);
   },
@@ -92,11 +92,9 @@ contextBridge.exposeInMainWorld('tiqora', {
   },
 
   // Conversations
-  getConversations: () => ipcRenderer.invoke('conversation:getAll'),
+  getConversations: (workspaceId: string) => ipcRenderer.invoke('conversation:getAll', workspaceId),
   saveConversation: (conv: unknown) => ipcRenderer.invoke('conversation:save', conv),
-  deleteConversation: (id: string) => ipcRenderer.invoke('conversation:delete', id),
-  readConversationMessages: (sessionId: string, repoPath: string, provider?: AgentProvider) =>
-    ipcRenderer.invoke('conversation:readMessages', sessionId, repoPath, provider),
+  deleteConversation: (id: string, workspaceId: string) => ipcRenderer.invoke('conversation:delete', id, workspaceId),
   getAgentTabs: async (workspaceId: string) => {
     try {
       return await ipcRenderer.invoke('agentTabs:get', workspaceId);
@@ -128,6 +126,10 @@ contextBridge.exposeInMainWorld('tiqora', {
   jiraGetStatus: (wsId: string) => ipcRenderer.invoke('jira:getStatus', wsId),
   jiraSyncTickets: (wsId: string, ws: unknown) => ipcRenderer.invoke('jira:syncTickets', wsId, ws),
   jiraGetProjects: (wsId: string) => ipcRenderer.invoke('jira:getProjects', wsId),
+  jiraGetBoardType: (wsId: string, projectKey: string) =>
+    ipcRenderer.invoke('jira:getBoardType', wsId, projectKey),
+  jiraCountTickets: (wsId: string, projectKey: string, syncFilter: string, boardType: string) =>
+    ipcRenderer.invoke('jira:countTickets', wsId, projectKey, syncFilter, boardType),
 
   onJiraAuthComplete: (cb: (data: unknown) => void) => {
     const listener = (_: unknown, data: unknown) => cb(data);
@@ -151,5 +153,29 @@ contextBridge.exposeInMainWorld('tiqora', {
     const listener = (_: unknown, status: 'starting' | 'running' | 'stopped') => cb(status);
     ipcRenderer.on('server:status-change', listener);
     return () => ipcRenderer.removeListener('server:status-change', listener);
+  },
+
+  // Onboarding
+  nakirosConfigExists: () => ipcRenderer.invoke('onboarding:nakirosConfigExists'),
+  onboardingDetectEditors: () => ipcRenderer.invoke('onboarding:detectEditors'),
+  onboardingInstall: (editors: unknown[]) => ipcRenderer.invoke('onboarding:install', editors),
+  onOnboardingProgress: (cb: (event: { label: string; done: boolean; error?: string }) => void) => {
+    const listener = (_: unknown, payload: { label: string; done: boolean; error?: string }) => cb(payload);
+    ipcRenderer.on('onboarding:progress', listener);
+    return () => ipcRenderer.removeListener('onboarding:progress', listener);
+  },
+
+  // Updates
+  checkForUpdates: (force?: boolean) => ipcRenderer.invoke('updates:check', force),
+  applyUpdate: (files: unknown[]) => ipcRenderer.invoke('updates:apply', files),
+  onUpdatesAvailable: (cb: (result: unknown) => void) => {
+    const listener = (_: unknown, result: unknown) => cb(result);
+    ipcRenderer.on('updates:available', listener);
+    return () => ipcRenderer.removeListener('updates:available', listener);
+  },
+  onUpdatesProgress: (cb: (event: { file: string; done: boolean; error?: string }) => void) => {
+    const listener = (_: unknown, payload: { file: string; done: boolean; error?: string }) => cb(payload);
+    ipcRenderer.on('updates:progress', listener);
+    return () => ipcRenderer.removeListener('updates:progress', listener);
   },
 });

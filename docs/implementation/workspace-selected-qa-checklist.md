@@ -52,5 +52,5 @@
 3. Sauvegarde ticket/epic/workspace inchangée.
 
 ## 9. Build
-1. `pnpm --filter @tiqora/desktop build` passe.
+1. `pnpm --filter @nakiros/desktop build` passe.
 2. Pas d'erreur TypeScript.

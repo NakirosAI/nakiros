@@ -3,8 +3,9 @@ import type {
   StoredWorkspace,
   AppPreferences,
   ResolvedTheme,
-} from '@tiqora/shared';
+} from '@nakiros/shared';
 import Home from './views/Home';
+import Onboarding from './views/Onboarding';
 import WorkspaceSetup from './views/WorkspaceSetup';
 import Dashboard from './views/Dashboard';
 import { MESSAGES, resolveLanguage } from './i18n';
@@ -17,27 +18,10 @@ const FALLBACK_PREFERENCES: AppPreferences = {
 
 type View =
   | { name: 'loading' }
+  | { name: 'onboarding' }
   | { name: 'home' }
   | { name: 'setup'; initialDirectory?: string }
   | { name: 'dashboard' };
-
-function normalizePath(path: string): string {
-  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
-  return normalized.length > 0 ? normalized : '/';
-}
-
-function isSameOrChildPath(path: string, basePath: string): boolean {
-  const candidate = normalizePath(path);
-  const base = normalizePath(basePath);
-  return candidate === base || candidate.startsWith(`${base}/`);
-}
-
-function isWorkspacePathMatch(workspace: StoredWorkspace, dir: string): boolean {
-  if (workspace.workspacePath && isSameOrChildPath(dir, workspace.workspacePath)) {
-    return true;
-  }
-  return workspace.repos.some((repo) => isSameOrChildPath(dir, repo.localPath));
-}
 
 export default function App() {
   const [view, setView] = useState<View>({ name: 'loading' });
@@ -52,10 +36,11 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const [ws, prefs, status] = await Promise.all([
-          window.tiqora.getWorkspaces(),
-          window.tiqora.getPreferences(),
-          window.tiqora.getServerStatus(),
+        const [ws, prefs, status, configExists] = await Promise.all([
+          window.nakiros.getWorkspaces(),
+          window.nakiros.getPreferences(),
+          window.nakiros.getServerStatus(),
+          window.nakiros.nakirosConfigExists(),
         ]);
         setWorkspaces(ws);
         setPreferences({
@@ -64,16 +49,20 @@ export default function App() {
           updatedAt: prefs.updatedAt ?? '',
         });
         setServerStatus(status);
+        if (!configExists) {
+          setView({ name: 'onboarding' });
+          return;
+        }
       } catch {
         setBootError(MESSAGES[resolveLanguage('system')].workspaceLoadError);
       } finally {
-        setView({ name: 'home' });
+        setView((current) => current.name === 'loading' ? { name: 'home' } : current);
       }
     })();
   }, []);
 
   useEffect(() => {
-    return window.tiqora.onServerStatusChange(setServerStatus);
+    return window.nakiros.onServerStatusChange(setServerStatus);
   }, []);
 
   useEffect(() => {
@@ -112,21 +101,6 @@ export default function App() {
     setView({ name: 'home' });
   }, [view, openedWorkspaceIds, activeWorkspaceId, workspaces]);
 
-  async function handleOpenDirectory() {
-    const dir = await window.tiqora.selectDirectory();
-    if (!dir) return;
-
-    // Ouvrir si le dossier correspond à un repo connu ou au dossier local du workspace.
-    const match = workspaces.find((ws) => isWorkspacePathMatch(ws, dir));
-
-    if (match) {
-      await openWorkspace(match);
-    } else {
-      // Aucun match → lancer le setup avec ce dossier pré-sélectionné (import assisté)
-      setView({ name: 'setup', initialDirectory: dir });
-    }
-  }
-
   async function openWorkspace(ws: StoredWorkspace) {
     const workspacePath = ws.workspacePath ?? ws.repos[0]?.localPath;
     const updated: StoredWorkspace = {
@@ -134,7 +108,7 @@ export default function App() {
       workspacePath,
       lastOpenedAt: new Date().toISOString(),
     };
-    await window.tiqora.saveWorkspace(updated);
+    await window.nakiros.saveWorkspace(updated);
     setWorkspaces((prev) => {
       const found = prev.some((w) => w.id === updated.id);
       if (!found) return [...prev, updated];
@@ -146,7 +120,7 @@ export default function App() {
   }
 
   async function handleWorkspaceCreated(workspace: StoredWorkspace) {
-    const updated = await window.tiqora.getWorkspaces();
+    const updated = await window.nakiros.getWorkspaces();
     setWorkspaces(updated);
     setOpenedWorkspaceIds((prev) => (prev.includes(workspace.id) ? prev : [...prev, workspace.id]));
     setActiveWorkspaceId(workspace.id);
@@ -176,15 +150,15 @@ export default function App() {
 
   async function handlePreferencesChange(next: AppPreferences) {
     const withTimestamp: AppPreferences = { ...next, updatedAt: new Date().toISOString() };
-    await window.tiqora.savePreferences(withTimestamp);
+    await window.nakiros.savePreferences(withTimestamp);
     setPreferences(withTimestamp);
   }
 
   async function handleUpdateWorkspace(updated: StoredWorkspace) {
-    await window.tiqora.saveWorkspace(updated);
+    await window.nakiros.saveWorkspace(updated);
     setWorkspaces((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
     if (updated.repos.length > 0) {
-      void window.tiqora.syncWorkspace(updated);
+      void window.nakiros.syncWorkspace(updated);
     }
   }
 
@@ -210,6 +184,15 @@ export default function App() {
     );
   }
 
+  if (view.name === 'onboarding') {
+    return (
+      <Onboarding
+        language={language}
+        onDone={() => setView({ name: 'setup' })}
+      />
+    );
+  }
+
   if (view.name === 'home') {
     const sorted = [...workspaces].sort(
       (a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime(),
@@ -219,7 +202,6 @@ export default function App() {
         recentWorkspaces={sorted}
         bootError={bootError ?? undefined}
         language={language}
-        onOpenDirectory={handleOpenDirectory}
         onNewWorkspace={() => setView({ name: 'setup' })}
         onOpenWorkspace={(id) => {
           const ws = workspaces.find((w) => w.id === id);
@@ -266,13 +248,13 @@ export default function App() {
         onCloseWorkspaceTab={handleCloseWorkspaceTab}
         onNewWorkspace={() => setView({ name: 'setup' })}
         onGoHome={() => {
-          void window.tiqora.getWorkspaces().then((fresh) => {
+          void window.nakiros.getWorkspaces().then((fresh) => {
             setWorkspaces(fresh);
             setOpenedWorkspaceIds((prev) => prev.filter((id) => fresh.some((w) => w.id === id)));
           });
           setView({ name: 'home' });
         }}
-        onRestartServer={() => { void window.tiqora.restartServer(); }}
+        onRestartServer={() => { void window.nakiros.restartServer(); }}
       />
   );
 }

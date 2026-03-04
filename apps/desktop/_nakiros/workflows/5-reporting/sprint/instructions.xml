@@ -1,0 +1,158 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: {project-root}/~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+
+  <step n="1" goal="Load configuration">
+    <action>Load project config from {project_config} (required). Halt with a clear error if missing.</action>
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Build effective config as: profile config (base) + project config (override).</action>
+    <action>Apply defaults when missing: communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Check for {workspace_config}. If found, load all repos as {{workspace_repos}}.</action>
+    <action>Ensure directories exist: {sprints_dir}, {reports_dir}.</action>
+    <output>[SPRINT] ✓ Config loaded | PM: {{pm_tool or "standalone"}} | Workspace: {{is_multi_repo ? "multi-repo" : "single-repo"}}</output>
+  </step>
+
+  <step n="2" goal="Identify sprint context">
+    <ask>What are we doing?
+      1. Retrospective — review the sprint that just ended
+      2. Planning — plan the next sprint
+      3. Both — retro then plan
+    </ask>
+    <action>Capture as {{sprint_mode}}: "retro" / "planning" / "both".</action>
+
+    <ask>Sprint name or number? (e.g. "Sprint 12" or "2026-Q1-W3")</ask>
+    <action>Capture as {{sprint_name}}.</action>
+
+    <check if="pm_tool is configured">
+      <action>Fetch current sprint board state via PM MCP:
+        - All tickets in sprint {{sprint_name}} with status
+        - Assignees, story points if available
+      </action>
+      <action>Capture as {{sprint_tickets}}. Compute {{done_count}}, {{in_progress_count}}, {{todo_count}}.</action>
+    </check>
+
+    <check if="pm_tool is not configured">
+      <ask>Paste the ticket list for sprint {{sprint_name}} (one per line: ID — title — status):</ask>
+      <action>Parse and capture as {{sprint_tickets}}.</action>
+    </check>
+
+    <output>[SPRINT] ✓ Sprint context loaded: {{sprint_name}} | {{done_count}} done / {{in_progress_count}} in progress / {{todo_count}} to do</output>
+  </step>
+
+  <step n="3" goal="Retrospective (if sprint_mode is 'retro' or 'both')" condition="sprint_mode != 'planning'">
+    <action>Analyze {{sprint_tickets}} for completion rate: {{done_count}} / {{total_count}} = {{completion_pct}}%.</action>
+
+    <check if="workspace_config is loaded (multi-repo)">
+      <action>For each repo in {{workspace_repos}}, run: git log --oneline --since={{sprint_start_date}} --until={{sprint_end_date}} to gather commit activity.</action>
+      <action>Correlate commits to ticket IDs found in commit messages.</action>
+    </check>
+
+    <ask>What went well this sprint? (list freely — we'll structure it)</ask>
+    <action>Capture as {{went_well}}.</action>
+
+    <ask>What could be improved? (blockers, process friction, surprises)</ask>
+    <action>Capture as {{to_improve}}.</action>
+
+    <ask>Any action items for the team? (optional)</ask>
+    <action>Capture as {{action_items}} (may be empty).</action>
+
+    <action>Write retro artifact to {reports_dir}/retro-{{sprint_name | slugify}}.md in {{document_language}}:
+
+      # Retrospective — {{sprint_name}} — {{date}}
+
+      ## Sprint Summary
+      - Completion: {{done_count}}/{{total_count}} tickets ({{completion_pct}}%)
+      - In Progress carried forward: {{in_progress_count}}
+      - Abandoned / returned to backlog: {{abandoned_count}}
+
+      ## Tickets Done
+      {{done tickets as list with ID and title}}
+
+      ## Tickets Carried Forward
+      {{in_progress and todo tickets with notes}}
+
+      ## Went Well
+      {{went_well as bullet list}}
+
+      ## To Improve
+      {{to_improve as bullet list}}
+
+      ## Action Items
+      {{action_items as numbered list, or "None"}}
+    </action>
+
+    <check if="pm_tool is configured">
+      <action>Post retro summary as a comment on the sprint or team channel via PM MCP (if supported).</action>
+      <action>Transition leftover in-progress tickets to {pm_todo_status} for backlog review (ask confirmation first).</action>
+    </check>
+
+    <output>[SPRINT] ✓ Retrospective complete — {{completion_pct}}% completion | Artifact: {reports_dir}/retro-{{sprint_name | slugify}}.md</output>
+  </step>
+
+  <step n="4" goal="Sprint planning (if sprint_mode is 'planning' or 'both')" condition="sprint_mode != 'retro'">
+    <ask>Next sprint name or number?</ask>
+    <action>Capture as {{next_sprint_name}}.</action>
+
+    <check if="pm_tool is configured">
+      <action>Fetch backlog tickets (status = {pm_todo_status}, not in any sprint) via PM MCP.</action>
+      <action>Capture as {{backlog_tickets}} with priority, story points, labels, assignee.</action>
+    </check>
+
+    <check if="pm_tool is not configured">
+      <ask>Paste the backlog tickets to consider for {{next_sprint_name}} (ID — title — priority):</ask>
+      <action>Capture as {{backlog_tickets}}.</action>
+    </check>
+
+    <ask>Team capacity for {{next_sprint_name}}? (story points or number of devs × days)</ask>
+    <action>Capture as {{capacity}}.</action>
+
+    <action>Analyze backlog and propose a sprint scope:
+      - Prioritize by: priority label, dependencies, team capacity
+      - Flag tickets that are too large (need splitting) or have unresolved dependencies
+      - Include any tickets carried forward from {{sprint_name}} if sprint_mode is 'both'
+      - Target total ≤ {{capacity}}
+    </action>
+
+    <action>Present proposed sprint scope to the user for validation.</action>
+
+    <ask>Adjust the scope? (add / remove tickets, or confirm as-is)</ask>
+    <action>Capture final scope as {{confirmed_sprint_scope}}.</action>
+
+    <check if="pm_tool is configured">
+      <action>For each ticket in {{confirmed_sprint_scope}}: assign to sprint {{next_sprint_name}} via PM MCP.</action>
+      <action>If assignees are specified, assign tickets.</action>
+      <action>Confirm each update.</action>
+    </check>
+
+    <action>Write sprint plan artifact to {sprints_dir}/plan-{{next_sprint_name | slugify}}.md in {{document_language}}:
+
+      # Sprint Plan — {{next_sprint_name}} — {{date}}
+
+      ## Capacity
+      {{capacity}}
+
+      ## Sprint Scope ({{confirmed_sprint_scope | count}} tickets)
+      {{confirmed_sprint_scope as table: ID | Title | Assignee | Points | Priority}}
+
+      ## Dependencies and Risks
+      {{list any dependencies or risks flagged during planning}}
+
+      ## Goals
+      {{3 bullet goals for the sprint — derived from the ticket themes}}
+    </action>
+
+    <output>[SPRINT] ✓ Planning complete — {{confirmed_sprint_scope | count}} tickets in {{next_sprint_name}} | Artifact: {sprints_dir}/plan-{{next_sprint_name | slugify}}.md</output>
+  </step>
+
+  <step n="5" goal="Final summary">
+    <action>Collect all artifact paths produced in this session.</action>
+
+    <output>[SPRINT] ✅ COMPLETE
+{{if retro: "├─ Retro: {reports_dir}/retro-{{sprint_name | slugify}}.md"}}
+{{if planning: "├─ Plan: {sprints_dir}/plan-{{next_sprint_name | slugify}}.md"}}
+└─ PM sync: {{pm_tool is configured ? "✓ updated" : "skipped (no PM configured)"}}
+    </output>
+  </step>
+</workflow>

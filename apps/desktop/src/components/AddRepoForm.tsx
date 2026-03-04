@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { StoredRepo, AgentProfile } from '@tiqora/shared';
+import type { StoredRepo, AgentProfile } from '@nakiros/shared';
 import { PROFILE_LABELS } from '../utils/profiles';
 
 const PROFILES: AgentProfile[] = [
@@ -26,10 +26,10 @@ export default function AddRepoForm({ onAdd }: Props) {
   async function handleClick() {
     setDetecting(true);
     try {
-      const localPath = await window.tiqora.selectDirectory();
+      const localPath = await window.nakiros.selectDirectory();
       if (!localPath) return;
 
-      const profile = await window.tiqora.detectProfile(localPath);
+      const profile = await window.nakiros.detectProfile(localPath);
       const name = localPath.split('/').pop() ?? localPath;
 
       onAdd({
@@ -56,7 +56,7 @@ export default function AddRepoForm({ onAdd }: Props) {
           background: 'var(--primary)',
           color: '#fff',
           border: 'none',
-          borderRadius: 2,
+          borderRadius: 10,
           cursor: detecting ? 'not-allowed' : 'pointer',
           opacity: detecting ? 0.65 : 1,
           alignSelf: 'flex-start',

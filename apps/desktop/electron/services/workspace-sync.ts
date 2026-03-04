@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import type { StoredWorkspace } from '@tiqora/shared';
+import type { StoredWorkspace } from '@nakiros/shared';
 
 function buildYaml(workspace: StoredWorkspace): string {
   const reposYaml = workspace.repos
@@ -35,7 +35,7 @@ function buildYaml(workspace: StoredWorkspace): string {
     : '';
 
   return [
-    `# Géré par Tiqora — ne pas éditer manuellement`,
+    `# Géré par Nakiros — ne pas éditer manuellement`,
     `workspace:`,
     `  name: ${workspace.name}`,
     `  repos:`,
@@ -59,7 +59,7 @@ function writeClaudeJson(repoPath: string, workspaceId: string, mcpServerUrl: st
   }
 
   const mcpServers = (existing['mcpServers'] as Record<string, unknown>) ?? {};
-  mcpServers['tiqora'] = {
+  mcpServers['nakiros'] = {
     type: 'http',
     url: `${mcpServerUrl}/ws/${workspaceId}/mcp`,
   };
@@ -72,19 +72,19 @@ export function syncToRepos(workspace: StoredWorkspace, mcpServerUrl: string): v
   const content = buildYaml(workspace);
   const workspaceRootPath = workspace.workspacePath ?? workspace.repos[0]?.localPath;
   if (workspaceRootPath) {
-    writeFileSync(join(workspaceRootPath, '.tiqora.workspace.yaml'), content, 'utf-8');
+    writeFileSync(join(workspaceRootPath, '.nakiros.workspace.yaml'), content, 'utf-8');
   }
 
   for (const repo of workspace.repos) {
     // Compat: keep a local copy in each repo for workflows launched from repo cwd.
     if (repo.localPath !== workspaceRootPath) {
-      writeFileSync(join(repo.localPath, '.tiqora.workspace.yaml'), content, 'utf-8');
+      writeFileSync(join(repo.localPath, '.nakiros.workspace.yaml'), content, 'utf-8');
     }
 
-    // Required for server cwd resolver.
-    const tiqoraDir = join(repo.localPath, '.tiqora');
-    mkdirSync(tiqoraDir, { recursive: true });
-    writeFileSync(join(tiqoraDir, 'workspace.yaml'), `workspace_id: ${workspace.id}\n`, 'utf-8');
+    // Required for server cwd resolver — written into _nakiros/ (committed, versioned).
+    const nakirosDir = join(repo.localPath, '_nakiros');
+    mkdirSync(nakirosDir, { recursive: true });
+    writeFileSync(join(nakirosDir, 'workspace.yaml'), `workspace_id: ${workspace.id}\n`, 'utf-8');
 
     // MCP config for Claude Code
     writeClaudeJson(repo.localPath, workspace.id, mcpServerUrl);

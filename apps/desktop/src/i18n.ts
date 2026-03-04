@@ -1,4 +1,4 @@
-import type { LanguagePreference, ResolvedLanguage, ResolvedTheme } from '@tiqora/shared';
+import type { LanguagePreference, ResolvedLanguage, ResolvedTheme } from '@nakiros/shared';
 
 type Dictionary = {
   loadingWorkspace: string;
@@ -7,8 +7,6 @@ type Dictionary = {
   home: {
     title: string;
     subtitle: string;
-    openWorkspace: string;
-    openWorkspaceHint: string;
     createWorkspace: string;
     createWorkspaceHint: string;
     recent: string;
@@ -17,6 +15,8 @@ type Dictionary = {
     minutesAgo: (n: number) => string;
     hoursAgo: (n: number) => string;
     daysAgo: (n: number) => string;
+    showMore: (n: number) => string;
+    showLess: string;
   };
   dashboard: {
     home: string;
@@ -33,6 +33,7 @@ type Dictionary = {
   };
   sidebar: {
     overview: string;
+    chat: string;
     product: string;
     delivery: string;
     settings: string;
@@ -78,7 +79,7 @@ type Dictionary = {
     agentsSubtitle: string;
     repoLabel: string;
     noRepoConfigured: string;
-    noTiqoraConfig: string;
+    noNakirosConfig: string;
     targetsLabel: string;
     envCursor: string;
     envCodex: string;
@@ -181,6 +182,31 @@ type Dictionary = {
     jiraProjectPlaceholder: string;
     jiraProjectLoading: string;
   };
+  onboarding: {
+    welcomeTitle: string;
+    welcomeSub: string;
+    welcomeBtn: string;
+    detectTitle: string;
+    detectSub: string;
+    detectBtn: string;
+    editorDetected: string;
+    editorNotDetected: string;
+    installTitle: string;
+    installSpinner: string;
+    installRetry: string;
+    installContinueError: string;
+    installContinue: string;
+    updateTitle: string;
+    updateChecking: string;
+    updateUpToDate: string;
+    updateAvailable: (version: string) => string;
+    updateSkip: string;
+    updateNow: string;
+    updating: string;
+    doneTitle: string;
+    doneSub: string;
+    doneBtn: string;
+  };
   toast: {
     contextCopied: (ticketId: string) => string;
     contextCopyError: string;
@@ -190,12 +216,10 @@ type Dictionary = {
 const fr: Dictionary = {
   loadingWorkspace: "Chargement de l'espace de travail…",
   workspaceLoadError: 'Impossible de charger les workspaces locaux. Vérifie les permissions dossier.',
-  appName: 'Tiqora',
+  appName: 'Nakiros',
   home: {
-    title: 'Tiqora',
-    subtitle: "Orchestration multi-repo avec un flux local rapide. Les workspaces sont stockés localement par Tiqora, avec repos optionnels.",
-    openWorkspace: 'Ouvrir un workspace',
-    openWorkspaceHint: 'Sélectionner un dossier repo ou un dossier Tiqora',
+    title: 'Nakiros',
+    subtitle: "Orchestration multi-repo avec un flux local rapide. Les workspaces sont stockés localement par Nakiros, avec repos optionnels.",
     createWorkspace: 'Créer un workspace',
     createWorkspaceHint: 'Configurer un nouveau projet guidé',
     recent: 'Workspaces récents',
@@ -204,6 +228,8 @@ const fr: Dictionary = {
     minutesAgo: (n) => `il y a ${n} min`,
     hoursAgo: (n) => `il y a ${n}h`,
     daysAgo: (n) => `il y a ${n}j`,
+    showMore: (n) => `Voir ${n} de plus`,
+    showLess: 'Voir moins',
   },
   dashboard: {
     home: 'Accueil',
@@ -220,6 +246,7 @@ const fr: Dictionary = {
   },
   sidebar: {
     overview: 'Overview',
+    chat: 'Chat IA',
     product: 'Product',
     delivery: 'Delivery',
     settings: 'Réglages',
@@ -262,10 +289,10 @@ const fr: Dictionary = {
     mcpServerPlaceholder: 'http://localhost:3737',
     mcpServerHint: 'Laissez vide pour utiliser le serveur local.',
     agentsTitle: 'Agents CLI',
-    agentsSubtitle: 'Installe ou mets à jour les commandes/agents Tiqora dans les repos du workspace.',
+    agentsSubtitle: 'Installe ou mets à jour les commandes/agents Nakiros dans les repos du workspace.',
     repoLabel: 'Repo cible',
     noRepoConfigured: "Aucun repo configuré dans ce workspace.",
-    noTiqoraConfig: "Ce repo n'a pas de fichier .tiqora.yaml (l'installation peut être incomplète).",
+    noNakirosConfig: "Ce repo n'a pas de fichier .nakiros.yaml (l'installation peut être incomplète).",
     targetsLabel: 'Environnements',
     envCursor: 'Cursor',
     envCodex: 'Codex',
@@ -279,7 +306,7 @@ const fr: Dictionary = {
     installError: "Échec de l'installation.",
     installResult: (summary) => `Résultat: ${summary}`,
     globalAgentsTitle: 'Commandes CLI globales',
-    globalAgentsSubtitle: 'Installe les commandes Tiqora dans ~/.claude/commands, ~/.codex/prompts et ~/.cursor/commands — disponibles dans tous les repos sans installation par repo.',
+    globalAgentsSubtitle: 'Installe les commandes Nakiros dans ~/.claude/commands, ~/.codex/prompts et ~/.cursor/commands — disponibles dans tous les repos sans installation par repo.',
     globalAgentsStatus: (installed, total) => `${installed}/${total} commandes installées`,
     globalAgentsInstallAction: 'Installer globalement',
     globalAgentsInstalling: 'Installation…',
@@ -313,7 +340,7 @@ const fr: Dictionary = {
     navMCPs: 'MCPs',
     navContext: 'Contexte LLM',
     workflowAvailabilityTitle: 'Disponibilité des workflows',
-    workflowAvailabilitySubtitle: 'Visibilité des workflows Tiqora dans cette version.',
+    workflowAvailabilitySubtitle: 'Visibilité des workflows Nakiros dans cette version.',
     workflowStatusStable: 'Stable',
     workflowStatusBeta: 'Beta',
     workflowBetaHint: 'Fallback:',
@@ -361,6 +388,31 @@ const fr: Dictionary = {
     jiraProjectPlaceholder: 'Sélectionner un projet…',
     jiraProjectLoading: 'Chargement des projets…',
   },
+  onboarding: {
+    welcomeTitle: 'Bienvenue sur Nakiros',
+    welcomeSub: 'Votre compagnon de développement autonome. Configurons tout.',
+    welcomeBtn: 'Commencer →',
+    detectTitle: 'Éditeurs IA détectés',
+    detectSub: 'Nakiros va installer ses agents dans les éditeurs détectés.',
+    detectBtn: 'Installer les agents →',
+    editorDetected: 'détecté',
+    editorNotDetected: 'non détecté',
+    installTitle: 'Installation en cours…',
+    installSpinner: 'Installation…',
+    installRetry: 'Réessayer',
+    installContinueError: 'Continuer quand même',
+    installContinue: 'Continuer →',
+    updateTitle: 'Vérification des mises à jour',
+    updateChecking: 'Vérification en cours…',
+    updateUpToDate: 'Agents et workflows sont à jour.',
+    updateAvailable: (version) => `✨ Version ${version} disponible`,
+    updateSkip: 'Passer',
+    updateNow: 'Mettre à jour maintenant',
+    updating: 'Mise à jour…',
+    doneTitle: 'Nakiros est prêt.',
+    doneSub: 'Créez votre premier workspace pour commencer.',
+    doneBtn: 'Créer mon premier workspace →',
+  },
   toast: {
     contextCopied: (ticketId) => `Contexte ${ticketId} copié`,
     contextCopyError: 'Échec de la copie du contexte. Réessaie.',
@@ -370,12 +422,10 @@ const fr: Dictionary = {
 const en: Dictionary = {
   loadingWorkspace: 'Loading workspace…',
   workspaceLoadError: 'Unable to load local workspaces. Check folder permissions.',
-  appName: 'Tiqora',
+  appName: 'Nakiros',
   home: {
-    title: 'Tiqora',
-    subtitle: 'Multi-repo orchestration with a fast local workflow. Workspaces are stored locally by Tiqora, with repos as optional links.',
-    openWorkspace: 'Open workspace',
-    openWorkspaceHint: 'Select a repo folder or Tiqora workspace folder',
+    title: 'Nakiros',
+    subtitle: 'Multi-repo orchestration with a fast local workflow. Workspaces are stored locally by Nakiros, with repos as optional links.',
     createWorkspace: 'Create workspace',
     createWorkspaceHint: 'Configure a new guided project',
     recent: 'Recent workspaces',
@@ -384,6 +434,8 @@ const en: Dictionary = {
     minutesAgo: (n) => `${n} min ago`,
     hoursAgo: (n) => `${n}h ago`,
     daysAgo: (n) => `${n}d ago`,
+    showMore: (n) => `Show ${n} more`,
+    showLess: 'Show less',
   },
   dashboard: {
     home: 'Home',
@@ -400,6 +452,7 @@ const en: Dictionary = {
   },
   sidebar: {
     overview: 'Overview',
+    chat: 'AI Chat',
     product: 'Product',
     delivery: 'Delivery',
     settings: 'Settings',
@@ -442,10 +495,10 @@ const en: Dictionary = {
     mcpServerPlaceholder: 'http://localhost:3737',
     mcpServerHint: 'Leave empty to use the local server.',
     agentsTitle: 'CLI Agents',
-    agentsSubtitle: 'Install or update Tiqora commands/agents in workspace repositories.',
+    agentsSubtitle: 'Install or update Nakiros commands/agents in workspace repositories.',
     repoLabel: 'Target repository',
     noRepoConfigured: 'No repository configured in this workspace.',
-    noTiqoraConfig: 'This repository has no .tiqora.yaml file (installation may be incomplete).',
+    noNakirosConfig: 'This repository has no .nakiros.yaml file (installation may be incomplete).',
     targetsLabel: 'Environments',
     envCursor: 'Cursor',
     envCodex: 'Codex',
@@ -459,7 +512,7 @@ const en: Dictionary = {
     installError: 'Installation failed.',
     installResult: (summary) => `Result: ${summary}`,
     globalAgentsTitle: 'Global CLI commands',
-    globalAgentsSubtitle: 'Install Tiqora commands in ~/.claude/commands, ~/.codex/prompts, and ~/.cursor/commands — available in all repos without per-repo installation.',
+    globalAgentsSubtitle: 'Install Nakiros commands in ~/.claude/commands, ~/.codex/prompts, and ~/.cursor/commands — available in all repos without per-repo installation.',
     globalAgentsStatus: (installed, total) => `${installed}/${total} commands installed`,
     globalAgentsInstallAction: 'Install globally',
     globalAgentsInstalling: 'Installing…',
@@ -493,7 +546,7 @@ const en: Dictionary = {
     navMCPs: 'MCPs',
     navContext: 'LLM Context',
     workflowAvailabilityTitle: 'Workflow availability',
-    workflowAvailabilitySubtitle: 'Visibility of Tiqora workflows in this release.',
+    workflowAvailabilitySubtitle: 'Visibility of Nakiros workflows in this release.',
     workflowStatusStable: 'Stable',
     workflowStatusBeta: 'Beta',
     workflowBetaHint: 'Fallback:',
@@ -540,6 +593,31 @@ const en: Dictionary = {
     jiraProjectLabel: 'Jira project',
     jiraProjectPlaceholder: 'Select a project…',
     jiraProjectLoading: 'Loading projects…',
+  },
+  onboarding: {
+    welcomeTitle: 'Welcome to Nakiros',
+    welcomeSub: "Your autonomous dev companion. Let's set things up.",
+    welcomeBtn: 'Get started →',
+    detectTitle: 'Detected AI editors',
+    detectSub: 'Nakiros will install its agents in the detected editors.',
+    detectBtn: 'Install agents →',
+    editorDetected: 'detected',
+    editorNotDetected: 'not detected',
+    installTitle: 'Installing…',
+    installSpinner: 'Installing…',
+    installRetry: 'Retry',
+    installContinueError: 'Continue anyway',
+    installContinue: 'Continue →',
+    updateTitle: 'Checking for updates',
+    updateChecking: 'Checking…',
+    updateUpToDate: 'Agents and workflows are up to date.',
+    updateAvailable: (version) => `✨ Version ${version} available`,
+    updateSkip: 'Skip',
+    updateNow: 'Update now',
+    updating: 'Updating…',
+    doneTitle: 'Nakiros is ready.',
+    doneSub: 'Create your first workspace to get started.',
+    doneBtn: 'Create my first workspace →',
   },
   toast: {
     contextCopied: (ticketId) => `${ticketId} context copied`,

@@ -1,4 +1,4 @@
-import type { StoredRepo } from '@tiqora/shared';
+import type { StoredRepo } from '@nakiros/shared';
 import { PROFILE_COLORS, PROFILE_LABELS } from '../utils/profiles';
 
 interface Props {
@@ -12,7 +12,7 @@ function truncatePath(path: string, maxLen = 40): string {
 
 export default function RepoCard({ repo }: Props) {
   async function handleOpen() {
-    await window.tiqora.openPath(repo.localPath);
+    await window.nakiros.openPath(repo.localPath);
   }
 
   const color = PROFILE_COLORS[repo.profile];
@@ -22,7 +22,7 @@ export default function RepoCard({ repo }: Props) {
     <div
       style={{
         border: '1px solid var(--line)',
-        borderRadius: 2,
+        borderRadius: 10,
         padding: 16,
         display: 'flex',
         flexDirection: 'column',
@@ -37,7 +37,7 @@ export default function RepoCard({ repo }: Props) {
             color: '#fff',
             fontSize: 11,
             padding: '2px 8px',
-            borderRadius: 2,
+            borderRadius: 10,
             fontWeight: 600,
           }}
         >
@@ -66,7 +66,7 @@ export default function RepoCard({ repo }: Props) {
           padding: '7px 12px',
           background: 'var(--bg-muted)',
           border: '1px solid var(--line)',
-          borderRadius: 2,
+          borderRadius: 10,
           cursor: 'pointer',
           fontSize: 13,
           alignSelf: 'flex-start',

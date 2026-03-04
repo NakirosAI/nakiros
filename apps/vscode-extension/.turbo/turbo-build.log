@@ -1,8 +1,0 @@
-
-> tiqora@0.0.1 build /Users/thomasailleaume/Perso/timetrackerAgent/apps/vscode-extension
-> esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node
-
-
-  dist/extension.js  1.9kb
-
-⚡ Done in 1ms

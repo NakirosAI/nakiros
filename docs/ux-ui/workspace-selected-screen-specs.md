@@ -61,7 +61,7 @@ Modal avec 4 champs:
 ### Submit
 1. Construit un prompt structure
 2. Lance `/tiq-agent-brainstorming`
-3. Demande explicitement la sauvegarde dans `.tiqora/context/brainstorming.md`
+3. Demande explicitement la sauvegarde dans `.nakiros/context/brainstorming.md`
 
 ### Completion
 1. Fermeture modal

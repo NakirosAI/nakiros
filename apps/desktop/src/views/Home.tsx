@@ -1,13 +1,14 @@
-import { useEffect } from 'react';
-import type { StoredWorkspace } from '@tiqora/shared';
+import { useEffect, useState } from 'react';
+import type { StoredWorkspace } from '@nakiros/shared';
 import appIcon from '../assets/icon.svg';
-import type { ResolvedLanguage } from '@tiqora/shared';
-import { Folder, SquarePlus } from 'lucide-react';
+import type { ResolvedLanguage } from '@nakiros/shared';
+import { SquarePlus } from 'lucide-react';
 import { MESSAGES } from '../i18n';
+
+const RECENT_LIMIT = 5;
 
 interface Props {
   recentWorkspaces: StoredWorkspace[];
-  onOpenDirectory(): void;
   onNewWorkspace(): void;
   onOpenWorkspace(id: string): void;
   bootError?: string;
@@ -28,30 +29,27 @@ function timeAgo(iso: string, language: ResolvedLanguage): string {
 
 export default function Home({
   recentWorkspaces,
-  onOpenDirectory,
   onNewWorkspace,
   onOpenWorkspace,
   bootError,
   language,
 }: Props) {
   const msg = MESSAGES[language];
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     function onKeydown(event: KeyboardEvent) {
-      const key = event.key.toLowerCase();
-      if ((event.metaKey || event.ctrlKey) && key === 'o') {
-        event.preventDefault();
-        onOpenDirectory();
-      }
-      if ((event.metaKey || event.ctrlKey) && key === 'n') {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'n') {
         event.preventDefault();
         onNewWorkspace();
       }
     }
-
     window.addEventListener('keydown', onKeydown);
     return () => window.removeEventListener('keydown', onKeydown);
-  }, [onOpenDirectory, onNewWorkspace]);
+  }, [onNewWorkspace]);
+
+  const hasMore = recentWorkspaces.length > RECENT_LIMIT;
+  const displayed = showAll ? recentWorkspaces : recentWorkspaces.slice(0, RECENT_LIMIT);
 
   return (
     <div
@@ -71,7 +69,7 @@ export default function Home({
           maxWidth: 820,
           background: 'var(--bg-soft)',
           border: '1px solid var(--line)',
-          borderRadius: 3,
+          borderRadius: 14,
           boxShadow: 'var(--shadow-sm)',
           padding: '34px 28px 26px',
         }}
@@ -80,7 +78,7 @@ export default function Home({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img
               src={appIcon}
-              alt="Logo Tiqora"
+              alt="Logo Nakiros"
               width={44}
               height={44}
               style={{ borderRadius: 12, display: 'block' }}
@@ -101,7 +99,7 @@ export default function Home({
               border: '1px solid #f1b5b5',
               background: '#fff3f3',
               color: '#8b1f1f',
-              borderRadius: 2,
+              borderRadius: 10,
               padding: '10px 12px',
               fontSize: 13,
             }}
@@ -110,20 +108,7 @@ export default function Home({
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 14, marginBottom: 28, flexWrap: 'wrap' }}>
-          <button onClick={onOpenDirectory} style={cardStyle}>
-            <span style={{ marginBottom: 10, display: 'block', color: 'var(--text-muted)' }}>
-              <Folder size={32} />
-            </span>
-            <strong style={{ fontSize: 16, display: 'block', marginBottom: 6 }}>
-              {msg.home.openWorkspace}
-            </strong>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              {msg.home.openWorkspaceHint}
-            </span>
-            <span style={shortcutPill}>Ctrl/Cmd + O</span>
-          </button>
-
+        <div style={{ marginBottom: 28 }}>
           <button
             onClick={onNewWorkspace}
             style={{ ...cardStyle, background: 'var(--primary-soft)', borderColor: 'var(--primary)' }}
@@ -156,7 +141,7 @@ export default function Home({
               {msg.home.recent}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {recentWorkspaces.map((ws) => (
+              {displayed.map((ws) => (
                 <button key={ws.id} onClick={() => onOpenWorkspace(ws.id)} style={recentItemStyle}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
                     <span style={{ fontWeight: 700, fontSize: 14 }}>{ws.name}</span>
@@ -171,12 +156,30 @@ export default function Home({
                 </button>
               ))}
             </div>
+            {hasMore && (
+              <button
+                onClick={() => setShowAll((prev) => !prev)}
+                style={{
+                  marginTop: 10,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  color: 'var(--text-muted)',
+                  padding: '4px 2px',
+                }}
+              >
+                {showAll
+                  ? msg.home.showLess
+                  : msg.home.showMore(recentWorkspaces.length - RECENT_LIMIT)}
+              </button>
+            )}
           </div>
         ) : (
           <div
             style={{
               border: '1px dashed var(--line-strong)',
-              borderRadius: 2,
+              borderRadius: 10,
               padding: '14px 16px',
               color: 'var(--text-muted)',
               fontSize: 13,
@@ -196,7 +199,7 @@ const shortcutPill: React.CSSProperties = {
   display: 'inline-block',
   border: '1px solid var(--line-strong)',
   color: 'var(--text-muted)',
-  borderRadius: 2,
+  borderRadius: 10,
   padding: '3px 8px',
   fontSize: 11,
   fontWeight: 600,
@@ -207,7 +210,7 @@ const cardStyle: React.CSSProperties = {
   padding: '22px 18px 18px',
   background: 'var(--bg-soft)',
   border: '1.5px solid var(--line)',
-  borderRadius: 3,
+  borderRadius: 12,
   cursor: 'pointer',
   textAlign: 'left',
 };
@@ -219,38 +222,9 @@ const recentItemStyle: React.CSSProperties = {
   padding: '12px 14px',
   background: 'var(--bg-soft)',
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   cursor: 'pointer',
   textAlign: 'left',
   width: '100%',
   boxSizing: 'border-box',
 };
-
-function actionIconStyle(): React.CSSProperties {
-  return {
-    width: 26,
-    height: 26,
-    stroke: 'currentColor',
-    strokeWidth: 1.9,
-    fill: 'none',
-  };
-}
-
-function OpenWorkspaceIcon() {
-  return (
-    <svg viewBox="0 0 24 24" style={actionIconStyle()} aria-hidden="true">
-      <path d="M3.5 7.5h6.5l2-2h8v12h-16.5z" />
-      <path d="M3.5 11.5h16.5" />
-    </svg>
-  );
-}
-
-function CreateWorkspaceIcon() {
-  return (
-    <svg viewBox="0 0 24 24" style={actionIconStyle()} aria-hidden="true">
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-      <path d="M12 8v8" />
-      <path d="M8 12h8" />
-    </svg>
-  );
-}

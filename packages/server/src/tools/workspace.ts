@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-import type { StoredWorkspace } from "@tiqora/shared";
+import type { StoredWorkspace } from "@nakiros/shared";
 
 export function registerWorkspaceTools(server: McpServer, workspace: StoredWorkspace): void {
   const topology =
@@ -44,7 +44,7 @@ export function registerWorkspaceTools(server: McpServer, workspace: StoredWorks
           text:
             workspace.context != null
               ? JSON.stringify(workspace.context, null, 2)
-              : "No context generated yet. Use the Discovery Workflow in Tiqora Desktop to generate workspace context."
+              : "No context generated yet. Use the Discovery Workflow in Nakiros Desktop to generate workspace context."
         }
       ]
     })

@@ -80,5 +80,5 @@ Nouveau type UI `WorkflowCapability`:
 
 ## PRD Assistant
 1. Trigger standard: `/tiq-agent-brainstorming`
-2. Sortie attendue: `.tiqora/context/brainstorming.md`
+2. Sortie attendue: `.nakiros/context/brainstorming.md`
 3. Re-scan docs apres execution pour remonter le document

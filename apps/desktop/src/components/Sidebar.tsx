@@ -1,6 +1,6 @@
-import { BookOpen, Kanban, LayoutDashboard, Settings2 } from 'lucide-react';
+import { BookOpen, Kanban, LayoutDashboard, MessageSquare, Settings2 } from 'lucide-react';
 
-export type SidebarTab = 'overview' | 'product' | 'delivery' | 'settings';
+export type SidebarTab = 'overview' | 'chat' | 'product' | 'delivery' | 'settings';
 
 interface Props {
   active: SidebarTab;
@@ -10,6 +10,7 @@ interface Props {
 
 const navTabs: { id: Exclude<SidebarTab, 'settings'>; icon: React.ReactNode }[] = [
   { id: 'overview', icon: <LayoutDashboard size={18} /> },
+  { id: 'chat', icon: <MessageSquare size={18} /> },
   { id: 'product', icon: <BookOpen size={18} /> },
   { id: 'delivery', icon: <Kanban size={18} /> },
 ];
@@ -84,7 +85,7 @@ function SidebarButton({
         gap: 4,
         background: active ? 'var(--bg-muted)' : 'transparent',
         border: active ? '1px solid var(--primary)' : '1px solid transparent',
-        borderRadius: 2,
+        borderRadius: 10,
         cursor: 'pointer',
         color: active ? 'var(--primary)' : 'var(--text-muted)',
         padding: '0 2px',

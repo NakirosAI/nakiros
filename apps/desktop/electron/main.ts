@@ -2,11 +2,12 @@ import { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeImage } fr
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { homedir } from 'os';
 import { join, resolve } from 'path';
 
 const execFileAsync = promisify(execFile);
-import { startServer, stopServer } from '@tiqora/server';
-import { DEFAULT_MCP_SERVER_URL } from '@tiqora/shared';
+import { startServer, stopServer } from '@nakiros/server';
+import { DEFAULT_MCP_SERVER_URL } from '@nakiros/shared';
 import { getAll, save, remove } from './services/workspace.js';
 import { syncWorkspaceYaml } from './services/workspace-yaml.js';
 import { resetWorkspace } from './services/workspace-reset.js';
@@ -15,19 +16,28 @@ import { syncToRepos } from './services/workspace-sync.js';
 import { createWorkspaceRoot, copyRepoToDirectory, initGitRepo } from './services/workspace-bootstrap.js';
 import { scanWorkspaceDocs } from './services/doc-scanner.js';
 import { getPreferences, savePreferences } from './services/preferences.js';
-import { getAgentInstallStatus, getGlobalInstallStatus, installAgents, installAgentsGlobally } from './services/agent-installer.js';
+import {
+  getAgentInstallStatus,
+  getGlobalInstallStatus,
+  installAgents,
+  installAgentsGlobally,
+  ensureRuntimeInDir,
+  ensureCommandsInRepo,
+} from './services/agent-installer.js';
+import { detectEditors, nakirosConfigExists, installNakiros } from './services/onboarding-installer.js';
+import { checkForUpdates, applyUpdate } from './services/update-checker.js';
+import { COMMAND_TEMPLATES } from './templates-bundle.js';
 import { getAgentCliStatus } from './services/agent-cli.js';
 import {
   getTickets, saveTicket, removeTicket,
   getEpics, saveEpic, removeEpic,
+  toWorkspaceSlug,
 } from './services/ticket-storage.js';
 import { generateContext } from './services/agent-context.js';
 import { createTerminal, writeToTerminal, resizeTerminal, destroyTerminal } from './services/terminal.js';
 import { runAgentCommand, cancelAgentRun } from './services/agent-runner.js';
 import { getConversations, saveConversation, deleteConversation } from './services/conversation-store.js';
 import { getAgentTabsState, saveAgentTabsState, clearAgentTabsState } from './services/agent-tabs-store.js';
-import { readClaudeHistory } from './services/claude-history.js';
-import { readCodexHistory } from './services/codex-history.js';
 import {
   generatePKCE,
   generateState,
@@ -44,7 +54,7 @@ import {
   getValidAccessToken,
 } from './services/jira-token-store.js';
 import { syncJiraTickets } from './services/jira-sync.js';
-import { fetchProjects } from './services/jira-connector.js';
+import { fetchProjects, fetchProjectBoardType, countIssues } from './services/jira-connector.js';
 import type {
   StoredWorkspace,
   LocalTicket,
@@ -52,7 +62,7 @@ import type {
   AppPreferences,
   AgentInstallRequest,
   AgentProvider,
-} from '@tiqora/shared';
+} from '@nakiros/shared';
 
 // ─── Single-instance lock (required for protocol handling on Windows/Linux) ───
 
@@ -66,10 +76,10 @@ if (!gotTheLock) {
 if (process.defaultApp) {
   // Development mode: register with explicit executable path
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient('tiqora', process.execPath, [resolve(process.argv[1] ?? '')]);
+    app.setAsDefaultProtocolClient('nakiros', process.execPath, [resolve(process.argv[1] ?? '')]);
   }
 } else {
-  app.setAsDefaultProtocolClient('tiqora');
+  app.setAsDefaultProtocolClient('nakiros');
 }
 
 // ─── OAuth state store ────────────────────────────────────────────────────────
@@ -89,7 +99,7 @@ async function handleOAuthCallback(url: string): Promise<void> {
     return;
   }
 
-  if (parsed.protocol !== 'tiqora:') return;
+  if (parsed.protocol !== 'nakiros:') return;
   if (parsed.hostname !== 'oauth') return;
 
   const win = BrowserWindow.getAllWindows()[0];
@@ -237,7 +247,7 @@ app.on('open-url', (event, url) => {
 // ─── Windows/Linux: second-instance (single-instance lock) ───────────────────
 
 app.on('second-instance', (_, argv) => {
-  const url = argv.find((arg) => arg.startsWith('tiqora://'));
+  const url = argv.find((arg) => arg.startsWith('nakiros://'));
   if (url) void handleOAuthCallback(url);
 
   // Focus existing window
@@ -311,22 +321,46 @@ ipcMain.handle('agents:global-status', () => getGlobalInstallStatus());
 ipcMain.handle('agents:install-global', () => installAgentsGlobally());
 ipcMain.handle('agents:cli-status', () => getAgentCliStatus());
 
+// ─── IPC: Onboarding ──────────────────────────────────────────────────────────
+
+ipcMain.handle('onboarding:detectEditors', () => detectEditors());
+ipcMain.handle('onboarding:nakirosConfigExists', () => nakirosConfigExists());
+ipcMain.handle('onboarding:install', async (event, editors: unknown[]) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return { success: false, errors: ['No window'] };
+  return installNakiros(editors as Parameters<typeof installNakiros>[0], COMMAND_TEMPLATES, win);
+});
+
+// ─── IPC: Updates ─────────────────────────────────────────────────────────────
+
+ipcMain.handle('updates:check', (_, force?: boolean) => checkForUpdates(force));
+ipcMain.handle('updates:apply', async (event, files: unknown[]) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  return applyUpdate(files as Parameters<typeof applyUpdate>[0], win);
+});
+
 // ─── IPC: Tickets ─────────────────────────────────────────────────────────────
 
-ipcMain.handle('ticket:getAll', (_, wsId: string) => getTickets(wsId));
-ipcMain.handle('ticket:save', (_, wsId: string, t: LocalTicket) => saveTicket(wsId, t));
-ipcMain.handle('ticket:remove', (_, wsId: string, id: string) => removeTicket(wsId, id));
+function resolveSlug(wsId: string): string {
+  const ws = getAll().find((w) => w.id === wsId);
+  return ws ? toWorkspaceSlug(ws.name) : wsId;
+}
+
+ipcMain.handle('ticket:getAll', (_, wsId: string) => getTickets(resolveSlug(wsId)));
+ipcMain.handle('ticket:save', (_, wsId: string, t: LocalTicket) => saveTicket(resolveSlug(wsId), t));
+ipcMain.handle('ticket:remove', (_, wsId: string, id: string) => removeTicket(resolveSlug(wsId), id));
 
 // ─── IPC: Epics ───────────────────────────────────────────────────────────────
 
-ipcMain.handle('epic:getAll', (_, wsId: string) => getEpics(wsId));
-ipcMain.handle('epic:save', (_, wsId: string, e: LocalEpic) => saveEpic(wsId, e));
-ipcMain.handle('epic:remove', (_, wsId: string, id: string) => removeEpic(wsId, id));
+ipcMain.handle('epic:getAll', (_, wsId: string) => getEpics(resolveSlug(wsId)));
+ipcMain.handle('epic:save', (_, wsId: string, e: LocalEpic) => saveEpic(resolveSlug(wsId), e));
+ipcMain.handle('epic:remove', (_, wsId: string, id: string) => removeEpic(resolveSlug(wsId), id));
 
 // ─── IPC: Agent context + clipboard ──────────────────────────────────────────
 
 ipcMain.handle('agent:context', (_, wsId: string, ticketId: string, ws: StoredWorkspace) =>
-  generateContext(wsId, ticketId, ws));
+  generateContext(resolveSlug(wsId), ticketId, ws));
 ipcMain.handle('clipboard:write', (_, text: string) => clipboard.writeText(text));
 
 // ─── IPC: Terminal (node-pty) ─────────────────────────────────────────────────
@@ -374,8 +408,17 @@ ipcMain.handle(
   )
     ? requestedProvider
     : (prefs.agentProvider ?? 'claude');
+  const agentWorkspacePath = resolve(homedir(), '.nakiros');
   // Use `let` + capture in onStart to avoid TDZ: onDone can fire synchronously
   // (e.g. spawn error) before the `const runId = ...` assignment completes.
+  try {
+    ensureCommandsInRepo(agentWorkspacePath, provider);
+  } catch (err) {
+    console.warn(`[agent:run] Unable to ensure command templates in agent workspace: ${String(err)}`);
+  }
+  // Ensure _nakiros/ runtime is present in agent workspace cwd.
+  ensureRuntimeInDir(agentWorkspacePath);
+  const rawLines: unknown[] = [];
   let runId = '';
   runId = runAgentCommand(
     provider,
@@ -387,8 +430,9 @@ ipcMain.handle(
       win?.webContents.send('agent:start', info);
     },
     (evt) => win?.webContents.send('agent:event', { runId, event: evt }),
-    (exitCode, error) => win?.webContents.send('agent:done', { runId, exitCode, error }),
+    (exitCode, error, lines) => win?.webContents.send('agent:done', { runId, exitCode, error, rawLines: lines ?? [] }),
     additionalDirs,
+    (raw) => rawLines.push(raw),
   );
   return runId;
 });
@@ -399,24 +443,19 @@ ipcMain.handle('agent:cancel', (_, runId: string) => {
 
 // ─── IPC: Conversations ───────────────────────────────────────────────────────
 
-ipcMain.handle('conversation:getAll', () => getConversations());
-ipcMain.handle('conversation:save', (_, conv: unknown) => saveConversation(conv as Parameters<typeof saveConversation>[0]));
-ipcMain.handle('conversation:delete', (_, id: string) => deleteConversation(id));
-ipcMain.handle(
-  'conversation:readMessages',
-  (_, sessionId: string, repoPath: string, provider?: AgentProvider) => {
-    if (provider === 'codex') return readCodexHistory(sessionId);
-    if (provider === 'claude') return readClaudeHistory(sessionId, repoPath);
-    return [];
-  },
-);
+ipcMain.handle('conversation:getAll', (_, workspaceId: string) => getConversations(resolveSlug(workspaceId)));
+ipcMain.handle('conversation:save', (_, conv: unknown) => {
+  const typedConv = conv as Parameters<typeof saveConversation>[0];
+  saveConversation(typedConv, resolveSlug(typedConv.workspaceId));
+});
+ipcMain.handle('conversation:delete', (_, id: string, workspaceId: string) => deleteConversation(id, resolveSlug(workspaceId)));
 
 // ─── IPC: Agent tabs (multi-conversations state) ────────────────────────────
 
-ipcMain.handle('agentTabs:get', (_, workspaceId: string) => getAgentTabsState(workspaceId));
+ipcMain.handle('agentTabs:get', (_, workspaceId: string) => getAgentTabsState(resolveSlug(workspaceId)));
 ipcMain.handle('agentTabs:save', (_, workspaceId: string, state: unknown) =>
-  saveAgentTabsState(workspaceId, state as Parameters<typeof saveAgentTabsState>[1]));
-ipcMain.handle('agentTabs:clear', (_, workspaceId: string) => clearAgentTabsState(workspaceId));
+  saveAgentTabsState(resolveSlug(workspaceId), state as Parameters<typeof saveAgentTabsState>[1]));
+ipcMain.handle('agentTabs:clear', (_, workspaceId: string) => clearAgentTabsState(resolveSlug(workspaceId)));
 
 // ─── IPC: Jira OAuth ─────────────────────────────────────────────────────────
 
@@ -462,6 +501,21 @@ ipcMain.handle('jira:getProjects', async (_, wsId: string) => {
   return fetchProjects(token, cloudId);
 });
 
+ipcMain.handle('jira:countTickets', async (_, wsId: string, projectKey: string, syncFilter: string, boardType: string) => {
+  const token = await getValidAccessToken(wsId);
+  const workspace = getAll().find((w) => w.id === wsId);
+  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
+  if (!cloudId) throw new Error('Not connected to Jira');
+  return countIssues(token, cloudId, projectKey, syncFilter as 'sprint_active' | 'last_3_months' | 'all', boardType as 'scrum' | 'kanban' | 'unknown');
+});
+
+ipcMain.handle('jira:getBoardType', async (_, wsId: string, projectKey: string) => {
+  const token = await getValidAccessToken(wsId);
+  const workspace = getAll().find((w) => w.id === wsId);
+  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
+  if (!cloudId) return { boardType: 'unknown', boardId: null };
+  return fetchProjectBoardType(token, cloudId, projectKey);
+});
 
 // ─── MCP Server ───────────────────────────────────────────────────────────────
 
@@ -493,7 +547,7 @@ ipcMain.handle('server:restart', async () => {
     broadcastServerStatus('running');
   } catch (err) {
     broadcastServerStatus('stopped');
-    console.error('[Tiqora] Failed to restart MCP server:', (err as Error).message);
+    console.error('[Nakiros] Failed to restart MCP server:', (err as Error).message);
   }
 });
 
@@ -503,7 +557,7 @@ async function ensureMcpServer(port: number): Promise<void> {
   try {
     const res = await fetch(`http://localhost:${port}/status`);
     if (res.ok) {
-      console.log(`[Tiqora] MCP server already running on http://localhost:${port}`);
+      console.log(`[Nakiros] MCP server already running on http://localhost:${port}`);
       broadcastServerStatus('running');
       return;
     }
@@ -514,10 +568,10 @@ async function ensureMcpServer(port: number): Promise<void> {
   try {
     await startServer(port);
     broadcastServerStatus('running');
-    console.log(`[Tiqora] MCP server running on http://localhost:${port}`);
+    console.log(`[Nakiros] MCP server running on http://localhost:${port}`);
   } catch (err) {
     broadcastServerStatus('stopped');
-    console.error('[Tiqora] Failed to start MCP server:', (err as Error).message);
+    console.error('[Nakiros] Failed to start MCP server:', (err as Error).message);
   }
 }
 
@@ -527,6 +581,21 @@ app.whenReady().then(() => {
   createWindow();
 
   void ensureMcpServer(3737);
+
+  // Auto-check for agent/workflow updates (5s delay, respects 24h cooldown)
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const result = await checkForUpdates();
+        if (result.hasUpdate) {
+          const win = BrowserWindow.getAllWindows()[0];
+          win?.webContents.send('updates:available', result);
+        }
+      } catch {
+        // Silently ignore startup update check errors
+      }
+    })();
+  }, 5000);
 
   // Process any URL that arrived before the app was ready (macOS)
   if (pendingProtocolUrl) {

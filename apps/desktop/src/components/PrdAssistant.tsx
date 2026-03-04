@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { ResolvedLanguage } from '@tiqora/shared';
+import type { ResolvedLanguage } from '@nakiros/shared';
 
 interface PrdDraft {
   vision: string;
@@ -27,7 +27,7 @@ export default function PrdAssistant({ language, onClose, onSubmit }: Props) {
 
   const prompt = useMemo(() => {
     return [
-      '/tiq-agent-brainstorming',
+      '/nak-agent-brainstorming',
       '',
       isFr ? 'Aide-moi à construire un PRD initial avec ce contexte:' : 'Help me build an initial PRD with this context:',
       '',
@@ -37,8 +37,8 @@ export default function PrdAssistant({ language, onClose, onSubmit }: Props) {
       `${isFr ? 'Contraintes' : 'Constraints'}: ${draft.constraints || '-'}`,
       '',
       isFr
-        ? 'À la fin de la session, sauvegarde la synthèse dans .tiqora/context/brainstorming.md.'
-        : 'At session end, save the synthesis in .tiqora/context/brainstorming.md.',
+        ? 'À la fin de la session, sauvegarde la synthèse dans .nakiros/context/brainstorming.md.'
+        : 'At session end, save the synthesis in .nakiros/context/brainstorming.md.',
     ].join('\n');
   }, [draft, isFr]);
 
@@ -58,7 +58,7 @@ export default function PrdAssistant({ language, onClose, onSubmit }: Props) {
   }
 
   async function handleCopyPrompt() {
-    await window.tiqora.writeClipboard(prompt);
+    await window.nakiros.writeClipboard(prompt);
   }
 
   return (
@@ -72,8 +72,8 @@ export default function PrdAssistant({ language, onClose, onSubmit }: Props) {
         </div>
         <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: 12 }}>
           {isFr
-            ? 'Ce wizard prépare un prompt pour /tiq-agent-brainstorming.'
-            : 'This wizard prepares a prompt for /tiq-agent-brainstorming.'}
+            ? 'Ce wizard prépare un prompt pour /nak-agent-brainstorming.'
+            : 'This wizard prepares a prompt for /nak-agent-brainstorming.'}
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
           <label style={label}>
@@ -154,7 +154,7 @@ const modal: React.CSSProperties = {
   maxHeight: 'calc(100vh - 40px)',
   overflowY: 'auto',
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   background: 'var(--bg-card)',
   padding: 16,
   boxShadow: 'var(--shadow-lg)',
@@ -179,7 +179,7 @@ const label: React.CSSProperties = {
 const input: React.CSSProperties = {
   width: '100%',
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   padding: '8px 10px',
   background: 'var(--bg-soft)',
   color: 'var(--text)',
@@ -191,7 +191,7 @@ const secondary: React.CSSProperties = {
   border: '1px solid var(--line)',
   background: 'var(--bg-soft)',
   color: 'var(--text)',
-  borderRadius: 2,
+  borderRadius: 10,
   padding: '8px 10px',
   fontSize: 12,
   fontWeight: 600,
@@ -203,7 +203,7 @@ function primary(disabled: boolean): React.CSSProperties {
     border: 'none',
     background: disabled ? 'var(--line-strong)' : 'var(--primary)',
     color: '#fff',
-    borderRadius: 2,
+    borderRadius: 10,
     padding: '8px 10px',
     fontSize: 12,
     fontWeight: 700,

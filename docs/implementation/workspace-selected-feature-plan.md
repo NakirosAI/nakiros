@@ -48,7 +48,7 @@
 
 ### Done criteria
 1. Brainstorming lance depuis Product Context
-2. `.tiqora/context/brainstorming.md` visible apres run
+2. `.nakiros/context/brainstorming.md` visible apres run
 
 ## Phase 4 - Workflow availability
 ### Fichiers

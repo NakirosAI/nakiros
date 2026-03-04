@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { LocalTicket, LocalEpic, TicketPriority, TicketStatus, StoredWorkspace } from '@tiqora/shared';
-import type { ResolvedLanguage } from '@tiqora/shared';
+import type { LocalTicket, LocalEpic, TicketPriority, TicketStatus, StoredWorkspace } from '@nakiros/shared';
+import type { ResolvedLanguage } from '@nakiros/shared';
 import TicketCard from './TicketCard';
 import TicketForm from './TicketForm';
 import { MESSAGES } from '../i18n';
@@ -60,8 +60,8 @@ export default function KanbanBoard({
   async function handleContextCopy(ticket: LocalTicket) {
     setCopyingId(ticket.id);
     try {
-      const ctx = await window.tiqora.generateContext(workspace.id, ticket.id, workspace);
-      await window.tiqora.writeClipboard(ctx);
+      const ctx = await window.nakiros.generateContext(workspace.id, ticket.id, workspace);
+      await window.nakiros.writeClipboard(ctx);
       onContextCopied?.(ticket.id);
     } finally {
       setTimeout(() => setCopyingId(null), 1500);
@@ -70,14 +70,14 @@ export default function KanbanBoard({
 
   async function handleStatusChange(ticket: LocalTicket, newStatus: TicketStatus) {
     const updated = { ...ticket, status: newStatus, updatedAt: new Date().toISOString() };
-    await window.tiqora.saveTicket(workspace.id, updated);
+    await window.nakiros.saveTicket(workspace.id, updated);
     onTicketUpdate(updated);
   }
 
   async function handleTicketCreated(ticket: LocalTicket) {
     // Increment counter in workspace
     const updatedWs = { ...workspace, ticketCounter: (workspace.ticketCounter ?? 0) + 1 };
-    await window.tiqora.saveWorkspace(updatedWs);
+    await window.nakiros.saveWorkspace(updatedWs);
     onTicketCreate(ticket);
     setAddingIn(null);
   }
@@ -93,7 +93,7 @@ export default function KanbanBoard({
             maxWidth: 340,
             width: '100%',
             border: '1px solid var(--line)',
-            borderRadius: 2,
+            borderRadius: 10,
             padding: '8px 12px',
             background: 'var(--bg-soft)',
             color: 'var(--text)',
@@ -138,7 +138,7 @@ export default function KanbanBoard({
           style={{
             padding: '8px 14px',
             border: 'none',
-            borderRadius: 2,
+            borderRadius: 10,
             background: 'var(--primary)',
             color: '#fff',
             fontSize: 13,
@@ -157,7 +157,7 @@ export default function KanbanBoard({
             display: 'grid',
             placeItems: 'center',
             border: '1px dashed var(--line-strong)',
-            borderRadius: 2,
+            borderRadius: 10,
             background: 'var(--bg-soft)',
             textAlign: 'center',
             padding: 24,
@@ -172,7 +172,7 @@ export default function KanbanBoard({
               onClick={() => setAddingIn('backlog')}
               style={{
                 padding: '8px 14px',
-                borderRadius: 2,
+                borderRadius: 10,
                 border: '1px solid var(--line)',
                 background: 'var(--bg-soft)',
                 cursor: 'pointer',
@@ -233,7 +233,7 @@ export default function KanbanBoard({
                   style={{
                     background: 'var(--bg-muted)',
                     border: '1px solid var(--line)',
-                    borderRadius: 2,
+                    borderRadius: 10,
                     padding: 8,
                     flex: 1,
                     display: 'flex',
@@ -286,7 +286,7 @@ export default function KanbanBoard({
 
 const filterStyle: React.CSSProperties = {
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   padding: '8px 10px',
   background: 'var(--bg-soft)',
   color: 'var(--text)',

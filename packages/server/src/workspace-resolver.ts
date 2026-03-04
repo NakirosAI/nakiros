@@ -11,7 +11,7 @@ export function resolveWorkspaceId(cwd: string): string | null {
   let dir = cwd;
 
   for (let i = 0; i < 5; i++) {
-    const configPath = join(dir, ".tiqora", "workspace.yaml");
+    const configPath = join(dir, "_nakiros", "workspace.yaml");
     if (existsSync(configPath)) {
       try {
         const content = readFileSync(configPath, "utf-8");

@@ -14,10 +14,10 @@ interface Props {
 }
 
 const DEFAULT_QUICK_COMMANDS: QuickCommand[] = [
-  { label: '/tiq-workflow-generate-context', command: 'claude /tiq-workflow-generate-context' },
-  { label: '/tiq-agent-architect', command: 'claude /tiq-agent-architect' },
-  { label: '/tiq-agent-pm', command: 'claude /tiq-agent-pm' },
-  { label: '/tiq-agent-dev', command: 'claude /tiq-agent-dev' },
+  { label: '/nak-workflow-generate-context', command: 'claude /nak-workflow-generate-context' },
+  { label: '/nak-agent-architect', command: 'claude /nak-agent-architect' },
+  { label: '/nak-agent-pm', command: 'claude /nak-agent-pm' },
+  { label: '/nak-agent-dev', command: 'claude /nak-agent-dev' },
 ];
 
 export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_COMMANDS }: Props) {
@@ -74,27 +74,27 @@ export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_C
     fitAddonRef.current = fitAddon;
 
     // Create PTY in main process
-    void window.tiqora.terminalCreate(repoPath).then((id) => {
+    void window.nakiros.terminalCreate(repoPath).then((id) => {
       terminalId = id;
       terminalIdRef.current = id;
 
       // PTY output → xterm display
-      removeDataListener = window.tiqora.onTerminalData((evt) => {
+      removeDataListener = window.nakiros.onTerminalData((evt) => {
         if (evt.terminalId === id) term.write(evt.data);
       });
 
       // PTY exit notification
-      removeExitListener = window.tiqora.onTerminalExit((evt) => {
+      removeExitListener = window.nakiros.onTerminalExit((evt) => {
         if (evt.terminalId === id) {
           term.writeln('\r\n\x1b[2m[Process exited with code ' + String(evt.code) + ']\x1b[0m');
         }
       });
 
       // User input → PTY
-      term.onData((data) => void window.tiqora.terminalWrite(id, data));
+      term.onData((data) => void window.nakiros.terminalWrite(id, data));
 
       // Resize event → PTY
-      term.onResize(({ cols, rows }) => void window.tiqora.terminalResize(id, cols, rows));
+      term.onResize(({ cols, rows }) => void window.nakiros.terminalResize(id, cols, rows));
     });
 
     // Resize container → fit terminal
@@ -107,7 +107,7 @@ export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_C
       observer.disconnect();
       removeDataListener?.();
       removeExitListener?.();
-      if (terminalId) void window.tiqora.terminalDestroy(terminalId);
+      if (terminalId) void window.nakiros.terminalDestroy(terminalId);
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;
@@ -119,7 +119,7 @@ export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_C
 
   function sendCommand(command: string) {
     const id = terminalIdRef.current;
-    if (id) void window.tiqora.terminalWrite(id, command + '\r');
+    if (id) void window.nakiros.terminalWrite(id, command + '\r');
   }
 
   return (
@@ -172,7 +172,7 @@ const quickCmdButton: React.CSSProperties = {
   padding: '3px 9px',
   background: '#21262d',
   border: '1px solid #30363d',
-  borderRadius: 2,
+  borderRadius: 10,
   color: '#8b949e',
   fontSize: 11,
   fontFamily: '"JetBrains Mono", monospace',

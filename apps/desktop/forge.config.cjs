@@ -12,7 +12,7 @@ const generatedMacIcon = path.resolve(generatedDir, 'app.icns');
 const entitlementsPath = path.resolve(__dirname, 'electron/entitlements.mac.plist');
 const entitlementsInheritPath = path.resolve(__dirname, 'electron/entitlements.mac.inherit.plist');
 
-const extraResource = [path.resolve(__dirname, '../cli/_tiqora')];
+const extraResource = [path.resolve(__dirname, '_nakiros')];
 if (fs.existsSync(runtimeIconSvg)) {
   extraResource.push(runtimeIconSvg);
 }
@@ -95,12 +95,12 @@ const osxNotarize = !shouldNotarize
 /** @type {import('@electron-forge/shared-types').ForgeConfig} */
 module.exports = {
   packagerConfig: {
-    name: 'Tiqora',
-    appBundleId: 'com.tiqora.desktop',
-    helperBundleId: 'com.tiqora.desktop.helper',
+    name: 'Nakiros',
+    appBundleId: 'com.nakiros.desktop',
+    helperBundleId: 'com.nakiros.desktop.helper',
     asar: true,
     prune: false,
-    ignore: [/[\\/]node_modules[\\/]@tiqora([\\/]|$)/],
+    ignore: [/[\\/]node_modules[\\/]@nakiros([\\/]|$)/],
     extraResource,
     icon: resolvedPackagerIcon,
     osxSign,

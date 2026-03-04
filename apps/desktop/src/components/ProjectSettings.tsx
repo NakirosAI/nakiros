@@ -6,7 +6,7 @@ import type {
   StoredWorkspace,
   WorkspaceDoc,
   WorkspaceMCP,
-} from '@tiqora/shared';
+} from '@nakiros/shared';
 import { MESSAGES } from '../i18n';
 import { WORKFLOW_CAPABILITIES } from '../utils/workflow-capabilities';
 
@@ -64,7 +64,7 @@ export default function ProjectSettings({ workspace, language, onUpdate, onTicke
               width: '100%',
               padding: '8px 10px',
               border: section === item.id ? '1px solid var(--primary)' : '1px solid transparent',
-              borderRadius: 2,
+              borderRadius: 10,
               background: section === item.id ? 'var(--primary-soft)' : 'transparent',
               color: section === item.id ? 'var(--primary)' : 'var(--text)',
               fontWeight: section === item.id ? 700 : 500,
@@ -151,7 +151,7 @@ function GeneralSection({ workspace, language, onUpdate, onDelete }: Props) {
               key={capability.id}
               style={{
                 border: '1px solid var(--line)',
-                borderRadius: 2,
+                borderRadius: 10,
                 background: 'var(--bg-card)',
                 padding: '8px 10px',
                 display: 'flex',
@@ -195,11 +195,11 @@ function GitSection({ workspace, language, onUpdate }: Props) {
   }
 
   async function handleOpenFolder() {
-    const dir = await window.tiqora.selectDirectory();
+    const dir = await window.nakiros.selectDirectory();
     if (!dir) return;
     if (workspace.repos.some((r) => r.localPath === dir)) return;
     const name = dir.split('/').pop() ?? dir;
-    const url = await window.tiqora.gitRemoteUrl(dir);
+    const url = await window.nakiros.gitRemoteUrl(dir);
     await onUpdate({
       ...workspace,
       repos: [...workspace.repos, { name, localPath: dir, url: url ?? undefined, role: '', profile: 'generic' as AgentProfile, llmDocs: [] }],
@@ -264,7 +264,7 @@ function GitSection({ workspace, language, onUpdate }: Props) {
             {workspace.repos.map((repo) => (
               <div
                 key={repo.localPath}
-                style={{ border: '1px solid var(--line)', borderRadius: 2, padding: '10px 12px', display: 'flex', alignItems: 'flex-start', gap: 10 }}
+                style={{ border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'flex-start', gap: 10 }}
               >
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <div style={{ fontWeight: 700, fontSize: 13 }}>{repo.name}</div>
@@ -315,7 +315,7 @@ function CloneForm({
     if (!url.trim() || !destDir) return;
     setStatus('cloning');
     setErrorMsg('');
-    const result = await window.tiqora.gitClone(url.trim(), destDir);
+    const result = await window.nakiros.gitClone(url.trim(), destDir);
     if (result.success) {
       setStatus('success');
       await onCloned(result.repoPath, result.repoName, url.trim());
@@ -326,7 +326,7 @@ function CloneForm({
   }
 
   return (
-    <div style={{ border: '1px solid var(--primary)', borderRadius: 2, padding: 14, marginBottom: 12, background: 'var(--bg-muted)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ border: '1px solid var(--primary)', borderRadius: 10, padding: 14, marginBottom: 12, background: 'var(--bg-muted)', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div>
         <label style={fieldLabel}>URL</label>
         <input
@@ -345,7 +345,7 @@ function CloneForm({
             {destDir ?? msg.cloneDestNone}
           </span>
           <button
-            onClick={async () => { const d = await window.tiqora.selectDirectory(); if (d) setDestDir(d); }}
+            onClick={async () => { const d = await window.nakiros.selectDirectory(); if (d) setDestDir(d); }}
             style={addButtonStyle}
             disabled={status === 'cloning'}
           >
@@ -416,7 +416,7 @@ function PMSection({ workspace, language, onUpdate, onTicketsRefresh }: Props) {
   useEffect(() => {
     if (workspace.pmTool !== 'jira') return;
     setJiraStatusLoading(true);
-    void window.tiqora.jiraGetStatus(workspace.id)
+    void window.nakiros.jiraGetStatus(workspace.id)
       .then((status) => {
         setJiraStatus(status);
         if (status.connected) loadProjects();
@@ -427,7 +427,7 @@ function PMSection({ workspace, language, onUpdate, onTicketsRefresh }: Props) {
   // Listen for OAuth completion / error events
   useEffect(() => {
     if (workspace.pmTool !== 'jira') return;
-    const unsubComplete = window.tiqora.onJiraAuthComplete((data) => {
+    const unsubComplete = window.nakiros.onJiraAuthComplete((data) => {
       if (data.wsId !== workspace.id) return;
       setJiraConnecting(false);
       setJiraStatus({ connected: true, cloudUrl: data.cloudUrl, displayName: data.displayName });
@@ -435,7 +435,7 @@ function PMSection({ workspace, language, onUpdate, onTicketsRefresh }: Props) {
       loadProjects();
       if (data.workspace) void onUpdate(data.workspace);
     });
-    const unsubError = window.tiqora.onJiraAuthError((data) => {
+    const unsubError = window.nakiros.onJiraAuthError((data) => {
       if (data.wsId !== workspace.id && data.wsId !== '') return;
       setJiraConnecting(false);
       setJiraError(data.error);
@@ -448,7 +448,7 @@ function PMSection({ workspace, language, onUpdate, onTicketsRefresh }: Props) {
 
   function loadProjects() {
     setProjectsLoading(true);
-    void window.tiqora.jiraGetProjects(workspace.id)
+    void window.nakiros.jiraGetProjects(workspace.id)
       .then(setProjects)
       .catch(() => setProjects([]))
       .finally(() => setProjectsLoading(false));
@@ -457,11 +457,11 @@ function PMSection({ workspace, language, onUpdate, onTicketsRefresh }: Props) {
   async function handleConnect() {
     setJiraConnecting(true);
     setJiraError(null);
-    await window.tiqora.jiraStartAuth(workspace.id);
+    await window.nakiros.jiraStartAuth(workspace.id);
   }
 
   async function handleDisconnect() {
-    const updated = await window.tiqora.jiraDisconnect(workspace.id);
+    const updated = await window.nakiros.jiraDisconnect(workspace.id);
     setJiraStatus({ connected: false });
     setProjects([]);
     setJiraSyncResult(null);
@@ -476,7 +476,7 @@ function PMSection({ workspace, language, onUpdate, onTicketsRefresh }: Props) {
     setJiraSyncing(true);
     setJiraError(null);
     setJiraSyncResult(null);
-    const result = await window.tiqora.jiraSyncTickets(workspace.id, workspace);
+    const result = await window.nakiros.jiraSyncTickets(workspace.id, workspace);
     setJiraSyncing(false);
     if (result.error) {
       setJiraError(result.error);
@@ -708,7 +708,7 @@ function MCPSection({
 
 function MCPRow({ mcp, msg, onToggle, onEdit, onDelete }: { mcp: WorkspaceMCP; msg: SMsg; onToggle(): void; onEdit(): void; onDelete(): void }) {
   return (
-    <div style={{ border: '1px solid var(--line)', borderRadius: 2, padding: '10px 12px', marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+    <div style={{ border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px', marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
       <button onClick={onToggle} style={{ marginTop: 3, width: 12, height: 12, borderRadius: 12, background: mcp.enabled ? 'var(--success, #22c55e)' : 'var(--line-strong)', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 13 }}>{mcp.name || <em style={{ color: 'var(--text-muted)' }}>Sans nom</em>}</div>
@@ -741,7 +741,7 @@ function MCPForm({ mcp: initial, msg, onSave, onCancel }: { mcp: WorkspaceMCP; m
   }
 
   return (
-    <div style={{ border: '1px solid var(--primary)', borderRadius: 2, padding: 14, marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--bg-muted)' }}>
+    <div style={{ border: '1px solid var(--primary)', borderRadius: 10, padding: 14, marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--bg-muted)' }}>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
           <label style={fieldLabel}>{msg.mcpName}</label>
@@ -795,7 +795,7 @@ function DocsSection({ workspace, onUpdate, msg }: { workspace: StoredWorkspace;
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 12 }}>
           <button
             onClick={async () => {
-              const p = await window.tiqora.openFilePicker();
+              const p = await window.nakiros.openFilePicker();
               if (!p) return;
               await onUpdate({ ...workspace, projectDocs: [...docs, { id: uid(), label: p.split('/').pop() ?? p, path: p, type: 'file' }] });
             }}
@@ -809,7 +809,7 @@ function DocsSection({ workspace, onUpdate, msg }: { workspace: StoredWorkspace;
         {docs.length === 0 && !addingUrl && <p style={hintStyle}>Aucun document configuré.</p>}
 
         {docs.map((doc) => (
-          <div key={doc.id} style={{ border: '1px solid var(--line)', borderRadius: 2, padding: '8px 12px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div key={doc.id} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: '8px 12px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 14, flexShrink: 0 }}>{doc.type === 'url' ? '🌐' : '📄'}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 13 }}>{doc.label}</div>
@@ -820,7 +820,7 @@ function DocsSection({ workspace, onUpdate, msg }: { workspace: StoredWorkspace;
         ))}
 
         {addingUrl && (
-          <div style={{ border: '1px solid var(--primary)', borderRadius: 2, padding: 12, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--bg-muted)' }}>
+          <div style={{ border: '1px solid var(--primary)', borderRadius: 10, padding: 12, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--bg-muted)' }}>
             <input value={urlLabel} onChange={(e) => setUrlLabel(e.target.value)} placeholder={msg.docsLabelPlaceholder} style={inputStyle} autoFocus />
             <input value={urlPath} onChange={(e) => setUrlPath(e.target.value)} placeholder={msg.docsUrlPlaceholder} style={inputStyle} />
             <div style={{ display: 'flex', gap: 8 }}>
@@ -850,27 +850,34 @@ function DangerZone({ workspace, onDeleted }: { workspace: StoredWorkspace; onDe
   const [confirm, setConfirm] = useState(false);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<{ deleted: number; errors: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleReset() {
     setRunning(true);
     setResult(null);
-    const r = await window.tiqora.resetWorkspace(workspace);
-    await window.tiqora.deleteWorkspace(workspace.id);
-    setRunning(false);
-    setConfirm(false);
-    setResult({ deleted: r.deletedPaths.length, errors: r.errors.length });
-    onDeleted?.();
+    setError(null);
+    try {
+      const r = await window.nakiros.resetWorkspace(workspace);
+      await window.nakiros.deleteWorkspace(workspace.id);
+      setConfirm(false);
+      setResult({ deleted: r.deletedPaths.length, errors: r.errors.length });
+      onDeleted?.();
+    } catch (err) {
+      setError((err as Error)?.message ?? 'Suppression impossible.');
+    } finally {
+      setRunning(false);
+    }
   }
 
   return (
     <section style={{ ...sectionStyle, borderColor: 'var(--danger, #ef4444)' }}>
       <h3 style={{ ...sectionTitle, color: 'var(--danger, #ef4444)' }}>Zone de danger</h3>
       <p style={{ ...hintStyle, marginBottom: 12 }}>
-        Supprime tous les fichiers Tiqora de chaque repo du workspace :
-        {' '}<code style={{ fontSize: 11 }}>_tiqora/</code>,{' '}
-        <code style={{ fontSize: 11 }}>.tiqora/</code>,{' '}
-        <code style={{ fontSize: 11 }}>.tiqora.yaml</code>,{' '}
-        <code style={{ fontSize: 11 }}>.tiqora.workspace.yaml</code>.
+        Supprime tous les fichiers Nakiros de chaque repo du workspace :
+        {' '}<code style={{ fontSize: 11 }}>_nakiros/</code>,{' '}
+        <code style={{ fontSize: 11 }}>.nakiros/</code>,{' '}
+        <code style={{ fontSize: 11 }}>.nakiros.yaml</code>,{' '}
+        <code style={{ fontSize: 11 }}>.nakiros.workspace.yaml</code>.
         <br />
         Les fichiers <code style={{ fontSize: 11 }}>CLAUDE.md</code>, <code style={{ fontSize: 11 }}>.cursorrules</code> et <code style={{ fontSize: 11 }}>llms.txt</code> ne sont pas touchés.
       </p>
@@ -878,9 +885,9 @@ function DangerZone({ workspace, onDeleted }: { workspace: StoredWorkspace; onDe
       {!confirm ? (
         <button
           onClick={() => { setConfirm(true); setResult(null); }}
-          style={{ padding: '7px 12px', borderRadius: 2, border: '1px solid var(--danger, #ef4444)', background: 'transparent', color: 'var(--danger, #ef4444)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+          style={{ padding: '7px 12px', borderRadius: 10, border: '1px solid var(--danger, #ef4444)', background: 'transparent', color: 'var(--danger, #ef4444)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
         >
-          Réinitialiser les données Tiqora
+          Réinitialiser les données Nakiros
         </button>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -891,7 +898,7 @@ function DangerZone({ workspace, onDeleted }: { workspace: StoredWorkspace; onDe
             <button
               onClick={() => void handleReset()}
               disabled={running}
-              style={{ padding: '7px 12px', borderRadius: 2, border: 'none', background: 'var(--danger, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: running ? 'not-allowed' : 'pointer', opacity: running ? 0.6 : 1 }}
+              style={{ padding: '7px 12px', borderRadius: 10, border: 'none', background: 'var(--danger, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: running ? 'not-allowed' : 'pointer', opacity: running ? 0.6 : 1 }}
             >
               {running ? 'Suppression…' : 'Oui, supprimer'}
             </button>
@@ -907,6 +914,12 @@ function DangerZone({ workspace, onDeleted }: { workspace: StoredWorkspace; onDe
             : `✓ ${String(result.deleted)} élément(s) supprimé(s).`}
         </p>
       )}
+
+      {error && (
+        <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--danger, #ef4444)' }}>
+          {error}
+        </p>
+      )}
     </section>
   );
 }
@@ -915,22 +928,22 @@ function DangerZone({ workspace, onDeleted }: { workspace: StoredWorkspace; onDe
 
 const h2Style: React.CSSProperties = { margin: '0 0 4px', fontSize: 20, fontWeight: 700 };
 const subtitleStyle: React.CSSProperties = { margin: 0, fontSize: 13, color: 'var(--text-muted)' };
-const sectionStyle: React.CSSProperties = { border: '1px solid var(--line)', background: 'var(--bg-soft)', borderRadius: 2, padding: 16 };
+const sectionStyle: React.CSSProperties = { border: '1px solid var(--line)', background: 'var(--bg-soft)', borderRadius: 10, padding: 16 };
 const sectionTitle: React.CSSProperties = { margin: '0 0 10px', fontSize: 13, fontWeight: 700 };
 const fieldLabel: React.CSSProperties = { display: 'block', fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' };
 const hintStyle: React.CSSProperties = { margin: 0, fontSize: 12, color: 'var(--text-muted)' };
-const inputStyle: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid var(--line)', borderRadius: 2, background: 'var(--bg-card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' };
-const selectStyle: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid var(--line)', borderRadius: 2, background: 'var(--bg-soft)', color: 'var(--text)', fontSize: 13 };
-const addButtonStyle: React.CSSProperties = { padding: '6px 10px', border: '1px solid var(--line)', borderRadius: 2, background: 'var(--bg-card)', color: 'var(--text)', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' };
-const iconBtn: React.CSSProperties = { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, padding: '2px 4px', borderRadius: 2, color: 'var(--text-muted)' };
-const secondaryBtn: React.CSSProperties = { padding: '7px 12px', borderRadius: 2, border: '1px solid var(--line)', background: 'var(--bg-soft)', color: 'var(--text)', fontWeight: 600, fontSize: 13, cursor: 'pointer' };
+const inputStyle: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--bg-card)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' };
+const selectStyle: React.CSSProperties = { width: '100%', padding: '7px 10px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--bg-soft)', color: 'var(--text)', fontSize: 13 };
+const addButtonStyle: React.CSSProperties = { padding: '6px 10px', border: '1px solid var(--line)', borderRadius: 10, background: 'var(--bg-card)', color: 'var(--text)', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' };
+const iconBtn: React.CSSProperties = { border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, padding: '2px 4px', borderRadius: 10, color: 'var(--text-muted)' };
+const secondaryBtn: React.CSSProperties = { padding: '7px 12px', borderRadius: 10, border: '1px solid var(--line)', background: 'var(--bg-soft)', color: 'var(--text)', fontWeight: 600, fontSize: 13, cursor: 'pointer' };
 
 function primaryBtn(disabled: boolean): React.CSSProperties {
-  return { padding: '7px 12px', borderRadius: 2, border: 'none', background: disabled ? 'var(--line-strong)' : 'var(--primary)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: disabled ? 'not-allowed' : 'pointer' };
+  return { padding: '7px 12px', borderRadius: 10, border: 'none', background: disabled ? 'var(--line-strong)' : 'var(--primary)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: disabled ? 'not-allowed' : 'pointer' };
 }
 
 function chipStyle(active: boolean): React.CSSProperties {
-  return { padding: '7px 11px', borderRadius: 2, border: `1px solid ${active ? 'var(--primary)' : 'var(--line)'}`, background: active ? 'var(--primary-soft)' : 'var(--bg-soft)', color: active ? 'var(--primary)' : 'var(--text)', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
+  return { padding: '7px 11px', borderRadius: 10, border: `1px solid ${active ? 'var(--primary)' : 'var(--line)'}`, background: active ? 'var(--primary-soft)' : 'var(--bg-soft)', color: active ? 'var(--primary)' : 'var(--text)', fontWeight: 700, fontSize: 12, cursor: 'pointer' };
 }
 
 function statusBadge(status: 'stable' | 'beta'): React.CSSProperties {
@@ -941,7 +954,7 @@ function statusBadge(status: 'stable' | 'beta'): React.CSSProperties {
       color: '#065f46',
       background: '#d1fae5',
       border: '1px solid #10b981',
-      borderRadius: 2,
+      borderRadius: 10,
       padding: '1px 6px',
     };
   }
@@ -951,7 +964,7 @@ function statusBadge(status: 'stable' | 'beta'): React.CSSProperties {
     color: '#92400e',
     background: '#fef3c7',
     border: '1px solid #f59e0b',
-    borderRadius: 2,
+    borderRadius: 10,
     padding: '1px 6px',
   };
 }

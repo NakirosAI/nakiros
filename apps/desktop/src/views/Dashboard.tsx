@@ -6,7 +6,7 @@ import type {
   ResolvedLanguage,
   ResolvedTheme,
   StoredWorkspace,
-} from '@tiqora/shared';
+} from '@nakiros/shared';
 import { Settings2 } from 'lucide-react';
 import appIcon from '../assets/icon.svg';
 import ContextPanel from '../components/ContextPanel';
@@ -17,6 +17,7 @@ import Sidebar, { type SidebarTab } from '../components/Sidebar';
 import TicketDetail from '../components/TicketDetail';
 import WorkspaceOverview from '../components/WorkspaceOverview';
 import { MESSAGES } from '../i18n';
+import ChatView from './ChatView';
 
 interface Props {
   workspace: StoredWorkspace;
@@ -71,14 +72,13 @@ export default function Dashboard({
   const [overviewConversationCount, setOverviewConversationCount] = useState(0);
   const [lastConversationAt, setLastConversationAt] = useState<string | null>(null);
   const [openPrdAssistantSignal, setOpenPrdAssistantSignal] = useState(0);
-  const [openFreeChatSignal, setOpenFreeChatSignal] = useState(0);
   const toastTimerRef = useRef<number | null>(null);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceMenuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    void window.tiqora.getTickets(workspace.id).then(setTickets);
-    void window.tiqora.getEpics(workspace.id).then(setEpics);
+    void window.nakiros.getTickets(workspace.id).then(setTickets);
+    void window.nakiros.getEpics(workspace.id).then(setEpics);
     setSelectedTicket(null);
   }, [workspace.id]);
 
@@ -116,7 +116,7 @@ export default function Dashboard({
   }, [isWorkspaceMenuOpen]);
 
   async function refreshOverviewData() {
-    const conversations = await window.tiqora.getConversations();
+    const conversations = await window.nakiros.getConversations(workspace.id);
     const repoPaths = new Set(workspace.repos.map((repo) => repo.localPath));
     const workspaceConversations = conversations.filter((conversation) => {
       if (conversation.workspaceId) return conversation.workspaceId === workspace.id;
@@ -139,8 +139,8 @@ export default function Dashboard({
     if (!selectedTicket) return;
     setCopyingId(selectedTicket.id);
     try {
-      const context = await window.tiqora.generateContext(workspace.id, selectedTicket.id, workspace);
-      await window.tiqora.writeClipboard(context);
+      const context = await window.nakiros.generateContext(workspace.id, selectedTicket.id, workspace);
+      await window.nakiros.writeClipboard(context);
       pushToast(msg.toast.contextCopied(selectedTicket.id));
     } catch {
       pushToast(msg.toast.contextCopyError);
@@ -194,7 +194,7 @@ export default function Dashboard({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
           <button onClick={onGoHome} title={msg.dashboard.home} aria-label={msg.dashboard.home} style={logoButton}>
-            <img src={appIcon} alt="Logo Tiqora" width={32} height={32} style={{ display: 'block' }} />
+            <img src={appIcon} alt="Logo Nakiros" width={32} height={32} style={{ display: 'block' }} />
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <div
@@ -271,17 +271,14 @@ export default function Dashboard({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <button
-            onClick={() => {
-              setActiveTab('product');
-              setOpenFreeChatSignal((prev) => prev + 1);
-            }}
+            onClick={() => setActiveTab('chat')}
             disabled={workspace.repos.length === 0}
             title={workspace.repos.length === 0 ? msg.dashboard.noRepo : msg.dashboard.chatAgent}
             style={{
               border: '1px solid var(--line)',
               background: 'var(--bg-soft)',
               color: 'var(--text)',
-              borderRadius: 2,
+              borderRadius: 10,
               padding: '6px 10px',
               fontSize: 12,
               fontWeight: 700,
@@ -298,7 +295,7 @@ export default function Dashboard({
               color: 'var(--text-muted)',
               background: 'var(--bg-muted)',
               padding: '3px 8px',
-              borderRadius: 2,
+              borderRadius: 8,
               border: '1px solid var(--line)',
             }}
           >
@@ -324,7 +321,7 @@ export default function Dashboard({
               border: 'none',
               cursor: !isLocalServer || serverStatus === 'starting' ? 'default' : 'pointer',
               padding: '4px 8px',
-              borderRadius: 4,
+              borderRadius: 8,
               opacity: !isLocalServer || serverStatus === 'starting' ? 0.6 : 1,
             }}
           >
@@ -348,20 +345,15 @@ export default function Dashboard({
             onClick={() => setShowGlobalSettings((prev) => !prev)}
             title={msg.settings.title}
             aria-label={msg.settings.title}
-            style={globalSettingsButton}
+            style={{
+              ...globalSettingsButton,
+              background: showGlobalSettings ? 'var(--bg-muted)' : 'transparent',
+              border: showGlobalSettings ? '1px solid var(--primary)' : '1px solid var(--line)',
+            }}
           >
-            <Settings2 size={14} color="var(--text-muted)" />
+            <Settings2 size={14} color={showGlobalSettings ? 'var(--primary)' : 'var(--text-muted)'} />
           </button>
         </div>
-        {showGlobalSettings && (
-          <GlobalSettings
-            preferences={preferences}
-            resolvedTheme={resolvedTheme}
-            language={language}
-            onChange={onPreferencesChange}
-            onClose={() => setShowGlobalSettings(false)}
-          />
-        )}
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -370,6 +362,7 @@ export default function Dashboard({
           onChange={setActiveTab}
           labels={{
             overview: msg.sidebar.overview,
+            chat: msg.sidebar.chat,
             product: msg.sidebar.product,
             delivery: msg.sidebar.delivery,
             settings: msg.sidebar.settings,
@@ -377,7 +370,17 @@ export default function Dashboard({
         />
 
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-          {activeTab === 'overview' && (
+          {showGlobalSettings && (
+            <GlobalSettings
+              preferences={preferences}
+              resolvedTheme={resolvedTheme}
+              language={language}
+              onChange={onPreferencesChange}
+              onClose={() => setShowGlobalSettings(false)}
+            />
+          )}
+
+          {!showGlobalSettings && activeTab === 'overview' && (
             <WorkspaceOverview
               workspace={workspace}
               tickets={tickets}
@@ -387,10 +390,7 @@ export default function Dashboard({
               serverStatus={serverStatus}
               onGoProduct={() => setActiveTab('product')}
               onGoDelivery={() => setActiveTab('delivery')}
-              onOpenChat={() => {
-                setActiveTab('product');
-                setOpenFreeChatSignal((prev) => prev + 1);
-              }}
+              onOpenChat={() => setActiveTab('chat')}
               onCreateTicket={() => setActiveTab('delivery')}
               onCreatePrd={() => {
                 setActiveTab('product');
@@ -400,7 +400,13 @@ export default function Dashboard({
             />
           )}
 
-          {activeTab === 'product' && (
+          {!showGlobalSettings && activeTab === 'chat' && (
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
+              <ChatView workspace={workspace} />
+            </div>
+          )}
+
+          {!showGlobalSettings && activeTab === 'product' && (
             <div style={{ flex: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
               <ContextPanel
                 workspace={workspace}
@@ -409,12 +415,12 @@ export default function Dashboard({
                   setOverviewDocsCount(docsCount);
                 }}
                 openPrdAssistantSignal={openPrdAssistantSignal}
-                openFreeChatSignal={openFreeChatSignal}
+                onOpenChat={() => setActiveTab('chat')}
               />
             </div>
           )}
 
-          {deliverySelected && (
+          {!showGlobalSettings && deliverySelected && (
             <>
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <KanbanBoard
@@ -449,14 +455,14 @@ export default function Dashboard({
             </>
           )}
 
-          {activeTab === 'settings' && (
+          {!showGlobalSettings && activeTab === 'settings' && (
             <ProjectSettings
               workspace={workspace}
               language={language}
               onUpdate={onUpdateWorkspace}
               onTicketsRefresh={() => {
-                void window.tiqora.getTickets(workspace.id).then(setTickets);
-                void window.tiqora.getEpics(workspace.id).then(setEpics);
+                void window.nakiros.getTickets(workspace.id).then(setTickets);
+                void window.nakiros.getEpics(workspace.id).then(setEpics);
                 void refreshOverviewData();
               }}
               onDelete={onGoHome}
@@ -472,7 +478,7 @@ export default function Dashboard({
             bottom: 14,
             background: '#0f172a',
             color: '#fff',
-            borderRadius: 2,
+            borderRadius: 10,
             padding: '9px 12px',
             fontSize: 12,
             boxShadow: 'var(--shadow-lg)',
@@ -493,7 +499,7 @@ const logoButton: React.CSSProperties = {
   placeItems: 'center',
   background: 'transparent',
   border: 'none',
-  borderRadius: 0,
+  borderRadius: 8,
   cursor: 'pointer',
   padding: 0,
 };
@@ -503,7 +509,7 @@ const tabItem = (active: boolean): React.CSSProperties => ({
   alignItems: 'center',
   border: active ? '1px solid var(--line-strong)' : '1px solid var(--line)',
   background: active ? 'var(--bg-card)' : 'var(--bg-soft)',
-  borderRadius: 2,
+  borderRadius: 10,
   minWidth: 0,
 });
 
@@ -538,7 +544,7 @@ const tabAddButton: React.CSSProperties = {
   width: 28,
   height: 28,
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 8,
   background: 'var(--bg-soft)',
   color: 'var(--text)',
   fontSize: 18,
@@ -556,7 +562,7 @@ const workspaceMenu: React.CSSProperties = {
   overflowY: 'auto',
   background: 'var(--bg-card)',
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 12,
   boxShadow: 'var(--shadow-lg)',
   padding: 6,
   zIndex: 200,
@@ -569,7 +575,7 @@ const workspaceMenuItem: React.CSSProperties = {
   background: 'transparent',
   color: 'var(--text)',
   padding: '8px 10px',
-  borderRadius: 2,
+  borderRadius: 8,
   fontSize: 13,
   cursor: 'pointer',
 };
@@ -581,7 +587,7 @@ const workspaceMenuAction: React.CSSProperties = {
   background: 'var(--bg-soft)',
   color: 'var(--text)',
   padding: '8px 10px',
-  borderRadius: 2,
+  borderRadius: 8,
   fontSize: 13,
   fontWeight: 700,
   cursor: 'pointer',
@@ -601,7 +607,7 @@ const globalSettingsButton: React.CSSProperties = {
   placeItems: 'center',
   background: 'transparent',
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 8,
   cursor: 'pointer',
   padding: 0,
 };

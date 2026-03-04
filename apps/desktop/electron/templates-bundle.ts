@@ -1,39 +1,41 @@
 /**
  * Templates bundled at build time via Vite ?raw imports.
- * Allows the packaged Electron app to install CLI commands
- * without requiring apps/cli/ to be present at runtime.
  */
 
-import tiqAgentDev from '../../cli/templates/commands/tiq-agent-dev.md?raw';
-import tiqAgentSm from '../../cli/templates/commands/tiq-agent-sm.md?raw';
-import tiqAgentPm from '../../cli/templates/commands/tiq-agent-pm.md?raw';
-import tiqAgentArchitect from '../../cli/templates/commands/tiq-agent-architect.md?raw';
-import tiqAgentBrainstorming from '../../cli/templates/commands/tiq-agent-brainstorming.md?raw';
-import tiqAgentQa from '../../cli/templates/commands/tiq-agent-qa.md?raw';
-import tiqAgentHotfix from '../../cli/templates/commands/tiq-agent-hotfix.md?raw';
-import tiqWorkflowCreateStory from '../../cli/templates/commands/tiq-workflow-create-story.md?raw';
-import tiqWorkflowDevStory from '../../cli/templates/commands/tiq-workflow-dev-story.md?raw';
-import tiqWorkflowFetchProjectContext from '../../cli/templates/commands/tiq-workflow-fetch-project-context.md?raw';
-import tiqWorkflowGenerateContext from '../../cli/templates/commands/tiq-workflow-generate-context.md?raw';
-import tiqWorkflowCreateTicket from '../../cli/templates/commands/tiq-workflow-create-ticket.md?raw';
-import tiqWorkflowHotfixStory from '../../cli/templates/commands/tiq-workflow-hotfix-story.md?raw';
-import tiqWorkflowQaReview from '../../cli/templates/commands/tiq-workflow-qa-review.md?raw';
-import tiqWorkflowSprint from '../../cli/templates/commands/tiq-workflow-sprint.md?raw';
+import AgentNakiros from '../templates/commands/nak-agent-nakiros.md?raw';
+import AgentDev from '../templates/commands/nak-agent-dev.md?raw';
+import AgentSm from '../templates/commands/nak-agent-sm.md?raw';
+import AgentPm from '../templates/commands/nak-agent-pm.md?raw';
+import AgentArchitect from '../templates/commands/nak-agent-architect.md?raw';
+import AgentBrainstorming from '../templates/commands/nak-agent-brainstorming.md?raw';
+import AgentQa from '../templates/commands/nak-agent-qa.md?raw';
+import AgentHotfix from '../templates/commands/nak-agent-hotfix.md?raw';
+import WorkflowCreateStory from '../templates/commands/nak-workflow-create-story.md?raw';
+import WorkflowDevStory from '../templates/commands/nak-workflow-dev-story.md?raw';
+import WorkflowFetchProjectContext from '../templates/commands/nak-workflow-fetch-project-context.md?raw';
+import WorkflowGenerateContext from '../templates/commands/nak-workflow-generate-context.md?raw';
+import WorkflowCreateTicket from '../templates/commands/nak-workflow-create-ticket.md?raw';
+import WorkflowHotfixStory from '../templates/commands/nak-workflow-hotfix-story.md?raw';
+import WorkflowQaReview from '../templates/commands/nak-workflow-qa-review.md?raw';
+import WorkflowSprint from '../templates/commands/nak-workflow-sprint.md?raw';
+import WorkflowProjectUnderstandingConfidence from '../templates/commands/nak-workflow-project-understanding-confidence.md?raw';
 
 export const COMMAND_TEMPLATES: Record<string, string> = {
-  'tiq-agent-dev.md': tiqAgentDev,
-  'tiq-agent-sm.md': tiqAgentSm,
-  'tiq-agent-pm.md': tiqAgentPm,
-  'tiq-agent-architect.md': tiqAgentArchitect,
-  'tiq-agent-brainstorming.md': tiqAgentBrainstorming,
-  'tiq-agent-qa.md': tiqAgentQa,
-  'tiq-agent-hotfix.md': tiqAgentHotfix,
-  'tiq-workflow-create-story.md': tiqWorkflowCreateStory,
-  'tiq-workflow-dev-story.md': tiqWorkflowDevStory,
-  'tiq-workflow-fetch-project-context.md': tiqWorkflowFetchProjectContext,
-  'tiq-workflow-generate-context.md': tiqWorkflowGenerateContext,
-  'tiq-workflow-create-ticket.md': tiqWorkflowCreateTicket,
-  'tiq-workflow-hotfix-story.md': tiqWorkflowHotfixStory,
-  'tiq-workflow-qa-review.md': tiqWorkflowQaReview,
-  'tiq-workflow-sprint.md': tiqWorkflowSprint,
+  'nak-agent-nakiros.md': AgentNakiros,
+  'nak-agent-dev.md': AgentDev,
+  'nak-agent-sm.md': AgentSm,
+  'nak-agent-pm.md': AgentPm,
+  'nak-agent-architect.md': AgentArchitect,
+  'nak-agent-brainstorming.md': AgentBrainstorming,
+  'nak-agent-qa.md': AgentQa,
+  'nak-agent-hotfix.md': AgentHotfix,
+  'nak-workflow-create-story.md': WorkflowCreateStory,
+  'nak-workflow-dev-story.md': WorkflowDevStory,
+  'nak-workflow-fetch-project-context.md': WorkflowFetchProjectContext,
+  'nak-workflow-generate-context.md': WorkflowGenerateContext,
+  'nak-workflow-create-ticket.md': WorkflowCreateTicket,
+  'nak-workflow-hotfix-story.md': WorkflowHotfixStory,
+  'nak-workflow-qa-review.md': WorkflowQaReview,
+  'nak-workflow-sprint.md': WorkflowSprint,
+  'nak-workflow-project-understanding-confidence.md': WorkflowProjectUnderstandingConfidence,
 };

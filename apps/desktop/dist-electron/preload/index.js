@@ -4,7 +4,7 @@ function isMissingHandlerError(err, channel) {
   if (!(err instanceof Error)) return false;
   return err.message.includes(`No handler registered for '${channel}'`);
 }
-electron.contextBridge.exposeInMainWorld("tiqora", {
+electron.contextBridge.exposeInMainWorld("nakiros", {
   // Workspace
   selectDirectory: () => electron.ipcRenderer.invoke("dialog:selectDirectory"),
   openFilePicker: () => electron.ipcRenderer.invoke("dialog:openFile"),
@@ -73,10 +73,9 @@ electron.contextBridge.exposeInMainWorld("tiqora", {
     return () => electron.ipcRenderer.removeListener("terminal:exit", listener);
   },
   // Conversations
-  getConversations: () => electron.ipcRenderer.invoke("conversation:getAll"),
+  getConversations: (workspaceId) => electron.ipcRenderer.invoke("conversation:getAll", workspaceId),
   saveConversation: (conv) => electron.ipcRenderer.invoke("conversation:save", conv),
-  deleteConversation: (id) => electron.ipcRenderer.invoke("conversation:delete", id),
-  readConversationMessages: (sessionId, repoPath, provider) => electron.ipcRenderer.invoke("conversation:readMessages", sessionId, repoPath, provider),
+  deleteConversation: (id, workspaceId) => electron.ipcRenderer.invoke("conversation:delete", id, workspaceId),
   getAgentTabs: async (workspaceId) => {
     try {
       return await electron.ipcRenderer.invoke("agentTabs:get", workspaceId);
@@ -107,6 +106,8 @@ electron.contextBridge.exposeInMainWorld("tiqora", {
   jiraGetStatus: (wsId) => electron.ipcRenderer.invoke("jira:getStatus", wsId),
   jiraSyncTickets: (wsId, ws) => electron.ipcRenderer.invoke("jira:syncTickets", wsId, ws),
   jiraGetProjects: (wsId) => electron.ipcRenderer.invoke("jira:getProjects", wsId),
+  jiraGetBoardType: (wsId, projectKey) => electron.ipcRenderer.invoke("jira:getBoardType", wsId, projectKey),
+  jiraCountTickets: (wsId, projectKey, syncFilter, boardType) => electron.ipcRenderer.invoke("jira:countTickets", wsId, projectKey, syncFilter, boardType),
   onJiraAuthComplete: (cb) => {
     const listener = (_, data) => cb(data);
     electron.ipcRenderer.on("jira:auth-complete", listener);
@@ -127,5 +128,27 @@ electron.contextBridge.exposeInMainWorld("tiqora", {
     const listener = (_, status) => cb(status);
     electron.ipcRenderer.on("server:status-change", listener);
     return () => electron.ipcRenderer.removeListener("server:status-change", listener);
+  },
+  // Onboarding
+  nakirosConfigExists: () => electron.ipcRenderer.invoke("onboarding:nakirosConfigExists"),
+  onboardingDetectEditors: () => electron.ipcRenderer.invoke("onboarding:detectEditors"),
+  onboardingInstall: (editors) => electron.ipcRenderer.invoke("onboarding:install", editors),
+  onOnboardingProgress: (cb) => {
+    const listener = (_, payload) => cb(payload);
+    electron.ipcRenderer.on("onboarding:progress", listener);
+    return () => electron.ipcRenderer.removeListener("onboarding:progress", listener);
+  },
+  // Updates
+  checkForUpdates: (force) => electron.ipcRenderer.invoke("updates:check", force),
+  applyUpdate: (files) => electron.ipcRenderer.invoke("updates:apply", files),
+  onUpdatesAvailable: (cb) => {
+    const listener = (_, result) => cb(result);
+    electron.ipcRenderer.on("updates:available", listener);
+    return () => electron.ipcRenderer.removeListener("updates:available", listener);
+  },
+  onUpdatesProgress: (cb) => {
+    const listener = (_, payload) => cb(payload);
+    electron.ipcRenderer.on("updates:progress", listener);
+    return () => electron.ipcRenderer.removeListener("updates:progress", listener);
   }
 });

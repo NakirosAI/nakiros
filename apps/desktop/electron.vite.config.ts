@@ -8,11 +8,11 @@ const outRoot = 'dist-electron';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['@tiqora/server', '@tiqora/shared'] })],
+    plugins: [externalizeDepsPlugin({ exclude: ['@nakiros/server', '@nakiros/shared'] })],
     resolve: {
       alias: {
-        '@tiqora/shared': sharedEntry,
-        '@tiqora/server': serverEntry,
+        '@nakiros/shared': sharedEntry,
+        '@nakiros/server': serverEntry,
       },
     },
     build: {
@@ -23,11 +23,11 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin({ exclude: ['@tiqora/server', '@tiqora/shared'] })],
+    plugins: [externalizeDepsPlugin({ exclude: ['@nakiros/server', '@nakiros/shared'] })],
     resolve: {
       alias: {
-        '@tiqora/shared': sharedEntry,
-        '@tiqora/server': serverEntry,
+        '@nakiros/shared': sharedEntry,
+        '@nakiros/server': serverEntry,
       },
     },
     build: {
@@ -41,8 +41,8 @@ export default defineConfig({
     root: 'src',
     resolve: {
       alias: {
-        '@tiqora/shared': sharedEntry,
-        '@tiqora/server': serverEntry,
+        '@nakiros/shared': sharedEntry,
+        '@nakiros/server': serverEntry,
       },
     },
     build: {

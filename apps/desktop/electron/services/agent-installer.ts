@@ -4,7 +4,6 @@ import {
   lstatSync,
   mkdirSync,
   readdirSync,
-  readFileSync,
   writeFileSync,
 } from 'fs';
 import { homedir } from 'os';
@@ -15,42 +14,32 @@ import type {
   AgentInstallRequest,
   AgentInstallStatus,
   AgentInstallSummary,
-} from '@tiqora/shared';
+  AgentProvider,
+} from '@nakiros/shared';
 import { COMMAND_TEMPLATES } from '../templates-bundle';
 
 const COMMAND_TEMPLATE_FILES = [
-  'tiq-agent-dev.md',
-  'tiq-agent-sm.md',
-  'tiq-agent-pm.md',
-  'tiq-agent-architect.md',
-  'tiq-agent-brainstorming.md',
-  'tiq-agent-qa.md',
-  'tiq-agent-hotfix.md',
-  'tiq-workflow-create-story.md',
-  'tiq-workflow-dev-story.md',
-  'tiq-workflow-fetch-project-context.md',
-  'tiq-workflow-generate-context.md',
-  'tiq-workflow-create-ticket.md',
-  'tiq-workflow-hotfix-story.md',
-  'tiq-workflow-qa-review.md',
-  'tiq-workflow-sprint.md',
+  'nak-agent-nakiros.md',
+  'nak-agent-dev.md',
+  'nak-agent-sm.md',
+  'nak-agent-pm.md',
+  'nak-agent-architect.md',
+  'nak-agent-brainstorming.md',
+  'nak-agent-qa.md',
+  'nak-agent-hotfix.md',
+  'nak-workflow-create-story.md',
+  'nak-workflow-dev-story.md',
+  'nak-workflow-fetch-project-context.md',
+  'nak-workflow-generate-context.md',
+  'nak-workflow-create-ticket.md',
+  'nak-workflow-hotfix-story.md',
+  'nak-workflow-qa-review.md',
+  'nak-workflow-sprint.md',
+  'nak-workflow-project-understanding-confidence.md',
 ] as const;
 
-const TIQORA_WORKSPACE_DIRECTORIES = [
-  'config',
-  'state',
-  'agents/sessions',
-  'workflows/runs',
-  'workflows/steps',
-  'sessions',
-  'sprints',
-  'context',
-  'reports/daily',
-  'reports/retrospective',
-  'reports/mr-context',
-  'sync',
-  'migrations',
-] as const;
+/** Workflow runtime — installed once globally at ~/.nakiros/ */
+const GLOBAL_RUNTIME_DIR = resolve(homedir(), '.nakiros');
 
 const ENVIRONMENTS: Record<
   AgentEnvironmentId,
@@ -84,32 +73,18 @@ function findRepoRoot(startDir = process.cwd()): string {
   return resolve(startDir);
 }
 
-
-function getRuntimeDir(): string {
+function getRuntimeSourceDir(): string {
   const repoRoot = findRepoRoot();
   const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
   const candidates = [
-    ...(resourcesPath ? [resolve(resourcesPath, '_tiqora')] : []),
-    resolve(repoRoot, '_tiqora'),
-    resolve(repoRoot, 'apps/cli/_tiqora'),
+    ...(resourcesPath ? [resolve(resourcesPath, '_nakiros')] : []),
+    resolve(repoRoot, '_nakiros'),
+    resolve(repoRoot, 'apps/desktop/_nakiros'),
   ];
   for (const path of candidates) {
     if (existsSync(resolve(path, 'core/tasks/workflow.xml'))) return path;
   }
-  throw new Error('Impossible de localiser le runtime _tiqora.');
-}
-
-function patchGitignore(repoPath: string): boolean {
-  const gitignorePath = resolve(repoPath, '.gitignore');
-  if (!existsSync(gitignorePath)) {
-    writeFileSync(gitignorePath, '.tiqora/\n', 'utf8');
-    return true;
-  }
-  const content = readFileSync(gitignorePath, 'utf8');
-  if (content.split(/\r?\n/).includes('.tiqora/')) return false;
-  const withTrailingNewline = content.endsWith('\n') ? content : `${content}\n`;
-  writeFileSync(gitignorePath, `${withTrailingNewline}.tiqora/\n`, 'utf8');
-  return true;
+  throw new Error('Impossible de localiser le runtime _nakiros.');
 }
 
 function copyDirectoryRecursive(
@@ -142,22 +117,49 @@ function copyDirectoryRecursive(
   return { copied, overwritten };
 }
 
-function getEnvironmentStatus(repoPath: string, id: AgentEnvironmentId): AgentEnvironmentStatus {
-  const env = ENVIRONMENTS[id];
-  const markerExists = existsSync(resolve(repoPath, env.markerRelativePath));
-  const targetPath = resolve(repoPath, env.targetRelativePath);
-  const installedCount = COMMAND_TEMPLATE_FILES.filter((file) =>
-    existsSync(resolve(targetPath, file))).length;
 
+export function ensureRuntimeInDir(targetDir: string): void {
+  const runtimeTargetDir = resolve(targetDir, '_nakiros');
+  if (existsSync(runtimeTargetDir)) return;
+  try {
+    const runtimeSourceDir = getRuntimeSourceDir();
+    copyDirectoryRecursive(runtimeSourceDir, runtimeTargetDir, false);
+  } catch {
+    // Runtime source not found — silently skip (dev env without packaged app).
+  }
+}
+
+// ─── Runtime global ────────────────────────────────────────────────────────
+
+export interface RuntimeInstallStatus {
+  installed: boolean;
+  path: string;
+}
+
+export interface RuntimeInstallSummary {
+  path: string;
+  filesCopied: number;
+  filesOverwritten: number;
+}
+
+export function getRuntimeInstallStatus(): RuntimeInstallStatus {
   return {
-    id,
-    label: env.label,
-    targetPath,
-    markerExists,
-    installedCount,
-    totalExpected: COMMAND_TEMPLATE_FILES.length,
+    installed: existsSync(resolve(GLOBAL_RUNTIME_DIR, 'core/tasks/workflow.xml')),
+    path: GLOBAL_RUNTIME_DIR,
   };
 }
+
+export function installRuntimeGlobally(force = false): RuntimeInstallSummary {
+  const sourceDir = getRuntimeSourceDir();
+  const result = copyDirectoryRecursive(sourceDir, GLOBAL_RUNTIME_DIR, force);
+  return {
+    path: GLOBAL_RUNTIME_DIR,
+    filesCopied: result.copied,
+    filesOverwritten: result.overwritten,
+  };
+}
+
+// ─── Agents globaux ─────────────────────────────────────────────────────────
 
 export interface GlobalInstallStatus {
   environments: Array<{
@@ -249,6 +251,25 @@ export function installAgentsGlobally(): GlobalInstallSummary {
   return { environments, commandFilesCopied, commandFilesOverwritten };
 }
 
+// ─── Agents par repo ────────────────────────────────────────────────────────
+
+function getEnvironmentStatus(repoPath: string, id: AgentEnvironmentId): AgentEnvironmentStatus {
+  const env = ENVIRONMENTS[id];
+  const markerExists = existsSync(resolve(repoPath, env.markerRelativePath));
+  const targetPath = resolve(repoPath, env.targetRelativePath);
+  const installedCount = COMMAND_TEMPLATE_FILES.filter((file) =>
+    existsSync(resolve(targetPath, file))).length;
+
+  return {
+    id,
+    label: env.label,
+    targetPath,
+    markerExists,
+    installedCount,
+    totalExpected: COMMAND_TEMPLATE_FILES.length,
+  };
+}
+
 export function getAgentInstallStatus(repoPath: string): AgentInstallStatus {
   const resolvedRepoPath = resolve(repoPath);
   const environments: AgentEnvironmentStatus[] = [
@@ -259,7 +280,7 @@ export function getAgentInstallStatus(repoPath: string): AgentInstallStatus {
 
   return {
     repoPath: resolvedRepoPath,
-    hasTiqoraConfig: existsSync(resolve(resolvedRepoPath, '.tiqora.yaml')),
+    hasNakirosConfig: existsSync(resolve(resolvedRepoPath, '.nakiros.yaml')),
     environments,
   };
 }
@@ -274,13 +295,9 @@ export function installAgents(request: AgentInstallRequest): AgentInstallSummary
   }
 
   const force = request.force ?? true;
-  const runtimeSourceDir = getRuntimeDir();
 
   let commandFilesCopied = 0;
   let commandFilesOverwritten = 0;
-  let runtimeFilesCopied = 0;
-  let runtimeFilesOverwritten = 0;
-  let workspaceDirsCreated = 0;
 
   for (const target of request.targets) {
     const env = ENVIRONMENTS[target];
@@ -297,28 +314,31 @@ export function installAgents(request: AgentInstallRequest): AgentInstallSummary
     }
   }
 
-  const runtimeTargetDir = resolve(repoPath, '_tiqora');
-  const runtimeCopy = copyDirectoryRecursive(runtimeSourceDir, runtimeTargetDir, force);
-  runtimeFilesCopied += runtimeCopy.copied;
-  runtimeFilesOverwritten += runtimeCopy.overwritten;
-
-  const workspaceRoot = resolve(repoPath, '.tiqora');
-  for (const relativeDir of TIQORA_WORKSPACE_DIRECTORIES) {
-    const target = resolve(workspaceRoot, relativeDir);
-    if (!existsSync(target)) workspaceDirsCreated += 1;
-    mkdirSync(target, { recursive: true });
-  }
-
-  const gitignorePatched = patchGitignore(repoPath);
-
   return {
     repoPath,
     targets: request.targets,
     commandFilesCopied,
     commandFilesOverwritten,
-    runtimeFilesCopied,
-    runtimeFilesOverwritten,
-    workspaceDirsCreated,
-    gitignorePatched,
+    runtimeFilesCopied: 0,
+    runtimeFilesOverwritten: 0,
+    workspaceDirsCreated: 0,
+    gitignorePatched: false,
   };
+}
+
+export function ensureCommandsInRepo(repoPath: string, provider: AgentProvider): void {
+  const resolvedRepoPath = resolve(repoPath);
+  if (!existsSync(resolvedRepoPath) || !lstatSync(resolvedRepoPath).isDirectory()) {
+    throw new Error(`Répertoire invalide: ${resolvedRepoPath}`);
+  }
+
+  const env = ENVIRONMENTS[provider];
+  const targetDir = resolve(resolvedRepoPath, env.targetRelativePath);
+  mkdirSync(targetDir, { recursive: true });
+
+  for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+    const targetPath = resolve(targetDir, fileName);
+    if (existsSync(targetPath)) continue;
+    writeFileSync(targetPath, content, 'utf8');
+  }
 }

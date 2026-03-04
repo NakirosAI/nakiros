@@ -11,7 +11,7 @@ export interface AgentEnvironmentStatus {
 
 export interface AgentInstallStatus {
   repoPath: string;
-  hasTiqoraConfig: boolean;
+  hasNakirosConfig: boolean;
   environments: AgentEnvironmentStatus[];
 }
 

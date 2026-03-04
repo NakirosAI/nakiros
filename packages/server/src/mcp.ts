@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Request, Response } from "express";
 
-import type { StoredWorkspace } from "@tiqora/shared";
+import type { StoredWorkspace } from "@nakiros/shared";
 
 import { registerWorkspaceTools } from "./tools/workspace.js";
 
@@ -12,7 +12,7 @@ export async function handleMcpRequest(
   workspace: StoredWorkspace
 ): Promise<void> {
   const server = new McpServer({
-    name: "tiqora",
+    name: "nakiros",
     version: "0.0.1"
   });
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { LocalTicket, LocalEpic, TicketStatus, TicketPriority } from '@tiqora/shared';
+import type { LocalTicket, LocalEpic, TicketStatus, TicketPriority } from '@nakiros/shared';
 
 interface Props {
   initialStatus: TicketStatus;
@@ -55,7 +55,7 @@ export default function TicketForm({
       updatedAt: new Date().toISOString(),
     };
 
-    await window.tiqora.saveTicket(workspaceId, ticket);
+    await window.nakiros.saveTicket(workspaceId, ticket);
     setSaving(false);
     onCreated(ticket);
   }
@@ -78,7 +78,7 @@ export default function TicketForm({
         onSubmit={handleSubmit}
         style={{
           background: 'var(--bg-soft)',
-          borderRadius: 2,
+          borderRadius: 10,
           padding: 24,
           width: 480,
           maxWidth: '100%',
@@ -168,7 +168,7 @@ export default function TicketForm({
 const inputStyle: React.CSSProperties = {
   padding: '8px 12px',
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   fontSize: 14,
   color: 'var(--text)',
   width: '100%',
@@ -182,7 +182,7 @@ function btnPrimary(disabled: boolean): React.CSSProperties {
     background: disabled ? 'var(--line-strong)' : 'var(--primary)',
     color: '#fff',
     border: 'none',
-    borderRadius: 2,
+    borderRadius: 10,
     cursor: disabled ? 'not-allowed' : 'pointer',
     fontSize: 14,
     fontWeight: 700,
@@ -194,7 +194,7 @@ const btnSecondary: React.CSSProperties = {
   background: 'var(--bg-muted)',
   color: 'var(--text)',
   border: '1px solid var(--line)',
-  borderRadius: 2,
+  borderRadius: 10,
   cursor: 'pointer',
   fontSize: 14,
   fontWeight: 600,

@@ -2,73 +2,45 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BookOpen } from 'lucide-react';
-import type { ResolvedLanguage, StoredWorkspace } from '@tiqora/shared';
-import AgentPanel from './AgentPanel';
+import type { ResolvedLanguage, StoredWorkspace } from '@nakiros/shared';
 import PrdAssistant from './PrdAssistant';
 import { WORKFLOW_CAPABILITIES } from '../utils/workflow-capabilities';
-
-type AgentType = 'brainstorming' | 'architect' | 'pm' | 'chat';
-
-interface ActiveAgent {
-  type: AgentType;
-  message: string;
-  key: number;
-}
 
 interface Props {
   workspace: StoredWorkspace;
   language: ResolvedLanguage;
   onDocumentsChanged?(docsCount: number): void;
   openPrdAssistantSignal?: number;
-  openFreeChatSignal?: number;
+  onOpenChat?(): void;
 }
 
-function buildAgentMessage(type: AgentType): string {
-  switch (type) {
-    case 'architect':
-      return '/tiq-workflow-generate-context';
-    case 'brainstorming':
-      return '/tiq-agent-brainstorming';
-    case 'pm':
-      return '/tiq-workflow-fetch-project-context';
-    case 'chat':
-      return '';
-  }
-}
+// Names (without .md ext) expected in each repo's _nakiros/ subfolder
+const NAKIROS_EXPECTED_NAMES = ['architecture', 'conventions', 'llms.txt'];
 
 export default function ContextPanel({
   workspace,
   language,
   onDocumentsChanged,
   openPrdAssistantSignal,
-  openFreeChatSignal,
+  onOpenChat,
 }: Props) {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<ScannedDoc | null>(null);
   const [docContent, setDocContent] = useState<string | null>(null);
-  const [activeAgent, setActiveAgent] = useState<ActiveAgent | null>(null);
-  const [primaryRepoPath, setPrimaryRepoPath] = useState<string | null>(null);
   const [showPrdAssistant, setShowPrdAssistant] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
   const [lastScanDurationMs, setLastScanDurationMs] = useState<number | null>(null);
   const [lastScanDocsCount, setLastScanDocsCount] = useState<number | null>(null);
   const [scanStartedAt, setScanStartedAt] = useState<number | null>(null);
   const [scanElapsedMs, setScanElapsedMs] = useState(0);
   const [lastScanAt, setLastScanAt] = useState<number | null>(null);
   const scanningRef = useRef(false);
-
   const isFr = language === 'fr';
   const hasRepos = workspace.repos.length > 0;
   const pmWorkflow = useMemo(
     () => WORKFLOW_CAPABILITIES.find((capability) => capability.id === 'fetch-project-context'),
     [],
   );
-
-  function pushToast(message: string) {
-    setToast(message);
-    window.setTimeout(() => setToast(null), 2800);
-  }
 
   useEffect(() => {
     if (!scanStartedAt || !scanning) return;
@@ -85,11 +57,13 @@ export default function ContextPanel({
     const startedAt = Date.now();
     setScanStartedAt(startedAt);
     setScanElapsedMs(0);
-    void window.tiqora
+    void window.nakiros
       .scanDocs(workspace)
       .then((result) => {
         setScanResult(result);
-        const docsCount = result.repos.reduce((sum, repo) => sum + repo.docs.length, 0);
+        const repoDocsCount = result.repos.reduce((sum, repo) => sum + repo.docs.length, 0);
+        const globalDocsCount = result.globalSection?.docs.length ?? 0;
+        const docsCount = repoDocsCount + globalDocsCount;
         setLastScanDocsCount(docsCount);
         setLastScanDurationMs(Date.now() - startedAt);
         setLastScanAt(Date.now());
@@ -110,7 +84,6 @@ export default function ContextPanel({
   }
 
   useEffect(() => {
-    setActiveAgent(null);
     setSelectedDoc(null);
     setDocContent(null);
     scan();
@@ -122,7 +95,7 @@ export default function ContextPanel({
       setDocContent(null);
       return;
     }
-    void window.tiqora
+    void window.nakiros
       .readDoc(selectedDoc.absolutePath)
       .then(setDocContent)
       .catch(() => setDocContent(isFr ? '_Impossible de lire ce fichier._' : '_Unable to read this file._'));
@@ -133,36 +106,9 @@ export default function ContextPanel({
     setShowPrdAssistant(true);
   }, [openPrdAssistantSignal]);
 
-  useEffect(() => {
-    if (!openFreeChatSignal) return;
-    if (!hasRepos) return;
-    void launchAgent('chat');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openFreeChatSignal, hasRepos]);
-
-  async function launchAgent(type: AgentType, message?: string) {
-    setSelectedDoc(null);
-    setDocContent(null);
-    const cwd = await window.tiqora.syncWorkspaceYaml(workspace);
-    setPrimaryRepoPath(cwd);
-    setActiveAgent({ type, message: message ?? buildAgentMessage(type), key: Date.now() });
-  }
-
-  function handleAgentDone() {
-    if (activeAgent?.type && activeAgent.type !== 'chat') {
-      scan();
-    }
-    if (activeAgent?.type === 'brainstorming') {
-      pushToast(
-        isFr
-          ? 'Session brainstorming terminée. Vérifie .tiqora/context/brainstorming.md.'
-          : 'Brainstorming session completed. Check .tiqora/context/brainstorming.md.',
-      );
-    }
-  }
-
   return (
     <div style={{ display: 'flex', flex: 1, width: '100%', minWidth: 0, height: '100%', overflow: 'hidden' }}>
+      {/* ── Left panel ── */}
       <div
         style={{
           width: 320,
@@ -173,6 +119,7 @@ export default function ContextPanel({
           flexShrink: 0,
         }}
       >
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 0', flexShrink: 0 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -205,62 +152,110 @@ export default function ContextPanel({
           </button>
         </div>
 
+        {/* Document list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
           {scanning && !scanResult ? (
             <p style={{ padding: '8px 14px', fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
               {isFr ? 'Synchronisation…' : 'Syncing…'}
             </p>
-          ) : !scanResult || scanResult.repos.length === 0 ? (
+          ) : !scanResult ? (
             <p style={{ padding: '8px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
               {hasRepos
                 ? (isFr ? 'Aucun document trouvé' : 'No documents found')
                 : (isFr ? 'Aucun repo configuré' : 'No repository configured')}
             </p>
           ) : (
-            scanResult.repos.map((repo) => (
-              <div key={repo.repoPath}>
-                <div
-                  style={{
-                    padding: '6px 14px 2px',
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: 'var(--text-muted)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                  }}
-                >
-                  {repo.repoName}
-                </div>
-                {repo.docs.map((doc) => (
-                  <button
-                    key={doc.absolutePath}
-                    onClick={() => {
-                      setActiveAgent(null);
-                      setSelectedDoc(doc);
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '4px 14px',
-                      background: selectedDoc?.absolutePath === doc.absolutePath ? 'var(--bg-muted)' : 'transparent',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--text)',
-                      fontSize: 12,
-                    }}
-                  >
-                    <span style={{ fontSize: 11, flexShrink: 0 }}>{doc.isGenerated ? '🤖' : '📄'}</span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</span>
-                  </button>
-                ))}
-              </div>
-            ))
+            <>
+              {/* ── GLOBAL SECTION ── */}
+              <SectionHeader label="GLOBAL" />
+              {scanResult.globalSection.docs.length === 0 && scanResult.globalSection.missingNames.length === 0 ? (
+                <EmptyGlobalSection isFr={isFr} onGenerate={() => onOpenChat?.()} />
+              ) : (
+                <>
+                  {scanResult.globalSection.docs.map((doc) => (
+                    <DocRow
+                      key={doc.absolutePath}
+                      doc={doc}
+                      isSelected={selectedDoc?.absolutePath === doc.absolutePath}
+                      isFr={isFr}
+                      onSelect={() => setSelectedDoc(doc)}
+                      onRegenerate={() => onOpenChat?.()}
+                    />
+                  ))}
+                  {scanResult.globalSection.missingNames.map((name) => (
+                    <MissingDocRow
+                      key={name}
+                      name={name}
+                      isFr={isFr}
+                      onGenerate={() => onOpenChat?.()}
+                    />
+                  ))}
+                </>
+              )}
+
+              {/* ── PER-REPO SECTIONS ── */}
+              {scanResult.repos.map((repo) => {
+                const rootDocs = repo.docs.filter((d) => !d.relativePath.startsWith('_nakiros/'));
+                const nakirosDocs = repo.docs.filter((d) => d.relativePath.startsWith('_nakiros/'));
+                const nakirosDocNames = new Set(nakirosDocs.map((d) => d.name));
+                const missingNakiros = NAKIROS_EXPECTED_NAMES.filter((n) => !nakirosDocNames.has(n));
+
+                return (
+                  <div key={repo.repoPath}>
+                    <SectionHeader label={repo.repoName.toUpperCase()} />
+
+                    {rootDocs.map((doc) => (
+                      <DocRow
+                        key={doc.absolutePath}
+                        doc={doc}
+                        isSelected={selectedDoc?.absolutePath === doc.absolutePath}
+                        isFr={isFr}
+                        onSelect={() => setSelectedDoc(doc)}
+                      />
+                    ))}
+
+                    {(nakirosDocs.length > 0 || missingNakiros.length > 0) && (
+                      <div>
+                        <div
+                          style={{
+                            padding: '5px 14px 2px 24px',
+                            fontSize: 10,
+                            color: 'var(--text-muted)',
+                            fontFamily: 'monospace',
+                          }}
+                        >
+                          _nakiros/
+                        </div>
+                        {nakirosDocs.map((doc) => (
+                          <DocRow
+                            key={doc.absolutePath}
+                            doc={doc}
+                            isSelected={selectedDoc?.absolutePath === doc.absolutePath}
+                            isFr={isFr}
+                            onSelect={() => setSelectedDoc(doc)}
+                            onRegenerate={() => onOpenChat?.()}
+                            indent
+                          />
+                        ))}
+                        {missingNakiros.map((name) => (
+                          <MissingDocRow
+                            key={name}
+                            name={name}
+                            isFr={isFr}
+                            onGenerate={() => onOpenChat?.()}
+                            indent
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
 
+        {/* AI Actions */}
         <div style={{ borderTop: '1px solid var(--line)', padding: '10px 12px', flexShrink: 0 }}>
           <p
             style={{
@@ -277,30 +272,26 @@ export default function ContextPanel({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             <ActionButton
               label={isFr ? 'PRD Assistant' : 'PRD Assistant'}
-              description="/tiq-agent-brainstorming"
+              description="/nak-agent-brainstorming"
               recommended
               onClick={() => setShowPrdAssistant(true)}
             />
-            {hasRepos && (
-              <ActionButton
-                label={isFr ? 'Générer le contexte' : 'Generate context'}
-                description="/tiq-workflow-generate-context"
-                onClick={() => void launchAgent('architect')}
-              />
-            )}
+            <ActionButton
+              label={isFr ? 'Générer le contexte' : 'Generate context'}
+              description="/nak-workflow-generate-context"
+              onClick={() => onOpenChat?.()}
+            />
             <ActionButton
               label={isFr ? 'Contexte PM' : 'PM context'}
-              description="/tiq-workflow-fetch-project-context"
+              description="/nak-workflow-fetch-project-context"
               badge={pmWorkflow?.status === 'beta' ? 'Beta' : undefined}
-              onClick={() => void launchAgent('pm')}
+              onClick={() => onOpenChat?.()}
             />
-            {hasRepos && (
-              <ActionButton
-                label={isFr ? 'Discussion libre' : 'Open chat'}
-                description={isFr ? 'Chat agent sans workflow impose' : 'Agent chat without predefined workflow'}
-                onClick={() => void launchAgent('chat')}
-              />
-            )}
+            <ActionButton
+              label={isFr ? 'Discussion libre' : 'Open chat'}
+              description={isFr ? 'Chat agent sans workflow imposé' : 'Agent chat without predefined workflow'}
+              onClick={() => onOpenChat?.()}
+            />
             {pmWorkflow?.status === 'beta' && (
               <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
                 {pmWorkflow.fallbackMessage}
@@ -310,22 +301,14 @@ export default function ContextPanel({
         </div>
       </div>
 
+      {/* ── Right panel (viewer) ── */}
       <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {activeAgent ? (
-          <div style={{ flex: 1, minWidth: 0, width: '100%', overflow: 'hidden' }}>
-            <AgentPanel
-              key={activeAgent.key}
-              workspaceId={workspace.id}
-              repos={workspace.repos}
-              initialRepoPath={primaryRepoPath ?? scanResult?.primaryRepoPath}
-              initialMessage={activeAgent.message || undefined}
-              hideRepoSelector={activeAgent.type !== 'chat'}
-              onDone={handleAgentDone}
-            />
-          </div>
-        ) : selectedDoc && docContent !== null ? (
+        {selectedDoc && docContent !== null ? (
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }} className="agent-md">
-            <p style={{ margin: '0 0 16px', fontSize: 11, color: 'var(--text-muted)' }}>{selectedDoc.relativePath}</p>
+            <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--text-muted)' }}>{selectedDoc.relativePath}</p>
+            {selectedDoc.isGenerated && (
+              <FreshnessBanner doc={selectedDoc} isFr={isFr} onRegenerate={() => onOpenChat?.()} />
+            )}
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{docContent}</ReactMarkdown>
           </div>
         ) : scanning && !scanResult ? (
@@ -341,31 +324,260 @@ export default function ContextPanel({
           />
         )}
       </div>
+
       {showPrdAssistant && (
         <PrdAssistant
           language={language}
           onClose={() => setShowPrdAssistant(false)}
-          onSubmit={(message) => launchAgent('brainstorming', message)}
+          onSubmit={async () => { setShowPrdAssistant(false); onOpenChat?.(); }}
         />
       )}
-      {toast && (
-        <div
+    </div>
+  );
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function getDaysAgo(lastModifiedAt?: number): number | null {
+  if (!lastModifiedAt) return null;
+  return Math.floor((Date.now() - lastModifiedAt) / (1000 * 60 * 60 * 24));
+}
+
+function freshnessColor(days: number): string {
+  if (days < 3) return 'var(--text-muted)';
+  if (days < 7) return '#f59e0b';
+  return '#ef4444';
+}
+
+function freshnessLabel(days: number, isGenerated: boolean, isFr: boolean): string {
+  const verb = isGenerated
+    ? (isFr ? 'Généré' : 'Generated')
+    : (isFr ? 'Modifié' : 'Modified');
+  if (days === 0) return isFr ? `${verb} aujourd'hui` : `${verb} today`;
+  if (days === 1) return isFr ? `${verb} il y a 1 jour` : `${verb} 1 day ago`;
+  return isFr ? `${verb} il y a ${days} jours` : `${verb} ${days} days ago`;
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        padding: '8px 14px 2px',
+        fontSize: 10,
+        fontWeight: 700,
+        color: 'var(--text-muted)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
+function DocRow({
+  doc,
+  isSelected,
+  isFr,
+  onSelect,
+  onRegenerate,
+  indent,
+}: {
+  doc: ScannedDoc;
+  isSelected: boolean;
+  isFr: boolean;
+  onSelect(): void;
+  onRegenerate?(): void;
+  indent?: boolean;
+}) {
+  const days = getDaysAgo(doc.lastModifiedAt);
+  const label = days !== null ? freshnessLabel(days, doc.isGenerated, isFr) : null;
+  const color = days !== null ? freshnessColor(days) : 'var(--text-muted)';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: indent ? '3px 8px 3px 28px' : '3px 8px 3px 14px',
+        background: isSelected ? 'var(--bg-muted)' : 'transparent',
+      }}
+    >
+      <button
+        onClick={onSelect}
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          gap: 1,
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'var(--text)',
+          textAlign: 'left',
+          padding: '1px 0',
+          minWidth: 0,
+        }}
+      >
+        <span style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+          {doc.name}
+        </span>
+        {label && (
+          <span style={{ fontSize: 10, color }}>{label}</span>
+        )}
+      </button>
+      {doc.isGenerated && onRegenerate && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRegenerate(); }}
+          title={isFr ? 'Régénérer' : 'Regenerate'}
           style={{
-            position: 'fixed',
-            right: 16,
-            bottom: 14,
-            background: '#0f172a',
-            color: '#fff',
-            borderRadius: 2,
-            padding: '9px 12px',
-            fontSize: 12,
-            boxShadow: 'var(--shadow-lg)',
-            zIndex: 1200,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-muted)',
+            fontSize: 13,
+            padding: '2px 3px',
+            flexShrink: 0,
+            lineHeight: 1,
           }}
         >
-          {toast}
-        </div>
+          ↻
+        </button>
       )}
+    </div>
+  );
+}
+
+function MissingDocRow({
+  name,
+  isFr,
+  onGenerate,
+  indent,
+}: {
+  name: string;
+  isFr: boolean;
+  onGenerate(): void;
+  indent?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 6,
+        padding: indent ? '3px 8px 3px 28px' : '3px 8px 3px 14px',
+      }}
+    >
+      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {name}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+          {isFr ? 'Non généré' : 'Not generated'}
+        </span>
+        <button
+          onClick={onGenerate}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--line)',
+            borderRadius: 4,
+            cursor: 'pointer',
+            color: 'var(--text-muted)',
+            fontSize: 10,
+            padding: '1px 5px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {isFr ? 'Générer →' : 'Generate →'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EmptyGlobalSection({ isFr, onGenerate }: { isFr: boolean; onGenerate(): void }) {
+  return (
+    <div style={{ padding: '4px 14px 8px' }}>
+      <p style={{ margin: '0 0 6px', fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+        {isFr ? 'Aucun contexte global généré.' : 'No global context generated.'}
+      </p>
+      <button
+        onClick={onGenerate}
+        style={{
+          background: 'var(--bg-soft)',
+          border: '1px solid var(--line)',
+          borderRadius: 6,
+          cursor: 'pointer',
+          color: 'var(--text-muted)',
+          fontSize: 11,
+          padding: '3px 8px',
+        }}
+      >
+        {isFr ? 'Générer le contexte global →' : 'Generate global context →'}
+      </button>
+    </div>
+  );
+}
+
+function FreshnessBanner({
+  doc,
+  isFr,
+  onRegenerate,
+}: {
+  doc: ScannedDoc;
+  isFr: boolean;
+  onRegenerate(): void;
+}) {
+  const days = getDaysAgo(doc.lastModifiedAt);
+  if (days === null) return null;
+
+  const isStale = days >= 7;
+  const color = freshnessColor(days);
+  const label = isStale
+    ? (isFr
+      ? `⚠ Généré il y a ${days} jours — peut ne plus être à jour`
+      : `⚠ Generated ${days} days ago — may be outdated`)
+    : (isFr
+      ? `Généré ${days === 0 ? "aujourd'hui" : days === 1 ? 'il y a 1 jour' : `il y a ${days} jours`}`
+      : `Generated ${days === 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`}`);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        padding: '6px 10px',
+        marginBottom: 14,
+        background: isStale ? 'rgba(245, 158, 11, 0.08)' : 'var(--bg-soft)',
+        border: `1px solid ${isStale ? '#f59e0b' : 'var(--line)'}`,
+        borderRadius: 8,
+        fontSize: 11,
+        color,
+      }}
+    >
+      <span>{label}</span>
+      <button
+        onClick={onRegenerate}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          fontSize: 11,
+          color: 'var(--primary)',
+          fontWeight: 600,
+          flexShrink: 0,
+          padding: 0,
+        }}
+      >
+        {isFr ? 'Régénérer →' : 'Regenerate →'}
+      </button>
     </div>
   );
 }
@@ -394,7 +606,7 @@ function ActionButton({
         padding: '7px 8px',
         background: recommended ? 'var(--primary-soft)' : 'var(--bg-soft)',
         border: `1px solid ${recommended ? 'var(--primary)' : 'var(--line)'}`,
-        borderRadius: 2,
+        borderRadius: 10,
         cursor: 'pointer',
         width: '100%',
       }}
@@ -410,7 +622,7 @@ function ActionButton({
               color: '#92400e',
               background: '#fef3c7',
               border: '1px solid #f59e0b',
-              borderRadius: 2,
+              borderRadius: 10,
               padding: '1px 4px',
               verticalAlign: 'middle',
             }}

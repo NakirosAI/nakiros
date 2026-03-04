@@ -1,15 +1,16 @@
 import { existsSync, mkdirSync } from 'fs';
 import type { Dirent } from 'fs';
-import { readdir } from 'fs/promises';
+import { readdir, readFile, stat } from 'fs/promises';
 import { homedir } from 'os';
 import { basename, dirname, join, resolve } from 'path';
-import type { StoredWorkspace } from '@tiqora/shared';
+import type { StoredWorkspace } from '@nakiros/shared';
 
 export interface ScannedDoc {
   name: string;
   relativePath: string;
   absolutePath: string;
   isGenerated: boolean;
+  lastModifiedAt?: number;
 }
 
 export interface ScannedRepo {
@@ -18,8 +19,14 @@ export interface ScannedRepo {
   docs: ScannedDoc[];
 }
 
+export interface GlobalSection {
+  docs: ScannedDoc[];
+  missingNames: string[];
+}
+
 export interface ScanResult {
   repos: ScannedRepo[];
+  globalSection: GlobalSection;
   primaryRepoPath: string;
 }
 
@@ -33,7 +40,14 @@ const PRIORITY_ROOT_FILES = new Set([
   'CONTRIBUTING.md', 'CHANGELOG.md', 'llms.txt',
 ]);
 
-const PRIORITY_DIRS = ['docs', '_bmad-output'];
+const PRIORITY_DIRS = ['docs', '_bmad-output', '_nakiros'];
+const GENERATED_TIQUORA_PREFIXES = [
+  '.nakiros/context/',
+  '.nakiros/workspace/',
+  '_nakiros/',
+];
+
+const GLOBAL_EXPECTED_FILES = ['global-context.md', 'inter-repo.md', 'pm-context.md'];
 
 function isExcluded(relPath: string): boolean {
   const normalized = relPath.replace(/\\/g, '/');
@@ -74,7 +88,8 @@ async function walkMarkdown(repoPath: string, llmDocs: string[]): Promise<Scanne
 
       if (!entry.isFile()) continue;
       const normalized = nextRelPath.replace(/\\/g, '/');
-      if (!normalized.toLowerCase().endsWith('.md')) continue;
+      const lowerName = entry.name.toLowerCase();
+      if (!lowerName.endsWith('.md') && lowerName !== 'llms.txt') continue;
       if (isExcluded(normalized)) continue;
 
       const absolutePath = join(current.absPath, entry.name);
@@ -84,7 +99,9 @@ async function walkMarkdown(repoPath: string, llmDocs: string[]): Promise<Scanne
 
       const fileName = basename(normalized);
       const dirPart = dirname(normalized);
-      const isGenerated = normalized.startsWith('.tiqora/context/');
+      const isGenerated = GENERATED_TIQUORA_PREFIXES.some((prefix) =>
+        normalized.startsWith(prefix),
+      );
 
       let priority: number;
       if (llmDocsSet.has(normalizedAbsPath)) {
@@ -99,6 +116,14 @@ async function walkMarkdown(repoPath: string, llmDocs: string[]): Promise<Scanne
         continue;
       }
 
+      let lastModifiedAt: number | undefined;
+      try {
+        const filestat = await stat(absolutePath);
+        lastModifiedAt = filestat.mtimeMs;
+      } catch {
+        // ignore
+      }
+
       results.push({
         priority,
         doc: {
@@ -106,6 +131,7 @@ async function walkMarkdown(repoPath: string, llmDocs: string[]): Promise<Scanne
           relativePath: normalized,
           absolutePath,
           isGenerated,
+          lastModifiedAt,
         },
       });
     }
@@ -123,24 +149,83 @@ function getPrimaryRepoPath(workspace: StoredWorkspace): string {
   if (workspace.repos.length > 0) {
     return workspace.repos[0]!.localPath;
   }
-  const scratchDir = join(homedir(), '.tiqora', 'workspaces', workspace.id);
+  const scratchDir = join(homedir(), '.nakiros', 'workspaces', workspace.id);
   mkdirSync(scratchDir, { recursive: true });
   return scratchDir;
+}
+
+async function scanGlobalSection(workspaceId: string): Promise<GlobalSection> {
+  const contextDir = join(homedir(), '.nakiros', 'workspaces', workspaceId, 'context');
+  const docs: ScannedDoc[] = [];
+  const missingNames: string[] = [];
+
+  for (const filename of GLOBAL_EXPECTED_FILES) {
+    const absolutePath = join(contextDir, filename);
+    if (existsSync(absolutePath)) {
+      let lastModifiedAt: number | undefined;
+      try {
+        const metaPath = join(contextDir, 'meta.json');
+        if (existsSync(metaPath)) {
+          const raw = await readFile(metaPath, 'utf-8');
+          const meta = JSON.parse(raw) as Record<string, { generatedAt?: number }>;
+          lastModifiedAt = meta[filename]?.generatedAt;
+        }
+        if (!lastModifiedAt) {
+          const filestat = await stat(absolutePath);
+          lastModifiedAt = filestat.mtimeMs;
+        }
+      } catch {
+        // ignore
+      }
+      docs.push({
+        name: filename.replace(/\.md$/i, ''),
+        relativePath: `context/${filename}`,
+        absolutePath,
+        isGenerated: true,
+        lastModifiedAt,
+      });
+    } else {
+      missingNames.push(filename.replace(/\.md$/i, ''));
+    }
+  }
+
+  return { docs, missingNames };
 }
 
 export async function scanWorkspaceDocs(workspace: StoredWorkspace): Promise<ScanResult> {
   const primaryRepoPath = getPrimaryRepoPath(workspace);
 
-  const repoResults = await Promise.all(
-    workspace.repos
-      .filter((repo) => existsSync(repo.localPath))
-      .map(async (repo) => ({
-        repoName: repo.name,
-        repoPath: repo.localPath,
-        docs: await walkMarkdown(repo.localPath, repo.llmDocs),
-      })),
-  );
+  const [repoResults, globalSection] = await Promise.all([
+    Promise.all(
+      workspace.repos
+        .filter((repo) => existsSync(repo.localPath))
+        .map(async (repo) => ({
+          repoName: repo.name,
+          repoPath: repo.localPath,
+          docs: await walkMarkdown(repo.localPath, repo.llmDocs),
+        })),
+    ),
+    scanGlobalSection(workspace.id),
+  ]);
+
   const repos = repoResults.filter((r) => r.docs.length > 0);
+
+  const workspaceRootPath = workspace.workspacePath?.trim();
+  const hasDistinctWorkspaceRoot =
+    Boolean(workspaceRootPath) &&
+    !workspace.repos.some((repo) => resolve(repo.localPath) === resolve(workspaceRootPath!)) &&
+    existsSync(workspaceRootPath!);
+
+  if (hasDistinctWorkspaceRoot && workspaceRootPath) {
+    const workspaceDocs = await walkMarkdown(workspaceRootPath, []);
+    if (workspaceDocs.length > 0) {
+      repos.unshift({
+        repoName: `${workspace.name} (workspace)`,
+        repoPath: workspaceRootPath,
+        docs: workspaceDocs,
+      });
+    }
+  }
 
   // For no-repo workspaces, scan the scratch dir (may have brainstorming.md etc.)
   if (workspace.repos.length === 0 && existsSync(primaryRepoPath)) {
@@ -154,5 +239,5 @@ export async function scanWorkspaceDocs(workspace: StoredWorkspace): Promise<Sca
     }
   }
 
-  return { repos, primaryRepoPath };
+  return { repos, globalSection, primaryRepoPath };
 }

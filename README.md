@@ -1,4 +1,4 @@
-# Tiqora
+# Nakiros
 
 Agentic delivery CLI for solo developers: challenge ticket quality, orchestrate PM/SM/Dev flows, and keep execution traceable with minimal overhead.
 
@@ -10,12 +10,12 @@ What is production-ready today:
 
 - CLI bootstrap and installation flow (`init`, `install`)
 - Multi-environment command deployment (Codex, Cursor, Claude Code, or manual path)
-- Runtime workspace bootstrap (`.tiqora/`) and workflow engine copy (`_tiqora/`)
+- Runtime workspace bootstrap (`.nakiros/`) and workflow engine copy (`_nakiros/`)
 - Implemented execution workflow: `dev-story`
 
-## Why Tiqora
+## Why Nakiros
 
-Tiqora is built for developers who want to stay in coding flow while keeping project hygiene:
+Nakiros is built for developers who want to stay in coding flow while keeping project hygiene:
 
 - clear ticket challenge gate before coding
 - explicit persona orchestration (PM for challenge, Dev for implementation)
@@ -31,37 +31,37 @@ Tiqora is built for developers who want to stay in coding flow while keeping pro
 In any target repository:
 
 ```bash
-npx @tiqora/tiqora@dev --version
+npx @nakiros/nakiros@dev --version
 ```
 
-Initialize Tiqora:
+Initialize Nakiros:
 
 ```bash
-npx @tiqora/tiqora@dev init
+npx @nakiros/nakiros@dev init
 ```
 
 Redeploy/update prompts and runtime assets:
 
 ```bash
-npx @tiqora/tiqora@dev install
+npx @nakiros/nakiros@dev install
 ```
 
 Use `-f` to overwrite existing command files without prompt:
 
 ```bash
-npx @tiqora/tiqora@dev init -f
-npx @tiqora/tiqora@dev install -f
+npx @nakiros/nakiros@dev init -f
+npx @nakiros/nakiros@dev install -f
 ```
 
 ## Install (from source)
 
 ```bash
-git clone git@github.com:Tiqora/tiqora.git
-cd tiqora
+git clone git@github.com:Nakiros/nakiros.git
+cd nakiros
 npm install
 npm run build
 npm link
-tiqora --version
+nak --version
 ```
 
 If you do not want to link globally:
@@ -73,10 +73,10 @@ node dist/index.cjs --version
 
 ## Quick Start
 
-In the target repository where you want Tiqora:
+In the target repository where you want Nakiros:
 
 ```bash
-npx @tiqora/tiqora@dev init
+npx @nakiros/nakiros@dev init
 ```
 
 `init` does the following:
@@ -84,36 +84,36 @@ npx @tiqora/tiqora@dev init
 1. asks for PM tool (`jira`, `gitlab`, `none`), git host, and branch pattern
 2. asks for user/language defaults
 3. creates/updates:
-   - project config: `.tiqora.yaml`
-   - user profile: `~/.tiqora/config.yaml`
+   - project config: `.nakiros.yaml`
+   - user profile: `~/.nakiros/config.yaml`
 4. deploys prompt commands to detected environments
-5. creates local workspace folders under `.tiqora/`
-6. copies runtime assets under `_tiqora/`
+5. creates local workspace folders under `.nakiros/`
+6. copies runtime assets under `_nakiros/`
 
 To redeploy/update prompts and runtime assets later:
 
 ```bash
-npx @tiqora/tiqora@dev install
+npx @nakiros/nakiros@dev install
 ```
 
 Use `-f` to overwrite existing command files without prompt:
 
 ```bash
-npx @tiqora/tiqora@dev init -f
-npx @tiqora/tiqora@dev install -f
+npx @nakiros/nakiros@dev init -f
+npx @nakiros/nakiros@dev install -f
 ```
 
 ## Generated Command Files
 
-Tiqora installs these command templates into your AI environment command folder:
+Nakiros installs these command templates into your AI environment command folder:
 
-- `tiq-agent-dev.md`
-- `tiq-agent-sm.md`
-- `tiq-agent-pm.md`
-- `tiq-workflow-create-story.md`
-- `tiq-workflow-dev-story.md`
-- `tiq-workflow-fetch-project-context.md`
-- `tiq-workflow-create-ticket.md`
+- `nak-agent-dev.md`
+- `nak-agent-sm.md`
+- `nak-agent-pm.md`
+- `nak-workflow-create-story.md`
+- `nak-workflow-dev-story.md`
+- `nak-workflow-fetch-project-context.md`
+- `nak-workflow-create-ticket.md`
 
 Supported auto-detected targets:
 
@@ -123,7 +123,7 @@ Supported auto-detected targets:
 
 ## Config
 
-Project config (`.tiqora.yaml`, required):
+Project config (`.nakiros.yaml`, required):
 
 ```yaml
 pm_tool: jira
@@ -134,7 +134,7 @@ jira:
   board_id: '123'
 ```
 
-User profile (`~/.tiqora/config.yaml`, optional base):
+User profile (`~/.nakiros/config.yaml`, optional base):
 
 ```yaml
 user_name: 'Developer'
@@ -147,7 +147,7 @@ Effective runtime config = global profile (base) + project config (override).
 
 ## Dev Story Workflow
 
-Current implemented workflow: `_tiqora/workflows/4-implementation/dev-story`.
+Current implemented workflow: `_nakiros/workflows/4-implementation/dev-story`.
 
 High-level behavior:
 
@@ -167,13 +167,13 @@ Persona behavior in this workflow:
 
 Artifacts are persisted under:
 
-- `.tiqora/state/active-run.json`
-- `.tiqora/workflows/runs/`
-- `.tiqora/workflows/steps/`
+- `.nakiros/state/active-run.json`
+- `.nakiros/workflows/runs/`
+- `.nakiros/workflows/steps/`
 
 ## Limitations (Current Dev Version)
 
-- Only `dev-story` is fully implemented in `_tiqora/workflows/...`
+- Only `dev-story` is fully implemented in `_nakiros/workflows/...`
 - `create-story`, `create-ticket`, `fetch-project-context` command files are present, but corresponding runtime workflows are not yet fully shipped in this repo version
 
 ## Development

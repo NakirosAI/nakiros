@@ -50,6 +50,6 @@ La V1 conserve une **vue unique** pour tous les profils, avec des informations p
 
 ## Decisons verrouillees
 1. Commande PRD Assistant: `/tiq-agent-brainstorming`
-2. Sortie attendue brainstorming: `.tiqora/context/brainstorming.md`
+2. Sortie attendue brainstorming: `.nakiros/context/brainstorming.md`
 3. Aucune reference produit a `tiq-workflow-brainstorming`
 4. Rollout progressif en phases

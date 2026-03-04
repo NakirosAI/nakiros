@@ -2,7 +2,7 @@ import { spawnSync } from 'child_process';
 import { existsSync, readdirSync } from 'fs';
 import { homedir, platform } from 'os';
 import { join, resolve } from 'path';
-import type { AgentProvider } from '@tiqora/shared';
+import type { AgentProvider } from '@nakiros/shared';
 
 export interface AgentCliStatus {
   provider: AgentProvider;

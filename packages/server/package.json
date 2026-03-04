@@ -1,5 +1,5 @@
 {
-  "name": "@tiqora/server",
+  "name": "@nakiros/server",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -18,7 +18,7 @@
     "dev": "tsup --watch"
   },
   "dependencies": {
-    "@tiqora/shared": "workspace:*",
+    "@nakiros/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "express": "^4.21.0",
     "cors": "^2.8.5",

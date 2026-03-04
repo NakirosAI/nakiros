@@ -1,4 +1,4 @@
-import type { LocalTicket, LocalEpic, TicketStatus, TicketPriority } from '@tiqora/shared';
+import type { LocalTicket, LocalEpic, TicketStatus, TicketPriority } from '@nakiros/shared';
 
 // ─── ADF (Atlassian Document Format) → plain text ─────────────────────────────
 
@@ -139,16 +139,87 @@ export async function fetchProjects(
   return allProjects;
 }
 
+// ─── Boards ───────────────────────────────────────────────────────────────────
+
+interface JiraBoard {
+  id: number;
+  name: string;
+  type: 'scrum' | 'kanban' | 'simple';
+}
+
+interface JiraBoardsResponse {
+  values: JiraBoard[];
+}
+
+export async function fetchProjectBoardType(
+  accessToken: string,
+  cloudId: string,
+  projectKey: string,
+): Promise<{ boardType: 'scrum' | 'kanban' | 'unknown'; boardId: string | null }> {
+  try {
+    const data = await jiraGet<JiraBoardsResponse>(
+      accessToken,
+      cloudId,
+      `/rest/agile/1.0/board?projectKeyOrId=${projectKey}&maxResults=10`,
+    );
+    const board = data.values[0];
+    if (!board) return { boardType: 'unknown', boardId: null };
+    const boardType = board.type === 'scrum' ? 'scrum' : board.type === 'kanban' ? 'kanban' : 'unknown';
+    return { boardType, boardId: String(board.id) };
+  } catch {
+    return { boardType: 'unknown', boardId: null };
+  }
+}
+
 // ─── Issues ───────────────────────────────────────────────────────────────────
+
+type SyncFilter = 'sprint_active' | 'last_3_months' | 'all';
+type BoardType = 'scrum' | 'kanban' | 'unknown';
+
+function buildJql(projectKey: string, syncFilter: SyncFilter, boardType: BoardType): string {
+  switch (syncFilter) {
+    case 'sprint_active':
+      if (boardType === 'scrum') {
+        return `project = '${projectKey}' AND sprint in openSprints() ORDER BY created DESC`;
+      }
+      // kanban or unknown: tickets not done
+      return `project = '${projectKey}' AND statusCategory != Done ORDER BY created DESC`;
+    case 'last_3_months':
+      return `project = '${projectKey}' AND updated >= -90d ORDER BY created DESC`;
+    case 'all':
+    default:
+      return `project = '${projectKey}' ORDER BY created DESC`;
+  }
+}
+
+const COUNT_SAMPLE = 200;
+
+export async function countIssues(
+  accessToken: string,
+  cloudId: string,
+  projectKey: string,
+  syncFilter: SyncFilter = 'all',
+  boardType: BoardType = 'unknown',
+): Promise<{ count: number; hasMore: boolean }> {
+  const jql = buildJql(projectKey, syncFilter, boardType);
+  const data = await jiraPost<JiraSearchJqlResponse>(
+    accessToken,
+    cloudId,
+    '/rest/api/3/search/jql',
+    { jql, fields: ['id'], maxResults: COUNT_SAMPLE },
+  );
+  return { count: data.issues.length, hasMore: !!data.nextPageToken };
+}
 
 export async function fetchAllIssues(
   accessToken: string,
   cloudId: string,
   projectKey: string,
+  syncFilter: SyncFilter = 'all',
+  boardType: BoardType = 'unknown',
 ): Promise<JiraIssue[]> {
   const allIssues: JiraIssue[] = [];
-  // Single quotes are required for string values in Jira JQL
-  const jql = `project = '${projectKey}' ORDER BY created DESC`;
+  const jql = buildJql(projectKey, syncFilter, boardType);
   let nextPageToken: string | undefined;
 
   while (true) {

@@ -8,6 +8,7 @@ interface Props {
   active: SidebarTab;
   onChange(tab: SidebarTab): void;
   labels: Record<SidebarTab, string>;
+  chatHasCompletionNotice?: boolean;
 }
 
 const navTabs: { id: Exclude<SidebarTab, 'settings'>; icon: ReactNode }[] = [
@@ -17,7 +18,7 @@ const navTabs: { id: Exclude<SidebarTab, 'settings'>; icon: ReactNode }[] = [
   { id: 'delivery', icon: <Kanban size={18} /> },
 ];
 
-export default function Sidebar({ active, onChange, labels }: Props) {
+export default function Sidebar({ active, onChange, labels, chatHasCompletionNotice = false }: Props) {
   return (
     <div className="flex w-[68px] shrink-0 flex-col items-center border-r border-[var(--line)] bg-[var(--bg-soft)] py-2.5">
       <div className="flex flex-col items-center gap-0.5">
@@ -27,6 +28,7 @@ export default function Sidebar({ active, onChange, labels }: Props) {
             icon={tab.icon}
             label={labels[tab.id]}
             active={active === tab.id}
+            showCompletionNotice={tab.id === 'chat' && chatHasCompletionNotice}
             onClick={() => onChange(tab.id)}
           />
         ))}
@@ -50,11 +52,13 @@ function SidebarButton({
   icon,
   label,
   active,
+  showCompletionNotice,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
   active: boolean;
+  showCompletionNotice?: boolean;
   onClick(): void;
 }) {
   return (
@@ -62,12 +66,15 @@ function SidebarButton({
       onClick={onClick}
       title={label}
       className={clsx(
-        'flex h-[54px] w-[60px] flex-col items-center justify-center gap-1 rounded-[10px] border px-0.5',
+        'relative flex h-[54px] w-[60px] flex-col items-center justify-center gap-1 rounded-[10px] border px-0.5',
         active
           ? 'border-[var(--primary)] bg-[var(--bg-muted)] text-[var(--primary)]'
           : 'border-transparent bg-transparent text-[var(--text-muted)]',
       )}
     >
+      {showCompletionNotice && (
+        <span className="absolute right-[11px] top-[11px] h-2 w-2 rounded-full bg-[#14b8a6]" />
+      )}
       {icon}
       <span
         className={clsx(

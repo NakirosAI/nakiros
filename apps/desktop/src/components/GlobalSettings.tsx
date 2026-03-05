@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import type { AppPreferences } from '@nakiros/shared';
 import { Button } from './ui';
 import { usePreferences } from '../hooks/usePreferences';
+import { AGENT_DEFINITIONS, resolveAgentDefinitions, type AgentDefinition } from '../constants/agents';
 import {
   GlobalSettingsAgentAISection,
   GlobalSettingsAgentNakirosSection,
@@ -32,6 +33,7 @@ export default function GlobalSettings({ onClose }: Props) {
   const [updateStatus, setUpdateStatus] = useState<GlobalSettingsUpdateStatus>('idle');
   const [updateMsg, setUpdateMsg] = useState('');
   const [versionInfo, setVersionInfo] = useState<BundleVersionInfo | null>(null);
+  const [agentDefinitions, setAgentDefinitions] = useState<AgentDefinition[]>(AGENT_DEFINITIONS);
   const [section, setSection] = useState<SettingsSection>('general');
   const [mcpServerInput, setMcpServerInput] = useState(preferences.mcpServerUrl ?? '');
 
@@ -44,6 +46,22 @@ export default function GlobalSettings({ onClose }: Props) {
 
   useEffect(() => {
     void window.nakiros.getVersionInfo().then(setVersionInfo);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.nakiros.getInstalledCommands()
+      .then((commands) => {
+        if (cancelled) return;
+        setAgentDefinitions(resolveAgentDefinitions(commands));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAgentDefinitions(AGENT_DEFINITIONS);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -87,6 +105,12 @@ export default function GlobalSettings({ onClose }: Props) {
     setUpdateStatus('updating');
     try {
       await window.nakiros.applyUpdate(updateResult.changedFiles, updateResult.latestVersion);
+      const [nextVersionInfo, installedCommands] = await Promise.all([
+        window.nakiros.getVersionInfo(),
+        window.nakiros.getInstalledCommands(),
+      ]);
+      setVersionInfo(nextVersionInfo);
+      setAgentDefinitions(resolveAgentDefinitions(installedCommands));
       setUpdateStatus('success');
       setUpdateMsg(t('updatedTo', { version: updateResult.latestVersion }));
       setUpdateResult(null);
@@ -205,6 +229,7 @@ export default function GlobalSettings({ onClose }: Props) {
           {section === 'agent-nakiros' && (
             <GlobalSettingsAgentNakirosSection
               versionInfo={versionInfo}
+              agentDefinitions={agentDefinitions}
               updateResult={updateResult}
               updateStatus={updateStatus}
               updateMsg={updateMsg}

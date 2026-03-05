@@ -14,6 +14,12 @@ export interface AgentDefinition {
   placeholderKey: string;
 }
 
+interface InstalledCommandLike {
+  id: string;
+  command: string;
+  kind: AgentKind;
+}
+
 export const AGENT_DEFINITIONS: AgentDefinition[] = [
   { id: 'nakiros', label: 'Nakiros', labelKey: 'definitions.nakiros.label', command: '/nak-agent-nakiros', group: 'meta', kind: 'agent', placeholder: 'Talk with Nakiros…', placeholderKey: 'definitions.nakiros.placeholder' },
   { id: 'dev', label: 'Dev Agent', labelKey: 'definitions.dev.label', command: '/nak-agent-dev', group: 'agent', kind: 'agent', placeholder: 'Message for Dev Agent…', placeholderKey: 'definitions.dev.placeholder' },
@@ -33,6 +39,62 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
   { id: 'sprint-planning', label: 'Sprint Planning', labelKey: 'definitions.sprint-planning.label', command: '/nak-workflow-sprint', group: 'workflow', kind: 'workflow', placeholder: 'Run Sprint Planning?', placeholderKey: 'definitions.sprint-planning.placeholder' },
   { id: 'fetch-project-context', label: 'Fetch Project Context', labelKey: 'definitions.fetch-project-context.label', command: '/nak-workflow-fetch-project-context', group: 'workflow', kind: 'workflow', placeholder: 'Run Fetch Project Context?', placeholderKey: 'definitions.fetch-project-context.placeholder' },
 ];
+
+const BUILTIN_BY_COMMAND = new Map(
+  AGENT_DEFINITIONS.map((definition) => [definition.command, definition]),
+);
+
+function humanizeSlug(slug: string): string {
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function dynamicDefinitionFromInstalled(command: InstalledCommandLike): AgentDefinition {
+  const normalizedCommand = command.command.startsWith('/') ? command.command : `/${command.command}`;
+  const id = command.id || normalizedCommand.replace(/^\/nak-(?:agent|workflow)-/, '');
+  const label = humanizeSlug(id);
+
+  return {
+    id,
+    label,
+    labelKey: '',
+    command: normalizedCommand,
+    group: command.kind === 'workflow' ? 'workflow' : (id === 'nakiros' ? 'meta' : 'agent'),
+    kind: command.kind,
+    placeholder: command.kind === 'workflow'
+      ? `Run ${label}?`
+      : `Message for ${label}…`,
+    placeholderKey: '',
+  };
+}
+
+export function resolveAgentDefinitions(installedCommands: InstalledCommandLike[] | null | undefined): AgentDefinition[] {
+  if (!installedCommands || installedCommands.length === 0) return AGENT_DEFINITIONS;
+
+  const seen = new Set<string>();
+  const resolved: AgentDefinition[] = [];
+  for (const command of installedCommands) {
+    const normalizedCommand = command.command.startsWith('/') ? command.command : `/${command.command}`;
+    if (seen.has(normalizedCommand)) continue;
+    seen.add(normalizedCommand);
+
+    const builtin = BUILTIN_BY_COMMAND.get(normalizedCommand);
+    resolved.push(builtin ?? dynamicDefinitionFromInstalled({ ...command, command: normalizedCommand }));
+  }
+
+  return resolved;
+}
+
+export function getAgentDefinitionLabel(
+  definition: AgentDefinition,
+  translate: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (!definition.labelKey) return definition.label;
+  return translate(definition.labelKey, { defaultValue: definition.label });
+}
 
 /** Lookup: command → label (fallback for conversation title) */
 export const COMMAND_LABEL_MAP: Record<string, string> = Object.fromEntries(

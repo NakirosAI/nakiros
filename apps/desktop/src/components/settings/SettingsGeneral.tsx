@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { WORKFLOW_CAPABILITIES } from '../../utils/workflow-capabilities';
 import { Button, Card, Input } from '../ui';
 import { SettingsDanger } from './SettingsDanger';
 import type { SettingsGeneralProps } from './types';
@@ -68,40 +67,7 @@ export function SettingsGeneral({ workspace, onUpdate, onDelete }: SettingsGener
         </div>
       </Card>
 
-      <Card padding="md" className="rounded-[10px] bg-[var(--bg-soft)]">
-        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
-          {t('workflowAvailabilityTitle')}
-        </span>
-        <p className="m-0 text-xs text-[var(--text-muted)]">{t('workflowAvailabilitySubtitle')}</p>
-        <div className="mt-2.5 flex flex-col gap-2">
-          {WORKFLOW_CAPABILITIES.map((capability) => (
-            <Card key={capability.id} padding="sm" className="rounded-[10px] bg-[var(--bg-card)]">
-              <div className="flex items-center justify-between gap-2.5">
-                <strong className="text-[13px]">{capability.label}</strong>
-                <span
-                  className={clsx(
-                    'inline-flex rounded-[10px] border px-1.5 py-0.5 text-[10px] font-bold',
-                    capability.status === 'stable'
-                      ? 'border-[#10b981] bg-[#d1fae5] text-[#065f46]'
-                      : 'border-[#f59e0b] bg-[#fef3c7] text-[#92400e]',
-                  )}
-                >
-                  {capability.status === 'stable' ? t('workflowStatusStable') : t('workflowStatusBeta')}
-                </span>
-              </div>
-              <code className="mt-1 text-[11px]">{capability.command}</code>
-              {capability.status === 'beta' && (
-                <p className="mb-0 mt-1 text-xs text-[var(--text-muted)]">
-                  {t('workflowBetaHint')} {capability.fallbackMessage}
-                </p>
-              )}
-            </Card>
-          ))}
-        </div>
-      </Card>
-
       <SettingsDanger workspace={workspace} onDeleted={onDelete} />
     </div>
   );
 }
-

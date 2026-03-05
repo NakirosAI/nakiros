@@ -5,9 +5,8 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import {
   Bot,
+  ChevronDown,
   Send,
-  Square,
-  Sparkles,
   Terminal,
   FileText,
   Code2,
@@ -22,29 +21,53 @@ import {
 } from 'lucide-react';
 import type { AgentProvider, StoredRepo } from '@nakiros/shared';
 import SessionFeedback, { type SessionFeedbackHandle } from './SessionFeedback.js';
-import { AGENT_DEFINITIONS, AGENT_COLORS } from '../constants/agents';
+import {
+  AGENT_DEFINITIONS,
+  AGENT_COLORS,
+  getAgentDefinitionLabel,
+  resolveAgentDefinitions,
+  type AgentDefinition,
+} from '../constants/agents';
 import i18n from '../i18n/index';
 import { useIpcListener } from '../hooks/useIpcListener';
+import { usePreferences } from '../hooks/usePreferences';
 
-interface QuickAction {
-  labelKey: string;
-  descriptionKey: string;
+interface SlashCommandOption {
+  id: string;
   command: string;
+  label: string;
+  kind: 'agent' | 'workflow';
 }
 
-const QUICK_ACTIONS: QuickAction[] = [
-  { labelKey: 'quickActions.generateContext.label', descriptionKey: 'quickActions.generateContext.description', command: '/nak-workflow-generate-context' },
-  { labelKey: 'quickActions.projectConfidence.label', descriptionKey: 'quickActions.projectConfidence.description', command: '/nak-workflow-project-understanding-confidence' },
-  { labelKey: 'quickActions.architect.label', descriptionKey: 'quickActions.architect.description', command: '/nak-agent-architect' },
-  { labelKey: 'quickActions.pmAgent.label', descriptionKey: 'quickActions.pmAgent.description', command: '/nak-agent-pm' },
-  { labelKey: 'quickActions.devAgent.label', descriptionKey: 'quickActions.devAgent.description', command: '/nak-agent-dev' },
-];
+interface AgentMentionOption {
+  tag: string;
+  token: string;
+  label: string;
+}
+
+interface ActiveMentionContext {
+  query: string;
+  start: number;
+}
 
 // ─── Multi-agent message rendering ───────────────────────────────────────────
 
 const AGENT_TAG_PATTERN = new RegExp(
   `(?<!@)\\[(${Object.keys(AGENT_COLORS).join('|')})\\]`,
   'g',
+);
+const AGENT_ID_TO_TAG: Record<string, string> = {
+  nakiros: 'Nakiros',
+  pm: 'PM',
+  architect: 'Architect',
+  dev: 'Dev',
+  sm: 'SM',
+  qa: 'QA',
+  hotfix: 'Hotfix',
+  brainstorming: 'Brainstorming',
+};
+const AGENT_TAG_TO_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(AGENT_ID_TO_TAG).map(([id, tag]) => [tag, id]),
 );
 
 interface AgentSegment { tag: string; content: string }
@@ -82,11 +105,32 @@ function generateTitle(text: string, commandLabelMap: Record<string, string>, de
   return words.length > 8 ? `${short}…` : short;
 }
 
-function buildEffectiveMessage(input: string, agentId: string | null, injectCommand = true): string {
-  const opt = AGENT_DEFINITIONS.find((o) => o.id === agentId);
-  if (!opt?.command || !injectCommand) return input;
-  const trimmed = input.trim();
-  return trimmed ? `${opt.command} ${trimmed}` : opt.command;
+function matchCommandDefinition(text: string, definitions: AgentDefinition[]): AgentDefinition | null {
+  const trimmed = text.trim();
+  return definitions.find((definition) => (
+    trimmed === definition.command
+    || trimmed.startsWith(`${definition.command} `)
+    || trimmed.startsWith(`${definition.command}\n`)
+  )) ?? null;
+}
+
+function extractSlashFilter(input: string): string | null {
+  const trimmedStart = input.trimStart();
+  const match = trimmedStart.match(/^\/\S*$/);
+  return match ? match[0].toLowerCase() : null;
+}
+
+function extractActiveMentionContext(input: string): ActiveMentionContext | null {
+  const mentionPattern = /(^|\s)@([^\s@]*)$/;
+  const match = mentionPattern.exec(input);
+  if (!match) return null;
+  const fullMatch = match[0];
+  const mentionIndex = fullMatch.lastIndexOf('@');
+  if (mentionIndex < 0) return null;
+  return {
+    query: (match[2] ?? '').toLowerCase(),
+    start: match.index + mentionIndex,
+  };
 }
 
 // ─── Raw NDJSON → UI messages ─────────────────────────────────────────────────
@@ -118,6 +162,15 @@ function rawToUiMessages(rawMessages: unknown[]): Message[] {
   let agentTools: ToolActivity[] = [];
   let inAgentTurn = false;
   let hasEmittedText = false;
+  const seenToolKeys = new Set<string>();
+
+  function appendTool(name: string, input: Record<string, unknown> = {}) {
+    const display = formatToolDisplay(name, input);
+    const key = `${name}::${display}`;
+    if (seenToolKeys.has(key)) return;
+    seenToolKeys.add(key);
+    agentTools.push({ name, display });
+  }
 
   function flushAgent() {
     if (!inAgentTurn) return;
@@ -132,6 +185,7 @@ function rawToUiMessages(rawMessages: unknown[]): Message[] {
     agentTools = [];
     inAgentTurn = false;
     hasEmittedText = false;
+    seenToolKeys.clear();
   }
 
   for (const raw of rawMessages) {
@@ -167,7 +221,7 @@ function rawToUiMessages(rawMessages: unknown[]): Message[] {
             hasEmittedText = true;
           } else if (b['type'] === 'tool_use' && typeof b['name'] === 'string') {
             const inp = (b['input'] as Record<string, unknown>) ?? {};
-            agentTools.push({ name: b['name'], display: formatToolDisplay(b['name'], inp) });
+            appendTool(b['name'], inp);
           }
         }
       }
@@ -190,6 +244,18 @@ function rawToUiMessages(rawMessages: unknown[]): Message[] {
       if (itm?.['type'] === 'agent_message' && typeof itm['text'] === 'string') {
         agentContent += itm['text'];
         hasEmittedText = true;
+      } else if (itm?.['type'] === 'command_execution' && typeof itm['command'] === 'string') {
+        appendTool('Bash', { command: itm['command'] });
+      }
+      continue;
+    }
+
+    // Codex: command starts (tool execution)
+    if (item['type'] === 'item.started') {
+      inAgentTurn = true;
+      const itm = item['item'] as Record<string, unknown> | undefined;
+      if (itm?.['type'] === 'command_execution' && typeof itm['command'] === 'string') {
+        appendTool('Bash', { command: itm['command'] });
       }
       continue;
     }
@@ -201,6 +267,7 @@ function rawToUiMessages(rawMessages: unknown[]): Message[] {
 
 const MAX_TABS = 12;
 const TAB_SAVE_DEBOUNCE_MS = 320;
+const DEFAULT_DESKTOP_NOTIFICATION_MIN_DURATION_SECONDS = 60;
 
 type MessageStatus = 'complete' | 'streaming' | 'error';
 
@@ -230,10 +297,12 @@ interface AgentTabState {
   conversationId: string | null;
   pendingTitle: string | null;
   hasUnread: boolean;
+  hasRunCompletionNotice: boolean;
 }
 
 interface Props {
   workspaceId: string;
+  workspaceName?: string;
   repos: StoredRepo[];
   workspacePath?: string;
   initialRepoPath?: string;
@@ -241,6 +310,9 @@ interface Props {
   initialAgentId?: string;
   persistentHistory?: boolean;
   onDone?: () => void;
+  isVisible?: boolean;
+  onRunCompletionNoticeChange?: (workspaceId: string, pendingCount: number) => void;
+  openChatTarget?: OpenAgentRunChatPayload | null;
 }
 
 function ToolIcon({ name }: { name: string }) {
@@ -281,6 +353,30 @@ function startsWithNakirosSlashCommand(input: string): boolean {
 
 function isAgentProvider(value: unknown): value is AgentProvider {
   return value === 'claude' || value === 'codex' || value === 'cursor';
+}
+
+function extractMeetingAgentTags(messages: Message[], seededTag?: string): string[] {
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  const addTag = (tag: string) => {
+    if (!tag || !(tag in AGENT_COLORS) || seen.has(tag)) return;
+    seen.add(tag);
+    ordered.push(tag);
+  };
+
+  if (seededTag) addTag(seededTag);
+
+  const pattern = new RegExp(AGENT_TAG_PATTERN.source, 'g');
+  for (const message of messages) {
+    if (message.role !== 'agent') continue;
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(message.content)) !== null) {
+      addTag(match[1] ?? '');
+    }
+  }
+
+  return ordered;
 }
 
 function MessageContent({ msg }: { msg: Pick<Message, 'content' | 'status'> }) {
@@ -333,6 +429,7 @@ function MessageContent({ msg }: { msg: Pick<Message, 'content' | 'status'> }) {
 
 export default function AgentPanel({
   workspaceId,
+  workspaceName,
   repos,
   workspacePath,
   initialRepoPath,
@@ -340,36 +437,40 @@ export default function AgentPanel({
   initialAgentId,
   persistentHistory,
   onDone,
+  isVisible = true,
+  onRunCompletionNoticeChange,
+  openChatTarget,
 }: Props) {
   const { t } = useTranslation('agent');
+  const { preferences } = usePreferences();
   const defaultTabTitle = t('newConversation');
+  const desktopNotificationsEnabled = preferences.desktopNotificationsEnabled !== false;
+  const desktopNotificationMinDurationSeconds = Math.min(
+    3600,
+    Math.max(
+      0,
+      Math.round(preferences.desktopNotificationMinDurationSeconds ?? DEFAULT_DESKTOP_NOTIFICATION_MIN_DURATION_SECONDS),
+    ),
+  );
+  const [agentDefinitions, setAgentDefinitions] = useState<AgentDefinition[]>(AGENT_DEFINITIONS);
   const commandLabelMap = useMemo(
     () => Object.fromEntries(
-      AGENT_DEFINITIONS.map((definition) => [
+      agentDefinitions.map((definition) => [
         definition.command,
-        t(definition.labelKey, { defaultValue: definition.label }),
+        getAgentDefinitionLabel(definition, t),
       ]),
     ),
-    [t],
+    [agentDefinitions, t],
   );
-  const quickActions = useMemo(
-    () => QUICK_ACTIONS.map((action) => ({
-      ...action,
-      label: t(action.labelKey),
-      description: t(action.descriptionKey),
+  const slashCommands = useMemo<SlashCommandOption[]>(
+    () => agentDefinitions.map((definition) => ({
+      id: definition.id,
+      command: definition.command,
+      label: getAgentDefinitionLabel(definition, t),
+      kind: definition.kind,
     })),
-    [t],
+    [agentDefinitions, t],
   );
-  const agentLabel = (id: string) => {
-    const definition = AGENT_DEFINITIONS.find((item) => item.id === id);
-    if (!definition) return id;
-    return t(definition.labelKey, { defaultValue: definition.label });
-  };
-  const agentPlaceholder = (id: string) => {
-    const definition = AGENT_DEFINITIONS.find((item) => item.id === id);
-    if (!definition) return t('inputPlaceholder');
-    return t(definition.placeholderKey, { defaultValue: definition.placeholder });
-  };
   const [tabs, setTabs] = useState<AgentTabState[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<StoredConversation[]>([]);
@@ -377,9 +478,15 @@ export default function AgentPanel({
   const [defaultProvider, setDefaultProvider] = useState<AgentProvider>('claude');
   const [tabsLoaded, setTabsLoaded] = useState(false);
   const [tabLimitMessage, setTabLimitMessage] = useState<string | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(initialAgentId ?? null);
+  const [highlightedSlashIndex, setHighlightedSlashIndex] = useState(0);
+  const [highlightedMentionIndex, setHighlightedMentionIndex] = useState(0);
+  const [expandedToolPanels, setExpandedToolPanels] = useState<Record<string, boolean>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const activeSlashItemRef = useRef<HTMLButtonElement>(null);
+  const activeMentionItemRef = useRef<HTMLButtonElement>(null);
   const tabCounterRef = useRef(0);
   const runToTabIdRef = useRef(new Map<string, string>());
   const cancelledRunIdsRef = useRef(new Set<string>());
@@ -387,7 +494,9 @@ export default function AgentPanel({
   const conversationsRef = useRef<StoredConversation[]>([]);
   const activeTabIdRef = useRef<string | null>(null);
   const persistTimerRef = useRef<number | null>(null);
+  const lastHandledOpenChatEventIdRef = useRef<string | null>(null);
   const initialMessageSentRef = useRef(false);
+  const runStartedAtRef = useRef(new Map<string, number>());
   const sessionStartTimesRef = useRef(new Map<string, number>());
   const tabRawLinesRef = useRef(new Map<string, unknown[]>());
   const feedbackRefsMap = useRef(new Map<string, React.RefObject<SessionFeedbackHandle | null>>());
@@ -416,12 +525,31 @@ export default function AgentPanel({
     () => tabs.find((tab) => tab.id === activeTabId) ?? null,
     [tabs, activeTabId],
   );
+  const activeSlashFilter = useMemo(
+    () => extractSlashFilter(activeTab?.input ?? ''),
+    [activeTab?.input],
+  );
+  const filteredSlashCommands = useMemo(
+    () => activeSlashFilter
+      ? slashCommands.filter((item) => item.command.toLowerCase().startsWith(activeSlashFilter))
+      : [],
+    [activeSlashFilter, slashCommands],
+  );
+  const showSlashCommands = Boolean(activeTab && !activeTab.activeRunId && activeSlashFilter);
 
   const hasReachedTabLimit = tabs.length >= MAX_TABS;
+  const completionNoticeCount = useMemo(
+    () => tabs.reduce((count, tab) => (tab.hasRunCompletionNotice ? count + 1 : count), 0),
+    [tabs],
+  );
 
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
+
+  useEffect(() => {
+    onRunCompletionNoticeChange?.(workspaceId, completionNoticeCount);
+  }, [workspaceId, completionNoticeCount, onRunCompletionNoticeChange]);
 
   useEffect(() => {
     conversationsRef.current = conversations;
@@ -432,8 +560,106 @@ export default function AgentPanel({
   }, [activeTabId]);
 
   useEffect(() => {
+    if (!tabsLoaded || !openChatTarget) return;
+    if (openChatTarget.workspaceId !== workspaceId) return;
+
+    const eventId = openChatTarget.eventId
+      ?? `fallback-${openChatTarget.workspaceId}-${openChatTarget.tabId ?? ''}-${openChatTarget.conversationId ?? ''}`;
+    if (lastHandledOpenChatEventIdRef.current === eventId) return;
+    lastHandledOpenChatEventIdRef.current = eventId;
+
+    const targetTab = openChatTarget.tabId
+      ? tabsRef.current.find((tab) => tab.id === openChatTarget.tabId)
+      : null;
+    if (targetTab) {
+      selectTab(targetTab.id);
+      return;
+    }
+
+    const targetConversationId = openChatTarget.conversationId ?? null;
+    if (targetConversationId) {
+      const tabWithConversation = tabsRef.current.find((tab) => tab.conversationId === targetConversationId);
+      if (tabWithConversation) {
+        selectTab(tabWithConversation.id);
+        return;
+      }
+      const conversation = conversationsRef.current.find((item) => item.id === targetConversationId);
+      if (conversation) {
+        void openConversationFromHistory(conversation);
+        return;
+      }
+    }
+
+    const fallbackTab = tabsRef.current.find((tab) => tab.hasRunCompletionNotice) ?? tabsRef.current[0];
+    if (fallbackTab) selectTab(fallbackTab.id);
+  }, [openChatTarget, tabsLoaded, workspaceId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.nakiros.getInstalledCommands()
+      .then((commands) => {
+        if (cancelled) return;
+        setAgentDefinitions(resolveAgentDefinitions(commands));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAgentDefinitions(AGENT_DEFINITIONS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => () => {
+    const runIds = Array.from(new Set(
+      tabsRef.current
+        .map((tab) => tab.activeRunId)
+        .filter((runId): runId is string => Boolean(runId)),
+    ));
+    for (const runId of runIds) {
+      runToTabIdRef.current.delete(runId);
+      runStartedAtRef.current.delete(runId);
+      void window.nakiros.agentCancel(runId);
+    }
+    runStartedAtRef.current.clear();
+  }, []);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeTab?.messages]);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    if (!activeTab?.hasRunCompletionNotice) return;
+    const frame = window.requestAnimationFrame(() => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 24;
+      if (!atBottom) return;
+      setTabsAndRef((prev) => prev.map((tab) => (
+        tab.id === activeTab.id && tab.hasRunCompletionNotice
+          ? { ...tab, hasRunCompletionNotice: false }
+          : tab
+      )));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isVisible, activeTab?.id, activeTab?.hasRunCompletionNotice, activeTab?.messages.length]);
+
+  useEffect(() => {
+    setHighlightedSlashIndex(0);
+  }, [activeSlashFilter, activeTabId]);
+
+  useEffect(() => {
+    if (filteredSlashCommands.length === 0) return;
+    setHighlightedSlashIndex((prev) => Math.min(prev, filteredSlashCommands.length - 1));
+  }, [filteredSlashCommands.length]);
+
+  useEffect(() => {
+    if (!showSlashCommands || filteredSlashCommands.length === 0) return;
+    window.requestAnimationFrame(() => {
+      activeSlashItemRef.current?.scrollIntoView({ block: 'nearest' });
+    });
+  }, [showSlashCommands, filteredSlashCommands.length, highlightedSlashIndex]);
 
   function setTabsAndRef(updater: (prev: AgentTabState[]) => AgentTabState[]) {
     setTabs((prev) => {
@@ -446,7 +672,13 @@ export default function AgentPanel({
   function selectTab(nextTabId: string | null) {
     activeTabIdRef.current = nextTabId;
     setTabsAndRef((prev) => prev.map((tab) => (
-      tab.id === nextTabId ? { ...tab, hasUnread: false } : tab
+      tab.id === nextTabId
+        ? {
+          ...tab,
+          hasUnread: false,
+          hasRunCompletionNotice: isVisible ? false : tab.hasRunCompletionNotice,
+        }
+        : tab
     )));
     setActiveTabId(nextTabId);
   }
@@ -492,6 +724,7 @@ export default function AgentPanel({
       conversationId: args.conversationId ?? null,
       pendingTitle: null,
       hasUnread: false,
+      hasRunCompletionNotice: false,
     };
   }
 
@@ -623,6 +856,7 @@ export default function AgentPanel({
     initialMessageSentRef.current = false;
     setShowHistory(false);
     setTabLimitMessage(null);
+    setExpandedToolPanels({});
     setTabsLoaded(false);
     void (async () => {
       try {
@@ -761,6 +995,11 @@ export default function AgentPanel({
   });
 
   useIpcListener(window.nakiros.onAgentDone, ({ runId, exitCode, error, rawLines }) => {
+    const startedAt = runStartedAtRef.current.get(runId) ?? null;
+    runStartedAtRef.current.delete(runId);
+    const runDurationSeconds = startedAt
+      ? Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+      : 0;
     const tabId = runToTabIdRef.current.get(runId);
     runToTabIdRef.current.delete(runId);
     const wasCancelled = cancelledRunIdsRef.current.delete(runId);
@@ -791,6 +1030,25 @@ export default function AgentPanel({
       }
     }
 
+    const shouldNotifyCompletion = !wasCancelled && (
+      !isVisible || activeTabIdRef.current !== tabId
+    );
+    const shouldSendDesktopNotification = desktopNotificationsEnabled
+      && shouldNotifyCompletion
+      && runDurationSeconds >= desktopNotificationMinDurationSeconds;
+
+    if (shouldSendDesktopNotification) {
+      void window.nakiros.showAgentRunNotification({
+        workspaceId,
+        workspaceName,
+        conversationId: currentTab?.conversationId ?? null,
+        tabId,
+        conversationTitle: currentTab?.title ?? defaultTabTitle,
+        provider: currentTab?.provider,
+        durationSeconds: runDurationSeconds,
+      });
+    }
+
     setTabsAndRef((prev) => prev.map((tab) => {
       if (tab.id !== tabId) return tab;
 
@@ -809,7 +1067,13 @@ export default function AgentPanel({
         return { ...msg, status: 'complete' as const };
       });
 
-      return { ...tab, activeRunId: null, runningCommand: null, messages: nextMessages };
+      return {
+        ...tab,
+        activeRunId: null,
+        runningCommand: null,
+        messages: nextMessages,
+        hasRunCompletionNotice: tab.hasRunCompletionNotice || shouldNotifyCompletion,
+      };
     }));
 
     markTabUnread(tabId);
@@ -823,6 +1087,45 @@ export default function AgentPanel({
 
   function updateTabProvider(tabId: string, provider: AgentProvider) {
     setTabsAndRef((prev) => prev.map((tab) => (tab.id === tabId ? { ...tab, provider } : tab)));
+  }
+
+  function isToolPanelExpanded(msg: Message): boolean {
+    const explicit = expandedToolPanels[msg.id];
+    if (typeof explicit === 'boolean') return explicit;
+    return msg.status === 'streaming';
+  }
+
+  function toggleToolPanel(messageId: string, currentExpanded: boolean) {
+    setExpandedToolPanels((prev) => ({
+      ...prev,
+      [messageId]: !currentExpanded,
+    }));
+  }
+
+  function applySlashCommand(tabId: string, command: string) {
+    const nextInput = `${command} `;
+    updateTabInput(tabId, nextInput);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(nextInput.length, nextInput.length);
+    });
+  }
+
+  function applyAgentMention(tabId: string, tag: string) {
+    const tab = tabsRef.current.find((item) => item.id === tabId);
+    if (!tab) return;
+
+    const mentionToken = `@${tag}`;
+    const mention = extractActiveMentionContext(tab.input);
+    const nextInput = mention
+      ? `${tab.input.slice(0, mention.start)}${mentionToken} `
+      : `${tab.input}${tab.input.length > 0 && !/\s$/.test(tab.input) ? ' ' : ''}${mentionToken} `;
+
+    updateTabInput(tabId, nextInput);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(nextInput.length, nextInput.length);
+    });
   }
 
 
@@ -858,6 +1161,7 @@ export default function AgentPanel({
       const runId = tab.activeRunId;
       cancelledRunIdsRef.current.add(runId);
       runToTabIdRef.current.delete(runId);
+      runStartedAtRef.current.delete(runId);
       void window.nakiros.agentCancel(runId).finally(() => {
         cancelledRunIdsRef.current.delete(runId);
       });
@@ -882,7 +1186,6 @@ export default function AgentPanel({
   }
 
   async function sendMessageToTab(tabId: string, rawText: string) {
-    const selectedOption = AGENT_DEFINITIONS.find((o) => o.id === selectedAgent);
     const text = rawText.trim();
 
     const currentTab = tabsRef.current.find((tab) => tab.id === tabId);
@@ -892,12 +1195,12 @@ export default function AgentPanel({
     if (userMessageCount === 0 && !sessionStartTimesRef.current.has(tabId)) {
       sessionStartTimesRef.current.set(tabId, Date.now());
     }
-    const shouldInjectPresetCommand = Boolean(selectedOption?.command) && userMessageCount === 0;
-    if (!text && !shouldInjectPresetCommand) return;
+    if (!text) return;
 
     const effectiveRepoPath = globalWorkspacePath ?? getDefaultRepoPath();
 
-    const effectiveText = buildEffectiveMessage(text, selectedAgent, shouldInjectPresetCommand);
+    const effectiveText = text;
+    const selectedDefinition = matchCommandDefinition(effectiveText, agentDefinitions);
     const title = generateTitle(effectiveText, commandLabelMap, defaultTabTitle);
     const shouldSetPendingTitle = !currentTab.conversationId && currentTab.messages.filter((msg) => msg.role === 'user').length === 0;
     let createdConversation: StoredConversation | null = null;
@@ -905,7 +1208,7 @@ export default function AgentPanel({
     const userMessage: Message = {
       id: `user-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
       role: 'user',
-      content: text || (shouldInjectPresetCommand ? (selectedOption?.command ?? '') : ''),
+      content: text,
       status: 'complete',
       tools: [],
     };
@@ -922,7 +1225,7 @@ export default function AgentPanel({
         provider: currentTab.provider,
         workspaceId,
         title,
-        agents: selectedAgent ? [selectedAgent] : [],
+        agents: selectedDefinition ? [selectedDefinition.id] : [],
         createdAt: now,
         lastUsedAt: now,
         messages: [userRaw],
@@ -932,7 +1235,14 @@ export default function AgentPanel({
       // Append user message to existing conversation
       const existing = conversationsRef.current.find((c) => c.id === currentTab.conversationId);
       if (existing) {
-        upsertConversation({ ...existing, messages: [...existing.messages, userRaw], lastUsedAt: new Date().toISOString() });
+        upsertConversation({
+          ...existing,
+          agents: existing.agents.length > 0
+            ? existing.agents
+            : (selectedDefinition ? [selectedDefinition.id] : []),
+          messages: [...existing.messages, userRaw],
+          lastUsedAt: new Date().toISOString(),
+        });
       }
     }
 
@@ -945,6 +1255,8 @@ export default function AgentPanel({
         pendingTitle: shouldSetPendingTitle ? null : tab.pendingTitle,
         conversationId: tab.conversationId ?? createdConversation?.id ?? null,
         repoPath: effectiveRepoPath,
+        hasUnread: false,
+        hasRunCompletionNotice: false,
         messages: [...tab.messages, userMessage],
       };
     }));
@@ -965,6 +1277,7 @@ export default function AgentPanel({
       );
 
       runToTabIdRef.current.set(runId, tabId);
+      runStartedAtRef.current.set(runId, Date.now());
 
       const agentMessage: Message = {
         id: `agent-${runId}`,
@@ -1006,6 +1319,7 @@ export default function AgentPanel({
     if (!activeTab?.activeRunId) return;
     const runId = activeTab.activeRunId;
     cancelledRunIdsRef.current.add(runId);
+    runStartedAtRef.current.delete(runId);
     void window.nakiros.agentCancel(runId);
 
     setTabsAndRef((prev) => prev.map((tab) => {
@@ -1061,17 +1375,20 @@ export default function AgentPanel({
   }
 
   function deleteConversation(id: string) {
+    const tabIdsToClose = tabsRef.current
+      .filter((tab) => tab.conversationId === id)
+      .map((tab) => tab.id);
+
     void window.nakiros.deleteConversation(id, workspaceId);
     setConversations((prev) => {
       const next = prev.filter((conv) => conv.id !== id);
       conversationsRef.current = next;
       return next;
     });
-    setTabsAndRef((prev) => prev.map((tab) => (
-      tab.conversationId === id
-        ? { ...tab, conversationId: null, sessionId: null, title: defaultTabTitle }
-        : tab
-    )));
+
+    for (const tabId of tabIdsToClose) {
+      closeTab(tabId);
+    }
   }
 
   function formatRelativeDate(iso: string): string {
@@ -1107,6 +1424,16 @@ export default function AgentPanel({
   }
 
   useEffect(() => {
+    if (!tabsLoaded || !initialAgentId) return;
+    const initialDefinition = agentDefinitions.find((definition) => definition.id === initialAgentId);
+    if (!initialDefinition) return;
+
+    const active = tabsRef.current.find((tab) => tab.id === activeTabIdRef.current) ?? null;
+    if (!active || active.messages.length > 0 || active.input.trim()) return;
+    updateTabInput(active.id, `${initialDefinition.command} `);
+  }, [tabsLoaded, initialAgentId, agentDefinitions]);
+
+  useEffect(() => {
     if (!tabsLoaded || !initialMessage || initialMessageSentRef.current) return;
 
     initialMessageSentRef.current = true;
@@ -1128,17 +1455,68 @@ export default function AgentPanel({
   }, [tabsLoaded, initialMessage]);
 
   const activeMessages = activeTab?.messages ?? [];
-  const historyCount = workspaceConversations.length;
-  const selectedAgentOption = AGENT_DEFINITIONS.find((o) => o.id === selectedAgent);
-  const isInputDisabled = !activeTab || !!activeTab.activeRunId;
-  const canLaunchPresetCommand = Boolean(
-    activeTab
-    && !activeTab.activeRunId
-    && selectedAgentOption?.command
-    && activeTab.messages.filter((msg) => msg.role === 'user').length === 0,
+  const activeCommandDefinition = useMemo(() => {
+    for (let index = activeMessages.length - 1; index >= 0; index -= 1) {
+      const message = activeMessages[index];
+      if (message?.role !== 'user') continue;
+      return matchCommandDefinition(message.content, agentDefinitions);
+    }
+    return null;
+  }, [activeMessages, agentDefinitions]);
+  const meetingAgentTags = useMemo(
+    () => extractMeetingAgentTags(
+      activeMessages,
+      activeCommandDefinition ? AGENT_ID_TO_TAG[activeCommandDefinition.id] : undefined,
+    ),
+    [activeMessages, activeCommandDefinition],
   );
-  const canSend = Boolean(activeTab) && !activeTab.activeRunId && (Boolean(activeTab?.input.trim()) || canLaunchPresetCommand);
-  const activePlaceholder = selectedAgentOption ? agentPlaceholder(selectedAgentOption.id) : t('inputPlaceholder');
+  const mentionOptions = useMemo<AgentMentionOption[]>(
+    () => meetingAgentTags.map((tag) => {
+      const agentId = AGENT_TAG_TO_ID[tag];
+      const definition = agentDefinitions.find((item) => item.id === agentId);
+      return {
+        tag,
+        token: `@${tag}`,
+        label: definition
+          ? getAgentDefinitionLabel(definition, t)
+          : tag,
+      };
+    }),
+    [meetingAgentTags, agentDefinitions, t],
+  );
+  const activeMention = useMemo(
+    () => extractActiveMentionContext(activeTab?.input ?? ''),
+    [activeTab?.input],
+  );
+  const filteredMentionOptions = useMemo(
+    () => {
+      if (!activeMention) return [];
+      return mentionOptions.filter((option) => option.tag.toLowerCase().startsWith(activeMention.query));
+    },
+    [mentionOptions, activeMention],
+  );
+  const showMentionMenu = Boolean(activeTab && !activeTab.activeRunId && activeMention);
+  const feedbackAgent = activeCommandDefinition?.kind === 'agent' ? activeCommandDefinition.id : null;
+  const feedbackWorkflow = activeCommandDefinition?.kind === 'workflow' ? activeCommandDefinition.id : null;
+  const historyCount = workspaceConversations.length;
+  const isInputDisabled = !activeTab || !!activeTab.activeRunId;
+  const canSend = Boolean(activeTab && !activeTab.activeRunId && activeTab.input.trim());
+
+  useEffect(() => {
+    setHighlightedMentionIndex(0);
+  }, [activeMention?.start, activeMention?.query, activeTabId]);
+
+  useEffect(() => {
+    if (filteredMentionOptions.length === 0) return;
+    setHighlightedMentionIndex((prev) => Math.min(prev, filteredMentionOptions.length - 1));
+  }, [filteredMentionOptions.length]);
+
+  useEffect(() => {
+    if (!showMentionMenu || filteredMentionOptions.length === 0) return;
+    window.requestAnimationFrame(() => {
+      activeMentionItemRef.current?.scrollIntoView({ block: 'nearest' });
+    });
+  }, [showMentionMenu, filteredMentionOptions.length, highlightedMentionIndex]);
 
   return (
     <div className={clsx('relative flex h-full w-full min-w-0 overflow-hidden bg-[var(--bg)]', persistentHistory ? 'flex-row' : 'flex-col')}>
@@ -1210,23 +1588,6 @@ export default function AgentPanel({
         <Bot size={15} color="var(--primary)" />
         <span className="text-xs font-bold text-[var(--text)]">{t('agents')}</span>
 
-        {activeTab && !persistentHistory && (
-          <>
-            <span className="text-[11px] text-[var(--text-muted)]">{t('provider')}</span>
-            <select
-              value={activeTab.provider}
-              onChange={(e) => updateTabProvider(activeTab.id, e.target.value as AgentProvider)}
-              className={SELECT_CLASS}
-              disabled={!!activeTab.activeRunId}
-            >
-              <option value="claude">Claude</option>
-              <option value="codex">Codex</option>
-              <option value="cursor">Cursor</option>
-            </select>
-          </>
-        )}
-
-
         {activeTab?.runningCommand && (
           <span className={RUNNING_INDICATOR_CLASS}>
             ● {activeTab.runningCommand.length > 55 ? `${activeTab.runningCommand.slice(0, 55)}…` : activeTab.runningCommand}
@@ -1284,8 +1645,9 @@ export default function AgentPanel({
                 <span className={SESSION_BADGE_COMPACT_CLASS}>
                   {providerLabel(tab.provider)}
                 </span>
-                {tab.hasUnread && <span className={TAB_UNREAD_DOT_CLASS} />}
-                {!tab.hasUnread && isRunning && <span className={TAB_RUNNING_DOT_CLASS} />}
+                {tab.hasRunCompletionNotice && <span className={TAB_COMPLETED_DOT_CLASS} />}
+                {!tab.hasRunCompletionNotice && tab.hasUnread && <span className={TAB_UNREAD_DOT_CLASS} />}
+                {!tab.hasRunCompletionNotice && !tab.hasUnread && isRunning && <span className={TAB_RUNNING_DOT_CLASS} />}
               </button>
               <button onClick={() => closeTab(tab.id)} className={TAB_CLOSE_BUTTON_CLASS} title={t('close')}>
                 <X size={11} />
@@ -1357,25 +1719,23 @@ export default function AgentPanel({
         </div>
       )}
 
-      <div className={QUICK_ACTIONS_BAR_CLASS}>
-        <div className={QUICK_ACTIONS_LABEL_CLASS}>{t('quickActions')}</div>
-        <div className="flex flex-wrap gap-1.5">
-          {quickActions.map((qa) => (
-            <button
-              key={qa.command}
-              onClick={() => activeTab && void sendMessageToTab(activeTab.id, qa.command)}
-              disabled={!activeTab || !!activeTab.activeRunId}
-              title={qa.description}
-              className={quickActionButtonClass(!activeTab || !!activeTab.activeRunId)}
-            >
-              <Sparkles size={11} />
-              {qa.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className={MESSAGES_AREA_CLASS}>
+      <div
+        ref={messagesContainerRef}
+        className={MESSAGES_AREA_CLASS}
+        onScroll={() => {
+          if (!isVisible) return;
+          if (!activeTab?.hasRunCompletionNotice) return;
+          const container = messagesContainerRef.current;
+          if (!container) return;
+          const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 24;
+          if (!atBottom) return;
+          setTabsAndRef((prev) => prev.map((tab) => (
+            tab.id === activeTab.id && tab.hasRunCompletionNotice
+              ? { ...tab, hasRunCompletionNotice: false }
+              : tab
+          )));
+        }}
+      >
         {activeMessages.length === 0 && (
           <div className={EMPTY_STATE_CLASS}>
             <Bot size={32} color="var(--line-strong)" className="mb-2.5" />
@@ -1406,22 +1766,44 @@ export default function AgentPanel({
 
                 {msg.tools.length > 0 && (
                   <div className={TOOL_TRACE_CLASS}>
-                    {msg.tools.map((tool, index) => (
-                      <div key={`${tool.name}-${index}`} className={TOOL_ROW_CLASS}>
-                        <ToolIcon name={tool.name} />
-                        <span className={TOOL_DISPLAY_TEXT_CLASS}>{tool.display}</span>
-                      </div>
-                    ))}
-                    {msg.status === 'streaming' && !msg.content.trim() && (
-                      <div className={TOOL_ROW_STREAMING_CLASS}>
-                        <Wrench size={11} color="var(--primary)" />
-                        <span className={TOOL_DISPLAY_TEXT_CLASS}><span className={CURSOR_CLASS}>▌</span></span>
-                      </div>
-                    )}
+                    {(() => {
+                      const toolsExpanded = isToolPanelExpanded(msg);
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => toggleToolPanel(msg.id, toolsExpanded)}
+                            className={TOOL_TRACE_TOGGLE_CLASS}
+                          >
+                            <div className="flex min-w-0 items-center gap-0.5">
+                              <ChevronDown size={10} className={toolTraceChevronClass(toolsExpanded)} />
+                              <span className="truncate">{t('toolsPanelTitle')}</span>
+                            </div>
+                            <span className="font-mono text-[9px] text-[var(--text-muted)]">{msg.tools.length}</span>
+                          </button>
+                          {toolsExpanded && (
+                            <>
+                              {msg.tools.map((tool, index) => (
+                                <div key={`${tool.name}-${index}`} className={TOOL_ROW_CLASS}>
+                                  <ToolIcon name={tool.name} />
+                                  <span className={TOOL_DISPLAY_TEXT_CLASS}>{tool.display}</span>
+                                </div>
+                              ))}
+                              {msg.status === 'streaming' && !msg.content.trim() && (
+                                <div className={TOOL_ROW_STREAMING_CLASS}>
+                                  <Wrench size={11} color="var(--primary)" />
+                                  <span className={TOOL_DISPLAY_TEXT_CLASS}><span className={CURSOR_CLASS}>▌</span></span>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 
-                {(msg.content.trim() || msg.status !== 'streaming') && (
+                {(msg.content.trim() || msg.status === 'error') && (
                   <MessageContent msg={msg} />
                 )}
               </div>
@@ -1442,8 +1824,8 @@ export default function AgentPanel({
             ref={fbRef}
             sessionId={activeTab.id}
             workspaceId={workspaceId}
-            agent={selectedAgent}
-            workflow={null}
+            agent={feedbackAgent}
+            workflow={feedbackWorkflow}
             editor={activeTab.provider ?? 'claude'}
             messageCount={activeMessages.length}
             getDurationSeconds={() => {
@@ -1456,70 +1838,190 @@ export default function AgentPanel({
       })()}
 
       <div className={INPUT_BAR_CLASS}>
-        {persistentHistory && (
-          <div className={INPUT_SELECT_ROW_CLASS}>
-            <select
-              value={selectedAgent ?? ''}
-              onChange={(e) => setSelectedAgent(e.target.value || null)}
-              className={WIDE_SELECT_CLASS}
-              disabled={!activeTab || !!activeTab.activeRunId}
-            >
-              <option value="">{t('chatFree')}</option>
-              <optgroup label={t('meta')}>
-                <option value="nakiros">{agentLabel('nakiros')}</option>
-              </optgroup>
-              <optgroup label={t('agents')}>
-                {AGENT_DEFINITIONS.filter((o) => o.group === 'agent').map((o) => (
-                  <option key={o.id} value={o.id}>{agentLabel(o.id)}</option>
-                ))}
-              </optgroup>
-              <optgroup label={t('workflows')}>
-                {AGENT_DEFINITIONS.filter((o) => o.group === 'workflow').map((o) => (
-                  <option key={o.id} value={o.id}>{agentLabel(o.id)}</option>
-                ))}
-              </optgroup>
-            </select>
-            <select
-              value={activeTab?.provider ?? 'claude'}
-              onChange={(e) => activeTab && updateTabProvider(activeTab.id, e.target.value as AgentProvider)}
-              className={SELECT_CLASS}
-              disabled={!activeTab || !!activeTab.activeRunId}
-            >
-              <option value="claude">Claude</option>
-              <option value="codex">Codex</option>
-              <option value="cursor">Cursor</option>
-            </select>
+        {showSlashCommands && (
+          <div className={SLASH_MENU_CLASS}>
+            <div className={SLASH_MENU_HEADER_CLASS}>
+              <span>{t('slashCommands')}</span>
+              <span>{t('slashHint')}</span>
+            </div>
+            {filteredSlashCommands.length === 0 ? (
+              <div className={SLASH_MENU_EMPTY_CLASS}>{t('slashNoMatch')}</div>
+            ) : (
+              <div className="max-h-[220px] overflow-y-auto">
+                {filteredSlashCommands.map((command, index) => {
+                  const active = index === highlightedSlashIndex;
+                  return (
+                    <button
+                      key={command.id}
+                      type="button"
+                      aria-selected={active}
+                      ref={active ? activeSlashItemRef : undefined}
+                      className={slashMenuItemClass(active)}
+                      onMouseEnter={() => setHighlightedSlashIndex(index)}
+                      onClick={() => activeTab && applySlashCommand(activeTab.id, command.command)}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className={slashMenuCursorClass(active)} />
+                        <div className="min-w-0">
+                          <div className={slashMenuCommandClass(active)}>{command.command}</div>
+                          <div className={slashMenuLabelClass(active)}>{command.label}</div>
+                        </div>
+                      </div>
+                      <span className={slashMenuKindBadgeClass(active)}>
+                        {command.kind === 'workflow' ? t('workflows') : t('agent')}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
-        <div className="flex items-end gap-2">
-          <textarea
-            value={activeTab?.input ?? ''}
-            onChange={(e) => activeTab && updateTabInput(activeTab.id, e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && activeTab) {
-                e.preventDefault();
-                void sendMessageToTab(activeTab.id, activeTab.input);
-              }
-            }}
-            placeholder={activePlaceholder}
-            disabled={isInputDisabled}
-            rows={1}
-            className={textareaClass(isInputDisabled)}
-          />
-          {activeTab?.activeRunId ? (
-            <button onClick={stopActiveRun} title={t('stop')} className={STOP_BUTTON_CLASS}>
-              <Square size={14} />
-            </button>
-          ) : (
-            <button
-              onClick={() => activeTab && void sendMessageToTab(activeTab.id, activeTab.input)}
-              disabled={!canSend}
-              title={t('sendEnter')}
-              className={sendButtonClass(!canSend)}
-            >
-              <Send size={14} />
-            </button>
-          )}
+        {!showSlashCommands && showMentionMenu && (
+          <div className={SLASH_MENU_CLASS}>
+            <div className={SLASH_MENU_HEADER_CLASS}>
+              <span>{t('mentionAgents')}</span>
+              <span>{t('mentionHint')}</span>
+            </div>
+            {mentionOptions.length === 0 ? (
+              <div className={SLASH_MENU_EMPTY_CLASS}>{t('mentionNoMeetingAgents')}</div>
+            ) : filteredMentionOptions.length === 0 ? (
+              <div className={SLASH_MENU_EMPTY_CLASS}>{t('mentionNoMatch')}</div>
+            ) : (
+              <div className="max-h-[220px] overflow-y-auto">
+                {filteredMentionOptions.map((option, index) => {
+                  const active = index === highlightedMentionIndex;
+                  return (
+                    <button
+                      key={option.tag}
+                      type="button"
+                      aria-selected={active}
+                      ref={active ? activeMentionItemRef : undefined}
+                      className={slashMenuItemClass(active)}
+                      onMouseEnter={() => setHighlightedMentionIndex(index)}
+                      onClick={() => activeTab && applyAgentMention(activeTab.id, option.tag)}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className={slashMenuCursorClass(active)} />
+                        <div className="min-w-0">
+                          <div className={slashMenuCommandClass(active)}>{option.token}</div>
+                          <div className={slashMenuLabelClass(active)}>{option.label}</div>
+                        </div>
+                      </div>
+                      <span className={slashMenuKindBadgeClass(active)}>
+                        {t('agent')}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        <div className={INPUT_GRID_CLASS}>
+          <div className="col-span-10 min-w-0">
+            <textarea
+              ref={inputRef}
+              value={activeTab?.input ?? ''}
+              onChange={(e) => activeTab && updateTabInput(activeTab.id, e.target.value)}
+              onKeyDown={(e) => {
+                if (activeTab && showSlashCommands) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (filteredSlashCommands.length > 0) {
+                      setHighlightedSlashIndex((prev) => (prev + 1) % filteredSlashCommands.length);
+                    }
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (filteredSlashCommands.length > 0) {
+                      setHighlightedSlashIndex((prev) => (prev - 1 + filteredSlashCommands.length) % filteredSlashCommands.length);
+                    }
+                    return;
+                  }
+                  if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+                    const nextCommand = filteredSlashCommands[highlightedSlashIndex] ?? filteredSlashCommands[0];
+                    if (nextCommand) {
+                      e.preventDefault();
+                      applySlashCommand(activeTab.id, nextCommand.command);
+                      return;
+                    }
+                  }
+                }
+                if (activeTab && !showSlashCommands && showMentionMenu) {
+                  if (e.key === 'ArrowDown') {
+                    if (filteredMentionOptions.length > 0) {
+                      e.preventDefault();
+                      setHighlightedMentionIndex((prev) => (prev + 1) % filteredMentionOptions.length);
+                      return;
+                    }
+                  }
+                  if (e.key === 'ArrowUp') {
+                    if (filteredMentionOptions.length > 0) {
+                      e.preventDefault();
+                      setHighlightedMentionIndex((prev) => (prev - 1 + filteredMentionOptions.length) % filteredMentionOptions.length);
+                      return;
+                    }
+                  }
+                  if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+                    const nextMention = filteredMentionOptions[highlightedMentionIndex] ?? filteredMentionOptions[0];
+                    if (nextMention) {
+                      e.preventDefault();
+                      applyAgentMention(activeTab.id, nextMention.tag);
+                      return;
+                    }
+                    if (e.key === 'Tab') {
+                      e.preventDefault();
+                      return;
+                    }
+                  }
+                }
+                if (e.key === 'Enter' && !e.shiftKey && activeTab) {
+                  e.preventDefault();
+                  void sendMessageToTab(activeTab.id, activeTab.input);
+                }
+              }}
+              placeholder={t('inputPlaceholder')}
+              disabled={isInputDisabled}
+              rows={4}
+              className={textareaClass(isInputDisabled)}
+            />
+          </div>
+          <div className="col-span-2 min-w-0">
+            <div className={COMBO_CONTROL_CLASS}>
+              <select
+                value={activeTab?.provider ?? 'claude'}
+                onChange={(e) => activeTab && updateTabProvider(activeTab.id, e.target.value as AgentProvider)}
+                className={COMBO_SELECT_CLASS}
+                disabled={!activeTab || !!activeTab.activeRunId}
+                title={t('provider')}
+              >
+                <option value="claude">Claude</option>
+                <option value="codex">Codex</option>
+                <option value="cursor">Cursor</option>
+              </select>
+              <span className={COMBO_SEPARATOR_CLASS} />
+              {activeTab?.activeRunId ? (
+                <button
+                  onClick={stopActiveRun}
+                  title={t('stop')}
+                  className={comboActionButtonClass({ running: true, disabled: false })}
+                >
+                  <span className="h-3 w-3 rounded-[1px] bg-white" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => activeTab && void sendMessageToTab(activeTab.id, activeTab.input)}
+                  disabled={!canSend}
+                  title={t('sendEnter')}
+                  className={comboActionButtonClass({ running: false, disabled: !canSend })}
+                >
+                  <Send size={14} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
       </div>
@@ -1536,17 +2038,18 @@ const TAB_SELECT_BUTTON_CLASS =
 const TAB_CLOSE_BUTTON_CLASS =
   'grid h-6 w-6 shrink-0 place-items-center border-0 border-l border-[var(--line)] bg-transparent text-[var(--text-muted)]';
 const TAB_RUNNING_DOT_CLASS = 'ml-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--primary)]';
+const TAB_COMPLETED_DOT_CLASS = 'ml-1.5 h-2 w-2 shrink-0 rounded-full bg-[#14b8a6]';
 const TAB_UNREAD_DOT_CLASS = 'ml-1.5 h-2 w-2 shrink-0 rounded-full bg-[#f59e0b]';
-const QUICK_ACTIONS_BAR_CLASS =
-  'shrink-0 border-b border-[var(--line)] bg-[var(--bg-soft)] px-4 py-2.5';
-const QUICK_ACTIONS_LABEL_CLASS =
-  'mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]';
 const MESSAGES_AREA_CLASS = 'flex flex-1 flex-col gap-3.5 overflow-y-auto p-4';
 const INPUT_BAR_CLASS =
   'flex shrink-0 flex-col border-t border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5';
-const EMPTY_STATE_CLASS = 'm-auto text-center text-[13px] text-[var(--text-muted)]';
-const SELECT_CLASS =
-  'ui-form-control cursor-pointer rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] px-1.5 py-[3px] text-xs text-[var(--text)]';
+const INPUT_GRID_CLASS = 'grid grid-cols-12 items-end gap-2';
+const EMPTY_STATE_CLASS = 'm-auto flex flex-col items-center text-center text-[13px] text-[var(--text-muted)]';
+const COMBO_CONTROL_CLASS =
+  'flex h-[34px] w-full items-center overflow-hidden rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] focus-within:border-[var(--primary)]';
+const COMBO_SELECT_CLASS =
+  'h-full min-w-0 flex-1 cursor-pointer border-none bg-transparent px-2 text-[11px] text-[var(--text)] outline-none disabled:cursor-not-allowed disabled:opacity-60';
+const COMBO_SEPARATOR_CLASS = 'h-4 w-px bg-[var(--line)]';
 const RUNNING_INDICATOR_CLASS =
   'ml-auto max-w-[280px] truncate font-mono text-[10px] text-[var(--primary)]';
 const SESSION_BADGE_CLASS =
@@ -1564,6 +2067,8 @@ const USER_MSG_BUBBLE_CLASS =
 const AGENT_HEADER_CLASS = 'mb-1.5 flex items-center gap-1.5';
 const TOOL_TRACE_CLASS =
   'mb-2 flex flex-col gap-[3px] rounded-[8px_10px_10px_8px] border-l-2 border-[var(--primary)] bg-[var(--bg-muted)] px-2.5 py-1.5';
+const TOOL_TRACE_TOGGLE_CLASS =
+  'mb-0 flex w-full items-center justify-between border-none bg-transparent p-0 text-[9px] leading-[1.2] text-[var(--text-muted)] opacity-85';
 const TOOL_ROW_CLASS = 'flex items-center gap-1.5';
 const TOOL_ROW_STREAMING_CLASS = 'flex items-center gap-1.5 opacity-50';
 const TOOL_DISPLAY_TEXT_CLASS =
@@ -1582,10 +2087,12 @@ const HISTORY_PANEL_HEADER_CLASS =
   'flex shrink-0 items-center gap-1.5 border-b border-[var(--line)] px-3 py-2.5';
 const HISTORY_GROUP_LABEL_CLASS =
   'px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]';
-const INPUT_SELECT_ROW_CLASS = 'mb-1.5 flex gap-1.5';
-const WIDE_SELECT_CLASS = `${SELECT_CLASS} min-w-0 flex-1`;
-const STOP_BUTTON_CLASS =
-  'grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] border-none bg-[#ef4444] text-white';
+const SLASH_MENU_CLASS = 'mb-2 rounded-[12px] border border-[var(--line)] bg-[var(--bg-card)]';
+const SLASH_MENU_HEADER_CLASS =
+  'flex items-center justify-between border-b border-[var(--line)] px-2.5 py-1 text-[10px] uppercase tracking-[0.06em] text-[var(--text-muted)]';
+const SLASH_MENU_EMPTY_CLASS = 'px-2.5 py-2 text-[11px] text-[var(--text-muted)]';
+const SLASH_KIND_BADGE_CLASS =
+  'rounded-[9px] border border-[var(--line)] bg-[var(--bg-soft)] px-1.5 py-px text-[10px] text-[var(--text-muted)]';
 const CURSOR_CLASS = 'animate-pulse text-[var(--primary)]';
 const AGENT_SEGMENT_TAG_BASE_CLASS =
   'rounded-lg border px-2 py-0.5 font-["Space_Mono"] text-[10px] font-bold tracking-[0.04em]';
@@ -1627,13 +2134,43 @@ function historyToggleButtonClass(showHistory: boolean): string {
   return clsx(NEW_CONV_BUTTON_CLASS, showHistory ? 'bg-[var(--bg-muted)]' : 'bg-transparent');
 }
 
-function quickActionButtonClass(disabled: boolean): string {
+function slashMenuItemClass(active: boolean): string {
   return clsx(
-    'inline-flex items-center gap-[5px] rounded-[10px] border border-[var(--line)] px-2.5 py-[5px] text-xs font-semibold',
-    disabled
-      ? 'cursor-not-allowed bg-[var(--bg-muted)] text-[var(--text-muted)] opacity-50'
-      : 'bg-[var(--bg-card)] text-[var(--text)]',
+    'flex w-full items-center justify-between gap-2 border-none border-b border-[var(--line)] bg-transparent px-2.5 py-2 text-left last:border-b-0',
+    active && 'bg-[var(--primary-soft)] shadow-[inset_0_0_0_1px_var(--primary)]',
   );
+}
+
+function slashMenuCursorClass(active: boolean): string {
+  return clsx(
+    'h-6 w-[3px] shrink-0 rounded-full bg-[var(--primary)] transition-opacity',
+    active ? 'opacity-100' : 'opacity-0',
+  );
+}
+
+function slashMenuCommandClass(active: boolean): string {
+  return clsx(
+    'truncate font-mono text-[11px]',
+    active ? 'font-bold text-[var(--primary)]' : 'text-[var(--text)]',
+  );
+}
+
+function slashMenuLabelClass(active: boolean): string {
+  return clsx(
+    'truncate text-[10px]',
+    active ? 'text-[var(--text)]' : 'text-[var(--text-muted)]',
+  );
+}
+
+function slashMenuKindBadgeClass(active: boolean): string {
+  return clsx(
+    SLASH_KIND_BADGE_CLASS,
+    active && 'border-[var(--primary)] text-[var(--primary)]',
+  );
+}
+
+function toolTraceChevronClass(expanded: boolean): string {
+  return clsx('transition-transform', expanded ? 'rotate-0' : '-rotate-90');
 }
 
 function historyItemClass(active: boolean): string {
@@ -1668,16 +2205,18 @@ function agentMessageContainerClass(status: MessageStatus): string {
 
 function textareaClass(disabled: boolean): string {
   return clsx(
-    'ui-form-control flex-1 resize-none rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-[7px] text-[13px] leading-[1.5] text-[var(--text)] focus:border-[var(--primary)] focus:outline-none',
+    'ui-form-control block w-full resize-none rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-[7px] text-[13px] leading-[1.5] text-[var(--text)] focus:border-[var(--primary)] focus:outline-none',
     disabled && 'opacity-50',
   );
 }
 
-function sendButtonClass(disabled: boolean): string {
+function comboActionButtonClass({ running, disabled }: { running: boolean; disabled: boolean }): string {
   return clsx(
-    'grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] border-none',
-    disabled
-      ? 'cursor-not-allowed bg-[var(--bg-muted)] text-[var(--text-muted)]'
-      : 'bg-[var(--primary)] text-white',
+    'grid h-full w-9 shrink-0 place-items-center border-none transition-colors',
+    running
+      ? 'bg-[#ef4444] text-white'
+      : (disabled
+        ? 'cursor-not-allowed bg-[var(--bg-muted)] text-[var(--text-muted)]'
+        : 'bg-[var(--primary)] text-white'),
   );
 }

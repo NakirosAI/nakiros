@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeImage, Notification } from 'electron';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
@@ -19,6 +19,7 @@ import { getPreferences, savePreferences } from './services/preferences.js';
 import {
   getAgentInstallStatus,
   getGlobalInstallStatus,
+  getInstalledCommands,
   installAgents,
   installAgentsGlobally,
   ensureCommandsInRepo,
@@ -72,6 +73,7 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 }
+let isQuitting = false;
 
 // ─── Protocol registration ────────────────────────────────────────────────────
 
@@ -225,11 +227,66 @@ function createWindow(): void {
     app.dock.setIcon(appIcon);
   }
 
+  // macOS convention: close button hides the app window but keeps app/process alive.
+  // This preserves renderer state (opened workspaces, running chats) when reopening from Dock.
+  win.on('close', (event) => {
+    if (process.platform !== 'darwin') return;
+    if (isQuitting) return;
+    event.preventDefault();
+    win.hide();
+  });
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL']);
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'));
   }
+}
+
+interface AgentRunNotificationRequest {
+  workspaceId: string;
+  workspaceName?: string;
+  conversationId?: string | null;
+  tabId?: string | null;
+  conversationTitle?: string;
+  provider?: AgentProvider;
+  durationSeconds: number;
+}
+
+interface OpenAgentChatPayload {
+  workspaceId: string;
+  conversationId?: string | null;
+  tabId?: string | null;
+  eventId?: string;
+}
+
+function emitOpenAgentChat(payload: OpenAgentChatPayload): void {
+  let win = BrowserWindow.getAllWindows()[0];
+  if (!win) {
+    createWindow();
+    win = BrowserWindow.getAllWindows()[0];
+  }
+  if (!win) return;
+
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+
+  const emit = () => {
+    win?.webContents.send(IPC_CHANNELS['notification:openAgentChat'], payload);
+  };
+
+  if (win.webContents.isLoading()) {
+    win.webContents.once('did-finish-load', emit);
+  } else {
+    emit();
+  }
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  return `${minutes} min`;
 }
 
 // ─── macOS: open-url event (protocol handler) ─────────────────────────────────
@@ -320,6 +377,7 @@ ipcMain.handle(IPC_CHANNELS['preferences:save'], (_, prefs: AppPreferences) => s
 ipcMain.handle(IPC_CHANNELS['agents:status'], (_, repoPath: string) => getAgentInstallStatus(repoPath));
 ipcMain.handle(IPC_CHANNELS['agents:install'], (_, request: AgentInstallRequest) => installAgents(request));
 ipcMain.handle(IPC_CHANNELS['agents:global-status'], () => getGlobalInstallStatus());
+ipcMain.handle(IPC_CHANNELS['agents:installed-commands'], () => getInstalledCommands());
 ipcMain.handle(IPC_CHANNELS['agents:install-global'], () => installAgentsGlobally());
 ipcMain.handle(IPC_CHANNELS['agents:cli-status'], () => getAgentCliStatus());
 
@@ -366,6 +424,39 @@ ipcMain.handle(IPC_CHANNELS['epic:remove'], (_, wsId: string, id: string) => rem
 ipcMain.handle(IPC_CHANNELS['agent:context'], (_, wsId: string, ticketId: string, ws: StoredWorkspace) =>
   generateContext(resolveSlug(wsId), ticketId, ws));
 ipcMain.handle(IPC_CHANNELS['clipboard:write'], (_, text: string) => clipboard.writeText(text));
+ipcMain.handle(IPC_CHANNELS['notification:showAgentRun'], (_, payload: AgentRunNotificationRequest) => {
+  if (!Notification.isSupported()) return;
+
+  const durationLabel = formatDuration(Math.max(1, payload.durationSeconds));
+  const title = payload.workspaceName ? `Nakiros · ${payload.workspaceName}` : 'Nakiros';
+  const body = payload.conversationTitle
+    ? `“${payload.conversationTitle}” finished in ${durationLabel}.`
+    : `A chat response finished in ${durationLabel}.`;
+
+  const options: Electron.NotificationConstructorOptions = {
+    title,
+    body,
+  };
+
+  if (process.platform === 'darwin') {
+    options.actions = [{ type: 'button', text: 'Open Chat' }];
+    options.closeButtonText = 'Dismiss';
+  }
+
+  const openPayload: OpenAgentChatPayload = {
+    workspaceId: payload.workspaceId,
+    conversationId: payload.conversationId ?? null,
+    tabId: payload.tabId ?? null,
+    eventId: `notif-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
+  };
+
+  const notification = new Notification(options);
+  notification.on('click', () => emitOpenAgentChat(openPayload));
+  notification.on('action', (_event, index) => {
+    if (index === 0) emitOpenAgentChat(openPayload);
+  });
+  notification.show();
+});
 
 // ─── IPC: Terminal (node-pty) ─────────────────────────────────────────────────
 
@@ -625,6 +716,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   broadcastServerStatus('stopped');
   stopServer();
 });

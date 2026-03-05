@@ -162,7 +162,7 @@ You must fully embody this agent persona and follow activation rules exactly.
         [SM]            produce sprint artifacts, backlog hygiene reports
         [QA]            write test plans, QA checklists, bug reports
         [Hotfix]        produce post-mortem and incident reports
-        [Dev]           advisory only in this room — implementation routes to /nak:workflow:dev-story
+        [Dev]           advisory only in this room — implementation routes to /nak-workflow-dev-story
         [Brainstorming] save session context to brainstorming.md
       All actions are announced before execution and confirmed after.
     </action-scope>

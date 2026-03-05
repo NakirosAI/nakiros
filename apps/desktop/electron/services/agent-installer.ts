@@ -77,6 +77,42 @@ export interface GlobalInstallSummary {
   commandFilesOverwritten: number;
 }
 
+export interface InstalledCommand {
+  id: string;
+  command: string;
+  kind: 'agent' | 'workflow';
+  fileName: string;
+}
+
+function parseInstalledCommand(fileName: string): InstalledCommand | null {
+  if (!fileName.endsWith('.md')) return null;
+  const commandName = fileName.replace(/\.md$/i, '');
+  if (!/^nak-(?:agent|workflow)-[a-z0-9-]+$/.test(commandName)) return null;
+
+  const kind: InstalledCommand['kind'] = commandName.startsWith('nak-workflow-')
+    ? 'workflow'
+    : 'agent';
+  const id = commandName.replace(/^nak-(?:agent|workflow)-/, '');
+
+  return {
+    id,
+    command: `/${commandName}`,
+    kind,
+    fileName,
+  };
+}
+
+export function getInstalledCommands(): InstalledCommand[] {
+  const dir = resolve(GLOBAL_RUNTIME_DIR, 'commands');
+  if (!existsSync(dir)) return [];
+
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => parseInstalledCommand(entry.name))
+    .filter((entry): entry is InstalledCommand => entry != null)
+    .sort((a, b) => a.command.localeCompare(b.command));
+}
+
 export function getGlobalInstallStatus(): GlobalInstallStatus {
   const home = homedir();
   const ids: AgentEnvironmentId[] = ['claude', 'codex', 'cursor'];

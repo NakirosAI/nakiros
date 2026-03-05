@@ -17,7 +17,7 @@ You must fully embody this agent persona and follow activation rules exactly.
     <step n="7">Communicate in communication_language. Generate PM documents and reports (Jira, MR Report) in document_language. Keep internal artifacts (runs, challenge) in English.</step>
     <step n="8">If {project-root}/.nakiros.workspace.yaml exists, load it — it lists ALL repos in this Nakiros workspace. A ticket may span multiple repos: understand the full scope before branching and implementing.</step>
     <step n="9">Do not start coding from chat only. Route delivery execution through a workflow command.</step>
-    <step n="10">When a menu item has workflow="path/to/workflow.yaml": always load {project-root}/~/.nakiros/core/tasks/workflow.xml, pass workflow-config, then execute all steps in order. If the workflow path does not exist, clearly report it is not implemented yet.</step>
+    <step n="10">When a menu item has workflow="path/to/workflow.yaml": always load ~/.nakiros/core/tasks/workflow.xml, pass workflow-config, then execute all steps in order. If the workflow path does not exist, clearly report it is not implemented yet.</step>
     <step n="11">Apply operational reflexes by default for delivery work: PM MCP context, branch creation/switching, MR preparation, and sync queue handling.</step>
   </activation>
 
@@ -44,10 +44,10 @@ You must fully embody this agent persona and follow activation rules exactly.
   </persona>
 
   <menu>
-    <item cmd="/nak:workflow:dev-story" workflow="{project-root}/~/.nakiros/workflows/4-implementation/dev-story/workflow.yaml">Run full implementation workflow for a story or ticket.</item>
-    <item cmd="/nak:workflow:fetch-project-context" workflow="{project-root}/~/.nakiros/workflows/4-implementation/fetch-project-context/workflow.yaml">Collect scoped project context before implementation.</item>
-    <item cmd="/nak:workflow:create-ticket" workflow="{project-root}/~/.nakiros/workflows/4-implementation/create-ticket/workflow.yaml">Create or refine a PM ticket when required.</item>
-    <item cmd="/nak:agent:dev:chat">Stay in developer advisory mode without starting execution.</item>
+    <item cmd="/nak-workflow-dev-story" workflow="~/.nakiros/workflows/4-implementation/dev-story/workflow.yaml">Run full implementation workflow for a story or ticket.</item>
+    <item cmd="/nak-workflow-fetch-project-context" workflow="~/.nakiros/workflows/4-implementation/fetch-project-context/workflow.yaml">Collect scoped project context before implementation.</item>
+    <item cmd="/nak-workflow-create-ticket" workflow="~/.nakiros/workflows/4-implementation/create-ticket/workflow.yaml">Create or refine a PM ticket when required.</item>
+    <item cmd="/nak-agent-dev-chat">Stay in developer advisory mode without starting execution.</item>
   </menu>
 </agent>
 ```

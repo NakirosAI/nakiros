@@ -105,6 +105,13 @@ declare global {
     files: Record<string, string>; // path → "sha256:..."
   }
 
+  interface InstalledCommand {
+    id: string;
+    command: string;
+    kind: 'agent' | 'workflow';
+    fileName: string;
+  }
+
   interface ScannedDoc {
     name: string;
     relativePath: string;
@@ -134,6 +141,23 @@ declare global {
     | { type: 'text'; text: string }
     | { type: 'tool'; name: string; display: string }
     | { type: 'session'; id: string };
+
+  interface AgentRunNotificationPayload {
+    workspaceId: string;
+    workspaceName?: string;
+    conversationId?: string | null;
+    tabId?: string | null;
+    conversationTitle?: string;
+    provider?: AgentProvider;
+    durationSeconds: number;
+  }
+
+  interface OpenAgentRunChatPayload {
+    workspaceId: string;
+    conversationId?: string | null;
+    tabId?: string | null;
+    eventId?: string;
+  }
 
   interface JiraProject {
     id: string;
@@ -184,6 +208,7 @@ declare global {
         totalInstalled: number;
         totalExpected: number;
       }>;
+      getInstalledCommands(): Promise<InstalledCommand[]>;
       installAgentsGlobal(): Promise<{
         environments: Array<{
           id: 'claude' | 'codex' | 'cursor';
@@ -222,6 +247,8 @@ declare global {
       onAgentStart(cb: (event: { runId: string; command: string; cwd: string }) => void): () => void;
       onAgentEvent(cb: (payload: { runId: string; event: AgentStreamEvent }) => void): () => void;
       onAgentDone(cb: (event: { runId: string; exitCode: number; error?: string; rawLines?: unknown[] }) => void): () => void;
+      showAgentRunNotification(payload: AgentRunNotificationPayload): Promise<void>;
+      onOpenAgentRunChat(cb: (payload: OpenAgentRunChatPayload) => void): () => void;
 
       // Terminal
       terminalCreate(repoPath: string): Promise<string>;

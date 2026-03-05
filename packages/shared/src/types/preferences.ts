@@ -13,6 +13,8 @@ export interface AppPreferences {
   mcpServerUrl?: string;
   agentProvider?: AgentProvider;
   agentChannel?: 'stable' | 'beta';
+  desktopNotificationsEnabled?: boolean;
+  desktopNotificationMinDurationSeconds?: number;
 }
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
@@ -20,4 +22,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   language: 'system',
   updatedAt: '',
   agentProvider: 'claude',
+  desktopNotificationsEnabled: true,
+  desktopNotificationMinDurationSeconds: 60,
 };

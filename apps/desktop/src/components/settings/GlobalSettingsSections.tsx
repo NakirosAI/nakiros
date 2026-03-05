@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import type {
@@ -5,7 +6,7 @@ import type {
   AppPreferences,
   LanguagePreference,
 } from '@nakiros/shared';
-import { AGENT_DEFINITIONS } from '../../constants/agents';
+import { getAgentDefinitionLabel, type AgentDefinition } from '../../constants/agents';
 import { formatLastCheck } from '../../utils/dates';
 import { Badge, Button, Card, Input } from '../ui';
 
@@ -49,6 +50,7 @@ interface GlobalSettingsMcpNakirosSectionProps {
 
 interface GlobalSettingsAgentNakirosSectionProps {
   versionInfo: BundleVersionInfo | null;
+  agentDefinitions: AgentDefinition[];
   updateResult: UpdateCheckResult | null;
   updateStatus: GlobalSettingsUpdateStatus;
   updateMsg: string;
@@ -63,6 +65,25 @@ export function GlobalSettingsGeneralSection({
   onUpdate,
 }: GlobalSettingsGeneralSectionProps) {
   const { t } = useTranslation('settings');
+  const desktopNotificationsEnabled = preferences.desktopNotificationsEnabled !== false;
+  const desktopNotificationThreshold = Math.min(
+    3600,
+    Math.max(0, Math.round(preferences.desktopNotificationMinDurationSeconds ?? 60)),
+  );
+  const [desktopThresholdInput, setDesktopThresholdInput] = useState(String(desktopNotificationThreshold));
+
+  useEffect(() => {
+    setDesktopThresholdInput(String(desktopNotificationThreshold));
+  }, [desktopNotificationThreshold]);
+
+  async function handleDesktopThresholdBlur() {
+    let nextThreshold = Number.parseInt(desktopThresholdInput, 10);
+    if (!Number.isFinite(nextThreshold)) nextThreshold = 60;
+    nextThreshold = Math.min(3600, Math.max(0, Math.round(nextThreshold)));
+    setDesktopThresholdInput(String(nextThreshold));
+    if (nextThreshold === desktopNotificationThreshold) return;
+    await onUpdate({ desktopNotificationMinDurationSeconds: nextThreshold });
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -107,6 +128,60 @@ export function GlobalSettingsGeneralSection({
               {label}
             </Button>
           ))}
+        </div>
+      </Card>
+
+      <Card padding="md" className="rounded-[10px] bg-[var(--bg-soft)]">
+        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
+          {t('desktopNotificationsTitle')}
+        </span>
+        <p className="m-0 text-xs text-[var(--text-muted)]">{t('desktopNotificationsHint')}</p>
+
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void onUpdate({ desktopNotificationsEnabled: true })}
+            className={clsx(
+              'h-8 rounded-[10px] px-2.5 text-xs font-bold',
+              desktopNotificationsEnabled
+                ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]'
+                : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--text)]',
+            )}
+          >
+            {t('desktopNotificationsOn')}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void onUpdate({ desktopNotificationsEnabled: false })}
+            className={clsx(
+              'h-8 rounded-[10px] px-2.5 text-xs font-bold',
+              !desktopNotificationsEnabled
+                ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)]'
+                : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--text)]',
+            )}
+          >
+            {t('desktopNotificationsOff')}
+          </Button>
+        </div>
+
+        <div className="mt-3">
+          <Input
+            type="number"
+            min={0}
+            max={3600}
+            step={1}
+            label={t('desktopNotificationsThresholdLabel')}
+            hint={t('desktopNotificationsThresholdHint')}
+            value={desktopThresholdInput}
+            onChange={(event) => setDesktopThresholdInput(event.target.value)}
+            onBlur={() => void handleDesktopThresholdBlur()}
+            disabled={!desktopNotificationsEnabled}
+            className="max-w-[220px] rounded-[10px] border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-2 text-[13px]"
+          />
         </div>
       </Card>
     </div>
@@ -256,6 +331,7 @@ export function GlobalSettingsMcpNakirosSection({
 
 export function GlobalSettingsAgentNakirosSection({
   versionInfo,
+  agentDefinitions,
   updateResult,
   updateStatus,
   updateMsg,
@@ -347,12 +423,12 @@ export function GlobalSettingsAgentNakirosSection({
         <p className="m-0 text-xs text-[var(--text-muted)]">{t('catalogSubtitle')}</p>
 
         <div className="mt-2.5 flex flex-col gap-2">
-          {AGENT_DEFINITIONS.map((capability) => (
+          {agentDefinitions.map((capability) => (
             <Card key={capability.id} padding="sm" className="rounded-[10px] bg-[var(--bg-card)]">
               <div className="flex items-center justify-between gap-2.5">
                 <div className="flex min-w-0 flex-col gap-1">
                   <strong className="text-[13px]">
-                    {tAgent(capability.labelKey, { defaultValue: capability.label })}
+                    {getAgentDefinitionLabel(capability, tAgent)}
                   </strong>
                   <code className="text-[11px]">{capability.command}</code>
                 </div>
@@ -370,4 +446,3 @@ export function GlobalSettingsAgentNakirosSection({
     </div>
   );
 }
-

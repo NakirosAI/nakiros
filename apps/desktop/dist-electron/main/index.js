@@ -46809,6 +46809,7 @@ const IPC_CHANNELS = {
   "agentTabs:save": "agentTabs:save",
   "agents:cli-status": "agents:cli-status",
   "agents:global-status": "agents:global-status",
+  "agents:installed-commands": "agents:installed-commands",
   "agents:install": "agents:install",
   "agents:install-global": "agents:install-global",
   "agents:status": "agents:status",
@@ -46838,6 +46839,8 @@ const IPC_CHANNELS = {
   "jira:getValidToken": "jira:getValidToken",
   "jira:startAuth": "jira:startAuth",
   "jira:syncTickets": "jira:syncTickets",
+  "notification:openAgentChat": "notification:openAgentChat",
+  "notification:showAgentRun": "notification:showAgentRun",
   "onboarding:detectEditors": "onboarding:detectEditors",
   "onboarding:install": "onboarding:install",
   "onboarding:nakirosConfigExists": "onboarding:nakirosConfigExists",
@@ -47369,8 +47372,15 @@ const DEFAULT_PREFERENCES = {
   language: "system",
   updatedAt: "",
   mcpServerUrl: void 0,
-  agentProvider: "claude"
+  agentProvider: "claude",
+  agentChannel: "stable",
+  desktopNotificationsEnabled: true,
+  desktopNotificationMinDurationSeconds: 60
 };
+function normalizeNotificationThresholdSeconds(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 60;
+  return Math.min(3600, Math.max(0, Math.round(value)));
+}
 function getStoragePath() {
   const dir = electron.app.getPath("userData");
   if (!require$$1$2.existsSync(dir)) {
@@ -47383,12 +47393,17 @@ function getPreferences() {
   if (!require$$1$2.existsSync(path)) return DEFAULT_PREFERENCES;
   try {
     const parsed = JSON.parse(require$$1$2.readFileSync(path, "utf-8"));
+    const agentProvider = parsed.agentProvider === "claude" || parsed.agentProvider === "codex" || parsed.agentProvider === "cursor" ? parsed.agentProvider : "claude";
+    const agentChannel = parsed.agentChannel === "stable" || parsed.agentChannel === "beta" ? parsed.agentChannel : "stable";
     return {
       theme: "dark",
       language: parsed.language ?? "system",
       updatedAt: parsed.updatedAt ?? "",
       mcpServerUrl: parsed.mcpServerUrl,
-      agentProvider: parsed.agentProvider ?? "claude"
+      agentProvider,
+      agentChannel,
+      desktopNotificationsEnabled: parsed.desktopNotificationsEnabled !== false,
+      desktopNotificationMinDurationSeconds: normalizeNotificationThresholdSeconds(parsed.desktopNotificationMinDurationSeconds)
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -47400,7 +47415,12 @@ function savePreferences(prefs) {
     language: prefs.language ?? "system",
     updatedAt: prefs.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
     mcpServerUrl: prefs.mcpServerUrl || void 0,
-    agentProvider: prefs.agentProvider ?? "claude"
+    agentProvider: prefs.agentProvider ?? "claude",
+    agentChannel: prefs.agentChannel ?? "stable",
+    desktopNotificationsEnabled: prefs.desktopNotificationsEnabled !== false,
+    desktopNotificationMinDurationSeconds: normalizeNotificationThresholdSeconds(
+      prefs.desktopNotificationMinDurationSeconds
+    )
   };
   require$$1$2.writeFileSync(getStoragePath(), JSON.stringify(next, null, 2), "utf-8");
 }
@@ -47428,6 +47448,24 @@ function readCommandTemplates() {
   return Object.fromEntries(
     require$$1$2.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md")).map((e) => [e.name, require$$1$2.readFileSync(require$$0$3.resolve(dir, e.name), "utf8")])
   );
+}
+function parseInstalledCommand(fileName) {
+  if (!fileName.endsWith(".md")) return null;
+  const commandName = fileName.replace(/\.md$/i, "");
+  if (!/^nak-(?:agent|workflow)-[a-z0-9-]+$/.test(commandName)) return null;
+  const kind = commandName.startsWith("nak-workflow-") ? "workflow" : "agent";
+  const id2 = commandName.replace(/^nak-(?:agent|workflow)-/, "");
+  return {
+    id: id2,
+    command: `/${commandName}`,
+    kind,
+    fileName
+  };
+}
+function getInstalledCommands() {
+  const dir = require$$0$3.resolve(GLOBAL_RUNTIME_DIR, "commands");
+  if (!require$$1$2.existsSync(dir)) return [];
+  return require$$1$2.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => parseInstalledCommand(entry.name)).filter((entry) => entry != null).sort((a, b) => a.command.localeCompare(b.command));
 }
 function getGlobalInstallStatus() {
   const home = os.homedir();
@@ -48307,25 +48345,69 @@ function formatProviderName(provider) {
   if (provider === "codex") return "Codex";
   return "Cursor";
 }
+function normalizeCodexSlashCommand(message, cwd) {
+  const leadingWhitespaceLength = message.length - message.trimStart().length;
+  const leadingWhitespace = message.slice(0, leadingWhitespaceLength);
+  const trimmed = message.trimStart();
+  const commandMatch = trimmed.match(/^\/(nak-(?:agent|workflow)-[^\s]+)/);
+  if (!commandMatch) return message;
+  const commandName = commandMatch[1];
+  if (!commandName) return message;
+  const promptPath = require$$0$3.resolve(cwd, ".codex", "prompts", `${commandName}.md`);
+  if (!require$$1$2.existsSync(promptPath)) return message;
+  return `${leadingWhitespace}/prompts:${commandName}${trimmed.slice(commandMatch[0].length)}`;
+}
+function expandCodexPromptCommand(message, cwd) {
+  const leadingWhitespaceLength = message.length - message.trimStart().length;
+  const leadingWhitespace = message.slice(0, leadingWhitespaceLength);
+  const trimmed = message.trimStart();
+  const commandMatch = trimmed.match(/^\/(nak-(?:agent|workflow)-[^\s]+)/);
+  if (!commandMatch) return normalizeCodexSlashCommand(message, cwd);
+  const commandName = commandMatch[1];
+  if (!commandName) return normalizeCodexSlashCommand(message, cwd);
+  const promptPath = require$$0$3.resolve(cwd, ".codex", "prompts", `${commandName}.md`);
+  if (!require$$1$2.existsSync(promptPath)) return normalizeCodexSlashCommand(message, cwd);
+  let promptContent = "";
+  try {
+    promptContent = require$$1$2.readFileSync(promptPath, "utf8").trim();
+  } catch {
+    return normalizeCodexSlashCommand(message, cwd);
+  }
+  const trailingInput = trimmed.slice(commandMatch[0].length).trim();
+  const sections = [
+    `Command Trigger: \`/${commandName}\``,
+    `Prompt Source: ${promptPath}`,
+    "The full prompt content is provided below. Apply it directly without scanning the filesystem to locate prompt files.",
+    promptContent
+  ];
+  if (trailingInput) {
+    sections.push(`User Input:
+${trailingInput}`);
+  }
+  return `${leadingWhitespace}${sections.join("\n\n")}`;
+}
 function buildRunnerCommand(args) {
-  const escapedMessage = shellEscape(args.message);
   const addDirFlags = args.additionalDirs.filter((d) => d && d !== args.cwd && require$$1$2.existsSync(d)).map((d) => `--add-dir '${shellEscape(d)}'`);
   const addDirCount = addDirFlags.length;
   const addDirPart = addDirCount > 0 ? `${addDirFlags.join(" ")} ` : "";
   if (args.provider === "codex") {
+    const effectiveMessage = expandCodexPromptCommand(args.message, args.cwd);
+    const escapedMessage2 = shellEscape(effectiveMessage);
     const topLevelFlags = `--dangerously-bypass-approvals-and-sandbox${addDirCount > 0 ? ` ${addDirFlags.join(" ")}` : ""}`;
-    const resumePart = args.sessionId ? `exec resume --json --skip-git-repo-check '${shellEscape(args.sessionId)}' '${escapedMessage}'` : `exec --json --skip-git-repo-check '${escapedMessage}'`;
+    const resumePart = args.sessionId ? `exec resume --json --skip-git-repo-check '${shellEscape(args.sessionId)}' '${escapedMessage2}'` : `exec --json --skip-git-repo-check '${escapedMessage2}'`;
     const shellCommand2 = `codex ${topLevelFlags} ${resumePart}`;
     const displayCommand2 = `codex ${args.sessionId ? "resume " : ""}${addDirCount > 0 ? `(+${addDirCount} dirs) ` : ""}'${args.message.slice(0, 80)}${args.message.length > 80 ? "…" : ""}'`;
     return { shellCommand: shellCommand2, displayCommand: displayCommand2, addDirCount };
   }
   if (args.provider === "cursor") {
+    const escapedMessage2 = shellEscape(args.message);
     const resumePart = args.sessionId ? `--resume '${shellEscape(args.sessionId)}' ` : "";
     const workspacePart = `--workspace '${shellEscape(args.cwd)}' `;
-    const shellCommand2 = `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust ${workspacePart}${resumePart}'${escapedMessage}'`;
+    const shellCommand2 = `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust ${workspacePart}${resumePart}'${escapedMessage2}'`;
     const displayCommand2 = `cursor-agent ${args.sessionId ? "resume " : ""}--print '${args.message.slice(0, 80)}${args.message.length > 80 ? "…" : ""}'`;
     return { shellCommand: shellCommand2, displayCommand: displayCommand2, addDirCount };
   }
+  const escapedMessage = shellEscape(args.message);
   const resumeFlag = args.sessionId ? `--resume '${shellEscape(args.sessionId)}' ` : "";
   const shellCommand = `claude --output-format stream-json --verbose --dangerously-skip-permissions ${addDirPart}${resumeFlag}--print '${escapedMessage}'`;
   const displayCommand = `claude ${addDirCount > 0 ? `(+${addDirCount} repos) ` : ""}${resumeFlag}--print '${args.message.slice(0, 80)}${args.message.length > 80 ? "…" : ""}'`;
@@ -49120,6 +49202,7 @@ const gotTheLock = electron.app.requestSingleInstanceLock();
 if (!gotTheLock) {
   electron.app.quit();
 }
+let isQuitting = false;
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
     electron.app.setAsDefaultProtocolClient("nakiros", process.execPath, [require$$0$3.resolve(process.argv[1] ?? "")]);
@@ -49235,11 +49318,41 @@ function createWindow() {
   if (process.platform === "darwin" && appIcon) {
     electron.app.dock.setIcon(appIcon);
   }
+  win.on("close", (event) => {
+    if (process.platform !== "darwin") return;
+    if (isQuitting) return;
+    event.preventDefault();
+    win.hide();
+  });
   if (process.env["ELECTRON_RENDERER_URL"]) {
     win.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {
     win.loadFile(require$$0$3.join(__dirname, "../renderer/index.html"));
   }
+}
+function emitOpenAgentChat(payload) {
+  let win = electron.BrowserWindow.getAllWindows()[0];
+  if (!win) {
+    createWindow();
+    win = electron.BrowserWindow.getAllWindows()[0];
+  }
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  const emit2 = () => {
+    win?.webContents.send(IPC_CHANNELS["notification:openAgentChat"], payload);
+  };
+  if (win.webContents.isLoading()) {
+    win.webContents.once("did-finish-load", emit2);
+  } else {
+    emit2();
+  }
+}
+function formatDuration(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  return `${minutes} min`;
 }
 let pendingProtocolUrl = null;
 electron.app.on("open-url", (event, url) => {
@@ -49315,6 +49428,7 @@ electron.ipcMain.handle(IPC_CHANNELS["preferences:save"], (_, prefs) => savePref
 electron.ipcMain.handle(IPC_CHANNELS["agents:status"], (_, repoPath) => getAgentInstallStatus(repoPath));
 electron.ipcMain.handle(IPC_CHANNELS["agents:install"], (_, request2) => installAgents(request2));
 electron.ipcMain.handle(IPC_CHANNELS["agents:global-status"], () => getGlobalInstallStatus());
+electron.ipcMain.handle(IPC_CHANNELS["agents:installed-commands"], () => getInstalledCommands());
 electron.ipcMain.handle(IPC_CHANNELS["agents:install-global"], () => installAgentsGlobally());
 electron.ipcMain.handle(IPC_CHANNELS["agents:cli-status"], () => getAgentCliStatus());
 electron.ipcMain.handle(IPC_CHANNELS["onboarding:detectEditors"], () => detectEditors());
@@ -49343,6 +49457,32 @@ electron.ipcMain.handle(IPC_CHANNELS["epic:save"], (_, wsId, e) => saveEpic(reso
 electron.ipcMain.handle(IPC_CHANNELS["epic:remove"], (_, wsId, id2) => removeEpic(resolveSlug(wsId), id2));
 electron.ipcMain.handle(IPC_CHANNELS["agent:context"], (_, wsId, ticketId, ws) => generateContext(resolveSlug(wsId), ticketId, ws));
 electron.ipcMain.handle(IPC_CHANNELS["clipboard:write"], (_, text) => electron.clipboard.writeText(text));
+electron.ipcMain.handle(IPC_CHANNELS["notification:showAgentRun"], (_, payload) => {
+  if (!electron.Notification.isSupported()) return;
+  const durationLabel = formatDuration(Math.max(1, payload.durationSeconds));
+  const title2 = payload.workspaceName ? `Nakiros · ${payload.workspaceName}` : "Nakiros";
+  const body = payload.conversationTitle ? `“${payload.conversationTitle}” finished in ${durationLabel}.` : `A chat response finished in ${durationLabel}.`;
+  const options = {
+    title: title2,
+    body
+  };
+  if (process.platform === "darwin") {
+    options.actions = [{ type: "button", text: "Open Chat" }];
+    options.closeButtonText = "Dismiss";
+  }
+  const openPayload = {
+    workspaceId: payload.workspaceId,
+    conversationId: payload.conversationId ?? null,
+    tabId: payload.tabId ?? null,
+    eventId: `notif-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+  };
+  const notification = new electron.Notification(options);
+  notification.on("click", () => emitOpenAgentChat(openPayload));
+  notification.on("action", (_event, index) => {
+    if (index === 0) emitOpenAgentChat(openPayload);
+  });
+  notification.show();
+});
 electron.ipcMain.handle(IPC_CHANNELS["terminal:create"], (event, repoPath) => {
   const win = electron.BrowserWindow.fromWebContents(event.sender);
   const terminalId = createTerminal(
@@ -49534,6 +49674,7 @@ electron.app.whenReady().then(() => {
   }
 });
 electron.app.on("before-quit", () => {
+  isQuitting = true;
   broadcastServerStatus("stopped");
   stopServer();
 });

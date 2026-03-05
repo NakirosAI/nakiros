@@ -20,6 +20,7 @@ interface Props {
   onGoHome(): void;
   serverStatus: 'starting' | 'running' | 'stopped';
   onRestartServer(): void;
+  openAgentRunChatTarget?: OpenAgentRunChatPayload | null;
 }
 
 export default function Dashboard({
@@ -28,6 +29,7 @@ export default function Dashboard({
   onGoHome,
   serverStatus,
   onRestartServer,
+  openAgentRunChatTarget,
 }: Props) {
   const { t } = useTranslation('dashboard');
   const { t: tSidebar } = useTranslation('sidebar');
@@ -67,6 +69,8 @@ export default function Dashboard({
   const [overviewConversationCount, setOverviewConversationCount] = useState(0);
   const [lastConversationAt, setLastConversationAt] = useState<string | null>(null);
   const [openPrdAssistantSignal, setOpenPrdAssistantSignal] = useState(0);
+  const [chatCompletionNotices, setChatCompletionNotices] = useState<Record<string, number>>({});
+  const lastHandledAgentRunChatEventIdRef = useRef<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceMenuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -76,10 +80,29 @@ export default function Dashboard({
   }, [workspace.id]);
 
   useEffect(() => {
+    if (!openAgentRunChatTarget) return;
+    const eventId = openAgentRunChatTarget.eventId
+      ?? `fallback-${openAgentRunChatTarget.workspaceId}-${openAgentRunChatTarget.tabId ?? ''}-${openAgentRunChatTarget.conversationId ?? ''}`;
+    if (lastHandledAgentRunChatEventIdRef.current === eventId) return;
+    if (openAgentRunChatTarget.workspaceId !== workspace.id) return;
+    lastHandledAgentRunChatEventIdRef.current = eventId;
+    setActiveTab('chat');
+  }, [openAgentRunChatTarget, workspace.id]);
+
+  useEffect(() => {
     void refreshOverviewData();
     setOverviewDocsCount(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace.id]);
+
+  useEffect(() => {
+    setChatCompletionNotices((prev) => {
+      const openIds = new Set(openWorkspaces.map((item) => item.id));
+      const nextEntries = Object.entries(prev).filter(([workspaceId]) => openIds.has(workspaceId));
+      if (nextEntries.length === Object.keys(prev).length) return prev;
+      return Object.fromEntries(nextEntries);
+    });
+  }, [openWorkspaces]);
 
   useEffect(() => {
     return () => {
@@ -150,8 +173,22 @@ export default function Dashboard({
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2400);
   }
 
+  function handleChatRunCompletionNoticeChange(workspaceId: string, pendingCount: number) {
+    setChatCompletionNotices((prev) => {
+      const current = prev[workspaceId] ?? 0;
+      if (pendingCount <= 0) {
+        if (!(workspaceId in prev)) return prev;
+        const { [workspaceId]: _removed, ...rest } = prev;
+        return rest;
+      }
+      if (current === pendingCount) return prev;
+      return { ...prev, [workspaceId]: pendingCount };
+    });
+  }
+
   const repoNames = workspace.repos.map((repo) => repo.name);
   const workspaceTopology = workspace.topology ?? (workspace.repos.length > 1 ? 'multi' : 'mono');
+  const activeWorkspaceHasChatCompletion = (chatCompletionNotices[workspace.id] ?? 0) > 0;
   const unopenedWorkspaces = allWorkspaces.filter(
     (candidate) => !openWorkspaces.some((openedWorkspace) => openedWorkspace.id === candidate.id),
   );
@@ -182,6 +219,7 @@ export default function Dashboard({
             <div aria-label={t('openedWorkspaceTabs')} className="flex min-w-0 max-w-[min(62vw,760px)] items-center gap-1.5 overflow-x-auto">
               {openWorkspaces.map((openedWorkspace) => {
                 const isActive = openedWorkspace.id === activeWorkspaceId;
+                const hasChatCompletion = (chatCompletionNotices[openedWorkspace.id] ?? 0) > 0;
                 return (
                   <div
                     key={openedWorkspace.id}
@@ -195,9 +233,12 @@ export default function Dashboard({
                     <button
                       onClick={() => openWorkspaceTab(openedWorkspace.id)}
                       title={openedWorkspace.name}
-                      className="max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap border-none bg-transparent px-[10px] py-1.5 text-[13px] font-semibold text-[var(--text)]"
+                      className="flex max-w-[220px] min-w-0 items-center gap-1.5 border-none bg-transparent px-[10px] py-1.5 text-[13px] font-semibold text-[var(--text)]"
                     >
-                      {openedWorkspace.name}
+                      <span className="truncate">{openedWorkspace.name}</span>
+                      {hasChatCompletion && (
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[#14b8a6]" />
+                      )}
                     </button>
                     <button
                       onClick={() => closeWorkspaceTab(openedWorkspace.id)}
@@ -319,6 +360,7 @@ export default function Dashboard({
         <Sidebar
           active={activeTab}
           onChange={setActiveTab}
+          chatHasCompletionNotice={activeWorkspaceHasChatCompletion}
           labels={{
             overview: tSidebar('overview'),
             chat: tSidebar('chat'),
@@ -333,6 +375,8 @@ export default function Dashboard({
             showGlobalSettings={showGlobalSettings}
             activeTab={activeTab}
             workspace={workspace}
+            openWorkspaces={openWorkspaces}
+            openAgentRunChatTarget={openAgentRunChatTarget}
             tickets={tickets}
             epics={epics}
             repoNames={repoNames}
@@ -364,6 +408,7 @@ export default function Dashboard({
               setOpenPrdAssistantSignal((prev) => prev + 1);
             }}
             onCloseGlobalSettings={() => setShowGlobalSettings(false)}
+            onChatRunCompletionNoticeChange={handleChatRunCompletionNoticeChange}
           />
         </div>
       </div>

@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   'agentTabs:save': 'agentTabs:save',
   'agents:cli-status': 'agents:cli-status',
   'agents:global-status': 'agents:global-status',
+  'agents:installed-commands': 'agents:installed-commands',
   'agents:install': 'agents:install',
   'agents:install-global': 'agents:install-global',
   'agents:status': 'agents:status',
@@ -39,6 +40,8 @@ export const IPC_CHANNELS = {
   'jira:getValidToken': 'jira:getValidToken',
   'jira:startAuth': 'jira:startAuth',
   'jira:syncTickets': 'jira:syncTickets',
+  'notification:openAgentChat': 'notification:openAgentChat',
+  'notification:showAgentRun': 'notification:showAgentRun',
   'onboarding:detectEditors': 'onboarding:detectEditors',
   'onboarding:install': 'onboarding:install',
   'onboarding:nakirosConfigExists': 'onboarding:nakirosConfigExists',
@@ -75,4 +78,3 @@ export const IPC_CHANNELS = {
 } as const;
 
 export type IpcChannel = keyof typeof IPC_CHANNELS;
-

@@ -18,6 +18,10 @@ const FALLBACK_PREFERENCES: AppPreferences = {
   theme: 'dark',
   language: 'system',
   updatedAt: '',
+  agentProvider: 'claude',
+  agentChannel: 'stable',
+  desktopNotificationsEnabled: true,
+  desktopNotificationMinDurationSeconds: 60,
 };
 
 type View =
@@ -37,6 +41,7 @@ export default function App() {
   const [preferences, setPreferences] = useState<AppPreferences>(FALLBACK_PREFERENCES);
   const [serverStatus, setServerStatus] = useState<'starting' | 'running' | 'stopped'>('starting');
   const [updateBanner, setUpdateBanner] = useState<UpdateCheckResult | null>(null);
+  const [openAgentRunChatTarget, setOpenAgentRunChatTarget] = useState<OpenAgentRunChatPayload | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -52,6 +57,11 @@ export default function App() {
           theme: 'dark',
           language: prefs.language ?? 'system',
           updatedAt: prefs.updatedAt ?? '',
+          mcpServerUrl: prefs.mcpServerUrl,
+          agentProvider: prefs.agentProvider ?? 'claude',
+          agentChannel: prefs.agentChannel ?? 'stable',
+          desktopNotificationsEnabled: prefs.desktopNotificationsEnabled !== false,
+          desktopNotificationMinDurationSeconds: prefs.desktopNotificationMinDurationSeconds ?? 60,
         };
         setPreferences(resolvedPrefs);
         void i18n.changeLanguage(resolveLanguage(resolvedPrefs.language));
@@ -73,6 +83,18 @@ export default function App() {
   useIpcListener(window.nakiros.onUpdatesAvailable, (result) => {
     if (result.compatible && result.hasUpdate) setUpdateBanner(result);
   });
+  useIpcListener(window.nakiros.onOpenAgentRunChat, (payload) => {
+    const target: OpenAgentRunChatPayload = {
+      ...payload,
+      eventId: payload.eventId ?? `notif-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
+    };
+    const workspaceExists = workspaces.some((item) => item.id === target.workspaceId);
+    if (!workspaceExists) return;
+    setOpenAgentRunChatTarget(target);
+    setOpenedWorkspaceIds((prev) => (prev.includes(target.workspaceId) ? prev : [...prev, target.workspaceId]));
+    setActiveWorkspaceId(target.workspaceId);
+    setView({ name: 'dashboard' });
+  }, [workspaces]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = 'dark';
@@ -247,6 +269,7 @@ export default function App() {
         >
           <Dashboard
             serverStatus={serverStatus}
+            openAgentRunChatTarget={openAgentRunChatTarget}
             onUpdateWorkspace={handleUpdateWorkspace}
             onNewWorkspace={() => setView({ name: 'setup' })}
             onGoHome={() => {

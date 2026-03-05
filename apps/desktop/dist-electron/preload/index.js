@@ -12,6 +12,7 @@ const IPC_CHANNELS = {
   "agentTabs:save": "agentTabs:save",
   "agents:cli-status": "agents:cli-status",
   "agents:global-status": "agents:global-status",
+  "agents:installed-commands": "agents:installed-commands",
   "agents:install": "agents:install",
   "agents:install-global": "agents:install-global",
   "agents:status": "agents:status",
@@ -41,6 +42,8 @@ const IPC_CHANNELS = {
   "jira:getValidToken": "jira:getValidToken",
   "jira:startAuth": "jira:startAuth",
   "jira:syncTickets": "jira:syncTickets",
+  "notification:openAgentChat": "notification:openAgentChat",
+  "notification:showAgentRun": "notification:showAgentRun",
   "onboarding:detectEditors": "onboarding:detectEditors",
   "onboarding:install": "onboarding:install",
   "onboarding:nakirosConfigExists": "onboarding:nakirosConfigExists",
@@ -101,6 +104,7 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
   getAgentInstallStatus: (repoPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:status"], repoPath),
   installAgents: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:install"], request),
   getGlobalInstallStatus: () => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:global-status"]),
+  getInstalledCommands: () => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:installed-commands"]),
   installAgentsGlobal: () => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:install-global"]),
   getAgentCliStatus: () => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:cli-status"]),
   // Tickets
@@ -131,6 +135,12 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
     const listener = (_, payload) => cb(payload);
     electron.ipcRenderer.on(IPC_CHANNELS["agent:done"], listener);
     return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["agent:done"], listener);
+  },
+  showAgentRunNotification: (payload) => electron.ipcRenderer.invoke(IPC_CHANNELS["notification:showAgentRun"], payload),
+  onOpenAgentRunChat: (cb) => {
+    const listener = (_, payload) => cb(payload);
+    electron.ipcRenderer.on(IPC_CHANNELS["notification:openAgentChat"], listener);
+    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["notification:openAgentChat"], listener);
   },
   // Terminal
   terminalCreate: (repoPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["terminal:create"], repoPath),

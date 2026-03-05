@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('nakiros', {
   getAgentInstallStatus: (repoPath: string) => ipcRenderer.invoke(IPC_CHANNELS['agents:status'], repoPath),
   installAgents: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS['agents:install'], request),
   getGlobalInstallStatus: () => ipcRenderer.invoke(IPC_CHANNELS['agents:global-status']),
+  getInstalledCommands: () => ipcRenderer.invoke(IPC_CHANNELS['agents:installed-commands']),
   installAgentsGlobal: () => ipcRenderer.invoke(IPC_CHANNELS['agents:install-global']),
   getAgentCliStatus: () => ipcRenderer.invoke(IPC_CHANNELS['agents:cli-status']),
 
@@ -77,6 +78,28 @@ contextBridge.exposeInMainWorld('nakiros', {
     const listener = (_: unknown, payload: { runId: string; exitCode: number; error?: string; rawLines?: unknown[] }) => cb(payload);
     ipcRenderer.on(IPC_CHANNELS['agent:done'], listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS['agent:done'], listener);
+  },
+  showAgentRunNotification: (payload: {
+    workspaceId: string;
+    workspaceName?: string;
+    conversationId?: string | null;
+    tabId?: string | null;
+    conversationTitle?: string;
+    provider?: AgentProvider;
+    durationSeconds: number;
+  }) => ipcRenderer.invoke(IPC_CHANNELS['notification:showAgentRun'], payload),
+  onOpenAgentRunChat: (cb: (payload: {
+    workspaceId: string;
+    conversationId?: string | null;
+    tabId?: string | null;
+    eventId?: string;
+  }) => void) => {
+    const listener = (
+      _: unknown,
+      payload: { workspaceId: string; conversationId?: string | null; tabId?: string | null; eventId?: string },
+    ) => cb(payload);
+    ipcRenderer.on(IPC_CHANNELS['notification:openAgentChat'], listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS['notification:openAgentChat'], listener);
   },
 
   // Terminal

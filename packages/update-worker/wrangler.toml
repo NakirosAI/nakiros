@@ -1,0 +1,18 @@
+name = "nakiros-updates"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "nakiros-assets"
+
+[triggers]
+routes = ["updates.nakiros.com/*"]
+
+# ─── Secrets (set via `wrangler secret put`) ──────────────────────────────────
+# NAKIROS_API_KEY_STABLE
+# NAKIROS_API_KEY_BETA
+#
+# ─── Rate limiting (configure in Cloudflare dashboard) ────────────────────────
+# /manifest  → 60 req/hour per IP
+# /download  → 200 req/hour per IP

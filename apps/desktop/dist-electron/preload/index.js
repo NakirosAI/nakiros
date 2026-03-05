@@ -139,8 +139,9 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
     return () => electron.ipcRenderer.removeListener("onboarding:progress", listener);
   },
   // Updates
-  checkForUpdates: (force) => electron.ipcRenderer.invoke("updates:check", force),
-  applyUpdate: (files) => electron.ipcRenderer.invoke("updates:apply", files),
+  checkForUpdates: (force, channel) => electron.ipcRenderer.invoke("updates:check", force, channel),
+  applyUpdate: (files, bundleVersion) => electron.ipcRenderer.invoke("updates:apply", files, bundleVersion),
+  getVersionInfo: () => electron.ipcRenderer.invoke("updates:getVersionInfo"),
   onUpdatesAvailable: (cb) => {
     const listener = (_, result) => cb(result);
     electron.ipcRenderer.on("updates:available", listener);
@@ -150,5 +151,8 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
     const listener = (_, payload) => cb(payload);
     electron.ipcRenderer.on("updates:progress", listener);
     return () => electron.ipcRenderer.removeListener("updates:progress", listener);
-  }
+  },
+  // Feedback
+  sendSessionFeedback: (data) => electron.ipcRenderer.invoke("feedback:sendSession", data),
+  sendProductFeedback: (data) => electron.ipcRenderer.invoke("feedback:sendProduct", data)
 });

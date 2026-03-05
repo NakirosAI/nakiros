@@ -1,13 +1,13 @@
 import {
-  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   writeFileSync,
 } from 'fs';
 import { homedir } from 'os';
-import { dirname, resolve } from 'path';
+import { resolve } from 'path';
 import type {
   AgentEnvironmentId,
   AgentEnvironmentStatus,
@@ -16,27 +16,6 @@ import type {
   AgentInstallSummary,
   AgentProvider,
 } from '@nakiros/shared';
-import { COMMAND_TEMPLATES } from '../templates-bundle';
-
-const COMMAND_TEMPLATE_FILES = [
-  'nak-agent-nakiros.md',
-  'nak-agent-dev.md',
-  'nak-agent-sm.md',
-  'nak-agent-pm.md',
-  'nak-agent-architect.md',
-  'nak-agent-brainstorming.md',
-  'nak-agent-qa.md',
-  'nak-agent-hotfix.md',
-  'nak-workflow-create-story.md',
-  'nak-workflow-dev-story.md',
-  'nak-workflow-fetch-project-context.md',
-  'nak-workflow-generate-context.md',
-  'nak-workflow-create-ticket.md',
-  'nak-workflow-hotfix-story.md',
-  'nak-workflow-qa-review.md',
-  'nak-workflow-sprint.md',
-  'nak-workflow-project-understanding-confidence.md',
-] as const;
 
 /** Workflow runtime — installed once globally at ~/.nakiros/ */
 const GLOBAL_RUNTIME_DIR = resolve(homedir(), '.nakiros');
@@ -62,101 +41,14 @@ const ENVIRONMENTS: Record<
   },
 };
 
-function findRepoRoot(startDir = process.cwd()): string {
-  let cursor = resolve(startDir);
-  for (let i = 0; i < 8; i += 1) {
-    if (existsSync(resolve(cursor, 'package.json'))) return cursor;
-    const parent = dirname(cursor);
-    if (parent === cursor) break;
-    cursor = parent;
-  }
-  return resolve(startDir);
-}
-
-function getRuntimeSourceDir(): string {
-  const repoRoot = findRepoRoot();
-  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
-  const candidates = [
-    ...(resourcesPath ? [resolve(resourcesPath, '_nakiros')] : []),
-    resolve(repoRoot, '_nakiros'),
-    resolve(repoRoot, 'apps/desktop/_nakiros'),
-  ];
-  for (const path of candidates) {
-    if (existsSync(resolve(path, 'core/tasks/workflow.xml'))) return path;
-  }
-  throw new Error('Impossible de localiser le runtime _nakiros.');
-}
-
-function copyDirectoryRecursive(
-  sourceDir: string,
-  targetDir: string,
-  force: boolean,
-): { copied: number; overwritten: number } {
-  mkdirSync(targetDir, { recursive: true });
-  let copied = 0;
-  let overwritten = 0;
-
-  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
-    const sourcePath = resolve(sourceDir, entry.name);
-    const targetPath = resolve(targetDir, entry.name);
-    if (entry.isDirectory()) {
-      const nested = copyDirectoryRecursive(sourcePath, targetPath, force);
-      copied += nested.copied;
-      overwritten += nested.overwritten;
-      continue;
-    }
-    if (!entry.isFile()) continue;
-
-    const targetExists = existsSync(targetPath);
-    if (targetExists && !force) continue;
-    copyFileSync(sourcePath, targetPath);
-    if (targetExists) overwritten += 1;
-    else copied += 1;
-  }
-
-  return { copied, overwritten };
-}
-
-
-export function ensureRuntimeInDir(targetDir: string): void {
-  const runtimeTargetDir = resolve(targetDir, '_nakiros');
-  if (existsSync(runtimeTargetDir)) return;
-  try {
-    const runtimeSourceDir = getRuntimeSourceDir();
-    copyDirectoryRecursive(runtimeSourceDir, runtimeTargetDir, false);
-  } catch {
-    // Runtime source not found — silently skip (dev env without packaged app).
-  }
-}
-
-// ─── Runtime global ────────────────────────────────────────────────────────
-
-export interface RuntimeInstallStatus {
-  installed: boolean;
-  path: string;
-}
-
-export interface RuntimeInstallSummary {
-  path: string;
-  filesCopied: number;
-  filesOverwritten: number;
-}
-
-export function getRuntimeInstallStatus(): RuntimeInstallStatus {
-  return {
-    installed: existsSync(resolve(GLOBAL_RUNTIME_DIR, 'core/tasks/workflow.xml')),
-    path: GLOBAL_RUNTIME_DIR,
-  };
-}
-
-export function installRuntimeGlobally(force = false): RuntimeInstallSummary {
-  const sourceDir = getRuntimeSourceDir();
-  const result = copyDirectoryRecursive(sourceDir, GLOBAL_RUNTIME_DIR, force);
-  return {
-    path: GLOBAL_RUNTIME_DIR,
-    filesCopied: result.copied,
-    filesOverwritten: result.overwritten,
-  };
+function readCommandTemplates(): Record<string, string> {
+  const dir = resolve(GLOBAL_RUNTIME_DIR, 'commands');
+  if (!existsSync(dir)) return {};
+  return Object.fromEntries(
+    readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .map((e) => [e.name, readFileSync(resolve(dir, e.name), 'utf8')])
+  );
 }
 
 // ─── Agents globaux ─────────────────────────────────────────────────────────
@@ -191,15 +83,14 @@ export function getGlobalInstallStatus(): GlobalInstallStatus {
   const environments = ids.map((id) => {
     const env = ENVIRONMENTS[id];
     const targetDir = resolve(home, env.targetRelativePath);
-    const installed = COMMAND_TEMPLATE_FILES.filter(
-      (file) => existsSync(resolve(targetDir, file)),
-    ).length;
+    const commandFiles = Object.keys(readCommandTemplates());
+    const installed = commandFiles.filter((file) => existsSync(resolve(targetDir, file))).length;
     return {
       id,
       label: env.label,
       targetDir,
       installed,
-      total: COMMAND_TEMPLATE_FILES.length,
+      total: commandFiles.length,
     };
   });
 
@@ -226,7 +117,7 @@ export function installAgentsGlobally(): GlobalInstallSummary {
     let copiedForEnv = 0;
     let overwrittenForEnv = 0;
 
-    for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
       const targetPath = resolve(targetDir, fileName);
       const targetExists = existsSync(targetPath);
       writeFileSync(targetPath, content, 'utf8');
@@ -257,7 +148,8 @@ function getEnvironmentStatus(repoPath: string, id: AgentEnvironmentId): AgentEn
   const env = ENVIRONMENTS[id];
   const markerExists = existsSync(resolve(repoPath, env.markerRelativePath));
   const targetPath = resolve(repoPath, env.targetRelativePath);
-  const installedCount = COMMAND_TEMPLATE_FILES.filter((file) =>
+  const commandFiles = Object.keys(readCommandTemplates());
+  const installedCount = commandFiles.filter((file) =>
     existsSync(resolve(targetPath, file))).length;
 
   return {
@@ -266,7 +158,7 @@ function getEnvironmentStatus(repoPath: string, id: AgentEnvironmentId): AgentEn
     targetPath,
     markerExists,
     installedCount,
-    totalExpected: COMMAND_TEMPLATE_FILES.length,
+    totalExpected: commandFiles.length,
   };
 }
 
@@ -304,7 +196,7 @@ export function installAgents(request: AgentInstallRequest): AgentInstallSummary
     const envTargetPath = resolve(repoPath, env.targetRelativePath);
     mkdirSync(envTargetPath, { recursive: true });
 
-    for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
       const targetPath = resolve(envTargetPath, fileName);
       const targetExists = existsSync(targetPath);
       if (targetExists && !force) continue;
@@ -336,7 +228,7 @@ export function ensureCommandsInRepo(repoPath: string, provider: AgentProvider):
   const targetDir = resolve(resolvedRepoPath, env.targetRelativePath);
   mkdirSync(targetDir, { recursive: true });
 
-  for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+  for (const [fileName, content] of Object.entries(readCommandTemplates())) {
     const targetPath = resolve(targetDir, fileName);
     if (existsSync(targetPath)) continue;
     writeFileSync(targetPath, content, 'utf8');

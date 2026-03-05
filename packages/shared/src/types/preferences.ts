@@ -12,6 +12,7 @@ export interface AppPreferences {
   updatedAt: string;
   mcpServerUrl?: string;
   agentProvider?: AgentProvider;
+  agentChannel?: 'stable' | 'beta';
 }
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {

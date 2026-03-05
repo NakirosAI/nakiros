@@ -32,6 +32,7 @@ export default function App() {
   const [preferences, setPreferences] = useState<AppPreferences>(FALLBACK_PREFERENCES);
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light');
   const [serverStatus, setServerStatus] = useState<'starting' | 'running' | 'stopped'>('starting');
+  const [updateBanner, setUpdateBanner] = useState<UpdateCheckResult | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -63,6 +64,12 @@ export default function App() {
 
   useEffect(() => {
     return window.nakiros.onServerStatusChange(setServerStatus);
+  }, []);
+
+  useEffect(() => {
+    return window.nakiros.onUpdatesAvailable((result) => {
+      if (result.compatible && result.hasUpdate) setUpdateBanner(result);
+    });
   }, []);
 
   useEffect(() => {
@@ -164,6 +171,25 @@ export default function App() {
 
   const language = resolveLanguage(preferences.language);
   const msg = MESSAGES[language];
+  const isFr = language === 'fr';
+
+  const updateBannerEl = updateBanner && (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+      background: 'var(--primary)', color: '#fff',
+      display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
+      fontSize: 13, fontWeight: 600,
+    }}>
+      <span style={{ flex: 1 }}>
+        ✨ {isFr ? `Mise à jour agents disponible (v${updateBanner.latestVersion})` : `Agent update available (v${updateBanner.latestVersion})`}
+      </span>
+      <button
+        onClick={() => setUpdateBanner(null)}
+        style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px' }}
+        aria-label="Fermer"
+      >×</button>
+    </div>
+  );
 
   if (view.name === 'loading') {
     return (
@@ -233,6 +259,8 @@ export default function App() {
   }
 
   return (
+    <>
+      {updateBannerEl}
       <Dashboard
         workspace={workspace}
         openWorkspaces={openedWorkspaces}
@@ -256,5 +284,6 @@ export default function App() {
         }}
         onRestartServer={() => { void window.nakiros.restartServer(); }}
       />
+    </>
   );
 }

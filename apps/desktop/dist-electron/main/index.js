@@ -47329,62 +47329,7 @@ function savePreferences(prefs) {
   };
   require$$1$2.writeFileSync(getStoragePath(), JSON.stringify(next, null, 2), "utf-8");
 }
-const AgentNakiros = '---\ndescription: \'Launch Nakiros — CTO meta-agent and multi-specialist conversation orchestrator\'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-nakiros`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS — as the Nakiros CTO meta-agent:\n\n<steps CRITICAL="TRUE">\n1. Always LOAD the FULL @~/.nakiros/agents/nakiros.md\n2. READ its entire contents and apply activation, persona, specialists, conversation-protocol, and operational-reflexes exactly\n3. Communicate in communication_language (default: Français)\n4. On every user message, apply the domain-analysis reflex to identify which specialists to involve (maximum 2-3 per turn)\n5. For each relevant specialist, invoke them as a Task subagent:\n   - Load their agent file: @~/.nakiros/agents/{specialist}.md (pm, architect, dev, sm, qa, hotfix, or brainstorming)\n   - Pass the full conversation history and the current user message as context\n   - Collect their response and prefix it with their identity tag: [PM], [Architect], [Dev], [SM], [QA], [Hotfix], or [Brainstorming]\n6. Apply the challenge-facilitation reflex: after a specialist responds, other active specialists may react with "↳ @[Tag] —" format (max 2 rounds before Nakiros synthesizes)\n7. Apply synthesis-discipline: synthesize as [Nakiros] only when 2+ specialists diverge, when a decision is needed, or when the user has not addressed a specific agent — otherwise stay silent\n8. When @mention is detected in user message (@PM, @Architect, etc.), skip domain-analysis and route directly to the named specialist first; others may challenge only if their domain is directly impacted\n9. When a significant decision emerges, trigger decision-log-trigger: announce "[Nakiros] Décision prise — je documente." and write the Decision Log to {primary_repo}/.nakiros/decisions/{YYYY-MM-DD}-{slug}.md\n10. Never make product, architectural, or delivery decisions alone — always involve the relevant specialist before committing to any direction\n11. When user types /nak:cto:invite @[agent], /nak:cto:dismiss @[agent], /nak:cto:decision, /nak:cto:handoff @[agent], or /nak:cto:summary — execute the corresponding conversation management action as defined in the menu\n</steps>\n';
-const AgentDev = "---\ndescription: 'Launch the Nakiros Developer agent for implementation guidance and execution support'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-dev`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Developer agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/dev.md\n2. READ its entire contents and apply activation, persona, menu, and rules exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate artifacts in `document_language` unless user explicitly requests otherwise\n6. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const AgentSm = "---\ndescription: 'Launch the Nakiros Scrum Master agent for planning, sequencing, and sprint flow'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-sm`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Scrum Master agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/sm.md\n2. READ its entire contents and apply activation, persona, menu, and rules exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate artifacts in `document_language` unless user explicitly requests otherwise\n6. Do not execute coding tasks directly; route implementation to `/nak-workflow-dev-story`\n7. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const AgentPm = "---\ndescription: 'Launch the Nakiros Product Manager agent for requirement clarity and prioritization'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-pm`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Product Manager agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/pm.md\n2. READ its entire contents and apply activation, persona, menu, and rules exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate artifacts in `document_language` unless user explicitly requests otherwise\n6. Keep decisions anchored on user value, measurable outcomes, and explicit scope boundaries\n7. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const AgentArchitect = "---\ndescription: 'Launch the Nakiros Architect agent for codebase analysis and context generation'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-architect`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Architect agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/architect.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n5. Generate architecture artifacts in `document_language` unless user explicitly requests otherwise\n6. Apply the architecture-scan reflex BEFORE any analysis: read entry points, dependency manifests, top-level README\n7. Every architectural claim must cite a specific file path — never speculate without grounding\n8. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const AgentBrainstorming = "---\ndescription: 'Launch the Nakiros Brainstorming agent for project vision and scope exploration'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-brainstorming`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Brainstorming agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/brainstorming.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Try to load project config from `.nakiros.yaml` if present; load `~/.nakiros/config.yaml` as optional base\n4. If `.nakiros.workspace.yaml` exists, load it for workspace context (existing repos as constraints)\n5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n6. Open with a SINGLE focused question about vision or the problem being solved — never a list of questions\n7. Apply the vision-first reflex: explore WHY before WHAT before HOW\n8. At session closure, save conclusions to `.nakiros/context/brainstorming.md` via the context-output reflex\n9. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const AgentQa = "---\ndescription: 'Launch the Nakiros QA agent for test strategy, coverage analysis, and quality gates'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-qa`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the QA agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/qa.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. If `.nakiros.workspace.yaml` exists, load it for cross-repo test coverage scope\n5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n6. Apply the ac-validation reflex BEFORE any test work: verify acceptance criteria are explicit and testable\n7. Apply the coverage-scan reflex to enumerate existing test files and identify gaps\n8. Every quality assessment must cite specific file paths or test file references — never speculate\n9. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const AgentHotfix = "---\ndescription: 'Launch the Nakiros Hotfix agent for rapid production incident response'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-agent-hotfix`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Hotfix agent:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/agents/hotfix.md\n2. READ its entire contents and apply activation, persona, menu, and reflexes exactly\n3. Resolve config using project `.nakiros.yaml` (required) + `~/.nakiros/config.yaml` (optional base)\n4. If `.nakiros.workspace.yaml` exists, identify ALL impacted repos immediately\n5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`\n6. HOTFIX MODE IS ACTIVE: move fast, skip non-critical steps, minimize scope\n7. Apply incident-scope reflex: fix ONLY what is broken — flag everything else as follow-up\n8. Apply fast-track-branch reflex: branch from main/master with hotfix/ prefix\n9. Apply production-sync reflex: push PM status at start and on MR ready\n10. When a workflow menu item is selected, execute via @~/.nakiros/core/tasks/workflow.xml with the workflow yaml path defined by the agent menu\n</steps>\n";
-const WorkflowCreateStory = "---\ndescription: 'Run the Nakiros create-story workflow to produce implementation-ready story specs via conversational elicitation'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-create-story`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded, taking a PM persona for the conversational elicitation and story structuring:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/create-story/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/create-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>\n";
-const WorkflowDevStory = "---\ndescription: 'Execute Nakiros dev-story workflow (config merge, ticket context, challenge gate, branch/run-state, implementation flow)'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-dev-story`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded, except when workflow instructions explicitly require loading PM persona for challenge and Developer persona for implementation:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/dev-story/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/dev-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>\n";
-const WorkflowFetchProjectContext = "---\ndescription: 'Run the Nakiros fetch-project-context workflow to gather scoped project/tool context'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-fetch-project-context`\n\n## Workflow Intent\n\nCollect project metadata, tool configuration, active branch details, and relevant prior decisions.\n\n## Required Inputs\n\n- `.nakiros.yaml`\n- Current repository state\n- Optional PM ticket id\n\n## Output\n\n- Context artifact in `.nakiros/workflows/steps/`\n- Reusable context pointer for subsequent workflow steps\n";
-const WorkflowGenerateContext = "---\ndescription: 'Analyse l''architecture et le contexte PM de tous les repos du workspace. Présente les findings pour validation, puis génère les fichiers de contexte.'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-generate-context`\n\n## Workflow Intent\n\nProduce context files for the workspace:\n- Per-repo: `{repo}/.nakiros/context/architecture.md`\n- Workspace-level (in primary repo): `.nakiros/workspace/global-context.md`, `.nakiros/workspace/pm-context.md`\n\nThis workflow is **interactive**: it presents its findings before generating any files, and waits for explicit user confirmation.\n\n---\n\n## Execution\n\nRead fully and follow: `~/.nakiros/workflows/4-implementation/generate-context/steps/step-01-discovery.md`\n";
-const WorkflowCreateTicket = "---\ndescription: 'Run the Nakiros create-ticket workflow to create a structured ticket (bug, feature, task) in the PM tool'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-create-ticket`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/create-ticket/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/create-ticket/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save outputs after EACH section when generating any documents from templates\n</steps>\n";
-const WorkflowHotfixStory = "---\ndescription: 'Run the Nakiros hotfix-story workflow to triage, fix, and ship a production incident as fast as possible'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-hotfix-story`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Hotfix agent, prioritizing speed and minimal scope:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/hotfix-story/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/hotfix-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. HOTFIX MODE: move fast, skip non-critical steps, fix ONLY what is broken — flag all out-of-scope improvements as follow-up tickets\n</steps>\n";
-const WorkflowQaReview = "---\ndescription: 'Run the Nakiros QA review workflow: acceptance criteria validation, test coverage analysis, regression scope, and sign-off'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-qa-review`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the QA agent persona:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/qa-review/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/qa-review/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Apply the AC gate strictly — never proceed to coverage analysis if acceptance criteria are ambiguous\n6. Every coverage and regression assessment must cite specific file paths — never speculate\n</steps>\n";
-const WorkflowSprint = "---\ndescription: 'Run the Nakiros sprint workflow: retrospective and/or sprint planning with PM sync'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-sprint`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Scrum Master agent persona:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/5-reporting/sprint/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/5-reporting/sprint/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Save sprint artifacts (retro and plan) after each section — never wait until the end to write\n</steps>\n";
-const WorkflowProjectUnderstandingConfidence = "---\ndescription: 'Run the Nakiros project-understanding-confidence workflow to score AI understanding readiness and identify missing context'\ndisable-model-invocation: true\n---\n\nCommand Trigger: `/nak-workflow-project-understanding-confidence`\n\nIT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:\n\n<steps CRITICAL=\"TRUE\">\n1. Always LOAD the FULL @~/.nakiros/core/tasks/workflow.xml\n2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @~/.nakiros/workflows/4-implementation/project-understanding-confidence/workflow.yaml\n3. Pass the yaml path ~/.nakiros/workflows/4-implementation/project-understanding-confidence/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions\n4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions\n5. Enforce workspace-control artifact location (`{project-root}/.nakiros/...`) for this workflow\n6. Enforce strict multi-repo coverage gate before assigning any confident verdict\n7. Save confidence outputs in `{project-root}/.nakiros/workspace/confidence/` and workflow snapshots in `{project-root}/.nakiros/workflows/steps/`\n</steps>\n";
-const COMMAND_TEMPLATES = {
-  "nak-agent-nakiros.md": AgentNakiros,
-  "nak-agent-dev.md": AgentDev,
-  "nak-agent-sm.md": AgentSm,
-  "nak-agent-pm.md": AgentPm,
-  "nak-agent-architect.md": AgentArchitect,
-  "nak-agent-brainstorming.md": AgentBrainstorming,
-  "nak-agent-qa.md": AgentQa,
-  "nak-agent-hotfix.md": AgentHotfix,
-  "nak-workflow-create-story.md": WorkflowCreateStory,
-  "nak-workflow-dev-story.md": WorkflowDevStory,
-  "nak-workflow-fetch-project-context.md": WorkflowFetchProjectContext,
-  "nak-workflow-generate-context.md": WorkflowGenerateContext,
-  "nak-workflow-create-ticket.md": WorkflowCreateTicket,
-  "nak-workflow-hotfix-story.md": WorkflowHotfixStory,
-  "nak-workflow-qa-review.md": WorkflowQaReview,
-  "nak-workflow-sprint.md": WorkflowSprint,
-  "nak-workflow-project-understanding-confidence.md": WorkflowProjectUnderstandingConfidence
-};
-const COMMAND_TEMPLATE_FILES = [
-  "nak-agent-nakiros.md",
-  "nak-agent-dev.md",
-  "nak-agent-sm.md",
-  "nak-agent-pm.md",
-  "nak-agent-architect.md",
-  "nak-agent-brainstorming.md",
-  "nak-agent-qa.md",
-  "nak-agent-hotfix.md",
-  "nak-workflow-create-story.md",
-  "nak-workflow-dev-story.md",
-  "nak-workflow-fetch-project-context.md",
-  "nak-workflow-generate-context.md",
-  "nak-workflow-create-ticket.md",
-  "nak-workflow-hotfix-story.md",
-  "nak-workflow-qa-review.md",
-  "nak-workflow-sprint.md",
-  "nak-workflow-project-understanding-confidence.md"
-];
-require$$0$3.resolve(os.homedir(), ".nakiros");
+const GLOBAL_RUNTIME_DIR = require$$0$3.resolve(os.homedir(), ".nakiros");
 const ENVIRONMENTS = {
   cursor: {
     label: "Cursor",
@@ -47402,59 +47347,12 @@ const ENVIRONMENTS = {
     targetRelativePath: ".claude/commands"
   }
 };
-function findRepoRoot(startDir = process.cwd()) {
-  let cursor = require$$0$3.resolve(startDir);
-  for (let i = 0; i < 8; i += 1) {
-    if (require$$1$2.existsSync(require$$0$3.resolve(cursor, "package.json"))) return cursor;
-    const parent = require$$0$3.dirname(cursor);
-    if (parent === cursor) break;
-    cursor = parent;
-  }
-  return require$$0$3.resolve(startDir);
-}
-function getRuntimeSourceDir() {
-  const repoRoot = findRepoRoot();
-  const resourcesPath = process.resourcesPath;
-  const candidates = [
-    ...resourcesPath ? [require$$0$3.resolve(resourcesPath, "_nakiros")] : [],
-    require$$0$3.resolve(repoRoot, "_nakiros"),
-    require$$0$3.resolve(repoRoot, "apps/desktop/_nakiros")
-  ];
-  for (const path of candidates) {
-    if (require$$1$2.existsSync(require$$0$3.resolve(path, "core/tasks/workflow.xml"))) return path;
-  }
-  throw new Error("Impossible de localiser le runtime _nakiros.");
-}
-function copyDirectoryRecursive(sourceDir, targetDir, force) {
-  require$$1$2.mkdirSync(targetDir, { recursive: true });
-  let copied = 0;
-  let overwritten = 0;
-  for (const entry of require$$1$2.readdirSync(sourceDir, { withFileTypes: true })) {
-    const sourcePath = require$$0$3.resolve(sourceDir, entry.name);
-    const targetPath = require$$0$3.resolve(targetDir, entry.name);
-    if (entry.isDirectory()) {
-      const nested = copyDirectoryRecursive(sourcePath, targetPath);
-      copied += nested.copied;
-      overwritten += nested.overwritten;
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    const targetExists = require$$1$2.existsSync(targetPath);
-    if (targetExists && true) continue;
-    require$$1$2.copyFileSync(sourcePath, targetPath);
-    if (targetExists) overwritten += 1;
-    else copied += 1;
-  }
-  return { copied, overwritten };
-}
-function ensureRuntimeInDir(targetDir) {
-  const runtimeTargetDir = require$$0$3.resolve(targetDir, "_nakiros");
-  if (require$$1$2.existsSync(runtimeTargetDir)) return;
-  try {
-    const runtimeSourceDir = getRuntimeSourceDir();
-    copyDirectoryRecursive(runtimeSourceDir, runtimeTargetDir, false);
-  } catch {
-  }
+function readCommandTemplates() {
+  const dir = require$$0$3.resolve(GLOBAL_RUNTIME_DIR, "commands");
+  if (!require$$1$2.existsSync(dir)) return {};
+  return Object.fromEntries(
+    require$$1$2.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md")).map((e) => [e.name, require$$1$2.readFileSync(require$$0$3.resolve(dir, e.name), "utf8")])
+  );
 }
 function getGlobalInstallStatus() {
   const home = os.homedir();
@@ -47462,15 +47360,14 @@ function getGlobalInstallStatus() {
   const environments = ids.map((id2) => {
     const env2 = ENVIRONMENTS[id2];
     const targetDir = require$$0$3.resolve(home, env2.targetRelativePath);
-    const installed = COMMAND_TEMPLATE_FILES.filter(
-      (file) => require$$1$2.existsSync(require$$0$3.resolve(targetDir, file))
-    ).length;
+    const commandFiles = Object.keys(readCommandTemplates());
+    const installed = commandFiles.filter((file) => require$$1$2.existsSync(require$$0$3.resolve(targetDir, file))).length;
     return {
       id: id2,
       label: env2.label,
       targetDir,
       installed,
-      total: COMMAND_TEMPLATE_FILES.length
+      total: commandFiles.length
     };
   });
   return {
@@ -47491,7 +47388,7 @@ function installAgentsGlobally() {
     require$$1$2.mkdirSync(targetDir, { recursive: true });
     let copiedForEnv = 0;
     let overwrittenForEnv = 0;
-    for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
       const targetPath = require$$0$3.resolve(targetDir, fileName);
       const targetExists = require$$1$2.existsSync(targetPath);
       require$$1$2.writeFileSync(targetPath, content, "utf8");
@@ -47517,14 +47414,15 @@ function getEnvironmentStatus(repoPath, id2) {
   const env2 = ENVIRONMENTS[id2];
   const markerExists = require$$1$2.existsSync(require$$0$3.resolve(repoPath, env2.markerRelativePath));
   const targetPath = require$$0$3.resolve(repoPath, env2.targetRelativePath);
-  const installedCount = COMMAND_TEMPLATE_FILES.filter((file) => require$$1$2.existsSync(require$$0$3.resolve(targetPath, file))).length;
+  const commandFiles = Object.keys(readCommandTemplates());
+  const installedCount = commandFiles.filter((file) => require$$1$2.existsSync(require$$0$3.resolve(targetPath, file))).length;
   return {
     id: id2,
     label: env2.label,
     targetPath,
     markerExists,
     installedCount,
-    totalExpected: COMMAND_TEMPLATE_FILES.length
+    totalExpected: commandFiles.length
   };
 }
 function getAgentInstallStatus(repoPath) {
@@ -47555,7 +47453,7 @@ function installAgents(request2) {
     const env2 = ENVIRONMENTS[target];
     const envTargetPath = require$$0$3.resolve(repoPath, env2.targetRelativePath);
     require$$1$2.mkdirSync(envTargetPath, { recursive: true });
-    for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
       const targetPath = require$$0$3.resolve(envTargetPath, fileName);
       const targetExists = require$$1$2.existsSync(targetPath);
       if (targetExists && !force) continue;
@@ -47583,10 +47481,168 @@ function ensureCommandsInRepo(repoPath, provider) {
   const env2 = ENVIRONMENTS[provider];
   const targetDir = require$$0$3.resolve(resolvedRepoPath, env2.targetRelativePath);
   require$$1$2.mkdirSync(targetDir, { recursive: true });
-  for (const [fileName, content] of Object.entries(COMMAND_TEMPLATES)) {
+  for (const [fileName, content] of Object.entries(readCommandTemplates())) {
     const targetPath = require$$0$3.resolve(targetDir, fileName);
     if (require$$1$2.existsSync(targetPath)) continue;
     require$$1$2.writeFileSync(targetPath, content, "utf8");
+  }
+}
+const BASE_URL$1 = "https://updates.nakiros.com";
+const GLOBAL_DIR$2 = require$$0$3.join(os.homedir(), ".nakiros");
+const VERSION_FILE = require$$0$3.join(GLOBAL_DIR$2, "version.json");
+const APP_SUPPORTED_FEATURES = [];
+const API_KEYS = {
+  stable: "019cbafa-2570-7216-8639-1a4aaab35d20",
+  beta: "019cbaf8-f46b-7df7-a601-ef560291fd40"
+};
+console.log("[update-checker] ENV check:");
+console.log(`  NAKIROS_API_KEY_STABLE = ${`"${API_KEYS.stable.slice(0, 8)}…" (${API_KEYS.stable.length} chars)`}`);
+console.log(`  NAKIROS_API_KEY_BETA   = ${`"${API_KEYS.beta.slice(0, 8)}…" (${API_KEYS.beta.length} chars)`}`);
+function getVersionInfo() {
+  if (!require$$1$2.existsSync(VERSION_FILE)) return null;
+  try {
+    return JSON.parse(require$$1$2.readFileSync(VERSION_FILE, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+function writeVersionInfo(info) {
+  require$$1$2.mkdirSync(GLOBAL_DIR$2, { recursive: true });
+  require$$1$2.writeFileSync(VERSION_FILE, JSON.stringify(info, null, 2) + "\n", "utf-8");
+}
+function shouldCheck(local) {
+  if (!local) return true;
+  const last = new Date(local.last_check).getTime();
+  return Date.now() - last > 24 * 60 * 60 * 1e3;
+}
+async function checkForUpdates(force = false, channel = "stable") {
+  const noUpdate = {
+    hasUpdate: false,
+    compatible: true,
+    latestVersion: "",
+    changelog: "",
+    channel,
+    changedFiles: []
+  };
+  const local = getVersionInfo();
+  if (!force && !shouldCheck(local)) return noUpdate;
+  const appVersion = electron.app.getVersion();
+  const ua = `Nakiros/${appVersion} (${os.platform()}; ${os.arch()})`;
+  const apiKey = API_KEYS[channel] ?? "";
+  const featuresParam = APP_SUPPORTED_FEATURES.length > 0 ? `&features=${APP_SUPPORTED_FEATURES.join(",")}` : "";
+  const url = `${BASE_URL$1}/manifest?channel=${channel}&app_version=${encodeURIComponent(appVersion)}${featuresParam}`;
+  console.log(`[update-checker] GET ${url}`);
+  console.log(`[update-checker] Headers: User-Agent=${ua} | X-Nakiros-Key=${apiKey ? `${apiKey.slice(0, 8)}…` : "(empty)"}`);
+  let manifest;
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(8e3),
+      headers: {
+        "X-Nakiros-Key": apiKey,
+        "User-Agent": ua
+      }
+    });
+    console.log(`[update-checker] Response: HTTP ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.warn(`[update-checker] Error body: ${body}`);
+      throw new Error(`HTTP ${res.status}${body ? ` — ${body}` : ""}`);
+    }
+    manifest = await res.json();
+    console.log(`[update-checker] Manifest OK — version=${manifest.version} channel=${manifest.channel} compatible=${manifest.compatible ?? "(not set)"} files=${manifest.files?.length ?? "n/a"}`);
+  } catch (err) {
+    console.warn("[update-checker] Manifest fetch failed:", err.message);
+    return { ...noUpdate, networkError: true };
+  }
+  if (local) {
+    writeVersionInfo({ ...local, last_check: (/* @__PURE__ */ new Date()).toISOString() });
+  }
+  if (manifest.compatible === false) {
+    return {
+      hasUpdate: false,
+      compatible: false,
+      incompatibleReason: manifest.reason,
+      incompatibleMessage: manifest.message,
+      latestVersion: manifest.version,
+      changelog: manifest.changelog ?? "",
+      channel,
+      changedFiles: []
+    };
+  }
+  const changedFiles = (manifest.files ?? []).filter((f) => !local?.files?.[f.path] || local.files[f.path] !== f.hash).map((f) => ({
+    type: f.type,
+    name: f.name,
+    filename: f.filename,
+    path: f.path,
+    hash: f.hash,
+    downloadUrl: `${BASE_URL$1}/download/${manifest.version}/${f.path}?channel=${channel}`
+  }));
+  return {
+    hasUpdate: changedFiles.length > 0,
+    compatible: true,
+    latestVersion: manifest.version,
+    changelog: manifest.changelog ?? "",
+    channel,
+    changedFiles
+  };
+}
+const SUBDIR_MAP = {
+  agent: "agents",
+  workflow: "workflows",
+  command: "commands",
+  core: "core"
+};
+async function applyUpdate(files, bundleVersion, win, onFileProgress) {
+  const local = getVersionInfo();
+  const channel = local?.channel ?? "stable";
+  const apiKey = API_KEYS[channel] ?? "";
+  const appVersion = electron.app.getVersion();
+  const ua = `Nakiros/${appVersion} (${os.platform()}; ${os.arch()})`;
+  const updatedHashes = {};
+  for (const file of files) {
+    const subdir = SUBDIR_MAP[file.type] ?? file.type;
+    const targetDir = require$$0$3.join(GLOBAL_DIR$2, subdir);
+    const targetPath = require$$0$3.join(targetDir, file.filename);
+    try {
+      const res = await fetch(file.downloadUrl, {
+        signal: AbortSignal.timeout(3e4),
+        headers: {
+          "X-Nakiros-Key": apiKey,
+          "User-Agent": ua
+        }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const expectedHash = file.hash.replace(/^sha256:/, "");
+      const actualHash = require$$0$9.createHash("sha256").update(buffer).digest("hex");
+      if (actualHash !== expectedHash) {
+        throw new Error(`Hash mismatch for ${file.filename}`);
+      }
+      require$$1$2.mkdirSync(targetDir, { recursive: true });
+      require$$1$2.writeFileSync(targetPath, buffer);
+      updatedHashes[file.path] = file.hash;
+      win.webContents.send("updates:progress", { file: file.filename, done: true });
+      onFileProgress?.(file.filename, true);
+    } catch (err) {
+      const errorMsg = err.message;
+      win.webContents.send("updates:progress", { file: file.filename, done: false, error: errorMsg });
+      onFileProgress?.(file.filename, false, errorMsg);
+    }
+  }
+  try {
+    installAgentsGlobally();
+  } catch {
+  }
+  if (Object.keys(updatedHashes).length > 0) {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    writeVersionInfo({
+      bundle_version: bundleVersion,
+      channel: local?.channel ?? "stable",
+      app_version: appVersion,
+      last_check: now,
+      installed_at: now,
+      files: { ...local?.files ?? {}, ...updatedHashes }
+    });
   }
 }
 const GLOBAL_DIR$1 = require$$0$3.join(os.homedir(), ".nakiros");
@@ -47622,44 +47678,19 @@ function detectEditors() {
   );
 }
 function nakirosConfigExists() {
-  return require$$1$2.existsSync(require$$0$3.join(GLOBAL_DIR$1, "config.yaml"));
-}
-function findRuntimeSourceDir() {
-  const resourcesPath = process.resourcesPath;
-  let repoRoot = require$$0$3.resolve(__dirname);
-  for (let i = 0; i < 8; i++) {
-    if (require$$1$2.existsSync(require$$0$3.join(repoRoot, "package.json"))) break;
-    const parent = require$$0$3.dirname(repoRoot);
-    if (parent === repoRoot) break;
-    repoRoot = parent;
-  }
-  const candidates = [
-    ...resourcesPath ? [require$$0$3.join(resourcesPath, "_nakiros")] : [],
-    require$$0$3.join(repoRoot, "_nakiros"),
-    require$$0$3.join(repoRoot, "apps", "desktop", "_nakiros")
-  ];
-  for (const p of candidates) {
-    if (require$$1$2.existsSync(require$$0$3.join(p, "core", "tasks", "workflow.xml"))) return p;
-  }
-  throw new Error("Runtime _nakiros introuvable.");
-}
-function copyDirRecursive(src2, dst) {
-  require$$1$2.mkdirSync(dst, { recursive: true });
-  for (const entry of require$$1$2.readdirSync(src2, { withFileTypes: true })) {
-    const srcPath = require$$0$3.join(src2, entry.name);
-    const dstPath = require$$0$3.join(dst, entry.name);
-    if (entry.isDirectory()) copyDirRecursive(srcPath, dstPath);
-    else if (entry.isFile()) require$$1$2.copyFileSync(srcPath, dstPath);
-  }
+  if (!require$$1$2.existsSync(require$$0$3.join(GLOBAL_DIR$1, "config.yaml"))) return false;
+  const info = getVersionInfo();
+  return !!info && info.bundle_version !== "0.0.0";
 }
 function emit(win, event) {
   win.webContents.send("onboarding:progress", event);
 }
-async function installNakiros(editors, commandTemplates, win) {
+async function installNakiros(editors, win) {
   const errors2 = [];
   try {
     require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "agents"), { recursive: true });
     require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "workflows"), { recursive: true });
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "commands"), { recursive: true });
     require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "core"), { recursive: true });
     require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "workspaces"), { recursive: true });
     emit(win, { label: "~/.nakiros/ créé", done: true });
@@ -47668,18 +47699,59 @@ async function installNakiros(editors, commandTemplates, win) {
     errors2.push(msg);
     emit(win, { label: msg, done: false, error: msg });
   }
+  let r2Success = false;
+  emit(win, { label: "Connexion aux serveurs Nakiros…", done: false });
   try {
-    const src2 = findRuntimeSourceDir();
-    copyDirRecursive(require$$0$3.join(src2, "agents"), require$$0$3.join(GLOBAL_DIR$1, "agents"));
-    copyDirRecursive(require$$0$3.join(src2, "workflows"), require$$0$3.join(GLOBAL_DIR$1, "workflows"));
-    copyDirRecursive(require$$0$3.join(src2, "core"), require$$0$3.join(GLOBAL_DIR$1, "core"));
-    const agentCount = require$$1$2.readdirSync(require$$0$3.join(GLOBAL_DIR$1, "agents")).length;
-    emit(win, { label: `Agents installés (${agentCount})`, done: true });
-    emit(win, { label: "Workflows installés", done: true });
+    const result = await checkForUpdates(true, "stable");
+    if (result.networkError) {
+      errors2.push("network");
+      emit(win, {
+        label: "Erreur réseau — impossible de joindre les serveurs Nakiros",
+        done: false,
+        error: "network"
+      });
+    } else if (!result.compatible) {
+      errors2.push("incompatible");
+      emit(win, {
+        label: "Version app incompatible — agents installables depuis les Settings",
+        done: false,
+        error: "incompatible"
+      });
+    } else if (result.changedFiles.length > 0) {
+      let downloaded = 0;
+      let failed = 0;
+      await applyUpdate(
+        result.changedFiles,
+        result.latestVersion,
+        win,
+        (filename, done, error) => {
+          if (done) {
+            downloaded += 1;
+            emit(win, { label: `↓ ${filename}`, done: true });
+          } else {
+            failed += 1;
+            emit(win, { label: `✗ ${filename} : ${error ?? "erreur"}`, done: false, error });
+          }
+        }
+      );
+      if (failed > 0) {
+        errors2.push(`${failed} fichier(s) en erreur`);
+      } else {
+        r2Success = true;
+      }
+      emit(win, {
+        label: `${downloaded} fichier(s) installé(s)${failed > 0 ? `, ${failed} en erreur` : ""}`,
+        done: failed === 0,
+        error: failed > 0 ? `${failed} fichier(s) en erreur` : void 0
+      });
+    } else {
+      emit(win, { label: "Aucun fichier à télécharger depuis R2", done: false, error: "empty" });
+      errors2.push("empty");
+    }
   } catch (err) {
-    const msg = `Copie runtime : ${err.message}`;
+    const msg = err.message;
     errors2.push(msg);
-    emit(win, { label: msg, done: false, error: msg });
+    emit(win, { label: `Erreur inattendue : ${msg}`, done: false, error: msg });
   }
   try {
     const configPath = require$$0$3.join(GLOBAL_DIR$1, "config.yaml");
@@ -47695,144 +47767,43 @@ async function installNakiros(editors, commandTemplates, win) {
         "utf-8"
       );
     }
-    emit(win, { label: "config.yaml créé", done: true });
+    if (r2Success) emit(win, { label: "config.yaml créé", done: true });
   } catch (err) {
     const msg = `config.yaml : ${err.message}`;
     errors2.push(msg);
     emit(win, { label: msg, done: false, error: msg });
   }
-  for (const editor of editors.filter((e) => e.detected)) {
-    try {
-      require$$1$2.mkdirSync(editor.targetDir, { recursive: true });
-      for (const [fileName, content] of Object.entries(commandTemplates)) {
-        require$$1$2.writeFileSync(require$$0$3.join(editor.targetDir, fileName), content, "utf8");
-      }
+  if (r2Success) {
+    for (const editor of editors.filter((e) => e.detected)) {
       emit(win, { label: `${editor.label} : commandes déployées`, done: true });
+    }
+  }
+  if (!getVersionInfo()) {
+    try {
+      require$$1$2.writeFileSync(
+        require$$0$3.join(GLOBAL_DIR$1, "version.json"),
+        JSON.stringify(
+          {
+            bundle_version: "0.0.0",
+            channel: "stable",
+            app_version: electron.app.getVersion(),
+            last_check: (/* @__PURE__ */ new Date()).toISOString(),
+            installed_at: (/* @__PURE__ */ new Date()).toISOString(),
+            files: {}
+          },
+          null,
+          2
+        ) + "\n",
+        "utf-8"
+      );
+      emit(win, { label: "version.json créé", done: true });
     } catch (err) {
-      const msg = `${editor.label} : ${err.message}`;
+      const msg = `version.json : ${err.message}`;
       errors2.push(msg);
       emit(win, { label: msg, done: false, error: msg });
     }
   }
-  try {
-    require$$1$2.writeFileSync(
-      require$$0$3.join(GLOBAL_DIR$1, "version.json"),
-      JSON.stringify(
-        {
-          nakiros_app: "1.0.0",
-          agents_version: "1.0.0",
-          workflows_version: "1.0.0",
-          last_check: (/* @__PURE__ */ new Date()).toISOString(),
-          files: {}
-        },
-        null,
-        2
-      ) + "\n",
-      "utf-8"
-    );
-    emit(win, { label: "version.json enregistré", done: true });
-  } catch (err) {
-    const msg = `version.json : ${err.message}`;
-    errors2.push(msg);
-    emit(win, { label: msg, done: false, error: msg });
-  }
   return { success: errors2.length === 0, errors: errors2 };
-}
-const MANIFEST_URL = "https://updates.nakiros.com/agents/manifest.json";
-const GLOBAL_DIR = require$$0$3.join(os.homedir(), ".nakiros");
-const VERSION_FILE = require$$0$3.join(GLOBAL_DIR, "version.json");
-function readLocalVersion() {
-  if (!require$$1$2.existsSync(VERSION_FILE)) return null;
-  try {
-    return JSON.parse(require$$1$2.readFileSync(VERSION_FILE, "utf-8"));
-  } catch {
-    return null;
-  }
-}
-function writeLocalVersion(info) {
-  require$$1$2.mkdirSync(GLOBAL_DIR, { recursive: true });
-  require$$1$2.writeFileSync(VERSION_FILE, JSON.stringify(info, null, 2) + "\n", "utf-8");
-}
-function shouldCheck(local) {
-  if (!local) return true;
-  const last = new Date(local.last_check).getTime();
-  return Date.now() - last > 24 * 60 * 60 * 1e3;
-}
-async function checkForUpdates(force = false) {
-  const noUpdate = {
-    hasUpdate: false,
-    latestVersion: "",
-    changelog: "",
-    changedFiles: []
-  };
-  const local = readLocalVersion();
-  if (!force && !shouldCheck(local)) return noUpdate;
-  let manifest;
-  try {
-    const res = await fetch(MANIFEST_URL, { signal: AbortSignal.timeout(8e3) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    manifest = await res.json();
-  } catch {
-    return noUpdate;
-  }
-  if (local) {
-    writeLocalVersion({ ...local, last_check: (/* @__PURE__ */ new Date()).toISOString() });
-  }
-  if (!local) return noUpdate;
-  const changedFiles = manifest.files.filter((f) => {
-    const installed = local.files[f.filename];
-    return !installed || installed.hash !== f.hash;
-  });
-  return {
-    hasUpdate: changedFiles.length > 0,
-    latestVersion: manifest.version,
-    changelog: manifest.changelog,
-    changedFiles
-  };
-}
-async function applyUpdate(files, win) {
-  const local = readLocalVersion();
-  for (const file of files) {
-    const subdirMap = {
-      agent: "agents",
-      workflow: "workflows",
-      core: "core"
-    };
-    const targetDir = require$$0$3.join(GLOBAL_DIR, subdirMap[file.type]);
-    const targetPath = require$$0$3.join(targetDir, file.filename);
-    try {
-      const res = await fetch(file.url, { signal: AbortSignal.timeout(3e4) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buffer = Buffer.from(await res.arrayBuffer());
-      const expectedHash = file.hash.replace(/^sha256:/, "");
-      const actualHash = require$$0$9.createHash("sha256").update(buffer).digest("hex");
-      if (actualHash !== expectedHash) {
-        throw new Error(`Hash mismatch pour ${file.filename}`);
-      }
-      require$$1$2.mkdirSync(targetDir, { recursive: true });
-      require$$1$2.writeFileSync(targetPath, buffer);
-      win.webContents.send("updates:progress", { file: file.filename, done: true });
-    } catch (err) {
-      win.webContents.send("updates:progress", {
-        file: file.filename,
-        done: false,
-        error: err.message
-      });
-    }
-  }
-  if (local) {
-    const updatedFiles = { ...local.files };
-    for (const f of files) {
-      updatedFiles[f.filename] = { version: f.version, hash: f.hash };
-    }
-    writeLocalVersion({
-      ...local,
-      agents_version: files.find((f) => f.type === "agent")?.version ?? local.agents_version,
-      workflows_version: files.find((f) => f.type === "workflow")?.version ?? local.workflows_version,
-      last_check: (/* @__PURE__ */ new Date()).toISOString(),
-      files: updatedFiles
-    });
-  }
 }
 const PROVIDERS = [
   { provider: "claude", label: "Claude Code", command: "claude", versionArgs: ["--version"] },
@@ -48980,6 +48951,95 @@ async function syncJiraTickets(wsId, workspace) {
     epicsImported: epicResult.created + epicResult.updated
   };
 }
+const BASE_URL = "https://feedback.nakiros.com";
+const GLOBAL_DIR = require$$0$3.join(os.homedir(), ".nakiros");
+const QUEUE_FILE = require$$0$3.join(GLOBAL_DIR, "feedback-queue.json");
+const API_KEY = "019cbd75-cb5d-7474-a0ea-7a87ec85ecdb";
+function getAppVersion() {
+  return electron.app.getVersion();
+}
+function getBundleVersion() {
+  return getVersionInfo()?.bundle_version ?? "0.0.0";
+}
+function getUserAgent() {
+  return `Nakiros/${getAppVersion()} (${os.platform()}; ${os.arch()})`;
+}
+function loadQueue() {
+  if (!require$$1$2.existsSync(QUEUE_FILE)) return [];
+  try {
+    return JSON.parse(require$$1$2.readFileSync(QUEUE_FILE, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveQueue(items2) {
+  require$$1$2.mkdirSync(GLOBAL_DIR, { recursive: true });
+  require$$1$2.writeFileSync(QUEUE_FILE, JSON.stringify(items2, null, 2) + "\n", "utf-8");
+}
+function enqueue(item) {
+  const queue = loadQueue();
+  queue.push(item);
+  const trimmed = queue.slice(-50);
+  saveQueue(trimmed);
+}
+async function postFeedback(endpoint, body) {
+  const res = await fetch(`${BASE_URL}${endpoint}`, {
+    method: "POST",
+    signal: AbortSignal.timeout(8e3),
+    headers: {
+      "Content-Type": "application/json",
+      "X-Nakiros-Key": API_KEY,
+      "User-Agent": getUserAgent()
+    },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}${text ? ` — ${text}` : ""}`);
+  }
+}
+async function sendSessionFeedback(data) {
+  const body = {
+    ...data,
+    app_version: getAppVersion(),
+    bundle_version: getBundleVersion(),
+    platform: os.platform()
+  };
+  try {
+    await postFeedback("/session", body);
+  } catch {
+    enqueue({ type: "session", endpoint: "/session", body, addedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  }
+}
+async function sendProductFeedback(data) {
+  const body = {
+    ...data,
+    app_version: getAppVersion(),
+    bundle_version: getBundleVersion(),
+    platform: os.platform()
+  };
+  try {
+    await postFeedback("/product", body);
+  } catch {
+    enqueue({ type: "product", endpoint: "/product", body, addedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  }
+}
+async function retryQueue() {
+  const queue = loadQueue();
+  if (queue.length === 0) return;
+  const remaining = [];
+  for (const item of queue) {
+    try {
+      await postFeedback(item.endpoint, item.body);
+    } catch {
+      remaining.push(item);
+    }
+  }
+  saveQueue(remaining);
+  if (remaining.length < queue.length) {
+    console.log(`[feedback] Retried queue: ${queue.length - remaining.length} sent, ${remaining.length} remaining`);
+  }
+}
 const execFileAsync = require$$1$1.promisify(child_process.execFile);
 const gotTheLock = electron.app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -49187,14 +49247,15 @@ electron.ipcMain.handle("onboarding:nakirosConfigExists", () => nakirosConfigExi
 electron.ipcMain.handle("onboarding:install", async (event, editors) => {
   const win = electron.BrowserWindow.fromWebContents(event.sender);
   if (!win) return { success: false, errors: ["No window"] };
-  return installNakiros(editors, COMMAND_TEMPLATES, win);
+  return installNakiros(editors, win);
 });
-electron.ipcMain.handle("updates:check", (_, force) => checkForUpdates(force));
-electron.ipcMain.handle("updates:apply", async (event, files) => {
+electron.ipcMain.handle("updates:check", (_, force, channel) => checkForUpdates(force, channel ?? (getPreferences().agentChannel ?? "stable")));
+electron.ipcMain.handle("updates:apply", async (event, files, bundleVersion) => {
   const win = electron.BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
-  return applyUpdate(files, win);
+  return applyUpdate(files, bundleVersion, win);
 });
+electron.ipcMain.handle("updates:getVersionInfo", () => getVersionInfo());
 function resolveSlug(wsId) {
   const ws = getAll().find((w) => w.id === wsId);
   return ws ? toWorkspaceSlug(ws.name) : wsId;
@@ -49237,7 +49298,6 @@ electron.ipcMain.handle(
     } catch (err) {
       console.warn(`[agent:run] Unable to ensure command templates in agent workspace: ${String(err)}`);
     }
-    ensureRuntimeInDir(agentWorkspacePath);
     const rawLines = [];
     let runId = "";
     runId = runAgentCommand(
@@ -49333,6 +49393,12 @@ electron.ipcMain.handle("server:getStatus", async () => {
     return "stopped";
   }
 });
+electron.ipcMain.handle("feedback:sendSession", async (_, data) => {
+  await sendSessionFeedback(data);
+});
+electron.ipcMain.handle("feedback:sendProduct", async (_, data) => {
+  await sendProductFeedback(data);
+});
 electron.ipcMain.handle("server:restart", async () => {
   broadcastServerStatus("starting");
   stopServer();
@@ -49368,11 +49434,13 @@ async function ensureMcpServer(port) {
 electron.app.whenReady().then(() => {
   createWindow();
   void ensureMcpServer(3737);
+  void retryQueue();
   setTimeout(() => {
     void (async () => {
       try {
-        const result = await checkForUpdates();
-        if (result.hasUpdate) {
+        const channel = getPreferences().agentChannel ?? "stable";
+        const result = await checkForUpdates(false, channel);
+        if (result.compatible && result.hasUpdate) {
           const win = electron.BrowserWindow.getAllWindows()[0];
           win?.webContents.send("updates:available", result);
         }

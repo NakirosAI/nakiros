@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Download, Languages, Plug, Sparkles, X } from 'lucide-react';
+import { Bot, Languages, Plug, Sparkles, X } from 'lucide-react';
 import type {
   AgentProvider,
   AppPreferences,
@@ -9,7 +9,6 @@ import type {
   ThemePreference,
 } from '@nakiros/shared';
 import { MESSAGES } from '../i18n';
-import { WORKFLOW_CAPABILITIES } from '../utils/workflow-capabilities';
 
 interface Props {
   preferences: AppPreferences;
@@ -20,19 +19,7 @@ interface Props {
 }
 
 type Status = 'idle' | 'saving' | 'saved' | 'error';
-type GlobalStatus = 'idle' | 'loading' | 'installing' | 'success' | 'error';
 type UpdateStatus = 'idle' | 'checking' | 'updating' | 'success' | 'error';
-type GlobalInstallStatus = {
-  environments: Array<{
-    id: 'claude' | 'codex' | 'cursor';
-    label: string;
-    targetDir: string;
-    installed: number;
-    total: number;
-  }>;
-  totalInstalled: number;
-  totalExpected: number;
-};
 type AgentCliStatus = {
   provider: 'claude' | 'codex' | 'cursor';
   label: string;
@@ -44,49 +31,27 @@ type AgentCliStatus = {
 };
 type SettingsSection = 'general' | 'agent-ai' | 'mcp-nakiros' | 'agent-nakiros';
 type NakirosCapabilityKind = 'agent' | 'workflow';
-type NakirosCapabilityStatus = 'stable' | 'beta';
-type NakirosCapability = {
-  id: string;
-  label: string;
-  command: string;
-  kind: NakirosCapabilityKind;
-  status: NakirosCapabilityStatus;
-};
+type NakirosCapability = { id: string; label: string; command: string; kind: NakirosCapabilityKind };
 
-const AGENT_CAPABILITIES: NakirosCapability[] = [
-  { id: 'agent-nakiros', label: 'Nakiros', command: '/nak-agent-nakiros', kind: 'agent', status: 'stable' },
-  { id: 'agent-dev', label: 'Dev Agent', command: '/nak-agent-dev', kind: 'agent', status: 'stable' },
-  { id: 'agent-pm', label: 'PM Agent', command: '/nak-agent-pm', kind: 'agent', status: 'stable' },
-  { id: 'agent-architect', label: 'Architect', command: '/nak-agent-architect', kind: 'agent', status: 'stable' },
-  { id: 'agent-sm', label: 'SM Agent', command: '/nak-agent-sm', kind: 'agent', status: 'stable' },
-  { id: 'agent-qa', label: 'QA Agent', command: '/nak-agent-qa', kind: 'agent', status: 'stable' },
-  { id: 'agent-hotfix', label: 'Hotfix Agent', command: '/nak-agent-hotfix', kind: 'agent', status: 'stable' },
-  { id: 'agent-brainstorming', label: 'Brainstorming', command: '/nak-agent-brainstorming', kind: 'agent', status: 'stable' },
+const NAKIROS_CAPABILITIES: NakirosCapability[] = [
+  { id: 'agent-nakiros', label: 'Nakiros', command: '/nak-agent-nakiros', kind: 'agent' },
+  { id: 'agent-dev', label: 'Dev Agent', command: '/nak-agent-dev', kind: 'agent' },
+  { id: 'agent-pm', label: 'PM Agent', command: '/nak-agent-pm', kind: 'agent' },
+  { id: 'agent-architect', label: 'Architect', command: '/nak-agent-architect', kind: 'agent' },
+  { id: 'agent-sm', label: 'SM Agent', command: '/nak-agent-sm', kind: 'agent' },
+  { id: 'agent-qa', label: 'QA Agent', command: '/nak-agent-qa', kind: 'agent' },
+  { id: 'agent-hotfix', label: 'Hotfix Agent', command: '/nak-agent-hotfix', kind: 'agent' },
+  { id: 'agent-brainstorming', label: 'Brainstorming', command: '/nak-agent-brainstorming', kind: 'agent' },
+  { id: 'workflow-dev-story', label: 'Dev Story', command: '/nak-workflow-dev-story', kind: 'workflow' },
+  { id: 'workflow-create-story', label: 'Create Story', command: '/nak-workflow-create-story', kind: 'workflow' },
+  { id: 'workflow-create-ticket', label: 'Create Ticket', command: '/nak-workflow-create-ticket', kind: 'workflow' },
+  { id: 'workflow-generate-context', label: 'Generate Context', command: '/nak-workflow-generate-context', kind: 'workflow' },
+  { id: 'workflow-fetch-project-context', label: 'Fetch Project Context', command: '/nak-workflow-fetch-project-context', kind: 'workflow' },
+  { id: 'workflow-qa-review', label: 'QA Review', command: '/nak-workflow-qa-review', kind: 'workflow' },
+  { id: 'workflow-project-confidence', label: 'Project Confidence', command: '/nak-workflow-project-understanding-confidence', kind: 'workflow' },
+  { id: 'workflow-hotfix-story', label: 'Hotfix Story', command: '/nak-workflow-hotfix-story', kind: 'workflow' },
+  { id: 'workflow-sprint-planning', label: 'Sprint Planning', command: '/nak-workflow-sprint', kind: 'workflow' },
 ];
-
-const WORKFLOW_STATUS_BY_COMMAND = new Map(
-  WORKFLOW_CAPABILITIES.map((capability) => [capability.command, capability.status] as const),
-);
-
-const WORKFLOW_CAPABILITY_LIST: Array<Pick<NakirosCapability, 'id' | 'label' | 'command'>> = [
-  { id: 'workflow-dev-story', label: 'Dev Story', command: '/nak-workflow-dev-story' },
-  { id: 'workflow-create-story', label: 'Create Story', command: '/nak-workflow-create-story' },
-  { id: 'workflow-create-ticket', label: 'Create Ticket', command: '/nak-workflow-create-ticket' },
-  { id: 'workflow-generate-context', label: 'Generate Context', command: '/nak-workflow-generate-context' },
-  { id: 'workflow-fetch-project-context', label: 'Fetch Project Context', command: '/nak-workflow-fetch-project-context' },
-  { id: 'workflow-qa-review', label: 'QA Review', command: '/nak-workflow-qa-review' },
-  { id: 'workflow-project-confidence', label: 'Project Confidence', command: '/nak-workflow-project-understanding-confidence' },
-  { id: 'workflow-hotfix-story', label: 'Hotfix Story', command: '/nak-workflow-hotfix-story' },
-  { id: 'workflow-sprint-planning', label: 'Sprint Planning', command: '/nak-workflow-sprint' },
-];
-
-const WORKFLOW_CAPABILITIES_EXTENDED: NakirosCapability[] = WORKFLOW_CAPABILITY_LIST.map((item) => ({
-  ...item,
-  kind: 'workflow',
-  status: WORKFLOW_STATUS_BY_COMMAND.get(item.command) ?? 'stable',
-}));
-
-const NAKIROS_CAPABILITIES: NakirosCapability[] = [...AGENT_CAPABILITIES, ...WORKFLOW_CAPABILITIES_EXTENDED];
 
 export default function GlobalSettings({
   preferences,
@@ -98,31 +63,25 @@ export default function GlobalSettings({
   const msg = MESSAGES[language];
   const [status, setStatus] = useState<Status>('idle');
   const timerRef = useRef<number | null>(null);
-  const [globalInfo, setGlobalInfo] = useState<GlobalInstallStatus | null>(null);
-  const [globalStatus, setGlobalStatus] = useState<GlobalStatus>('idle');
-  const [globalMsg, setGlobalMsg] = useState<string>('');
   const [cliInfo, setCliInfo] = useState<AgentCliStatus[] | null>(null);
   const [cliLoading, setCliLoading] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [updateMsg, setUpdateMsg] = useState<string>('');
+  const [versionInfo, setVersionInfo] = useState<BundleVersionInfo | null>(null);
   const [section, setSection] = useState<SettingsSection>('general');
   const [mcpServerInput, setMcpServerInput] = useState(preferences.mcpServerUrl ?? '');
   const isFr = language === 'fr';
-
-  useEffect(() => {
-    setGlobalStatus('loading');
-    void window.nakiros.getGlobalInstallStatus().then((info) => {
-      setGlobalInfo(info);
-      setGlobalStatus('idle');
-    }).catch(() => setGlobalStatus('idle'));
-  }, []);
 
   useEffect(() => {
     setCliLoading(true);
     void window.nakiros.getAgentCliStatus().then((info) => {
       setCliInfo(info);
     }).finally(() => setCliLoading(false));
+  }, []);
+
+  useEffect(() => {
+    void window.nakiros.getVersionInfo().then(setVersionInfo);
   }, []);
 
   useEffect(() => {
@@ -145,15 +104,16 @@ export default function GlobalSettings({
     setMcpServerInput(preferences.mcpServerUrl ?? '');
   }, [preferences.mcpServerUrl]);
 
-  async function handleCheckUpdates() {
+  async function handleCheckUpdates(channelOverride?: 'stable' | 'beta') {
     setUpdateStatus('checking');
     setUpdateMsg('');
     setUpdateResult(null);
     try {
-      const result = await window.nakiros.checkForUpdates(true);
+      const channel = channelOverride ?? preferences.agentChannel ?? 'stable';
+      const result = await window.nakiros.checkForUpdates(true, channel);
       setUpdateResult(result);
-      setUpdateStatus(result.hasUpdate ? 'idle' : 'success');
-      if (!result.hasUpdate) setUpdateMsg(isFr ? '✅ Agents et workflows à jour.' : '✅ Agents and workflows are up to date.');
+      setUpdateStatus(result.hasUpdate || !result.compatible ? 'idle' : 'success');
+      if (!result.hasUpdate && result.compatible) setUpdateMsg(isFr ? 'Agents et workflows à jour.' : 'Agents and workflows are up to date.');
     } catch {
       setUpdateStatus('error');
       setUpdateMsg(isFr ? 'Impossible de vérifier les mises à jour.' : 'Unable to check updates.');
@@ -164,27 +124,13 @@ export default function GlobalSettings({
     if (!updateResult?.changedFiles.length) return;
     setUpdateStatus('updating');
     try {
-      await window.nakiros.applyUpdate(updateResult.changedFiles);
+      await window.nakiros.applyUpdate(updateResult.changedFiles, updateResult.latestVersion);
       setUpdateStatus('success');
       setUpdateMsg(isFr ? `✅ Mis à jour vers ${updateResult.latestVersion}` : `✅ Updated to ${updateResult.latestVersion}`);
       setUpdateResult(null);
     } catch {
       setUpdateStatus('error');
       setUpdateMsg(isFr ? 'Erreur lors de la mise à jour.' : 'Update failed.');
-    }
-  }
-
-  async function handleInstallGlobal() {
-    setGlobalStatus('installing');
-    setGlobalMsg('');
-    try {
-      const r = await window.nakiros.installAgentsGlobal();
-      setGlobalInfo(await window.nakiros.getGlobalInstallStatus());
-      setGlobalMsg(msg.settings.globalAgentsSuccess(r.commandFilesCopied, r.commandFilesOverwritten));
-      setGlobalStatus('success');
-    } catch {
-      setGlobalMsg(msg.settings.globalAgentsError);
-      setGlobalStatus('error');
     }
   }
 
@@ -446,10 +392,79 @@ export default function GlobalSettings({
                 <h2 style={h2Style}>{isFr ? 'Agent Nakiros' : 'Nakiros Agent'}</h2>
                 <p style={subtitleStyle}>
                   {isFr
-                    ? 'Catalogue des agents et workflows avec badge Beta, plus installation et mises à jour globales.'
-                    : 'Catalog of agents and workflows with beta badges, plus global install and updates.'}
+                    ? 'Mises à jour et catalogue des agents et workflows Nakiros.'
+                    : 'Updates and catalog of Nakiros agents and workflows.'}
                 </p>
               </div>
+
+              <section style={sectionStyle}>
+                <label style={fieldLabel}>Agents &amp; Workflows</label>
+
+                {versionInfo && (
+                  <p style={{ ...hintStyle, marginBottom: 14 }}>
+                    {isFr ? 'Version installée :' : 'Installed version:'}{' '}
+                    <strong style={{ color: 'var(--text)' }}>{versionInfo.bundle_version}</strong>
+                    {' · '}
+                    {isFr ? 'Dernière vérification :' : 'Last check:'}{' '}
+                    {formatLastCheck(versionInfo.last_check, isFr)}
+                  </p>
+                )}
+
+                {updateResult?.compatible === false && (
+                  <div style={{ marginBottom: 12, padding: '12px 14px', background: 'var(--bg-soft)', border: '1px solid var(--line)', borderRadius: 10 }}>
+                    <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                      {isFr ? 'Mise à jour incompatible' : 'Incompatible update'}
+                    </p>
+                    <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+                      {updateResult.incompatibleMessage ?? (isFr
+                        ? `Cette version nécessite une mise à jour de l'application Nakiros (v${updateResult.latestVersion}).`
+                        : `This version requires a Nakiros app update (v${updateResult.latestVersion}).`)}
+                    </p>
+                  </div>
+                )}
+
+                {updateResult?.hasUpdate && (
+                  <div style={{ marginBottom: 12, padding: '12px 14px', background: 'var(--primary-soft)', border: '1px solid var(--primary)', borderRadius: 10 }}>
+                    <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>
+                      {isFr ? `Version ${updateResult.latestVersion} disponible` : `Version ${updateResult.latestVersion} available`}
+                    </p>
+                    {updateResult.changelog && (
+                      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>{updateResult.changelog}</p>
+                    )}
+                    <button
+                      onClick={() => void handleApplyUpdate()}
+                      disabled={updateStatus === 'updating'}
+                      style={{ ...chipStyle(true), marginTop: 10, border: 'none', opacity: updateStatus === 'updating' ? 0.6 : 1 }}
+                    >
+                      {updateStatus === 'updating'
+                        ? (isFr ? 'Mise à jour…' : 'Updating…')
+                        : (isFr ? 'Mettre à jour maintenant' : 'Update now')}
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => void handleCheckUpdates()}
+                  disabled={updateStatus === 'checking' || updateStatus === 'updating'}
+                  style={{
+                    ...secondaryBtn,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    cursor: updateStatus === 'checking' ? 'default' : 'pointer',
+                    opacity: updateStatus === 'checking' || updateStatus === 'updating' ? 0.6 : 1,
+                  }}
+                >
+                  {updateStatus === 'checking'
+                    ? (isFr ? 'Vérification…' : 'Checking…')
+                    : (isFr ? 'Vérifier les mises à jour' : 'Check for updates')}
+                </button>
+                {updateMsg && (
+                  <p style={{ margin: '8px 0 0', fontSize: 12, color: updateStatus === 'error' ? 'var(--danger)' : 'var(--text-muted)' }}>
+                    {updateMsg}
+                  </p>
+                )}
+              </section>
 
               <section style={sectionStyle}>
                 <label style={fieldLabel}>{isFr ? 'Catalogue' : 'Catalog'}</label>
@@ -476,7 +491,6 @@ export default function GlobalSettings({
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <strong style={{ fontSize: 13 }}>{capability.label}</strong>
-                          {capability.status === 'beta' && <span style={statusBadge('beta')}>Beta</span>}
                         </div>
                         <code style={{ fontSize: 11 }}>{capability.command}</code>
                       </div>
@@ -486,109 +500,6 @@ export default function GlobalSettings({
                     </div>
                   ))}
                 </div>
-              </section>
-
-              <section style={sectionStyle}>
-                <label style={fieldLabel}>Agents &amp; Workflows</label>
-                {updateResult?.hasUpdate && (
-                  <div
-                    style={{
-                      marginBottom: 12,
-                      padding: '12px 14px',
-                      background: 'var(--primary-soft)',
-                      border: '1px solid var(--primary)',
-                      borderRadius: 10,
-                    }}
-                  >
-                    <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>
-                      {isFr ? `Version ${updateResult.latestVersion} disponible` : `Version ${updateResult.latestVersion} available`}
-                    </p>
-                    {updateResult.changelog && (
-                      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>{updateResult.changelog}</p>
-                    )}
-                    <button
-                      onClick={() => void handleApplyUpdate()}
-                      disabled={updateStatus === 'updating'}
-                      style={{ ...chipStyle(true), marginTop: 10, border: 'none', opacity: updateStatus === 'updating' ? 0.6 : 1 }}
-                    >
-                      {updateStatus === 'updating'
-                        ? (isFr ? 'Mise à jour…' : 'Updating…')
-                        : (isFr ? 'Mettre à jour maintenant' : 'Update now')}
-                    </button>
-                  </div>
-                )}
-                <button
-                  onClick={() => void handleCheckUpdates()}
-                  disabled={updateStatus === 'checking' || updateStatus === 'updating'}
-                  style={{
-                    ...secondaryBtn,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    cursor: updateStatus === 'checking' ? 'default' : 'pointer',
-                    opacity: updateStatus === 'checking' || updateStatus === 'updating' ? 0.6 : 1,
-                  }}
-                >
-                  {updateStatus === 'checking'
-                    ? (isFr ? 'Vérification…' : 'Checking…')
-                    : (isFr ? 'Vérifier les mises à jour' : 'Check for updates')}
-                </button>
-                {updateMsg && (
-                  <p style={{ margin: '8px 0 0', fontSize: 12, color: updateStatus === 'error' ? 'var(--danger)' : 'var(--text-muted)' }}>
-                    {updateMsg}
-                  </p>
-                )}
-              </section>
-
-              <section style={sectionStyle}>
-                <label style={fieldLabel}>{msg.settings.globalAgentsTitle}</label>
-                <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                  {msg.settings.globalAgentsSubtitle}
-                </p>
-                {globalInfo && (
-                  <div style={{ margin: '0 0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <p style={{ margin: 0, fontSize: 13, color: globalInfo.totalInstalled === globalInfo.totalExpected ? 'var(--success, #22c55e)' : 'var(--text-muted)', fontWeight: 600 }}>
-                      {msg.settings.globalAgentsStatus(globalInfo.totalInstalled, globalInfo.totalExpected)}
-                    </p>
-                    {globalInfo.environments.map((env) => (
-                      <div
-                        key={env.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '8px 12px',
-                          background: 'var(--bg-card)',
-                          border: '1px solid var(--line)',
-                          borderRadius: 10,
-                        }}
-                      >
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{env.label}</span>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                          {env.installed}/{env.total} · {env.targetDir}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <button
-                  onClick={() => void handleInstallGlobal()}
-                  disabled={globalStatus === 'installing' || globalStatus === 'loading'}
-                  style={{
-                    ...primaryBtn(globalStatus === 'installing' || globalStatus === 'loading'),
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
-                  <Download size={14} />
-                  {globalStatus === 'installing' ? msg.settings.globalAgentsInstalling : msg.settings.globalAgentsInstallAction}
-                </button>
-                {globalMsg && (
-                  <p style={{ margin: '8px 0 0', fontSize: 12, color: globalStatus === 'error' ? 'var(--danger)' : 'var(--text-muted)' }}>
-                    {globalMsg}
-                  </p>
-                )}
               </section>
             </div>
           )}
@@ -618,18 +529,6 @@ const closeButton: React.CSSProperties = {
   padding: 0,
 };
 
-function primaryBtn(disabled: boolean): React.CSSProperties {
-  return {
-    padding: '7px 12px',
-    borderRadius: 10,
-    border: 'none',
-    background: disabled ? 'var(--line-strong)' : 'var(--primary)',
-    color: '#fff',
-    fontWeight: 700,
-    fontSize: 13,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-  };
-}
 
 function chipStyle(active: boolean): React.CSSProperties {
   return {
@@ -644,27 +543,16 @@ function chipStyle(active: boolean): React.CSSProperties {
   };
 }
 
-function statusBadge(status: NakirosCapabilityStatus): React.CSSProperties {
-  if (status === 'stable') {
-    return {
-      fontSize: 10,
-      fontWeight: 700,
-      color: '#065f46',
-      background: '#d1fae5',
-      border: '1px solid #10b981',
-      borderRadius: 10,
-      padding: '1px 6px',
-    };
-  }
-  return {
-    fontSize: 10,
-    fontWeight: 700,
-    color: '#92400e',
-    background: '#fef3c7',
-    border: '1px solid #f59e0b',
-    borderRadius: 10,
-    padding: '1px 6px',
-  };
+
+function formatLastCheck(iso: string, isFr: boolean): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days = Math.floor(diff / 86_400_000);
+  if (days > 0) return isFr ? `il y a ${days}j` : `${days}d ago`;
+  if (hours > 0) return isFr ? `il y a ${hours}h` : `${hours}h ago`;
+  if (minutes > 0) return isFr ? `il y a ${minutes}min` : `${minutes}m ago`;
+  return isFr ? "à l'instant" : 'just now';
 }
 
 function kindBadge(kind: NakirosCapabilityKind): React.CSSProperties {

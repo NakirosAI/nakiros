@@ -1,0 +1,248 @@
+{
+  "version": "1.0.0",
+  "channel": "stable",
+  "released_at": "2026-03-04T10:00:00Z",
+  "min_app_version": "1.0.0",
+  "required_features": [],
+  "changelog": "Initial release of agents bundle",
+  "files": [
+    {
+      "type": "agent",
+      "name": "architect",
+      "filename": "architect.md",
+      "path": "agents/architect.md",
+      "hash": "sha256:1b6956987a618b8efb7bff2a6990eca58fe7659eabf743a5b82b4189e8479af0"
+    },
+    {
+      "type": "agent",
+      "name": "brainstorming",
+      "filename": "brainstorming.md",
+      "path": "agents/brainstorming.md",
+      "hash": "sha256:ce30fa54ca891082e7b7f42942eea14499ae12957985f6565fc4d0279b546893"
+    },
+    {
+      "type": "agent",
+      "name": "dev",
+      "filename": "dev.md",
+      "path": "agents/dev.md",
+      "hash": "sha256:4df40f64f490e7a2e9b46b38f722b0d09f78244a8443404ba8d571801f50a107"
+    },
+    {
+      "type": "agent",
+      "name": "hotfix",
+      "filename": "hotfix.md",
+      "path": "agents/hotfix.md",
+      "hash": "sha256:273b4fe835adadf00b45dbdf02e55fda356793bb46fbb6e83608686198494f4e"
+    },
+    {
+      "type": "agent",
+      "name": "pm",
+      "filename": "pm.md",
+      "path": "agents/pm.md",
+      "hash": "sha256:99d9c92813cda07c129d1f8dc2945f1d74f0c813c13f1614dca734b89e9a4a5c"
+    },
+    {
+      "type": "agent",
+      "name": "qa",
+      "filename": "qa.md",
+      "path": "agents/qa.md",
+      "hash": "sha256:dfa2166929b7bbd28dcae3a0df2a34ebfe94a31585d8493215cf9d48da398f7e"
+    },
+    {
+      "type": "agent",
+      "name": "sm",
+      "filename": "sm.md",
+      "path": "agents/sm.md",
+      "hash": "sha256:bdd94c2dc88b7233e39fea1e1262ec8b81fe8b1485a11d74f9238f2093acdf0c"
+    },
+    {
+      "type": "workflow",
+      "name": "create-story",
+      "filename": "create-story.md",
+      "path": "workflows/create-story.md",
+      "hash": "sha256:5b1b2780d5e2f56bf0cefcd73d9878dcc38da298bc57a36b1d412ed60a60c61b"
+    },
+    {
+      "type": "workflow",
+      "name": "create-ticket",
+      "filename": "create-ticket.md",
+      "path": "workflows/create-ticket.md",
+      "hash": "sha256:222975edb2aa257d27e0493b5b4f8902c559706fdf5a5ceed42d17f7f32681bd"
+    },
+    {
+      "type": "workflow",
+      "name": "dev-story",
+      "filename": "dev-story.yaml",
+      "path": "workflows/dev-story.yaml",
+      "hash": "sha256:adb8aea9111d33efbd93ea637a3b299022f0c2b284104158fa7c993d3e426b53"
+    },
+    {
+      "type": "workflow",
+      "name": "generate-context",
+      "filename": "generate-context.md",
+      "path": "workflows/generate-context.md",
+      "hash": "sha256:2333cc49da115f9358ee4a0198600c4d4b8f701ba18e022cd759a61dd579f8a5"
+    },
+    {
+      "type": "workflow",
+      "name": "hotfix-story",
+      "filename": "hotfix-story.yaml",
+      "path": "workflows/hotfix-story.yaml",
+      "hash": "sha256:f6b1ac25829c02fbe456f94d2ec6b53a5a8460c5f31cb71a9e36d7139dbfc6c2"
+    },
+    {
+      "type": "workflow",
+      "name": "project-confidence",
+      "filename": "project-confidence.md",
+      "path": "workflows/project-confidence.md",
+      "hash": "sha256:7548d4817ae68c4986b15512fc86a67550f4949fa8bae15a07b4df35274e20f3"
+    },
+    {
+      "type": "workflow",
+      "name": "qa-review",
+      "filename": "qa-review.md",
+      "path": "workflows/qa-review.md",
+      "hash": "sha256:ffcdcde864beb56fb47ba69692723fbc071919870f3ad01838631bcdf32918e0"
+    },
+    {
+      "type": "workflow",
+      "name": "sprint-planning",
+      "filename": "sprint-planning.md",
+      "path": "workflows/sprint-planning.md",
+      "hash": "sha256:abdf7ba46c7bf59fa3ef77ae1edbf2bc5c1c0c9f4a16f1f0c30b20482ce188fc"
+    },
+    {
+      "type": "workflow",
+      "name": "sprint-retro",
+      "filename": "sprint-retro.md",
+      "path": "workflows/sprint-retro.md",
+      "hash": "sha256:3a87035df90f88f1d02a1c2d8c2e8108121e4200fa74cd93a431982e2ec3cd61"
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-architect",
+      "filename": "nak-agent-architect.md",
+      "path": "commands/nak-agent-architect.md",
+      "hash": "sha256:af19ebcc22ac71b3498c8539e0d350bbb45c935840bc2bc1c72a5093e227cbc5"
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-brainstorming",
+      "filename": "nak-agent-brainstorming.md",
+      "path": "commands/nak-agent-brainstorming.md",
+      "hash": "sha256:e2a7cbb9270561ef0a08aaa4aa6964679c81a405a486967f6db5bfa0f3cc4cc0"
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-dev",
+      "filename": "nak-agent-dev.md",
+      "path": "commands/nak-agent-dev.md",
+      "hash": "sha256:8c6d09c871c31da345121eaf6cb502ff179f051caad1a94b2ae16762b5d6b1cc"
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-hotfix",
+      "filename": "nak-agent-hotfix.md",
+      "path": "commands/nak-agent-hotfix.md",
+      "hash": "sha256:001a8c229e8f78704a650d916bf4c0ebbd80139751497eada530bf1d5b5edce0"
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-nakiros",
+      "filename": "nak-agent-nakiros.md",
+      "path": "commands/nak-agent-nakiros.md",
+      "hash": "sha256:6e1e9e6533aff2a0b1d66cab1344d22ee1be4872bd65628df4a509eb24394cd8"
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-pm",
+      "filename": "nak-agent-pm.md",
+      "path": "commands/nak-agent-pm.md",
+      "hash": "sha256:aa09a1bad4b61c6d1aa5fcfaa2ebed10f00f837d6ea5c3e2f1c61bc266088f48"
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-qa",
+      "filename": "nak-agent-qa.md",
+      "path": "commands/nak-agent-qa.md",
+      "hash": "sha256:8d8dd169feb2f4c457543057e4adad0e253ffa7862a0315e18c0e79bdfbfd736"
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-sm",
+      "filename": "nak-agent-sm.md",
+      "path": "commands/nak-agent-sm.md",
+      "hash": "sha256:42c5a393ebeba93a3bd206425b11f02649777325d2990040107840f474e93fc3"
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-create-story",
+      "filename": "nak-workflow-create-story.md",
+      "path": "commands/nak-workflow-create-story.md",
+      "hash": "sha256:ae9d326e06b556c9b73cc54794463710c3256ada79b1f1e32caa6abd0d31b49a"
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-create-ticket",
+      "filename": "nak-workflow-create-ticket.md",
+      "path": "commands/nak-workflow-create-ticket.md",
+      "hash": "sha256:88317f2e98868008cfd3cd5901b9a7b2c5a1c5013b6ae78597bdd77fa4dffcf8"
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-dev-story",
+      "filename": "nak-workflow-dev-story.md",
+      "path": "commands/nak-workflow-dev-story.md",
+      "hash": "sha256:2e7523ed4902d319d3a2cfd4d4d1952467b73f006cdcbc742417d4dc9453aea1"
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-fetch-project-context",
+      "filename": "nak-workflow-fetch-project-context.md",
+      "path": "commands/nak-workflow-fetch-project-context.md",
+      "hash": "sha256:40bc80edc62be7a5e0dac3a0fa900dfa9d912e173edc4ea5339560f593208ee5"
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-generate-context",
+      "filename": "nak-workflow-generate-context.md",
+      "path": "commands/nak-workflow-generate-context.md",
+      "hash": "sha256:249b28ca1adfc6f88aeb01143bbbe630b984e2f1366999628ceb13c230ddcb0c"
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-hotfix-story",
+      "filename": "nak-workflow-hotfix-story.md",
+      "path": "commands/nak-workflow-hotfix-story.md",
+      "hash": "sha256:c390357317bccd0ed271c5e52d6556d9df08e365a84a1562ca2ef94a8e562264"
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-project-understanding-confidence",
+      "filename": "nak-workflow-project-understanding-confidence.md",
+      "path": "commands/nak-workflow-project-understanding-confidence.md",
+      "hash": "sha256:cffa4d03a08170dfa76bd5d7d0fbf3c2d76eb3f34e5ca9c9dac88a7b78b5be63"
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-qa-review",
+      "filename": "nak-workflow-qa-review.md",
+      "path": "commands/nak-workflow-qa-review.md",
+      "hash": "sha256:ddc42fe6ce76a52a21d6fd1e128c3a86c8987956cdde23f79fda4fc39b137988"
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-sprint",
+      "filename": "nak-workflow-sprint.md",
+      "path": "commands/nak-workflow-sprint.md",
+      "hash": "sha256:38ec4dec6902e61f18d25482558334aeeafbf6c6fa08e309e3a3a8e857e5a91a"
+    },
+    {
+      "type": "core",
+      "name": "workflow",
+      "filename": "workflow.xml",
+      "path": "core/tasks/workflow.xml",
+      "hash": "sha256:be919612bc89a1d5ac9e059305794c24f3f374c3a34b8c9d354db438059eb163"
+    }
+  ]
+}

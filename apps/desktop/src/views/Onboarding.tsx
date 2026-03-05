@@ -3,7 +3,7 @@ import { Check, Circle, Loader2, X } from 'lucide-react';
 import type { ResolvedLanguage } from '@nakiros/shared';
 import { MESSAGES } from '../i18n';
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4;
 
 interface OnboardingProps {
   language: ResolvedLanguage;
@@ -26,7 +26,6 @@ function AnimatedLogo({ size = 160 }: { size?: number }) {
 
     const cx = size / 2;
     const cy = size / 2;
-    // Scale so the furthest node (~180px in design space) fits with padding
     const s = size / 500;
 
     const nodes = [
@@ -58,7 +57,6 @@ function AnimatedLogo({ size = 160 }: { size?: number }) {
         1,
       );
 
-      // Lines
       nodes.forEach((node, i) => {
         if (node.isCenter) return;
         const isActive = i === activeIdx;
@@ -79,7 +77,6 @@ function AnimatedLogo({ size = 160 }: { size?: number }) {
         }
       });
 
-      // Nodes
       nodes.forEach((node, i) => {
         ctx.fillStyle = node.isCenter ? '#2ECFCF' : '#0D9E9E';
         ctx.beginPath();
@@ -122,8 +119,6 @@ export default function Onboarding({ language, onDone }: OnboardingProps) {
   const [progress, setProgress] = useState<OnboardingProgressEvent[]>([]);
   const [installDone, setInstallDone] = useState(false);
   const [installError, setInstallError] = useState(false);
-  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
-  const [updating, setUpdating] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
 
   // Détection des éditeurs au passage à l'étape 2
@@ -153,23 +148,6 @@ export default function Onboarding({ language, onDone }: OnboardingProps) {
 
     return unsub;
   }, [step]);
-
-  // Check de mise à jour à l'étape 4
-  useEffect(() => {
-    if (step !== 4) return;
-    void window.nakiros.checkForUpdates().then((result) => {
-      setUpdateResult(result);
-      if (!result.hasUpdate) setTimeout(() => setStep(5), 1200);
-    });
-  }, [step]);
-
-  const handleApplyUpdate = async () => {
-    if (!updateResult) return;
-    setUpdating(true);
-    await window.nakiros.applyUpdate(updateResult.changedFiles);
-    setUpdating(false);
-    setStep(5);
-  };
 
   return (
     <div style={styles.root}>
@@ -250,42 +228,8 @@ export default function Onboarding({ language, onDone }: OnboardingProps) {
         </div>
       )}
 
-      {/* Étape 4 — Update Check */}
+      {/* Étape 4 — Done */}
       {step === 4 && (
-        <div style={styles.center}>
-          <h2 style={styles.h2}>{t.updateTitle}</h2>
-          {!updateResult && (
-            <p style={styles.sub}>{t.updateChecking}</p>
-          )}
-          {updateResult && !updateResult.hasUpdate && (
-            <p style={{ ...styles.sub, ...styles.statusLine }}>
-              <Check size={16} color="var(--success)" strokeWidth={2.4} />
-              {t.updateUpToDate}
-            </p>
-          )}
-          {updateResult?.hasUpdate && (
-            <>
-              <p style={styles.sub}>{t.updateAvailable(updateResult.latestVersion)}</p>
-              {updateResult.changelog && (
-                <p style={{ ...styles.sub, fontSize: 13, color: 'var(--text-muted)' }}>
-                  {updateResult.changelog}
-                </p>
-              )}
-              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                <button style={styles.btnSecondary} onClick={() => setStep(5)}>
-                  {t.updateSkip}
-                </button>
-                <button style={styles.btnPrimary} disabled={updating} onClick={handleApplyUpdate}>
-                  {updating ? t.updating : t.updateNow}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Étape 5 — Done */}
-      {step === 5 && (
         <div style={styles.center}>
           <AnimatedLogo size={160} />
           <h2 style={styles.h2}>{t.doneTitle}</h2>
@@ -298,7 +242,7 @@ export default function Onboarding({ language, onDone }: OnboardingProps) {
 
       {/* Indicateurs d'étapes */}
       <div style={styles.steps}>
-        {([1, 2, 3, 4, 5] as Step[]).map((s) => (
+        {([1, 2, 3, 4] as Step[]).map((s) => (
           <div
             key={s}
             style={{

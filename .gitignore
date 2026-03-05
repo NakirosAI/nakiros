@@ -8,6 +8,10 @@ dist/
 node_modules/
 .nakiros.yaml
 
+# Wrangler
+.wrangler/
+packages/*/.wrangler/
+
 # Monorepo
 .turbo/
 apps/*/.turbo/

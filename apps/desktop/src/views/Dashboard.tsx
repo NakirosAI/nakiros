@@ -1,37 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
 import type {
-  AppPreferences,
-  LocalEpic,
   LocalTicket,
-  ResolvedLanguage,
-  ResolvedTheme,
   StoredWorkspace,
 } from '@nakiros/shared';
 import { Settings2 } from 'lucide-react';
 import appIcon from '../assets/icon.svg';
-import ContextPanel from '../components/ContextPanel';
+import { DashboardRouter } from '../components/dashboard/DashboardRouter';
 import FeedbackModal from '../components/FeedbackModal';
-import GlobalSettings from '../components/GlobalSettings';
-import KanbanBoard from '../components/KanbanBoard';
-import ProjectSettings from '../components/ProjectSettings';
 import Sidebar, { type SidebarTab } from '../components/Sidebar';
-import TicketDetail from '../components/TicketDetail';
-import WorkspaceOverview from '../components/WorkspaceOverview';
-import { MESSAGES } from '../i18n';
-import ChatView from './ChatView';
+import { usePreferences } from '../hooks/usePreferences';
+import { useTickets } from '../hooks/useTickets';
+import { useWorkspace } from '../hooks/useWorkspace';
 
 interface Props {
-  workspace: StoredWorkspace;
-  openWorkspaces: StoredWorkspace[];
-  activeWorkspaceId: string;
-  allWorkspaces: StoredWorkspace[];
-  preferences: AppPreferences;
-  resolvedTheme: ResolvedTheme;
-  language: ResolvedLanguage;
-  onPreferencesChange(next: AppPreferences): Promise<void>;
   onUpdateWorkspace(workspace: StoredWorkspace): Promise<void>;
-  onOpenWorkspaceTab(id: string): void;
-  onCloseWorkspaceTab(id: string): void;
   onNewWorkspace(): void;
   onGoHome(): void;
   serverStatus: 'starting' | 'running' | 'stopped';
@@ -39,32 +23,41 @@ interface Props {
 }
 
 export default function Dashboard({
-  workspace,
-  openWorkspaces,
-  activeWorkspaceId,
-  allWorkspaces,
-  preferences,
-  resolvedTheme,
-  language,
-  onPreferencesChange,
   onUpdateWorkspace,
-  onOpenWorkspaceTab,
-  onCloseWorkspaceTab,
   onNewWorkspace,
   onGoHome,
   serverStatus,
   onRestartServer,
 }: Props) {
-  const msg = MESSAGES[language];
+  const { t } = useTranslation('dashboard');
+  const { t: tSidebar } = useTranslation('sidebar');
+  const { t: tToast } = useTranslation('toast');
+  const { t: tSettings } = useTranslation('settings');
+  const { t: tFeedback } = useTranslation('feedback');
+  const { preferences } = usePreferences();
+  const {
+    workspace,
+    openWorkspaces,
+    activeWorkspaceId,
+    allWorkspaces,
+    openWorkspaceTab,
+    closeWorkspaceTab,
+  } = useWorkspace();
+
   const mcpUrl = preferences.mcpServerUrl || 'http://localhost:3737';
   const isLocalServer = mcpUrl.includes('localhost') || mcpUrl.includes('127.0.0.1');
   const defaultProvider = preferences.agentProvider ?? 'claude';
+  const {
+    tickets,
+    epics,
+    refresh: refreshTickets,
+    upsertTicketLocal,
+    addTicketLocal,
+  } = useTickets(workspace.id);
 
   const [activeTab, setActiveTab] = useState<SidebarTab>('overview');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [tickets, setTickets] = useState<LocalTicket[]>([]);
-  const [epics, setEpics] = useState<LocalEpic[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<LocalTicket | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -79,8 +72,6 @@ export default function Dashboard({
   const workspaceMenuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    void window.nakiros.getTickets(workspace.id).then(setTickets);
-    void window.nakiros.getEpics(workspace.id).then(setEpics);
     setSelectedTicket(null);
   }, [workspace.id]);
 
@@ -129,12 +120,12 @@ export default function Dashboard({
   }
 
   function handleTicketUpdate(updated: LocalTicket) {
-    setTickets((prev) => prev.map((ticket) => (ticket.id === updated.id ? updated : ticket)));
+    upsertTicketLocal(updated);
     if (selectedTicket?.id === updated.id) setSelectedTicket(updated);
   }
 
   function handleTicketCreate(ticket: LocalTicket) {
-    setTickets((prev) => [...prev, ticket]);
+    addTicketLocal(ticket);
   }
 
   async function handleContextCopy() {
@@ -143,9 +134,9 @@ export default function Dashboard({
     try {
       const context = await window.nakiros.generateContext(workspace.id, selectedTicket.id, workspace);
       await window.nakiros.writeClipboard(context);
-      pushToast(msg.toast.contextCopied(selectedTicket.id));
+      pushToast(tToast('contextCopied', { ticketId: selectedTicket.id }));
     } catch {
-      pushToast(msg.toast.contextCopyError);
+      pushToast(tToast('contextCopyError'));
     } finally {
       setTimeout(() => setCopyingId(null), 1500);
     }
@@ -164,10 +155,7 @@ export default function Dashboard({
   const unopenedWorkspaces = allWorkspaces.filter(
     (candidate) => !openWorkspaces.some((openedWorkspace) => openedWorkspace.id === candidate.id),
   );
-  const workspaceMenuPositionStyle =
-    workspaceMenuSide === 'right'
-      ? { left: 0 as const, right: 'auto' as const }
-      : { right: 0 as const, left: 'auto' as const };
+  const workspaceMenuPositionClass = workspaceMenuSide === 'right' ? 'left-0' : 'right-0';
 
   function toggleWorkspaceMenu() {
     const rect = workspaceMenuButtonRef.current?.getBoundingClientRect();
@@ -178,50 +166,44 @@ export default function Dashboard({
     setIsWorkspaceMenuOpen((prev) => !prev);
   }
 
-  const deliverySelected = activeTab === 'delivery';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 18px',
-          height: 56,
-          borderBottom: '1px solid var(--line)',
-          background: 'var(--bg-soft)',
-          flexShrink: 0,
-          gap: 12,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-          <button onClick={onGoHome} title={msg.dashboard.home} aria-label={msg.dashboard.home} style={logoButton}>
-            <img src={appIcon} alt="Logo Nakiros" width={32} height={32} style={{ display: 'block' }} />
+    <div className="flex h-screen flex-col overflow-hidden">
+      <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--bg-soft)] px-[18px]">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <button
+            onClick={onGoHome}
+            title={t('home')}
+            aria-label={t('home')}
+            className="grid h-7 w-7 place-items-center rounded-lg border-none bg-transparent p-0"
+          >
+            <img src={appIcon} alt="Logo Nakiros" width={32} height={32} className="block" />
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            <div
-              aria-label={msg.dashboard.openedWorkspaceTabs}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                minWidth: 0,
-                maxWidth: 'min(62vw, 760px)',
-                overflowX: 'auto',
-              }}
-            >
+          <div className="flex min-w-0 items-center gap-1.5">
+            <div aria-label={t('openedWorkspaceTabs')} className="flex min-w-0 max-w-[min(62vw,760px)] items-center gap-1.5 overflow-x-auto">
               {openWorkspaces.map((openedWorkspace) => {
                 const isActive = openedWorkspace.id === activeWorkspaceId;
                 return (
-                  <div key={openedWorkspace.id} style={tabItem(isActive)}>
-                    <button onClick={() => onOpenWorkspaceTab(openedWorkspace.id)} title={openedWorkspace.name} style={tabSelectButton}>
+                  <div
+                    key={openedWorkspace.id}
+                    className={clsx(
+                      'flex min-w-0 items-center rounded-[10px] border',
+                      isActive
+                        ? 'border-[var(--line-strong)] bg-[var(--bg-card)]'
+                        : 'border-[var(--line)] bg-[var(--bg-soft)]',
+                    )}
+                  >
+                    <button
+                      onClick={() => openWorkspaceTab(openedWorkspace.id)}
+                      title={openedWorkspace.name}
+                      className="max-w-[220px] overflow-hidden text-ellipsis whitespace-nowrap border-none bg-transparent px-[10px] py-1.5 text-[13px] font-semibold text-[var(--text)]"
+                    >
                       {openedWorkspace.name}
                     </button>
                     <button
-                      onClick={() => onCloseWorkspaceTab(openedWorkspace.id)}
-                      title={`${msg.dashboard.closeTab} ${openedWorkspace.name}`}
-                      aria-label={`${msg.dashboard.closeTab} ${openedWorkspace.name}`}
-                      style={tabCloseButton}
+                      onClick={() => closeWorkspaceTab(openedWorkspace.id)}
+                      title={`${t('closeTab')} ${openedWorkspace.name}`}
+                      aria-label={`${t('closeTab')} ${openedWorkspace.name}`}
+                      className="h-[26px] w-[26px] shrink-0 border-0 border-l border-solid border-l-[var(--line)] bg-transparent p-0 text-sm leading-none text-[var(--text-muted)]"
                     >
                       ×
                     </button>
@@ -229,79 +211,57 @@ export default function Dashboard({
                 );
               })}
             </div>
-            <div ref={workspaceMenuRef} style={{ position: 'relative', flexShrink: 0 }}>
+            <div ref={workspaceMenuRef} className="relative shrink-0">
               <button
                 ref={workspaceMenuButtonRef}
                 onClick={toggleWorkspaceMenu}
-                title={msg.dashboard.openWorkspace}
-                aria-label={msg.dashboard.openWorkspace}
-                style={tabAddButton}
+                title={t('openWorkspace')}
+                aria-label={t('openWorkspace')}
+                className="h-7 w-7 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-0 text-lg leading-none text-[var(--text)]"
               >
                 +
               </button>
               {isWorkspaceMenuOpen && (
-                <div style={{ ...workspaceMenu, ...workspaceMenuPositionStyle }}>
+                <div
+                  className={clsx(
+                    'absolute top-[34px] z-[200] max-h-[280px] w-[260px] max-w-[calc(100vw-24px)] overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-1.5',
+                    workspaceMenuPositionClass,
+                  )}
+                >
                   {unopenedWorkspaces.length > 0 ? (
                     unopenedWorkspaces.map((candidate) => (
                       <button
                         key={candidate.id}
                         onClick={() => {
-                          onOpenWorkspaceTab(candidate.id);
+                          openWorkspaceTab(candidate.id);
                           setIsWorkspaceMenuOpen(false);
                         }}
-                        style={workspaceMenuItem}
+                        className="w-full rounded-lg border-none bg-transparent px-[10px] py-2 text-left text-[13px] text-[var(--text)]"
                       >
                         {candidate.name}
                       </button>
                     ))
                   ) : (
-                    <div style={workspaceMenuEmpty}>{msg.dashboard.noOtherWorkspace}</div>
+                    <div className="px-[10px] py-2 text-xs text-[var(--text-muted)]">{t('noOtherWorkspace')}</div>
                   )}
                   <button
                     onClick={() => {
                       setIsWorkspaceMenuOpen(false);
                       onNewWorkspace();
                     }}
-                    style={workspaceMenuAction}
+                    className="mt-1.5 w-full rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-[10px] py-2 text-left text-[13px] font-bold text-[var(--text)]"
                   >
-                    + {msg.dashboard.newWorkspace}
+                    + {t('newWorkspace')}
                   </button>
                 </div>
               )}
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <button
-            onClick={() => setActiveTab('chat')}
-            disabled={workspace.repos.length === 0}
-            title={workspace.repos.length === 0 ? msg.dashboard.noRepo : msg.dashboard.chatAgent}
-            style={{
-              border: '1px solid var(--line)',
-              background: 'var(--bg-soft)',
-              color: 'var(--text)',
-              borderRadius: 10,
-              padding: '6px 10px',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: workspace.repos.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: workspace.repos.length === 0 ? 0.55 : 1,
-            }}
-          >
-            {msg.dashboard.chatAgent}
-          </button>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{msg.dashboard.repoCount(workspace.repos.length)}</span>
-          <span
-            style={{
-              fontSize: 11,
-              color: 'var(--text-muted)',
-              background: 'var(--bg-muted)',
-              padding: '3px 8px',
-              borderRadius: 8,
-              border: '1px solid var(--line)',
-            }}
-          >
-            {workspaceTopology === 'mono' ? msg.dashboard.topologyMono : msg.dashboard.topologyMulti}
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-xs text-[var(--text-muted)]">{t('repoCount', { count: workspace.repos.length })}</span>
+          <span className="rounded-lg border border-[var(--line)] bg-[var(--bg-muted)] px-2 py-[3px] text-[11px] text-[var(--text-muted)]">
+            {workspaceTopology === 'mono' ? t('topologyMono') : t('topologyMulti')}
           </span>
           <button
             onClick={isLocalServer ? onRestartServer : undefined}
@@ -315,323 +275,109 @@ export default function Dashboard({
                     ? 'MCP starting…'
                     : 'MCP stopped — click to restart'
             }
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              background: 'none',
-              border: 'none',
-              cursor: !isLocalServer || serverStatus === 'starting' ? 'default' : 'pointer',
-              padding: '4px 8px',
-              borderRadius: 8,
-              opacity: !isLocalServer || serverStatus === 'starting' ? 0.6 : 1,
-            }}
+            className={clsx(
+              'flex items-center gap-[5px] rounded-lg border-none bg-transparent px-2 py-1',
+              (!isLocalServer || serverStatus === 'starting') && 'opacity-60',
+            )}
           >
             <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background:
-                  serverStatus === 'running'
-                    ? 'var(--success)'
-                    : serverStatus === 'starting'
-                      ? 'var(--warning)'
-                      : 'var(--danger)',
-                flexShrink: 0,
-              }}
+              className={clsx(
+                'h-[7px] w-[7px] shrink-0 rounded-full',
+                serverStatus === 'running'
+                  ? 'bg-[var(--success)]'
+                  : serverStatus === 'starting'
+                    ? 'bg-[var(--warning)]'
+                    : 'bg-[var(--danger)]',
+              )}
             />
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>MCP</span>
+            <span className="text-[11px] text-[var(--text-muted)]">MCP</span>
           </button>
           <button
             onClick={() => setShowFeedbackModal(true)}
-            title={msg.feedback.productTitle}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--line)',
-              borderRadius: 8,
-              color: 'var(--text-muted)',
-              fontSize: 11,
-              padding: '4px 9px',
-              cursor: 'pointer',
-            }}
+            title={tFeedback('productTitle')}
+            className="rounded-lg border border-[var(--line)] bg-transparent px-[9px] py-1 text-[11px] text-[var(--text-muted)]"
           >
-            {msg.feedback.productButton}
+            {tFeedback('productButton')}
           </button>
           <button
             onClick={() => setShowGlobalSettings((prev) => !prev)}
-            title={msg.settings.title}
-            aria-label={msg.settings.title}
-            style={{
-              ...globalSettingsButton,
-              background: showGlobalSettings ? 'var(--bg-muted)' : 'transparent',
-              border: showGlobalSettings ? '1px solid var(--primary)' : '1px solid var(--line)',
-            }}
+            title={tSettings('title')}
+            aria-label={tSettings('title')}
+            className={clsx(
+              'grid h-7 w-7 place-items-center rounded-lg p-0',
+              showGlobalSettings
+                ? 'border border-[var(--primary)] bg-[var(--bg-muted)]'
+                : 'border border-[var(--line)] bg-transparent',
+            )}
           >
             <Settings2 size={14} color={showGlobalSettings ? 'var(--primary)' : 'var(--text-muted)'} />
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="flex flex-1 overflow-hidden">
         <Sidebar
           active={activeTab}
           onChange={setActiveTab}
           labels={{
-            overview: msg.sidebar.overview,
-            chat: msg.sidebar.chat,
-            product: msg.sidebar.product,
-            delivery: msg.sidebar.delivery,
-            settings: msg.sidebar.settings,
+            overview: tSidebar('overview'),
+            chat: tSidebar('chat'),
+            product: tSidebar('product'),
+            delivery: tSidebar('delivery'),
+            settings: tSidebar('settings'),
           }}
         />
 
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-          {showGlobalSettings && (
-            <GlobalSettings
-              preferences={preferences}
-              resolvedTheme={resolvedTheme}
-              language={language}
-              onChange={onPreferencesChange}
-              onClose={() => setShowGlobalSettings(false)}
-            />
-          )}
-
-          {!showGlobalSettings && activeTab === 'overview' && (
-            <WorkspaceOverview
-              workspace={workspace}
-              tickets={tickets}
-              docsCount={overviewDocsCount}
-              conversationCount={overviewConversationCount}
-              lastConversationAt={lastConversationAt}
-              serverStatus={serverStatus}
-              onGoProduct={() => setActiveTab('product')}
-              onGoDelivery={() => setActiveTab('delivery')}
-              onOpenChat={() => setActiveTab('chat')}
-              onCreateTicket={() => setActiveTab('delivery')}
-              onCreatePrd={() => {
-                setActiveTab('product');
-                setOpenPrdAssistantSignal((prev) => prev + 1);
-              }}
-              language={language}
-            />
-          )}
-
-          {!showGlobalSettings && activeTab === 'chat' && (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
-              <ChatView workspace={workspace} lang={language} />
-            </div>
-          )}
-
-          {!showGlobalSettings && activeTab === 'product' && (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
-              <ContextPanel
-                workspace={workspace}
-                language={language}
-                onDocumentsChanged={(docsCount) => {
-                  setOverviewDocsCount(docsCount);
-                }}
-                openPrdAssistantSignal={openPrdAssistantSignal}
-                onOpenChat={() => setActiveTab('chat')}
-              />
-            </div>
-          )}
-
-          {!showGlobalSettings && deliverySelected && (
-            <>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <KanbanBoard
-                  workspace={workspace}
-                  tickets={tickets}
-                  epics={epics}
-                  onTicketUpdate={handleTicketUpdate}
-                  onTicketCreate={handleTicketCreate}
-                  onSelectTicket={setSelectedTicket}
-                  selectedTicketId={selectedTicket?.id}
-                  onContextCopied={(ticketId) => pushToast(msg.toast.contextCopied(ticketId))}
-                  language={language}
-                />
-              </div>
-              {selectedTicket && (
-                <TicketDetail
-                  ticket={selectedTicket}
-                  allTickets={tickets}
-                  epics={epics}
-                  repos={repoNames}
-                  storedRepos={workspace.repos}
-                  workspaceId={workspace.id}
-                  workspace={workspace}
-                  onUpdate={handleTicketUpdate}
-                  onClose={() => setSelectedTicket(null)}
-                  onContextCopy={handleContextCopy}
-                  copying={copyingId === selectedTicket.id}
-                  defaultProvider={defaultProvider}
-                  language={language}
-                />
-              )}
-            </>
-          )}
-
-          {!showGlobalSettings && activeTab === 'settings' && (
-            <ProjectSettings
-              workspace={workspace}
-              language={language}
-              onUpdate={onUpdateWorkspace}
-              onTicketsRefresh={() => {
-                void window.nakiros.getTickets(workspace.id).then(setTickets);
-                void window.nakiros.getEpics(workspace.id).then(setEpics);
-                void refreshOverviewData();
-              }}
-              onDelete={onGoHome}
-            />
-          )}
+        <div className="flex flex-1 overflow-hidden">
+          <DashboardRouter
+            showGlobalSettings={showGlobalSettings}
+            activeTab={activeTab}
+            workspace={workspace}
+            tickets={tickets}
+            epics={epics}
+            repoNames={repoNames}
+            serverStatus={serverStatus}
+            overviewDocsCount={overviewDocsCount}
+            overviewConversationCount={overviewConversationCount}
+            lastConversationAt={lastConversationAt}
+            openPrdAssistantSignal={openPrdAssistantSignal}
+            selectedTicket={selectedTicket}
+            copyingId={copyingId}
+            defaultProvider={defaultProvider}
+            onSetActiveTab={setActiveTab}
+            onSetSelectedTicket={setSelectedTicket}
+            onSetOverviewDocsCount={setOverviewDocsCount}
+            onTicketUpdate={handleTicketUpdate}
+            onTicketCreate={handleTicketCreate}
+            onContextCopy={handleContextCopy}
+            onContextCopied={(ticketId) => pushToast(tToast('contextCopied', { ticketId }))}
+            onUpdateWorkspace={onUpdateWorkspace}
+            onRefreshTickets={() => {
+              void refreshTickets();
+            }}
+            onRefreshOverviewData={() => {
+              void refreshOverviewData();
+            }}
+            onGoHome={onGoHome}
+            onOpenPrdAssistant={() => {
+              setActiveTab('product');
+              setOpenPrdAssistantSignal((prev) => prev + 1);
+            }}
+            onCloseGlobalSettings={() => setShowGlobalSettings(false)}
+          />
         </div>
       </div>
       {showFeedbackModal && (
         <FeedbackModal
-          lang={language}
           onClose={() => setShowFeedbackModal(false)}
           onToast={pushToast}
         />
       )}
       {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            right: 16,
-            bottom: 14,
-            background: '#0f172a',
-            color: '#fff',
-            borderRadius: 10,
-            padding: '9px 12px',
-            fontSize: 12,
-            boxShadow: 'var(--shadow-lg)',
-            zIndex: 1200,
-          }}
-        >
+        <div className="fixed bottom-[14px] right-4 z-[1200] rounded-[10px] bg-[#0f172a] px-3 py-[9px] text-xs text-white shadow-[var(--shadow-lg)]">
           {toast}
         </div>
       )}
     </div>
   );
 }
-
-const logoButton: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  display: 'grid',
-  placeItems: 'center',
-  background: 'transparent',
-  border: 'none',
-  borderRadius: 8,
-  cursor: 'pointer',
-  padding: 0,
-};
-
-const tabItem = (active: boolean): React.CSSProperties => ({
-  display: 'flex',
-  alignItems: 'center',
-  border: active ? '1px solid var(--line-strong)' : '1px solid var(--line)',
-  background: active ? 'var(--bg-card)' : 'var(--bg-soft)',
-  borderRadius: 10,
-  minWidth: 0,
-});
-
-const tabSelectButton: React.CSSProperties = {
-  maxWidth: 220,
-  padding: '6px 10px',
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--text)',
-  fontSize: 13,
-  fontWeight: 600,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  cursor: 'pointer',
-};
-
-const tabCloseButton: React.CSSProperties = {
-  width: 26,
-  height: 26,
-  border: 'none',
-  borderLeft: '1px solid var(--line)',
-  background: 'transparent',
-  color: 'var(--text-muted)',
-  fontSize: 14,
-  lineHeight: 1,
-  cursor: 'pointer',
-  flexShrink: 0,
-};
-
-const tabAddButton: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  border: '1px solid var(--line)',
-  borderRadius: 8,
-  background: 'var(--bg-soft)',
-  color: 'var(--text)',
-  fontSize: 18,
-  lineHeight: 1,
-  cursor: 'pointer',
-  padding: 0,
-};
-
-const workspaceMenu: React.CSSProperties = {
-  position: 'absolute',
-  top: 34,
-  width: 260,
-  maxWidth: 'calc(100vw - 24px)',
-  maxHeight: 280,
-  overflowY: 'auto',
-  background: 'var(--bg-card)',
-  border: '1px solid var(--line)',
-  borderRadius: 12,
-  boxShadow: 'var(--shadow-lg)',
-  padding: 6,
-  zIndex: 200,
-};
-
-const workspaceMenuItem: React.CSSProperties = {
-  width: '100%',
-  textAlign: 'left',
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--text)',
-  padding: '8px 10px',
-  borderRadius: 8,
-  fontSize: 13,
-  cursor: 'pointer',
-};
-
-const workspaceMenuAction: React.CSSProperties = {
-  width: '100%',
-  textAlign: 'left',
-  border: '1px solid var(--line)',
-  background: 'var(--bg-soft)',
-  color: 'var(--text)',
-  padding: '8px 10px',
-  borderRadius: 8,
-  fontSize: 13,
-  fontWeight: 700,
-  cursor: 'pointer',
-  marginTop: 6,
-};
-
-const workspaceMenuEmpty: React.CSSProperties = {
-  color: 'var(--text-muted)',
-  fontSize: 12,
-  padding: '8px 10px',
-};
-
-const globalSettingsButton: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  display: 'grid',
-  placeItems: 'center',
-  background: 'transparent',
-  border: '1px solid var(--line)',
-  borderRadius: 8,
-  cursor: 'pointer',
-  padding: 0,
-};

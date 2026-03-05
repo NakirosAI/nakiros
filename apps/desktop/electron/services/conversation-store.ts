@@ -1,26 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { AgentProvider } from '@nakiros/shared';
-
-export interface StoredConversation {
-  id: string;
-  sessionId: string;
-  repoPath: string;
-  repoName: string;
-  provider: AgentProvider;
-  workspaceId: string;
-  title: string;
-  agents: string[];
-  createdAt: string;
-  lastUsedAt: string;
-  /**
-   * Interleaved array of:
-   * - User messages: { type: 'user', content: string, timestamp: string }
-   * - Raw NDJSON objects from the agent CLI stream (Claude/Codex/Cursor)
-   */
-  messages: unknown[];
-}
+import type { AgentProvider, StoredConversation } from '@nakiros/shared';
 
 const NAKIROS_DIR = join(homedir(), '.nakiros');
 

@@ -16,7 +16,7 @@ export interface AppPreferences {
 }
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
-  theme: 'system',
+  theme: 'dark',
   language: 'system',
   updatedAt: '',
   agentProvider: 'claude',

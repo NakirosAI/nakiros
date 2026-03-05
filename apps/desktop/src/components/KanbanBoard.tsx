@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { LocalTicket, LocalEpic, TicketPriority, TicketStatus, StoredWorkspace } from '@nakiros/shared';
-import type { ResolvedLanguage } from '@nakiros/shared';
 import TicketCard from './TicketCard';
 import TicketForm from './TicketForm';
-import { MESSAGES } from '../i18n';
+import { Button, EmptyState, Input, Select } from './ui';
+import { useDebounce } from '../hooks/useDebounce';
 
-const COLUMNS: { status: TicketStatus; label: string }[] = [
-  { status: 'backlog', label: 'Backlog' },
-  { status: 'todo', label: 'À faire' },
-  { status: 'in_progress', label: 'En cours' },
-  { status: 'done', label: 'Terminé' },
+const COLUMNS: { status: TicketStatus; key: string }[] = [
+  { status: 'backlog', key: 'columnBacklog' },
+  { status: 'todo', key: 'columnTodo' },
+  { status: 'in_progress', key: 'columnInProgress' },
+  { status: 'done', key: 'columnDone' },
 ];
 
 interface Props {
@@ -21,7 +22,6 @@ interface Props {
   onSelectTicket(ticket: LocalTicket): void;
   selectedTicketId?: string;
   onContextCopied?(ticketId: string): void;
-  language: ResolvedLanguage;
 }
 
 export default function KanbanBoard({
@@ -33,20 +33,24 @@ export default function KanbanBoard({
   onSelectTicket,
   selectedTicketId,
   onContextCopied,
-  language,
 }: Props) {
-  const msg = MESSAGES[language];
+  const { t } = useTranslation('board');
   const [addingIn, setAddingIn] = useState<TicketStatus | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TicketStatus>('all');
   const [repoFilter, setRepoFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | TicketPriority>('all');
+  const [columnBodyHeight, setColumnBodyHeight] = useState<number | null>(null);
+  const columnsAreaRef = useRef<HTMLDivElement | null>(null);
+  const columnHeaderRefs = useRef<Partial<Record<TicketStatus, HTMLDivElement | null>>>({});
+  const columnBodyRefs = useRef<Partial<Record<TicketStatus, HTMLDivElement | null>>>({});
 
   const repoNames = workspace.repos.map((r) => r.name);
   const prefix = workspace.ticketPrefix ?? 'PROJ';
   const counter = workspace.ticketCounter ?? 0;
-  const normalizedQuery = query.trim().toLowerCase();
+  const debouncedQuery = useDebounce(query, 220);
+  const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const visibleTickets = tickets.filter((ticket) => {
     const queryMatch = normalizedQuery.length === 0
       || ticket.id.toLowerCase().includes(normalizedQuery)
@@ -56,6 +60,39 @@ export default function KanbanBoard({
     const priorityMatch = priorityFilter === 'all' || ticket.priority === priorityFilter;
     return queryMatch && statusMatch && repoMatch && priorityMatch;
   });
+
+  useLayoutEffect(() => {
+    if (tickets.length === 0 && !addingIn) {
+      setColumnBodyHeight(null);
+      return;
+    }
+
+    function updateColumnHeights() {
+      const area = columnsAreaRef.current;
+      if (!area) return;
+
+      let tallestHeader = 0;
+      let tallestBodyContent = 120;
+
+      for (const { status } of COLUMNS) {
+        const headerEl = columnHeaderRefs.current[status];
+        const bodyEl = columnBodyRefs.current[status];
+        if (headerEl) tallestHeader = Math.max(tallestHeader, headerEl.offsetHeight);
+        if (bodyEl) tallestBodyContent = Math.max(tallestBodyContent, bodyEl.scrollHeight);
+      }
+
+      const minBodyHeight = Math.max(120, area.clientHeight - tallestHeader - 8);
+      const next = Math.max(minBodyHeight, tallestBodyContent);
+      setColumnBodyHeight((prev) => (prev === next ? prev : next));
+    }
+
+    const rafId = requestAnimationFrame(updateColumnHeights);
+    window.addEventListener('resize', updateColumnHeights);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', updateColumnHeights);
+    };
+  }, [addingIn, tickets.length, visibleTickets.length, normalizedQuery, statusFilter, repoFilter, priorityFilter]);
 
   async function handleContextCopy(ticket: LocalTicket) {
     setCopyingId(ticket.id);
@@ -75,176 +112,121 @@ export default function KanbanBoard({
   }
 
   async function handleTicketCreated(ticket: LocalTicket) {
-    // Increment counter in workspace
     const updatedWs = { ...workspace, ticketCounter: (workspace.ticketCounter ?? 0) + 1 };
     await window.nakiros.saveWorkspace(updatedWs);
     onTicketCreate(ticket);
     setAddingIn(null);
   }
 
+  const statusOptions = [
+    { value: 'all', label: t('allStatuses') },
+    { value: 'backlog', label: t('statusBacklog') },
+    { value: 'todo', label: t('statusTodo') },
+    { value: 'in_progress', label: t('statusInProgress') },
+    { value: 'done', label: t('statusDone') },
+  ];
+
+  const repoOptions = [
+    { value: 'all', label: t('allRepos') },
+    ...repoNames.map((repoName) => ({ value: repoName, label: repoName })),
+  ];
+
+  const priorityOptions = [
+    { value: 'all', label: t('allPriorities') },
+    { value: 'low', label: t('priorityLow') },
+    { value: 'medium', label: t('priorityMedium') },
+    { value: 'high', label: t('priorityHigh') },
+  ];
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 16, gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-        <input
+    <div className="flex h-full flex-col gap-3 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2.5">
+        <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={msg.board.searchPlaceholder}
-          style={{
-            maxWidth: 340,
-            width: '100%',
-            border: '1px solid var(--line)',
-            borderRadius: 10,
-            padding: '8px 12px',
-            background: 'var(--bg-soft)',
-            color: 'var(--text)',
-            fontSize: 13,
-          }}
+          placeholder={t('searchPlaceholder')}
+          containerClassName="w-full max-w-[340px]"
+          className="rounded-[10px] px-3 py-2 text-[13px]"
         />
-        <select
+        <Select
           value={statusFilter}
           onChange={(event) => setStatusFilter(event.target.value as 'all' | TicketStatus)}
-          style={filterStyle}
-        >
-          <option value="all">Tous statuts</option>
-          <option value="backlog">Backlog</option>
-          <option value="todo">A faire</option>
-          <option value="in_progress">En cours</option>
-          <option value="done">Termine</option>
-        </select>
-        <select
+          options={statusOptions}
+          containerClassName="min-w-[150px]"
+          className="rounded-[10px] px-3 py-2 text-[13px]"
+        />
+        <Select
           value={repoFilter}
           onChange={(event) => setRepoFilter(event.target.value)}
-          style={filterStyle}
-        >
-          <option value="all">Tous repos</option>
-          {repoNames.map((repoName) => (
-            <option key={repoName} value={repoName}>
-              {repoName}
-            </option>
-          ))}
-        </select>
-        <select
+          options={repoOptions}
+          containerClassName="min-w-[160px]"
+          className="rounded-[10px] px-3 py-2 text-[13px]"
+        />
+        <Select
           value={priorityFilter}
           onChange={(event) => setPriorityFilter(event.target.value as 'all' | TicketPriority)}
-          style={filterStyle}
-        >
-          <option value="all">Toutes priorites</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-        <button
+          options={priorityOptions}
+          containerClassName="min-w-[150px]"
+          className="rounded-[10px] px-3 py-2 text-[13px]"
+        />
+        <Button
           onClick={() => setAddingIn('backlog')}
-          style={{
-            padding: '8px 14px',
-            border: 'none',
-            borderRadius: 10,
-            background: 'var(--primary)',
-            color: '#fff',
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
+          className="rounded-[10px] text-[13px]"
         >
-          + {msg.board.newTicket}
-        </button>
+          + {t('newTicket')}
+        </Button>
       </div>
 
       {tickets.length === 0 && !addingIn ? (
-        <div
-          style={{
-            flex: 1,
-            display: 'grid',
-            placeItems: 'center',
-            border: '1px dashed var(--line-strong)',
-            borderRadius: 10,
-            background: 'var(--bg-soft)',
-            textAlign: 'center',
-            padding: 24,
+        <EmptyState
+          className="flex-1"
+          title={t('noTicketsTitle')}
+          subtitle={t('noTicketsHint')}
+          action={{
+            label: t('createFirstTicket'),
+            onClick: () => setAddingIn('backlog'),
+            variant: 'secondary',
           }}
-        >
-          <div>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{msg.board.noTicketsTitle}</p>
-            <p style={{ margin: '6px 0 14px', color: 'var(--text-muted)', fontSize: 13 }}>
-              {msg.board.noTicketsHint}
-            </p>
-            <button
-              onClick={() => setAddingIn('backlog')}
-              style={{
-                padding: '8px 14px',
-                borderRadius: 10,
-                border: '1px solid var(--line)',
-                background: 'var(--bg-soft)',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              {msg.board.createFirstTicket}
-            </button>
-          </div>
-        </div>
+        />
       ) : (
-        <div style={{ display: 'flex', gap: 12, flex: 1, overflow: 'auto' }}>
-          {COLUMNS.map(({ status, label }) => {
-            const col = visibleTickets.filter((t) => t.status === status);
+        <div ref={columnsAreaRef} className="flex flex-1 items-start gap-3 overflow-auto">
+          {COLUMNS.map(({ status, key }) => {
+            const col = visibleTickets.filter((ticket) => ticket.status === status);
             return (
-              <div
-                key={status}
-                style={{
-                  minWidth: 260,
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                }}
-              >
+              <div key={status} className="flex min-w-[260px] flex-1 flex-col gap-2">
                 <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '4px 2px',
+                  ref={(el) => {
+                    columnHeaderRefs.current[status] = el;
                   }}
+                  className="flex items-center justify-between px-0.5 py-1"
                 >
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-                    {label}
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>
+                  <span className="text-[13px] font-bold text-[var(--text)]">
+                    {t(key)}
+                    <span className="ml-1.5 text-xs text-[var(--text-muted)]">
                       {col.length}
                     </span>
                   </span>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setAddingIn(status)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--text-muted)',
-                      fontSize: 18,
-                      lineHeight: 1,
-                      padding: '0 4px',
-                    }}
-                    title="Nouveau ticket"
+                    className="h-7 w-7 px-0 text-lg leading-none"
+                    title={t('newTicket')}
                   >
                     +
-                  </button>
+                  </Button>
                 </div>
 
                 <div
-                  style={{
-                    background: 'var(--bg-muted)',
-                    border: '1px solid var(--line)',
-                    borderRadius: 10,
-                    padding: 8,
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 8,
-                    minHeight: 120,
+                  ref={(el) => {
+                    columnBodyRefs.current[status] = el;
                   }}
+                  className="flex min-h-[120px] flex-col gap-2 rounded-[10px] border border-[var(--line)] bg-[var(--bg-muted)] p-2"
+                  style={columnBodyHeight ? { height: columnBodyHeight } : undefined}
                 >
                   {col.length === 0 ? (
-                    <div style={{ padding: 10, fontSize: 12, color: 'var(--text-muted)' }}>
-                      {normalizedQuery ? msg.board.emptyColumnSearch : msg.board.emptyColumn}
+                    <div className="p-2.5 text-xs text-[var(--text-muted)]">
+                      {normalizedQuery ? t('emptyColumnSearch') : t('emptyColumn')}
                     </div>
                   ) : (
                     col.map((ticket) => (
@@ -283,12 +265,3 @@ export default function KanbanBoard({
     </div>
   );
 }
-
-const filterStyle: React.CSSProperties = {
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  padding: '8px 10px',
-  background: 'var(--bg-soft)',
-  color: 'var(--text)',
-  fontSize: 13,
-};

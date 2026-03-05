@@ -36,6 +36,13 @@
     },
     {
       "type": "agent",
+      "name": "nakiros",
+      "filename": "nakiros.md",
+      "path": "agents/nakiros.md",
+      "hash": "sha256:682dfdd6ecd4f791bb0151fef1bc3adb4d5f81a172d9b730eafb5c0be14bf5f6"
+    },
+    {
+      "type": "agent",
       "name": "pm",
       "filename": "pm.md",
       "path": "agents/pm.md",

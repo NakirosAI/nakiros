@@ -8,6 +8,8 @@ import type {
   AgentInstallStatus,
   AgentInstallRequest,
   AgentInstallSummary,
+  StoredConversation,
+  StoredAgentTabsState,
 } from '@nakiros/shared';
 
 interface JiraStatus {
@@ -126,36 +128,6 @@ declare global {
     repos: ScannedRepo[];
     globalSection: GlobalSection;
     primaryRepoPath: string;
-  }
-
-  interface StoredConversation {
-    id: string;
-    sessionId: string;
-    repoPath: string;
-    repoName: string;
-    provider: AgentProvider;
-    workspaceId: string;
-    title: string;
-    agents: string[];
-    createdAt: string;
-    lastUsedAt: string;
-    /** Interleaved raw NDJSON agent events + { type: 'user', content, timestamp } messages */
-    messages: unknown[];
-  }
-
-  interface StoredAgentTab {
-    tabId: string;
-    conversationId?: string;
-    repoPath: string;
-    provider: AgentProvider;
-    title: string;
-    sessionId?: string;
-  }
-
-  interface StoredAgentTabsState {
-    workspaceId: string;
-    activeTabId: string | null;
-    tabs: StoredAgentTab[];
   }
 
   type AgentStreamEvent =

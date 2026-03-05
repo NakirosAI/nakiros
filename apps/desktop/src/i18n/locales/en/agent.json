@@ -1,0 +1,143 @@
+{
+  "newConversation": "New conversation",
+  "workspaceGlobal": "Workspace (global)",
+  "tabLimitReached": "Limit of {{count}} tabs reached",
+  "unableToStartRun": "Unable to start agent run.",
+  "stoppedMarker": "_[Stopped]_",
+  "timeNow": "now",
+  "timeMinutesAgo": "{{count}}m ago",
+  "timeHoursAgo": "{{count}}h ago",
+  "timeDaysAgo": "{{count}}d ago",
+  "historyToday": "Today",
+  "historyYesterday": "Yesterday",
+  "historyThisWeek": "This week",
+  "historyOlder": "Older",
+  "inputPlaceholder": "Message or /nak-agent-dev…",
+  "history": "History",
+  "noConversation": "No conversation",
+  "agents": "Agents",
+  "provider": "Provider",
+  "session": "session",
+  "conversationHistory": "Conversation history",
+  "new": "New",
+  "close": "Close",
+  "workspaceHistory": "History (workspace)",
+  "noSavedConversation": "No saved conversation",
+  "delete": "Delete",
+  "quickActions": {
+    "generateContext": {
+      "label": "Generate Context",
+      "description": "Analyze code + tickets and generate global context"
+    },
+    "projectConfidence": {
+      "label": "Project Confidence",
+      "description": "Assess AI confidence on project understanding and missing docs"
+    },
+    "architect": {
+      "label": "Architect",
+      "description": "Analyze architecture and technical patterns"
+    },
+    "pmAgent": {
+      "label": "PM Agent",
+      "description": "Create and refine tickets, manage priorities"
+    },
+    "devAgent": {
+      "label": "Dev Agent",
+      "description": "Implement stories with branch discipline"
+    }
+  },
+  "emptyPrompt": "Launch an agent or type a command",
+  "example": "Ex.",
+  "agent": "Agent",
+  "thinking": "thinking…",
+  "error": "error",
+  "chatFree": "Free chat",
+  "meta": "Meta",
+  "workflows": "Workflows",
+  "stop": "Stop",
+  "sendEnter": "Send (Enter)",
+  "processExitedWithCode": "Process exited with code {{code}}",
+  "sessionTitle": "Session: {{id}}",
+  "tools": {
+    "reading": "Reading {{path}}",
+    "writing": "Writing {{path}}",
+    "editing": "Editing {{path}}",
+    "bash": "$ {{command}}",
+    "glob": "Glob: {{pattern}}",
+    "grep": "Grep: {{pattern}} in {{path}}",
+    "todoWrite": "Updating tasks",
+    "webFetch": "Fetch: {{url}}",
+    "webSearch": "Search: {{query}}",
+    "task": "Sub-agent: {{description}}"
+  },
+  "definitions": {
+    "nakiros": {
+      "label": "Nakiros",
+      "placeholder": "Talk with Nakiros…"
+    },
+    "dev": {
+      "label": "Dev Agent",
+      "placeholder": "Message for Dev Agent…"
+    },
+    "pm": {
+      "label": "PM Agent",
+      "placeholder": "Message for PM Agent…"
+    },
+    "architect": {
+      "label": "Architect",
+      "placeholder": "Message for Architect…"
+    },
+    "sm": {
+      "label": "SM Agent",
+      "placeholder": "Message for SM Agent…"
+    },
+    "qa": {
+      "label": "QA Agent",
+      "placeholder": "Message for QA Agent…"
+    },
+    "hotfix": {
+      "label": "Hotfix Agent",
+      "placeholder": "Message for Hotfix Agent…"
+    },
+    "brainstorming": {
+      "label": "Brainstorming",
+      "placeholder": "Message for Brainstorming…"
+    },
+    "dev-story": {
+      "label": "Dev Story",
+      "placeholder": "Ticket ID (e.g. EX-203)"
+    },
+    "create-story": {
+      "label": "Create Story",
+      "placeholder": "Describe the story to create…"
+    },
+    "create-ticket": {
+      "label": "Create Ticket",
+      "placeholder": "Describe the ticket to create…"
+    },
+    "generate-context": {
+      "label": "Generate Context",
+      "placeholder": "Run Generate Context on this workspace?"
+    },
+    "project-confidence": {
+      "label": "Project Confidence",
+      "placeholder": "Evaluate project confidence?"
+    },
+    "qa-review": {
+      "label": "QA Review",
+      "placeholder": "Run QA Review?"
+    },
+    "hotfix-story": {
+      "label": "Hotfix Story",
+      "placeholder": "Hotfix ticket ID (e.g. EX-203)"
+    },
+    "sprint-planning": {
+      "label": "Sprint Planning",
+      "placeholder": "Run Sprint Planning?"
+    },
+    "fetch-project-context": {
+      "label": "Fetch Project Context",
+      "placeholder": "Run Fetch Project Context?"
+    }
+  }
+}

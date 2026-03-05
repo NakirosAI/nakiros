@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { LocalTicket, LocalEpic, TicketStatus, TicketPriority } from '@nakiros/shared';
+import { Button, Input, Modal, Select } from './ui';
+import { useForm } from '../hooks/useForm';
 
 interface Props {
   initialStatus: TicketStatus;
@@ -22,34 +25,32 @@ export default function TicketForm({
   onCreated,
   onClose,
 }: Props) {
-  const [title, setTitle] = useState('');
-  const [priority, setPriority] = useState<TicketPriority>('medium');
-  const [epicId, setEpicId] = useState('');
-  const [repoName, setRepoName] = useState('');
+  const { t } = useTranslation('board');
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    function onKeydown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKeydown);
-    return () => window.removeEventListener('keydown', onKeydown);
-  }, [onClose]);
+  const nextTicketId = `${ticketPrefix}-${String(ticketCounter + 1).padStart(3, '0')}`;
+  const initialValues = useMemo(() => ({
+    title: '',
+    priority: 'medium' as TicketPriority,
+    epicId: '',
+    repoName: '',
+  }), []);
+  const { values, handleChange, reset, isValid } = useForm(initialValues, (nextValues) => (
+    nextValues.title.trim() ? {} : { title: 'required' }
+  ));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!isValid) return;
     setSaving(true);
 
-    const id = `${ticketPrefix}-${String(ticketCounter + 1).padStart(3, '0')}`;
     const ticket: LocalTicket = {
-      id,
-      title: title.trim(),
+      id: nextTicketId,
+      title: values.title.trim(),
       acceptanceCriteria: [],
       status: initialStatus,
-      priority,
-      epicId: epicId || undefined,
-      repoName: repoName || undefined,
+      priority: values.priority,
+      epicId: values.epicId || undefined,
+      repoName: values.repoName || undefined,
       blockedBy: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -57,145 +58,87 @@ export default function TicketForm({
 
     await window.nakiros.saveTicket(workspaceId, ticket);
     setSaving(false);
+    reset();
     onCreated(ticket);
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(16, 42, 67, 0.28)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 100,
-        padding: 14,
-      }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+    <Modal
+      isOpen
+      onClose={onClose}
+      size="sm"
+      title={t('ticketFormTitle', { id: nextTicketId })}
+      className="max-w-[480px]"
     >
       <form
         onSubmit={handleSubmit}
-        style={{
-          background: 'var(--bg-soft)',
-          borderRadius: 10,
-          padding: 24,
-          width: 480,
-          maxWidth: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 14,
-          boxShadow: 'var(--shadow-lg)',
-          border: '1px solid var(--line)',
-        }}
+        className="flex flex-col gap-3.5"
       >
-        <h2 style={{ margin: 0, fontSize: 17 }}>
-          Nouveau ticket — {ticketPrefix}-{String(ticketCounter + 1).padStart(3, '0')}
-        </h2>
-        <p style={{ margin: '-4px 0 2px', fontSize: 12, color: 'var(--text-muted)' }}>
-          Appuie sur <kbd>Esc</kbd> pour fermer rapidement.
+        <p className="-mt-1 mb-0.5 text-xs text-[var(--text-muted)]">
+          {t('ticketFormEscHint')}
         </p>
 
-        <input
+        <Input
           autoFocus
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Titre du ticket"
-          style={inputStyle}
+          value={values.title}
+          onChange={(e) => handleChange('title', e.target.value)}
+          label={t('ticketFormTitleLabel')}
+          placeholder={t('ticketFormTitlePlaceholder')}
+          className="rounded-[10px] px-3 py-2 text-sm"
           required
         />
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Priorité</span>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as TicketPriority)}
-              style={inputStyle}
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </label>
+        <div className="flex gap-2">
+          <Select
+            value={values.priority}
+            onChange={(e) => handleChange('priority', e.target.value as TicketPriority)}
+            label={t('ticketFormPriorityLabel')}
+            options={[
+              { value: 'low', label: t('priorityLow') },
+              { value: 'medium', label: t('priorityMedium') },
+              { value: 'high', label: t('priorityHigh') },
+            ]}
+            containerClassName="flex-1"
+            className="rounded-[10px] px-3 py-2 text-sm"
+          />
 
           {epics.length > 0 && (
-            <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Epic</span>
-              <select
-                value={epicId}
-                onChange={(e) => setEpicId(e.target.value)}
-                style={inputStyle}
-              >
-                <option value="">— aucun —</option>
-                {epics.map((ep) => (
-                  <option key={ep.id} value={ep.id}>{ep.name}</option>
-                ))}
-              </select>
-            </label>
+            <Select
+              value={values.epicId}
+              onChange={(e) => handleChange('epicId', e.target.value)}
+              label={t('ticketFormEpicLabel')}
+              options={[
+                { value: '', label: t('ticketFormNoEpic') },
+                ...epics.map((ep) => ({ value: ep.id, label: ep.name })),
+              ]}
+              containerClassName="flex-1"
+              className="rounded-[10px] px-3 py-2 text-sm"
+            />
           )}
         </div>
 
         {repos.length > 0 && (
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Repo cible</span>
-            <select
-              value={repoName}
-              onChange={(e) => setRepoName(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">— non spécifié —</option>
-              {repos.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-          </label>
+          <Select
+            value={values.repoName}
+            onChange={(e) => handleChange('repoName', e.target.value)}
+            label={t('ticketFormRepoLabel')}
+            options={[
+              { value: '', label: t('ticketFormRepoUnset') },
+              ...repos.map((r) => ({ value: r, label: r })),
+            ]}
+            className="rounded-[10px] px-3 py-2 text-sm"
+          />
         )}
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onClose} style={btnSecondary}>
-            Annuler
-          </button>
-          <button type="submit" disabled={!title.trim() || saving} style={btnPrimary(!title.trim() || saving)}>
-            {saving ? 'Création…' : 'Créer'}
-          </button>
+        <div className="mt-1 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('ticketFormCancel')}
+          </Button>
+          <Button type="submit" disabled={!isValid || saving} loading={saving}>
+            {saving ? t('ticketFormCreating') : t('ticketFormCreate')}
+          </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  fontSize: 14,
-  color: 'var(--text)',
-  width: '100%',
-  boxSizing: 'border-box',
-  background: 'var(--bg-soft)',
-};
-
-function btnPrimary(disabled: boolean): React.CSSProperties {
-  return {
-    padding: '8px 20px',
-    background: disabled ? 'var(--line-strong)' : 'var(--primary)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    fontSize: 14,
-    fontWeight: 700,
-  };
-}
-
-const btnSecondary: React.CSSProperties = {
-  padding: '8px 16px',
-  background: 'var(--bg-muted)',
-  color: 'var(--text)',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  cursor: 'pointer',
-  fontSize: 14,
-  fontWeight: 600,
-};

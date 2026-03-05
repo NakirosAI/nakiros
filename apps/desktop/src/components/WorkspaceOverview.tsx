@@ -1,4 +1,6 @@
-import type { LocalTicket, ResolvedLanguage, StoredWorkspace } from '@nakiros/shared';
+import { useTranslation } from 'react-i18next';
+import type { LocalTicket, StoredWorkspace } from '@nakiros/shared';
+import { Button, Card } from './ui';
 
 interface Props {
   workspace: StoredWorkspace;
@@ -12,7 +14,6 @@ interface Props {
   onOpenChat(): void;
   onCreateTicket(): void;
   onCreatePrd(): void;
-  language: ResolvedLanguage;
 }
 
 type OverviewAction = {
@@ -20,6 +21,12 @@ type OverviewAction = {
   label: string;
   description: string;
   run(): void;
+};
+
+const STATUS_DOT_CLASS: Record<Props['serverStatus'], string> = {
+  running: 'bg-[var(--success)]',
+  starting: 'bg-[var(--warning)]',
+  stopped: 'bg-[var(--danger)]',
 };
 
 function isTicketBlocked(ticket: LocalTicket, allTickets: LocalTicket[]): boolean {
@@ -38,149 +45,110 @@ export default function WorkspaceOverview({
   onOpenChat,
   onCreateTicket,
   onCreatePrd,
-  language,
 }: Props) {
+  const { t, i18n } = useTranslation('overview');
+  const locale = i18n.language.startsWith('fr') ? 'fr-FR' : 'en-US';
+
   const inProgressCount = tickets.filter((ticket) => ticket.status === 'in_progress').length;
   const doneCount = tickets.filter((ticket) => ticket.status === 'done').length;
   const blockedCount = tickets.filter((ticket) => isTicketBlocked(ticket, tickets)).length;
   const hasRepos = workspace.repos.length > 0;
-  const isFr = language === 'fr';
+
   const serverLabel = serverStatus === 'running'
-    ? (isFr ? 'MCP opérationnel' : 'MCP running')
+    ? t('mcpRunning')
     : serverStatus === 'starting'
-    ? (isFr ? 'MCP démarrage' : 'MCP starting')
-    : (isFr ? 'MCP arrêté' : 'MCP stopped');
+      ? t('mcpStarting')
+      : t('mcpStopped');
 
   const actions: OverviewAction[] = [];
   if (tickets.length === 0 && docsCount === 0) {
-    actions.push({
-      id: 'create-prd',
-      label: isFr ? 'Créer PRD avec IA' : 'Create PRD with AI',
-      description: isFr
-        ? 'Démarre le cadrage projet via brainstorming et génère la documentation initiale.'
-        : 'Kick off product framing with brainstorming and generate initial documentation.',
-      run: onCreatePrd,
-    });
+    actions.push({ id: 'create-prd', label: t('createPrd'), description: t('createPrdDesc'), run: onCreatePrd });
   } else if (tickets.length === 0) {
-    actions.push({
-      id: 'create-ticket',
-      label: isFr ? 'Créer premier ticket' : 'Create first ticket',
-      description: isFr
-        ? 'Le contexte est prêt: passe en delivery et crée le premier ticket.'
-        : 'Context is ready: switch to delivery and create the first ticket.',
-      run: onCreateTicket,
-    });
+    actions.push({ id: 'create-ticket', label: t('createTicket'), description: t('createTicketDesc'), run: onCreateTicket });
   } else if (inProgressCount > 0) {
-    actions.push({
-      id: 'open-delivery',
-      label: isFr ? 'Ouvrir Delivery' : 'Open Delivery',
-      description: isFr
-        ? 'Des tickets sont déjà en cours. Reprends l’exécution.'
-        : 'Tickets are already in progress. Resume execution.',
-      run: onGoDelivery,
-    });
+    actions.push({ id: 'open-delivery', label: t('openDelivery'), description: t('openDeliveryDesc'), run: onGoDelivery });
   }
 
   if (hasRepos) {
-    actions.push({
-      id: 'open-chat',
-      label: isFr ? 'Ouvrir Chat IA' : 'Open AI Chat',
-      description: isFr
-        ? 'Démarre une discussion libre avec un agent sur le workspace.'
-        : 'Start a free-form discussion with an agent on this workspace.',
-      run: onOpenChat,
-    });
+    actions.push({ id: 'open-chat', label: t('openChat'), description: t('openChatDesc'), run: onOpenChat });
   }
-  actions.push({
-    id: 'open-product',
-    label: isFr ? 'Aller au Product Context' : 'Go to Product Context',
-    description: isFr
-      ? 'Visualise et mets à jour les documents de contexte.'
-      : 'Review and update project context documents.',
-    run: onGoProduct,
-  });
-  actions.push({
-    id: 'open-delivery-shortcut',
-    label: isFr ? 'Aller au Delivery' : 'Go to Delivery',
-    description: isFr
-      ? 'Board, tickets et exécution IA centralisés.'
-      : 'Board, tickets and AI execution in one place.',
-    run: onGoDelivery,
-  });
+
+  actions.push({ id: 'open-product', label: t('goToProduct'), description: t('goToProductDesc'), run: onGoProduct });
+  actions.push({ id: 'open-delivery-shortcut', label: t('goToDelivery'), description: t('goToDeliveryDesc'), run: onGoDelivery });
 
   return (
-    <div style={{ padding: 22, overflowY: 'auto', width: '100%' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
-        <section style={panel}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+    <div className="w-full overflow-y-auto p-[22px]">
+      <div className="flex w-full flex-col gap-5">
+        <Card padding="md" className="rounded-[10px] bg-[var(--bg-soft)]">
+          <div className="flex flex-wrap justify-between gap-3.5">
             <div>
-              <h2 style={{ margin: 0, fontSize: 20 }}>
-                {isFr ? 'Project health' : 'Project health'}
-              </h2>
-              <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
+              <h2 className="m-0 text-xl">{t('projectHealth')}</h2>
+              <p className="mb-0 mt-1.5 text-[13px] text-[var(--text-muted)]">
                 {workspace.name} · {workspace.repos.length} repo{workspace.repos.length > 1 ? 's' : ''}
               </p>
             </div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-              <span style={statusDot(serverStatus)} />
+            <div className="inline-flex items-center gap-2 text-xs text-[var(--text-muted)]">
+              <span className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_CLASS[serverStatus]}`} />
               {serverLabel}
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginTop: 14 }}>
-            <MetricCard label={isFr ? 'Tickets total' : 'Total tickets'} value={String(tickets.length)} />
-            <MetricCard label={isFr ? 'En cours' : 'In progress'} value={String(inProgressCount)} />
-            <MetricCard label={isFr ? 'Bloqués' : 'Blocked'} value={String(blockedCount)} />
-            <MetricCard label={isFr ? 'Terminés' : 'Done'} value={String(doneCount)} />
-            <MetricCard label={isFr ? 'Docs contexte' : 'Context docs'} value={String(docsCount)} />
-            <MetricCard label={isFr ? 'Sessions IA' : 'AI sessions'} value={String(conversationCount)} />
+          <div className="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-2.5">
+            <MetricCard label={t('totalTickets')} value={String(tickets.length)} />
+            <MetricCard label={t('inProgress')} value={String(inProgressCount)} />
+            <MetricCard label={t('blocked')} value={String(blockedCount)} />
+            <MetricCard label={t('done')} value={String(doneCount)} />
+            <MetricCard label={t('contextDocs')} value={String(docsCount)} />
+            <MetricCard label={t('aiSessions')} value={String(conversationCount)} />
           </div>
-        </section>
+        </Card>
 
-        <section style={panel}>
-          <h3 style={panelTitle}>{isFr ? 'Next actions' : 'Next actions'}</h3>
+        <Card padding="md" className="rounded-[10px] bg-[var(--bg-soft)]">
+          <h3 className="mb-2.5 mt-0 text-sm font-bold">{t('nextActions')}</h3>
           {!hasRepos && (
-            <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--warning)' }}>
-              {isFr
-                ? 'Aucun repo configuré: ajoute un repo dans Settings > Git pour activer les workflows IA.'
-                : 'No repository configured: add one in Settings > Git to enable AI workflows.'}
+            <p className="mb-2.5 mt-0 text-[13px] text-[var(--warning)]">
+              {t('noRepoWarning')}
             </p>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="flex flex-col gap-2">
             {actions.slice(0, 3).map((action, index) => (
-              <button
+              <Button
                 key={action.id}
                 onClick={action.run}
-                style={{
-                  ...actionButton,
-                  borderColor: index === 0 ? 'var(--primary)' : 'var(--line)',
-                  background: index === 0 ? 'var(--primary-soft)' : 'var(--bg-soft)',
-                }}
+                variant="secondary"
+                className={
+                  [
+                    'w-full flex-col items-start gap-1.5 rounded-[10px] border px-3 py-2 text-left text-[var(--text)]',
+                    index === 0
+                      ? 'border-[var(--primary)] bg-[var(--primary-soft)]'
+                      : 'border-[var(--line)] bg-[var(--bg-soft)]',
+                  ].join(' ')
+                }
               >
-                <strong style={{ fontSize: 13 }}>{action.label}</strong>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{action.description}</span>
-              </button>
+                <strong className="text-[13px]">{action.label}</strong>
+                <span className="text-xs font-normal text-[var(--text-muted)]">{action.description}</span>
+              </Button>
             ))}
           </div>
-        </section>
+        </Card>
 
-        <section style={{ ...panel, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <Card padding="md" className="grid gap-3 rounded-[10px] bg-[var(--bg-soft)] md:grid-cols-2">
           <div>
-            <h3 style={panelTitle}>{isFr ? 'IA activity' : 'AI activity'}</h3>
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+            <h3 className="mb-2.5 mt-0 text-sm font-bold">{t('aiActivity')}</h3>
+            <p className="m-0 text-[13px] text-[var(--text-muted)]">
               {lastConversationAt
-                ? (isFr ? `Dernière activité: ${new Date(lastConversationAt).toLocaleString('fr-FR')}` : `Last activity: ${new Date(lastConversationAt).toLocaleString('en-US')}`)
-                : (isFr ? 'Aucune activité IA récente.' : 'No recent AI activity.')}
+                ? t('lastActivity', { time: new Date(lastConversationAt).toLocaleString(locale) })
+                : t('noRecentActivity')}
             </p>
           </div>
           <div>
-            <h3 style={panelTitle}>{isFr ? 'Delivery snapshot' : 'Delivery snapshot'}</h3>
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+            <h3 className="mb-2.5 mt-0 text-sm font-bold">{t('deliverySnapshot')}</h3>
+            <p className="m-0 text-[13px] text-[var(--text-muted)]">
               {tickets.length === 0
-                ? (isFr ? 'Aucun ticket encore créé.' : 'No ticket created yet.')
-                : (isFr ? `${inProgressCount} en cours · ${blockedCount} bloqué(s) · ${doneCount} terminé(s)` : `${inProgressCount} in progress · ${blockedCount} blocked · ${doneCount} done`)}
+                ? t('noTicket')
+                : t('ticketSummary', { inProgress: inProgressCount, blocked: blockedCount, done: doneCount })}
             </p>
           </div>
-        </section>
+        </Card>
       </div>
     </div>
   );
@@ -188,54 +156,11 @@ export default function WorkspaceOverview({
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div style={metricCard}>
-      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label}</span>
-      <strong style={{ fontSize: 24, lineHeight: 1 }}>{value}</strong>
-    </div>
+    <Card padding="sm" className="rounded-[10px] bg-[var(--bg-card)]">
+      <div className="flex flex-col gap-2">
+        <span className="text-xs text-[var(--text-muted)]">{label}</span>
+        <strong className="text-2xl leading-none">{value}</strong>
+      </div>
+    </Card>
   );
-}
-
-const panel: React.CSSProperties = {
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  background: 'var(--bg-soft)',
-  padding: 16,
-};
-
-const panelTitle: React.CSSProperties = {
-  margin: '0 0 10px',
-  fontSize: 14,
-  fontWeight: 700,
-};
-
-const metricCard: React.CSSProperties = {
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  padding: '10px 12px',
-  background: 'var(--bg-card)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
-};
-
-const actionButton: React.CSSProperties = {
-  width: '100%',
-  textAlign: 'left',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 5,
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  padding: '10px 12px',
-  cursor: 'pointer',
-};
-
-function statusDot(status: 'starting' | 'running' | 'stopped'): React.CSSProperties {
-  return {
-    width: 8,
-    height: 8,
-    borderRadius: 8,
-    background: status === 'running' ? 'var(--success)' : status === 'starting' ? 'var(--warning)' : 'var(--danger)',
-    display: 'inline-block',
-  };
 }

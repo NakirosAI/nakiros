@@ -46797,6 +46797,81 @@ function stopServer() {
   }
 }
 const DEFAULT_MCP_SERVER_URL = "http://localhost:3737";
+const IPC_CHANNELS = {
+  "agent:cancel": "agent:cancel",
+  "agent:context": "agent:context",
+  "agent:done": "agent:done",
+  "agent:event": "agent:event",
+  "agent:run": "agent:run",
+  "agent:start": "agent:start",
+  "agentTabs:clear": "agentTabs:clear",
+  "agentTabs:get": "agentTabs:get",
+  "agentTabs:save": "agentTabs:save",
+  "agents:cli-status": "agents:cli-status",
+  "agents:global-status": "agents:global-status",
+  "agents:install": "agents:install",
+  "agents:install-global": "agents:install-global",
+  "agents:status": "agents:status",
+  "clipboard:write": "clipboard:write",
+  "conversation:delete": "conversation:delete",
+  "conversation:getAll": "conversation:getAll",
+  "conversation:save": "conversation:save",
+  "dialog:openFile": "dialog:openFile",
+  "dialog:selectDirectory": "dialog:selectDirectory",
+  "docs:read": "docs:read",
+  "docs:scan": "docs:scan",
+  "epic:getAll": "epic:getAll",
+  "epic:remove": "epic:remove",
+  "epic:save": "epic:save",
+  "feedback:sendProduct": "feedback:sendProduct",
+  "feedback:sendSession": "feedback:sendSession",
+  "git:clone": "git:clone",
+  "git:init": "git:init",
+  "git:remoteUrl": "git:remoteUrl",
+  "jira:auth-complete": "jira:auth-complete",
+  "jira:auth-error": "jira:auth-error",
+  "jira:countTickets": "jira:countTickets",
+  "jira:disconnect": "jira:disconnect",
+  "jira:getBoardType": "jira:getBoardType",
+  "jira:getProjects": "jira:getProjects",
+  "jira:getStatus": "jira:getStatus",
+  "jira:getValidToken": "jira:getValidToken",
+  "jira:startAuth": "jira:startAuth",
+  "jira:syncTickets": "jira:syncTickets",
+  "onboarding:detectEditors": "onboarding:detectEditors",
+  "onboarding:install": "onboarding:install",
+  "onboarding:nakirosConfigExists": "onboarding:nakirosConfigExists",
+  "onboarding:progress": "onboarding:progress",
+  "preferences:get": "preferences:get",
+  "preferences:save": "preferences:save",
+  "repo:copyLocal": "repo:copyLocal",
+  "repo:detectProfile": "repo:detectProfile",
+  "server:getStatus": "server:getStatus",
+  "server:restart": "server:restart",
+  "server:status-change": "server:status-change",
+  "shell:openPath": "shell:openPath",
+  "terminal:create": "terminal:create",
+  "terminal:data": "terminal:data",
+  "terminal:destroy": "terminal:destroy",
+  "terminal:exit": "terminal:exit",
+  "terminal:resize": "terminal:resize",
+  "terminal:write": "terminal:write",
+  "ticket:getAll": "ticket:getAll",
+  "ticket:remove": "ticket:remove",
+  "ticket:save": "ticket:save",
+  "updates:apply": "updates:apply",
+  "updates:available": "updates:available",
+  "updates:check": "updates:check",
+  "updates:getVersionInfo": "updates:getVersionInfo",
+  "updates:progress": "updates:progress",
+  "workspace:createRoot": "workspace:createRoot",
+  "workspace:delete": "workspace:delete",
+  "workspace:getAll": "workspace:getAll",
+  "workspace:reset": "workspace:reset",
+  "workspace:save": "workspace:save",
+  "workspace:sync": "workspace:sync",
+  "workspace:syncYaml": "workspace:syncYaml"
+};
 function toSlug(name) {
   return name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || "workspace";
 }
@@ -47290,7 +47365,7 @@ async function scanWorkspaceDocs(workspace) {
   return { repos, globalSection, primaryRepoPath };
 }
 const DEFAULT_PREFERENCES = {
-  theme: "system",
+  theme: "dark",
   language: "system",
   updatedAt: "",
   mcpServerUrl: void 0,
@@ -47309,7 +47384,7 @@ function getPreferences() {
   try {
     const parsed = JSON.parse(require$$1$2.readFileSync(path, "utf-8"));
     return {
-      theme: parsed.theme ?? "system",
+      theme: "dark",
       language: parsed.language ?? "system",
       updatedAt: parsed.updatedAt ?? "",
       mcpServerUrl: parsed.mcpServerUrl,
@@ -47321,7 +47396,7 @@ function getPreferences() {
 }
 function savePreferences(prefs) {
   const next = {
-    theme: prefs.theme ?? "system",
+    theme: "dark",
     language: prefs.language ?? "system",
     updatedAt: prefs.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
     mcpServerUrl: prefs.mcpServerUrl || void 0,
@@ -49070,7 +49145,7 @@ async function handleOAuthCallback(url) {
   const state = parsed.searchParams.get("state");
   const errorParam = parsed.searchParams.get("error");
   if (errorParam || !code2 || !state) {
-    win.webContents.send("jira:auth-error", {
+    win.webContents.send(IPC_CHANNELS["jira:auth-error"], {
       wsId: "",
       error: errorParam ?? "Missing code or state in OAuth callback"
     });
@@ -49078,7 +49153,7 @@ async function handleOAuthCallback(url) {
   }
   const pending = pendingOAuth.get(state);
   if (!pending) {
-    win.webContents.send("jira:auth-error", { wsId: "", error: "Invalid OAuth state (expired or unknown)" });
+    win.webContents.send(IPC_CHANNELS["jira:auth-error"], { wsId: "", error: "Invalid OAuth state (expired or unknown)" });
     return;
   }
   pendingOAuth.delete(state);
@@ -49115,17 +49190,17 @@ async function handleOAuthCallback(url) {
         jiraUrl: workspace.jiraUrl ?? resource.url
       };
       save(updated);
-      win.webContents.send("jira:auth-complete", {
+      win.webContents.send(IPC_CHANNELS["jira:auth-complete"], {
         wsId,
         cloudUrl: resource.url,
         displayName,
         workspace: updated
       });
     } else {
-      win.webContents.send("jira:auth-complete", { wsId, cloudUrl: resource.url, displayName });
+      win.webContents.send(IPC_CHANNELS["jira:auth-complete"], { wsId, cloudUrl: resource.url, displayName });
     }
   } catch (err) {
-    win.webContents.send("jira:auth-error", { wsId, error: String(err) });
+    win.webContents.send(IPC_CHANNELS["jira:auth-error"], { wsId, error: String(err) });
   }
 }
 function loadAppIcon() {
@@ -49184,30 +49259,30 @@ electron.app.on("second-instance", (_, argv) => {
     win.focus();
   }
 });
-electron.ipcMain.handle("dialog:selectDirectory", async () => {
+electron.ipcMain.handle(IPC_CHANNELS["dialog:selectDirectory"], async () => {
   const result = await electron.dialog.showOpenDialog({ properties: ["openDirectory"] });
   return result.canceled ? null : result.filePaths[0] ?? null;
 });
-electron.ipcMain.handle("dialog:openFile", async () => {
+electron.ipcMain.handle(IPC_CHANNELS["dialog:openFile"], async () => {
   const result = await electron.dialog.showOpenDialog({ properties: ["openFile"] });
   return result.canceled ? null : result.filePaths[0] ?? null;
 });
-electron.ipcMain.handle("workspace:getAll", () => getAll());
-electron.ipcMain.handle("workspace:save", (_, w) => save(w));
-electron.ipcMain.handle("workspace:delete", (_, id2) => remove(id2));
-electron.ipcMain.handle("workspace:createRoot", (_, parentDir, workspaceName) => createWorkspaceRoot(parentDir, workspaceName));
-electron.ipcMain.handle("repo:detectProfile", (_, path) => detectProfile(path));
-electron.ipcMain.handle("repo:copyLocal", (_, sourcePath, targetParentDir) => copyRepoToDirectory(sourcePath, targetParentDir));
-electron.ipcMain.handle("workspace:syncYaml", (_, w) => syncWorkspaceYaml(w));
-electron.ipcMain.handle("workspace:reset", (_, w) => resetWorkspace(w));
-electron.ipcMain.handle("workspace:sync", (_, w) => {
+electron.ipcMain.handle(IPC_CHANNELS["workspace:getAll"], () => getAll());
+electron.ipcMain.handle(IPC_CHANNELS["workspace:save"], (_, w) => save(w));
+electron.ipcMain.handle(IPC_CHANNELS["workspace:delete"], (_, id2) => remove(id2));
+electron.ipcMain.handle(IPC_CHANNELS["workspace:createRoot"], (_, parentDir, workspaceName) => createWorkspaceRoot(parentDir, workspaceName));
+electron.ipcMain.handle(IPC_CHANNELS["repo:detectProfile"], (_, path) => detectProfile(path));
+electron.ipcMain.handle(IPC_CHANNELS["repo:copyLocal"], (_, sourcePath, targetParentDir) => copyRepoToDirectory(sourcePath, targetParentDir));
+electron.ipcMain.handle(IPC_CHANNELS["workspace:syncYaml"], (_, w) => syncWorkspaceYaml(w));
+electron.ipcMain.handle(IPC_CHANNELS["workspace:reset"], (_, w) => resetWorkspace(w));
+electron.ipcMain.handle(IPC_CHANNELS["workspace:sync"], (_, w) => {
   const prefs = getPreferences();
   syncToRepos(w, prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL);
 });
-electron.ipcMain.handle("docs:scan", (_, w) => scanWorkspaceDocs(w));
-electron.ipcMain.handle("docs:read", (_, absolutePath) => require$$1$2.readFileSync(absolutePath, "utf-8"));
-electron.ipcMain.handle("shell:openPath", (_, path) => electron.shell.openPath(path));
-electron.ipcMain.handle("git:remoteUrl", async (_, repoPath) => {
+electron.ipcMain.handle(IPC_CHANNELS["docs:scan"], (_, w) => scanWorkspaceDocs(w));
+electron.ipcMain.handle(IPC_CHANNELS["docs:read"], (_, absolutePath) => require$$1$2.readFileSync(absolutePath, "utf-8"));
+electron.ipcMain.handle(IPC_CHANNELS["shell:openPath"], (_, path) => electron.shell.openPath(path));
+electron.ipcMain.handle(IPC_CHANNELS["git:remoteUrl"], async (_, repoPath) => {
   try {
     const { stdout } = await execFileAsync("git", ["remote", "get-url", "origin"], { cwd: repoPath });
     return stdout.trim() || null;
@@ -49215,7 +49290,7 @@ electron.ipcMain.handle("git:remoteUrl", async (_, repoPath) => {
     return null;
   }
 });
-electron.ipcMain.handle("git:clone", async (_, url, parentDir) => {
+electron.ipcMain.handle(IPC_CHANNELS["git:clone"], async (_, url, parentDir) => {
   try {
     require$$1$2.mkdirSync(parentDir, { recursive: true });
     await execFileAsync("git", ["clone", url], { cwd: parentDir });
@@ -49226,7 +49301,7 @@ electron.ipcMain.handle("git:clone", async (_, url, parentDir) => {
     return { success: false, repoPath: "", repoName: "", error };
   }
 });
-electron.ipcMain.handle("git:init", async (_, repoPath) => {
+electron.ipcMain.handle(IPC_CHANNELS["git:init"], async (_, repoPath) => {
   try {
     await initGitRepo(repoPath);
     return { success: true };
@@ -49235,59 +49310,59 @@ electron.ipcMain.handle("git:init", async (_, repoPath) => {
     return { success: false, error };
   }
 });
-electron.ipcMain.handle("preferences:get", () => getPreferences());
-electron.ipcMain.handle("preferences:save", (_, prefs) => savePreferences(prefs));
-electron.ipcMain.handle("agents:status", (_, repoPath) => getAgentInstallStatus(repoPath));
-electron.ipcMain.handle("agents:install", (_, request2) => installAgents(request2));
-electron.ipcMain.handle("agents:global-status", () => getGlobalInstallStatus());
-electron.ipcMain.handle("agents:install-global", () => installAgentsGlobally());
-electron.ipcMain.handle("agents:cli-status", () => getAgentCliStatus());
-electron.ipcMain.handle("onboarding:detectEditors", () => detectEditors());
-electron.ipcMain.handle("onboarding:nakirosConfigExists", () => nakirosConfigExists());
-electron.ipcMain.handle("onboarding:install", async (event, editors) => {
+electron.ipcMain.handle(IPC_CHANNELS["preferences:get"], () => getPreferences());
+electron.ipcMain.handle(IPC_CHANNELS["preferences:save"], (_, prefs) => savePreferences(prefs));
+electron.ipcMain.handle(IPC_CHANNELS["agents:status"], (_, repoPath) => getAgentInstallStatus(repoPath));
+electron.ipcMain.handle(IPC_CHANNELS["agents:install"], (_, request2) => installAgents(request2));
+electron.ipcMain.handle(IPC_CHANNELS["agents:global-status"], () => getGlobalInstallStatus());
+electron.ipcMain.handle(IPC_CHANNELS["agents:install-global"], () => installAgentsGlobally());
+electron.ipcMain.handle(IPC_CHANNELS["agents:cli-status"], () => getAgentCliStatus());
+electron.ipcMain.handle(IPC_CHANNELS["onboarding:detectEditors"], () => detectEditors());
+electron.ipcMain.handle(IPC_CHANNELS["onboarding:nakirosConfigExists"], () => nakirosConfigExists());
+electron.ipcMain.handle(IPC_CHANNELS["onboarding:install"], async (event, editors) => {
   const win = electron.BrowserWindow.fromWebContents(event.sender);
   if (!win) return { success: false, errors: ["No window"] };
   return installNakiros(editors, win);
 });
-electron.ipcMain.handle("updates:check", (_, force, channel) => checkForUpdates(force, channel ?? (getPreferences().agentChannel ?? "stable")));
-electron.ipcMain.handle("updates:apply", async (event, files, bundleVersion) => {
+electron.ipcMain.handle(IPC_CHANNELS["updates:check"], (_, force, channel) => checkForUpdates(force, channel ?? (getPreferences().agentChannel ?? "stable")));
+electron.ipcMain.handle(IPC_CHANNELS["updates:apply"], async (event, files, bundleVersion) => {
   const win = electron.BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
   return applyUpdate(files, bundleVersion, win);
 });
-electron.ipcMain.handle("updates:getVersionInfo", () => getVersionInfo());
+electron.ipcMain.handle(IPC_CHANNELS["updates:getVersionInfo"], () => getVersionInfo());
 function resolveSlug(wsId) {
   const ws = getAll().find((w) => w.id === wsId);
   return ws ? toWorkspaceSlug(ws.name) : wsId;
 }
-electron.ipcMain.handle("ticket:getAll", (_, wsId) => getTickets(resolveSlug(wsId)));
-electron.ipcMain.handle("ticket:save", (_, wsId, t) => saveTicket(resolveSlug(wsId), t));
-electron.ipcMain.handle("ticket:remove", (_, wsId, id2) => removeTicket(resolveSlug(wsId), id2));
-electron.ipcMain.handle("epic:getAll", (_, wsId) => getEpics(resolveSlug(wsId)));
-electron.ipcMain.handle("epic:save", (_, wsId, e) => saveEpic(resolveSlug(wsId), e));
-electron.ipcMain.handle("epic:remove", (_, wsId, id2) => removeEpic(resolveSlug(wsId), id2));
-electron.ipcMain.handle("agent:context", (_, wsId, ticketId, ws) => generateContext(resolveSlug(wsId), ticketId, ws));
-electron.ipcMain.handle("clipboard:write", (_, text) => electron.clipboard.writeText(text));
-electron.ipcMain.handle("terminal:create", (event, repoPath) => {
+electron.ipcMain.handle(IPC_CHANNELS["ticket:getAll"], (_, wsId) => getTickets(resolveSlug(wsId)));
+electron.ipcMain.handle(IPC_CHANNELS["ticket:save"], (_, wsId, t) => saveTicket(resolveSlug(wsId), t));
+electron.ipcMain.handle(IPC_CHANNELS["ticket:remove"], (_, wsId, id2) => removeTicket(resolveSlug(wsId), id2));
+electron.ipcMain.handle(IPC_CHANNELS["epic:getAll"], (_, wsId) => getEpics(resolveSlug(wsId)));
+electron.ipcMain.handle(IPC_CHANNELS["epic:save"], (_, wsId, e) => saveEpic(resolveSlug(wsId), e));
+electron.ipcMain.handle(IPC_CHANNELS["epic:remove"], (_, wsId, id2) => removeEpic(resolveSlug(wsId), id2));
+electron.ipcMain.handle(IPC_CHANNELS["agent:context"], (_, wsId, ticketId, ws) => generateContext(resolveSlug(wsId), ticketId, ws));
+electron.ipcMain.handle(IPC_CHANNELS["clipboard:write"], (_, text) => electron.clipboard.writeText(text));
+electron.ipcMain.handle(IPC_CHANNELS["terminal:create"], (event, repoPath) => {
   const win = electron.BrowserWindow.fromWebContents(event.sender);
   const terminalId = createTerminal(
     repoPath,
-    (data) => win?.webContents.send("terminal:data", { terminalId, data }),
-    (code2) => win?.webContents.send("terminal:exit", { terminalId, code: code2 })
+    (data) => win?.webContents.send(IPC_CHANNELS["terminal:data"], { terminalId, data }),
+    (code2) => win?.webContents.send(IPC_CHANNELS["terminal:exit"], { terminalId, code: code2 })
   );
   return terminalId;
 });
-electron.ipcMain.handle("terminal:write", (_, terminalId, data) => {
+electron.ipcMain.handle(IPC_CHANNELS["terminal:write"], (_, terminalId, data) => {
   writeToTerminal(terminalId, data);
 });
-electron.ipcMain.handle("terminal:resize", (_, terminalId, cols, rows) => {
+electron.ipcMain.handle(IPC_CHANNELS["terminal:resize"], (_, terminalId, cols, rows) => {
   resizeTerminal(terminalId, cols, rows);
 });
-electron.ipcMain.handle("terminal:destroy", (_, terminalId) => {
+electron.ipcMain.handle(IPC_CHANNELS["terminal:destroy"], (_, terminalId) => {
   destroyTerminal(terminalId);
 });
 electron.ipcMain.handle(
-  "agent:run",
+  IPC_CHANNELS["agent:run"],
   (event, repoPath, message, sessionId, additionalDirs, requestedProvider) => {
     const win = electron.BrowserWindow.fromWebContents(event.sender);
     const prefs = getPreferences();
@@ -49307,35 +49382,34 @@ electron.ipcMain.handle(
       sessionId ?? null,
       (info) => {
         runId = info.runId;
-        win?.webContents.send("agent:start", info);
+        win?.webContents.send(IPC_CHANNELS["agent:start"], info);
       },
-      (evt) => win?.webContents.send("agent:event", { runId, event: evt }),
-      (exitCode, error, lines) => win?.webContents.send("agent:done", { runId, exitCode, error, rawLines: lines ?? [] }),
+      (evt) => win?.webContents.send(IPC_CHANNELS["agent:event"], { runId, event: evt }),
+      (exitCode, error, lines) => win?.webContents.send(IPC_CHANNELS["agent:done"], { runId, exitCode, error, rawLines: lines ?? [] }),
       additionalDirs,
       (raw) => rawLines.push(raw)
     );
     return runId;
   }
 );
-electron.ipcMain.handle("agent:cancel", (_, runId) => {
+electron.ipcMain.handle(IPC_CHANNELS["agent:cancel"], (_, runId) => {
   cancelAgentRun(runId);
 });
-electron.ipcMain.handle("conversation:getAll", (_, workspaceId) => getConversations(resolveSlug(workspaceId)));
-electron.ipcMain.handle("conversation:save", (_, conv) => {
-  const typedConv = conv;
-  saveConversation(typedConv, resolveSlug(typedConv.workspaceId));
+electron.ipcMain.handle(IPC_CHANNELS["conversation:getAll"], (_, workspaceId) => getConversations(resolveSlug(workspaceId)));
+electron.ipcMain.handle(IPC_CHANNELS["conversation:save"], (_, conv) => {
+  saveConversation(conv, resolveSlug(conv.workspaceId));
 });
-electron.ipcMain.handle("conversation:delete", (_, id2, workspaceId) => deleteConversation(id2, resolveSlug(workspaceId)));
-electron.ipcMain.handle("agentTabs:get", (_, workspaceId) => getAgentTabsState(resolveSlug(workspaceId)));
-electron.ipcMain.handle("agentTabs:save", (_, workspaceId, state) => saveAgentTabsState(resolveSlug(workspaceId), state));
-electron.ipcMain.handle("agentTabs:clear", (_, workspaceId) => clearAgentTabsState(resolveSlug(workspaceId)));
-electron.ipcMain.handle("jira:startAuth", (_, wsId) => {
+electron.ipcMain.handle(IPC_CHANNELS["conversation:delete"], (_, id2, workspaceId) => deleteConversation(id2, resolveSlug(workspaceId)));
+electron.ipcMain.handle(IPC_CHANNELS["agentTabs:get"], (_, workspaceId) => getAgentTabsState(resolveSlug(workspaceId)));
+electron.ipcMain.handle(IPC_CHANNELS["agentTabs:save"], (_, workspaceId, state) => saveAgentTabsState(resolveSlug(workspaceId), state));
+electron.ipcMain.handle(IPC_CHANNELS["agentTabs:clear"], (_, workspaceId) => clearAgentTabsState(resolveSlug(workspaceId)));
+electron.ipcMain.handle(IPC_CHANNELS["jira:startAuth"], (_, wsId) => {
   const state = generateState();
   const { codeVerifier, codeChallenge } = generatePKCE();
   pendingOAuth.set(state, { codeVerifier, wsId });
   openAuthUrl(state, codeChallenge);
 });
-electron.ipcMain.handle("jira:disconnect", (_, wsId) => {
+electron.ipcMain.handle(IPC_CHANNELS["jira:disconnect"], (_, wsId) => {
   clearTokens(wsId);
   const workspaces = getAll();
   const workspace = workspaces.find((w) => w.id === wsId);
@@ -49351,27 +49425,27 @@ electron.ipcMain.handle("jira:disconnect", (_, wsId) => {
   }
   return null;
 });
-electron.ipcMain.handle("jira:getStatus", (_, wsId) => getTokenMeta(wsId));
-electron.ipcMain.handle("jira:syncTickets", async (_, wsId, workspace) => {
+electron.ipcMain.handle(IPC_CHANNELS["jira:getStatus"], (_, wsId) => getTokenMeta(wsId));
+electron.ipcMain.handle(IPC_CHANNELS["jira:syncTickets"], async (_, wsId, workspace) => {
   const persisted = getAll().find((w) => w.id === wsId) ?? workspace;
   return syncJiraTickets(wsId, persisted);
 });
-electron.ipcMain.handle("jira:getValidToken", (_, wsId) => getValidAccessToken(wsId));
-electron.ipcMain.handle("jira:getProjects", async (_, wsId) => {
+electron.ipcMain.handle(IPC_CHANNELS["jira:getValidToken"], (_, wsId) => getValidAccessToken(wsId));
+electron.ipcMain.handle(IPC_CHANNELS["jira:getProjects"], async (_, wsId) => {
   const token = await getValidAccessToken(wsId);
   const workspace = getAll().find((w) => w.id === wsId);
   const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
   if (!cloudId) throw new Error("Not connected to Jira");
   return fetchProjects(token, cloudId);
 });
-electron.ipcMain.handle("jira:countTickets", async (_, wsId, projectKey, syncFilter, boardType) => {
+electron.ipcMain.handle(IPC_CHANNELS["jira:countTickets"], async (_, wsId, projectKey, syncFilter, boardType) => {
   const token = await getValidAccessToken(wsId);
   const workspace = getAll().find((w) => w.id === wsId);
   const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
   if (!cloudId) throw new Error("Not connected to Jira");
   return countIssues(token, cloudId, projectKey, syncFilter, boardType);
 });
-electron.ipcMain.handle("jira:getBoardType", async (_, wsId, projectKey) => {
+electron.ipcMain.handle(IPC_CHANNELS["jira:getBoardType"], async (_, wsId, projectKey) => {
   const token = await getValidAccessToken(wsId);
   const workspace = getAll().find((w) => w.id === wsId);
   const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
@@ -49380,10 +49454,10 @@ electron.ipcMain.handle("jira:getBoardType", async (_, wsId, projectKey) => {
 });
 function broadcastServerStatus(status) {
   for (const win of electron.BrowserWindow.getAllWindows()) {
-    win.webContents.send("server:status-change", status);
+    win.webContents.send(IPC_CHANNELS["server:status-change"], status);
   }
 }
-electron.ipcMain.handle("server:getStatus", async () => {
+electron.ipcMain.handle(IPC_CHANNELS["server:getStatus"], async () => {
   const prefs = getPreferences();
   const baseUrl = prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL;
   try {
@@ -49393,13 +49467,13 @@ electron.ipcMain.handle("server:getStatus", async () => {
     return "stopped";
   }
 });
-electron.ipcMain.handle("feedback:sendSession", async (_, data) => {
+electron.ipcMain.handle(IPC_CHANNELS["feedback:sendSession"], async (_, data) => {
   await sendSessionFeedback(data);
 });
-electron.ipcMain.handle("feedback:sendProduct", async (_, data) => {
+electron.ipcMain.handle(IPC_CHANNELS["feedback:sendProduct"], async (_, data) => {
   await sendProductFeedback(data);
 });
-electron.ipcMain.handle("server:restart", async () => {
+electron.ipcMain.handle(IPC_CHANNELS["server:restart"], async () => {
   broadcastServerStatus("starting");
   stopServer();
   await new Promise((resolve2) => setTimeout(resolve2, 300));
@@ -49442,7 +49516,7 @@ electron.app.whenReady().then(() => {
         const result = await checkForUpdates(false, channel);
         if (result.compatible && result.hasUpdate) {
           const win = electron.BrowserWindow.getAllWindows()[0];
-          win?.webContents.send("updates:available", result);
+          win?.webContents.send(IPC_CHANNELS["updates:available"], result);
         }
       } catch {
       }

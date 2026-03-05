@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { StoredRepo, AgentProfile } from '@nakiros/shared';
+import type { AgentProfile, StoredRepo } from '@nakiros/shared';
+import clsx from 'clsx';
 import { PROFILE_LABELS } from '../utils/profiles';
 
 const PROFILES: AgentProfile[] = [
@@ -47,25 +48,18 @@ export default function AddRepoForm({ onAdd }: Props) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="flex flex-col gap-2">
       <button
         onClick={handleClick}
         disabled={detecting}
-        style={{
-          padding: '8px 16px',
-          background: 'var(--primary)',
-          color: '#fff',
-          border: 'none',
-          borderRadius: 10,
-          cursor: detecting ? 'not-allowed' : 'pointer',
-          opacity: detecting ? 0.65 : 1,
-          alignSelf: 'flex-start',
-          fontWeight: 700,
-        }}
+        className={clsx(
+          'self-start rounded-[10px] border-none px-4 py-2 font-bold text-white',
+          detecting ? 'cursor-not-allowed bg-[var(--primary)] opacity-65' : 'bg-[var(--primary)]',
+        )}
       >
         {detecting ? 'Détection…' : '+ Ajouter un repo'}
       </button>
-      {status && <span style={{ fontSize: 12, color: 'var(--success)' }}>{status}</span>}
+      {status && <span className="text-xs text-[var(--success)]">{status}</span>}
     </div>
   );
 }

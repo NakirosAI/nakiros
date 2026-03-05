@@ -1,22 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { AgentProvider } from '@nakiros/shared';
-
-export interface StoredAgentTab {
-  tabId: string;
-  conversationId?: string;
-  repoPath: string;
-  provider: AgentProvider;
-  title: string;
-  sessionId?: string;
-}
-
-export interface StoredAgentTabsState {
-  workspaceId: string;
-  activeTabId: string | null;
-  tabs: StoredAgentTab[];
-}
+import type { AgentProvider, StoredAgentTab, StoredAgentTabsState } from '@nakiros/shared';
 
 type AgentTabsByWorkspace = Record<string, StoredAgentTabsState>;
 

@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   StoredWorkspace,
   AppPreferences,
-  ResolvedTheme,
 } from '@nakiros/shared';
 import Home from './views/Home';
 import Onboarding from './views/Onboarding';
 import WorkspaceSetup from './views/WorkspaceSetup';
 import Dashboard from './views/Dashboard';
-import { MESSAGES, resolveLanguage } from './i18n';
+import { resolveLanguage } from './utils/language';
+import i18n from './i18n/index';
+import { useIpcListener } from './hooks/useIpcListener';
+import { PreferencesProvider } from './hooks/usePreferences';
+import { WorkspaceProvider } from './hooks/useWorkspace';
 
 const FALLBACK_PREFERENCES: AppPreferences = {
-  theme: 'system',
+  theme: 'dark',
   language: 'system',
   updatedAt: '',
 };
@@ -24,13 +28,13 @@ type View =
   | { name: 'dashboard' };
 
 export default function App() {
+  const { t } = useTranslation('common');
   const [view, setView] = useState<View>({ name: 'loading' });
   const [workspaces, setWorkspaces] = useState<StoredWorkspace[]>([]);
   const [openedWorkspaceIds, setOpenedWorkspaceIds] = useState<string[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<AppPreferences>(FALLBACK_PREFERENCES);
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light');
   const [serverStatus, setServerStatus] = useState<'starting' | 'running' | 'stopped'>('starting');
   const [updateBanner, setUpdateBanner] = useState<UpdateCheckResult | null>(null);
 
@@ -44,50 +48,36 @@ export default function App() {
           window.nakiros.nakirosConfigExists(),
         ]);
         setWorkspaces(ws);
-        setPreferences({
-          theme: prefs.theme ?? 'system',
+        const resolvedPrefs: AppPreferences = {
+          theme: 'dark',
           language: prefs.language ?? 'system',
           updatedAt: prefs.updatedAt ?? '',
-        });
+        };
+        setPreferences(resolvedPrefs);
+        void i18n.changeLanguage(resolveLanguage(resolvedPrefs.language));
         setServerStatus(status);
         if (!configExists) {
           setView({ name: 'onboarding' });
           return;
         }
       } catch {
-        setBootError(MESSAGES[resolveLanguage('system')].workspaceLoadError);
+        setBootError(t('workspaceLoadError'));
       } finally {
         setView((current) => current.name === 'loading' ? { name: 'home' } : current);
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useIpcListener(window.nakiros.onServerStatusChange, setServerStatus);
+  useIpcListener(window.nakiros.onUpdatesAvailable, (result) => {
+    if (result.compatible && result.hasUpdate) setUpdateBanner(result);
+  });
+
   useEffect(() => {
-    return window.nakiros.onServerStatusChange(setServerStatus);
+    document.documentElement.dataset.theme = 'dark';
+    document.documentElement.style.colorScheme = 'dark';
   }, []);
-
-  useEffect(() => {
-    return window.nakiros.onUpdatesAvailable((result) => {
-      if (result.compatible && result.hasUpdate) setUpdateBanner(result);
-    });
-  }, []);
-
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const applyTheme = () => {
-      const nextTheme: ResolvedTheme =
-        preferences.theme === 'system'
-          ? (media.matches ? 'dark' : 'light')
-          : preferences.theme;
-      setResolvedTheme(nextTheme);
-      document.documentElement.dataset.theme = nextTheme;
-      document.documentElement.style.colorScheme = nextTheme;
-    };
-
-    applyTheme();
-    media.addEventListener('change', applyTheme);
-    return () => media.removeEventListener('change', applyTheme);
-  }, [preferences.theme]);
 
   useEffect(() => {
     if (view.name !== 'dashboard') return;
@@ -159,6 +149,7 @@ export default function App() {
     const withTimestamp: AppPreferences = { ...next, updatedAt: new Date().toISOString() };
     await window.nakiros.savePreferences(withTimestamp);
     setPreferences(withTimestamp);
+    void i18n.changeLanguage(resolveLanguage(withTimestamp.language));
   }
 
   async function handleUpdateWorkspace(updated: StoredWorkspace) {
@@ -169,42 +160,25 @@ export default function App() {
     }
   }
 
-  const language = resolveLanguage(preferences.language);
-  const msg = MESSAGES[language];
-  const isFr = language === 'fr';
-
   const updateBannerEl = updateBanner && (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-      background: 'var(--primary)', color: '#fff',
-      display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
-      fontSize: 13, fontWeight: 600,
-    }}>
-      <span style={{ flex: 1 }}>
-        ✨ {isFr ? `Mise à jour agents disponible (v${updateBanner.latestVersion})` : `Agent update available (v${updateBanner.latestVersion})`}
+    <div className="fixed inset-x-0 top-0 z-[9999] flex items-center gap-3 bg-[var(--primary)] px-4 py-2 text-[13px] font-semibold text-white">
+      <span className="flex-1">
+        {t('updateBanner', { version: updateBanner.latestVersion })}
       </span>
       <button
         onClick={() => setUpdateBanner(null)}
-        style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px' }}
-        aria-label="Fermer"
+        className="border-0 bg-transparent px-1 text-[18px] leading-none text-white"
+        aria-label="Close"
       >×</button>
     </div>
   );
 
   if (view.name === 'loading') {
     return (
-      <div
-        style={{
-          display: 'grid',
-          placeItems: 'center',
-          height: '100vh',
-          color: 'var(--text-muted)',
-          fontWeight: 600,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ width: 10, height: 10, borderRadius: 10, background: 'var(--primary)' }} />
-          {msg.loadingWorkspace}
+      <div className="grid h-screen place-items-center font-semibold text-[var(--text-muted)]">
+        <div className="flex items-center gap-2.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />
+          {t('loadingWorkspace')}
         </div>
       </div>
     );
@@ -213,7 +187,6 @@ export default function App() {
   if (view.name === 'onboarding') {
     return (
       <Onboarding
-        language={language}
         onDone={() => setView({ name: 'setup' })}
       />
     );
@@ -227,7 +200,6 @@ export default function App() {
       <Home
         recentWorkspaces={sorted}
         bootError={bootError ?? undefined}
-        language={language}
         onNewWorkspace={() => setView({ name: 'setup' })}
         onOpenWorkspace={(id) => {
           const ws = workspaces.find((w) => w.id === id);
@@ -255,35 +227,39 @@ export default function App() {
     .filter((w): w is StoredWorkspace => Boolean(w));
 
   if (!workspace) {
-    return <div style={{ padding: 20, color: 'var(--text-muted)' }}>{msg.loadingWorkspace}</div>;
+    return <div className="p-5 text-[var(--text-muted)]">{t('loadingWorkspace')}</div>;
   }
 
   return (
     <>
       {updateBannerEl}
-      <Dashboard
-        workspace={workspace}
-        openWorkspaces={openedWorkspaces}
-        activeWorkspaceId={workspace.id}
-        allWorkspaces={workspaces}
-        language={language}
+      <PreferencesProvider
         preferences={preferences}
-        resolvedTheme={resolvedTheme}
-        serverStatus={serverStatus}
-        onPreferencesChange={handlePreferencesChange}
-        onUpdateWorkspace={handleUpdateWorkspace}
-        onOpenWorkspaceTab={handleOpenWorkspaceTab}
-        onCloseWorkspaceTab={handleCloseWorkspaceTab}
-        onNewWorkspace={() => setView({ name: 'setup' })}
-        onGoHome={() => {
-          void window.nakiros.getWorkspaces().then((fresh) => {
-            setWorkspaces(fresh);
-            setOpenedWorkspaceIds((prev) => prev.filter((id) => fresh.some((w) => w.id === id)));
-          });
-          setView({ name: 'home' });
-        }}
-        onRestartServer={() => { void window.nakiros.restartServer(); }}
-      />
+        updatePreferences={handlePreferencesChange}
+      >
+        <WorkspaceProvider
+          workspace={workspace}
+          openWorkspaces={openedWorkspaces}
+          activeWorkspaceId={workspace.id}
+          allWorkspaces={workspaces}
+          openWorkspaceTab={handleOpenWorkspaceTab}
+          closeWorkspaceTab={handleCloseWorkspaceTab}
+        >
+          <Dashboard
+            serverStatus={serverStatus}
+            onUpdateWorkspace={handleUpdateWorkspace}
+            onNewWorkspace={() => setView({ name: 'setup' })}
+            onGoHome={() => {
+              void window.nakiros.getWorkspaces().then((fresh) => {
+                setWorkspaces(fresh);
+                setOpenedWorkspaceIds((prev) => prev.filter((id) => fresh.some((w) => w.id === id)));
+              });
+              setView({ name: 'home' });
+            }}
+            onRestartServer={() => { void window.nakiros.restartServer(); }}
+          />
+        </WorkspaceProvider>
+      </PreferencesProvider>
     </>
   );
 }

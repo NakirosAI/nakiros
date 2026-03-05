@@ -4,7 +4,7 @@ import { join } from 'path';
 import type { AppPreferences } from '@nakiros/shared';
 
 const DEFAULT_PREFERENCES: AppPreferences = {
-  theme: 'system',
+  theme: 'dark',
   language: 'system',
   updatedAt: '',
   mcpServerUrl: undefined,
@@ -25,7 +25,7 @@ export function getPreferences(): AppPreferences {
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Partial<AppPreferences>;
     return {
-      theme: parsed.theme ?? 'system',
+      theme: 'dark',
       language: parsed.language ?? 'system',
       updatedAt: parsed.updatedAt ?? '',
       mcpServerUrl: parsed.mcpServerUrl,
@@ -38,7 +38,7 @@ export function getPreferences(): AppPreferences {
 
 export function savePreferences(prefs: AppPreferences): void {
   const next: AppPreferences = {
-    theme: prefs.theme ?? 'system',
+    theme: 'dark',
     language: prefs.language ?? 'system',
     updatedAt: prefs.updatedAt || new Date().toISOString(),
     mcpServerUrl: prefs.mcpServerUrl || undefined,

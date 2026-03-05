@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { StoredWorkspace, AgentProfile } from '@nakiros/shared';
+import clsx from 'clsx';
+import { Button } from '../components/ui';
 import { PROFILE_LABELS } from '../utils/profiles';
+import { useIpcListener } from '../hooks/useIpcListener';
 
 interface Props {
   initialDirectory?: string;
@@ -271,26 +274,29 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
     };
   }, [pmTool, workspaceDraftId]);
 
-  useEffect(() => {
-    if (pmTool !== 'jira') return;
-    const unsubComplete = window.nakiros.onJiraAuthComplete((data) => {
+  useIpcListener(
+    window.nakiros.onJiraAuthComplete,
+    (data) => {
       if (data.wsId !== workspaceDraftId) return;
       setJiraConnecting(false);
       setJiraAuthError(null);
       setJiraStatus({ connected: true, cloudUrl: data.cloudUrl, displayName: data.displayName });
       void loadJiraProjects();
-    });
-    const unsubError = window.nakiros.onJiraAuthError((data) => {
+    },
+    [workspaceDraftId],
+    pmTool === 'jira',
+  );
+
+  useIpcListener(
+    window.nakiros.onJiraAuthError,
+    (data) => {
       if (data.wsId !== workspaceDraftId) return;
       setJiraConnecting(false);
       setJiraAuthError(data.error);
-    });
-
-    return () => {
-      unsubComplete();
-      unsubError();
-    };
-  }, [pmTool, workspaceDraftId]);
+    },
+    [workspaceDraftId],
+    pmTool === 'jira',
+  );
 
   useEffect(() => {
     if (pmTool !== 'jira' || !jiraStatus?.connected || !normalizedProjectKey || boardDetecting) {
@@ -477,122 +483,115 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
   }
 
   return (
-    <div style={{ maxWidth: 760, margin: '42px auto', padding: '0 24px' }}>
-      <div
-        style={{
-          background: 'var(--bg-soft)',
-          border: '1px solid var(--line)',
-          borderRadius: 10,
-          padding: '24px 22px',
-          boxShadow: 'var(--shadow-sm)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-          <h1 style={{ fontSize: 22, margin: 0 }}>
+    <div className="mx-auto my-[42px] w-full max-w-[760px] px-6">
+      <div className="rounded-[10px] border border-[var(--line)] bg-[var(--bg-soft)] px-[22px] py-6 shadow-sm">
+        <div className="mb-[18px] flex items-center justify-between gap-3">
+          <h1 className="m-0 text-[22px] font-bold text-[var(--text)]">
             {`Nouveau workspace — Étape ${step}/${totalSteps}`}
           </h1>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onCancel}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14 }}
+            className="h-8 px-2 text-sm text-[var(--text-muted)] hover:text-[var(--text)]"
           >
             ✕ Annuler
-          </button>
+          </Button>
         </div>
 
         {initialDirectory && (
-          <p style={{ margin: '0 0 12px', color: 'var(--text-muted)', fontSize: 12 }}>
-            Import assisté depuis: <code>{initialDirectory}</code>
+          <p className="mb-3 mt-0 text-xs text-[var(--text-muted)]">
+            Import assisté depuis:{' '}
+            <code className="rounded-md border border-[var(--line)] bg-[var(--bg-muted)] px-1.5 py-0.5">
+              {initialDirectory}
+            </code>
           </p>
         )}
         {status && (
-          <p style={{ margin: '0 0 12px', color: 'var(--success)', fontSize: 12 }}>{status}</p>
+          <p className="mb-3 mt-0 text-xs text-[var(--success)]">{status}</p>
         )}
         {error && (
-          <p style={{ margin: '0 0 12px', color: 'var(--danger)', fontSize: 12 }}>{error}</p>
+          <p className="mb-3 mt-0 text-xs text-[var(--danger)]">{error}</p>
         )}
 
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ height: 8, borderRadius: 10, background: 'var(--bg-muted)', overflow: 'hidden' }}>
+        <div className="mb-5">
+          <div className="h-2 overflow-hidden rounded-full bg-[var(--bg-muted)]">
             <div
-              style={{
-                width: `${(step / totalSteps) * 100}%`,
-                height: '100%',
-                background: 'var(--primary)',
-                borderRadius: 10,
-              }}
+              className="h-full rounded-full bg-[var(--primary)] transition-all"
+              style={{ width: `${(step / totalSteps) * 100}%` }}
             />
           </div>
         </div>
 
         {step === 1 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span>Nom du workspace</span>
+          <div className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-[var(--text)]">Nom du workspace</span>
               <input
                 value={name}
                 onChange={(e) => handleNameChange(e.target.value)}
                 placeholder="ex: Plateforme Produit"
-                style={inputStyle}
+                className={INPUT_CLASS}
                 autoFocus
               />
             </label>
 
-            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}>Structure du workspace</p>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <p className="m-0 text-sm text-[var(--text-muted)]">Structure du workspace</p>
+            <div className="flex gap-3">
               {(['mono', 'multi'] as Topology[]).map((kind) => (
                 <button
                   key={kind}
+                  type="button"
                   onClick={() => setTopology(kind)}
-                  style={{
-                    flex: 1,
-                    padding: '20px 16px',
-                    background: topology === kind ? 'var(--primary-soft)' : 'var(--bg-soft)',
-                    border: `2px solid ${topology === kind ? 'var(--primary)' : 'var(--line)'}`,
-                    borderRadius: 10,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
+                  className={clsx(
+                    'flex-1 rounded-[10px] border-2 px-4 py-5 text-left transition',
+                    topology === kind
+                      ? 'border-[var(--primary)] bg-[var(--primary-soft)]'
+                      : 'border-[var(--line)] bg-[var(--bg-soft)] hover:border-[var(--line-strong)]',
+                  )}
                 >
-                  <strong style={{ fontSize: 15, display: 'block', marginBottom: 6 }}>
+                  <strong className="mb-1.5 block text-[15px]">
                     {kind === 'mono' ? 'Mono-repo' : 'Multi-repo'}
                   </strong>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  <span className={MUTED_TEXT_CLASS}>
                     {kind === 'mono' ? 'Un seul dépôt Git.' : 'Plusieurs dépôts regroupés dans un workspace.'}
                   </span>
                 </button>
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={nextStep} disabled={!canGoNextFromStep1} style={btnPrimary(!canGoNextFromStep1)}>
+            <div className="flex gap-2">
+              <Button onClick={nextStep} disabled={!canGoNextFromStep1}>
                 Suivant →
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
         {step === 2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="flex flex-col gap-4">
             {topology === 'mono' && (
               <>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}>
+                <p className="m-0 text-sm text-[var(--text-muted)]">
                   Source du repo unique
                 </p>
 
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => setMonoSource('local')} style={chipStyle(monoSource === 'local')}>Repo local</button>
-                  <button onClick={() => setMonoSource('remote')} style={chipStyle(monoSource === 'remote')}>Cloner repo distant</button>
-                  <button onClick={() => setMonoSource('new')} style={chipStyle(monoSource === 'new')}>Créer repo local</button>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setMonoSource('local')} className={chipClass(monoSource === 'local')}>Repo local</button>
+                  <button type="button" onClick={() => setMonoSource('remote')} className={chipClass(monoSource === 'remote')}>Cloner repo distant</button>
+                  <button type="button" onClick={() => setMonoSource('new')} className={chipClass(monoSource === 'new')}>Créer repo local</button>
                 </div>
 
                 {monoSource === 'local' && (
                   <>
-                    <button onClick={() => void pickMonoLocalRepo()} style={btnSecondary}>Choisir un dossier repo</button>
+                    <Button variant="secondary" onClick={() => void pickMonoLocalRepo()}>
+                      Choisir un dossier repo
+                    </Button>
                     {monoRepo && (
-                      <div style={cardStyle}>
+                      <div className={CARD_CLASS}>
                         <div><strong>{monoRepo.name}</strong></div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{monoRepo.localPath}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{PROFILE_LABELS[monoRepo.profile]}</div>
+                        <div className={MUTED_TEXT_CLASS}>{monoRepo.localPath}</div>
+                        <div className={MUTED_TEXT_CLASS}>{PROFILE_LABELS[monoRepo.profile]}</div>
                       </div>
                     )}
                   </>
@@ -600,19 +599,21 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
 
                 {monoSource === 'remote' && (
                   <>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span>URL Git du repo</span>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm font-medium text-[var(--text)]">URL Git du repo</span>
                       <input
                         value={monoRemoteUrl}
                         onChange={(e) => setMonoRemoteUrl(e.target.value)}
                         placeholder="git@github.com:org/repo.git"
-                        style={inputStyle}
+                        className={INPUT_CLASS}
                       />
                     </label>
 
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <button onClick={() => void pickMonoParentDir()} style={btnSecondary}>Choisir dossier de destination</button>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    <div className="flex items-center gap-2">
+                      <Button variant="secondary" onClick={() => void pickMonoParentDir()}>
+                        Choisir dossier de destination
+                      </Button>
+                      <span className={MUTED_TEXT_CLASS}>
                         {monoParentDir || 'Aucun dossier choisi'}
                       </span>
                     </div>
@@ -621,14 +622,20 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
 
                 {monoSource === 'new' && (
                   <>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <button onClick={() => void pickMonoParentDir()} style={btnSecondary}>Choisir dossier parent</button>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    <div className="flex items-center gap-2">
+                      <Button variant="secondary" onClick={() => void pickMonoParentDir()}>
+                        Choisir dossier parent
+                      </Button>
+                      <span className={MUTED_TEXT_CLASS}>
                         {monoParentDir || 'Aucun dossier choisi'}
                       </span>
                     </div>
-                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>
-                      Un dossier repo sera créé puis <code>git init</code> sera exécuté.
+                    <p className={MUTED_TEXT_CLASS}>
+                      Un dossier repo sera créé puis{' '}
+                      <code className="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-1.5 py-0.5">
+                        git init
+                      </code>{' '}
+                      sera exécuté.
                     </p>
                   </>
                 )}
@@ -637,50 +644,56 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
 
             {topology === 'multi' && (
               <>
-                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}>
+                <p className="m-0 text-sm text-[var(--text-muted)]">
                   Repos du workspace
                 </p>
 
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => void addMultiLocalRepo()} style={btnSecondary}>+ Ajouter un repo local</button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => void addMultiLocalRepo()}>+ Ajouter un repo local</Button>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="flex flex-wrap items-center gap-2">
                   <input
                     value={pendingRemoteUrl}
                     onChange={(e) => setPendingRemoteUrl(e.target.value)}
                     placeholder="git@github.com:org/repo.git"
-                    style={{ ...inputStyle, flex: 1, minWidth: 280 }}
+                    className={clsx(INPUT_CLASS, 'min-w-[280px] flex-1')}
                   />
-                  <button onClick={() => void addMultiRemoteRepo()} style={btnSecondary}>+ Ajouter repo distant</button>
+                  <Button variant="secondary" onClick={() => void addMultiRemoteRepo()}>+ Ajouter repo distant</Button>
                 </div>
 
                 {multiRepos.length === 0 ? (
-                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>Aucun repo ajouté.</p>
+                  <p className={MUTED_TEXT_CLASS}>Aucun repo ajouté.</p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="flex flex-col gap-2">
                     {multiRepos.map((repo) => (
-                      <div key={repo.id} style={cardStyle}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                      <div key={repo.id} className={CARD_CLASS}>
+                        <div className="flex items-center justify-between gap-2">
                           <input
                             value={repo.name}
                             onChange={(e) => updateMultiRepo(repo.id, { name: e.target.value })}
                             placeholder="Nom du repo"
-                            style={{ ...inputStyle, fontWeight: 700, flex: 1 }}
+                            className={clsx(INPUT_CLASS, 'flex-1 font-bold')}
                           />
-                          <button onClick={() => removeMultiRepo(repo.id)} style={dangerButton}>Retirer</button>
+                          <button
+                            type="button"
+                            onClick={() => removeMultiRepo(repo.id)}
+                            className="border-0 bg-transparent p-0 text-xs font-bold text-[var(--danger)]"
+                          >
+                            Retirer
+                          </button>
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                        <div className="mt-1.5 text-xs text-[var(--text-muted)]">
                           {repo.sourcePath}
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                        <div className="mt-1 text-xs text-[var(--text-muted)]">
                           Profil détecté: {PROFILE_LABELS[repo.profile]}
                         </div>
                         <input
                           value={repo.role}
                           onChange={(e) => updateMultiRepo(repo.id, { role: e.target.value })}
                           placeholder="Rôle (optionnel)"
-                          style={{ ...inputStyle, marginTop: 8 }}
+                          className={clsx(INPUT_CLASS, 'mt-2')}
                         />
                       </div>
                     ))}
@@ -689,23 +702,23 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
               </>
             )}
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={prevStep} style={btnSecondary}>← Retour</button>
-              <button onClick={nextStep} disabled={!canGoNextFromStep2} style={btnPrimary(!canGoNextFromStep2)}>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={prevStep}>← Retour</Button>
+              <Button onClick={nextStep} disabled={!canGoNextFromStep2}>
                 Suivant →
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
         {step === 3 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span>Outil PM</span>
+          <div className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-[var(--text)]">Outil PM</span>
               <select
                 value={pmTool}
                 onChange={(e) => setPmTool(e.target.value as StoredWorkspace['pmTool'] | '')}
-                style={inputStyle}
+                className={INPUT_CLASS}
               >
                 <option value="">— aucun —</option>
                 <option value="jira">Jira</option>
@@ -713,41 +726,41 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
             </label>
 
             {pmTool && pmTool !== 'jira' && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span>Clé de projet (ex: PROJ)</span>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-[var(--text)]">Clé de projet (ex: PROJ)</span>
                 <input
                   value={projectKey}
                   onChange={(e) => setProjectKey(e.target.value.toUpperCase())}
                   placeholder="PROJ"
-                  style={inputStyle}
+                  className={INPUT_CLASS}
                 />
               </label>
             )}
 
             {pmTool === 'jira' && (
-              <div style={cardStyle}>
-                <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Connexion Jira</p>
+              <div className={CARD_CLASS}>
+                <p className="mb-2 mt-0 text-sm font-bold">Connexion Jira</p>
                 {jiraStatusLoading ? (
-                  <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Vérification de la connexion…</p>
+                  <p className={MUTED_TEXT_CLASS}>Vérification de la connexion…</p>
                 ) : jiraStatus?.connected ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+                  <div className="flex flex-col gap-2.5">
+                    <p className={MUTED_TEXT_CLASS}>
                       Connecté en tant que {jiraStatus.displayName ?? 'utilisateur'} ({jiraStatus.cloudUrl ?? 'site Jira'}).
                     </p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button onClick={() => void handleJiraDisconnect()} style={btnSecondary}>Déconnecter</button>
-                      <button onClick={loadJiraProjects} style={btnSecondary}>Rafraîchir les projets</button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="secondary" onClick={() => void handleJiraDisconnect()}>Déconnecter</Button>
+                      <Button variant="secondary" onClick={loadJiraProjects}>Rafraîchir les projets</Button>
                     </div>
                     {jiraProjectsLoading ? (
-                      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>Chargement des projets…</p>
+                      <p className={MUTED_TEXT_CLASS}>Chargement des projets…</p>
                     ) : (
                       <>
-                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span>Projet Jira</span>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-sm font-medium text-[var(--text)]">Projet Jira</span>
                           <select
                             value={projectKey}
                             onChange={(e) => setProjectKey(e.target.value)}
-                            style={inputStyle}
+                            className={INPUT_CLASS}
                           >
                             <option value="">Sélectionner un projet</option>
                             {jiraProjects.map((project) => (
@@ -758,21 +771,12 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                           </select>
                         </label>
                         {normalizedProjectKey && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                          <div className="mt-1 flex items-center gap-2">
                             {boardDetecting && (
-                              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Détection du board…</span>
+                              <span className={MUTED_TEXT_CLASS}>Détection du board…</span>
                             )}
                             {!boardDetecting && boardType && boardType !== 'unknown' && (
-                              <span style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                padding: '2px 8px',
-                                borderRadius: 6,
-                                background: 'var(--primary-soft)',
-                                color: 'var(--primary)',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.05em',
-                              }}>
+                              <span className="rounded-md bg-[var(--primary-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--primary)]">
                                 {boardType}
                               </span>
                             )}
@@ -782,49 +786,50 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                     )}
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+                  <div className="flex flex-col gap-2.5">
+                    <p className={MUTED_TEXT_CLASS}>
                       Connecte Jira pour sélectionner directement le projet et récupérer sa clé.
                     </p>
                     <div>
-                      <button
+                      <Button
                         onClick={() => void handleJiraConnect()}
-                        disabled={jiraConnecting}
-                        style={btnPrimary(jiraConnecting)}
+                        loading={jiraConnecting}
                       >
-                        {jiraConnecting ? 'Connexion…' : 'Se connecter à Jira'}
-                      </button>
+                        Se connecter à Jira
+                      </Button>
                     </div>
-                    <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                    <p className={MUTED_TEXT_CLASS}>
                       Ou renseigne la clé projet manuellement:
                     </p>
                     <input
                       value={projectKey}
                       onChange={(e) => setProjectKey(e.target.value.toUpperCase())}
                       placeholder="PROJ"
-                      style={inputStyle}
+                      className={INPUT_CLASS}
                     />
                   </div>
                 )}
                 {jiraAuthError && (
-                  <div style={{ margin: '10px 0 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--danger)' }}>
+                  <div className="mt-2.5 flex flex-col gap-1.5">
+                    <p className="m-0 text-xs text-[var(--danger)]">
                       Connexion Jira échouée — {jiraAuthError}
                     </p>
-                    <button
+                    <Button
                       onClick={() => void handleJiraConnect()}
-                      style={{ ...btnSecondary, fontSize: 12, padding: '6px 12px', alignSelf: 'flex-start' }}
+                      variant="secondary"
+                      size="sm"
+                      className="self-start"
                     >
                       Réessayer
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
             )}
 
             {pmTool === 'jira' && jiraStatus?.connected && normalizedProjectKey && (
-              <div style={cardStyle}>
-                <p style={{ margin: '0 0 10px', fontWeight: 700 }}>Synchroniser les tickets</p>
+              <div className={CARD_CLASS}>
+                <p className="mb-2.5 mt-0 text-sm font-bold">Synchroniser les tickets</p>
                 {([
                   { value: 'sprint_active', label: 'Sprint actif uniquement', desc: boardType === 'scrum' ? 'Tickets du sprint en cours. (Recommandé)' : 'Tickets non terminés. (Recommandé)' },
                   { value: 'last_3_months', label: '3 derniers mois', desc: 'Tickets créés ou modifiés dans les 3 derniers mois.' },
@@ -832,7 +837,7 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                 ] as { value: SyncFilter; label: string; desc: string }[]).map((opt) => (
                   <label
                     key={opt.value}
-                    style={{ display: 'flex', gap: 10, cursor: 'pointer', marginBottom: 10, alignItems: 'flex-start' }}
+                    className="mb-2.5 flex cursor-pointer items-start gap-2.5"
                   >
                     <input
                       type="radio"
@@ -840,26 +845,23 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                       value={opt.value}
                       checked={syncFilter === opt.value}
                       onChange={() => setSyncFilter(opt.value)}
-                      style={{ marginTop: 2, accentColor: 'var(--primary)', flexShrink: 0 }}
+                      className="mt-0.5 shrink-0 accent-[var(--primary)]"
                     />
-                    <span style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span className="flex flex-1 items-start justify-between gap-2">
                       <span>
-                        <strong style={{ fontSize: 13 }}>{opt.label}</strong>
+                        <strong className="text-[13px]">{opt.label}</strong>
                         <br />
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{opt.desc}</span>
+                        <span className={MUTED_TEXT_CLASS}>{opt.desc}</span>
                       </span>
                       {syncFilter === opt.value && (
-                        <span style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: 6,
-                          background: ticketCountLoading ? 'var(--bg-muted)' : 'var(--primary-soft)',
-                          color: ticketCountLoading ? 'var(--text-muted)' : 'var(--primary)',
-                          flexShrink: 0,
-                          marginLeft: 8,
-                          marginTop: 2,
-                        }}>
+                        <span
+                          className={clsx(
+                            'ml-2 mt-0.5 shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold',
+                            ticketCountLoading
+                              ? 'bg-[var(--bg-muted)] text-[var(--text-muted)]'
+                              : 'bg-[var(--primary-soft)] text-[var(--primary)]',
+                          )}
+                        >
                           {ticketCountLoading ? '…' : ticketCount !== null ? `${ticketCount.count}${ticketCount.hasMore ? '+' : ''} tickets` : ''}
                         </span>
                       )}
@@ -869,50 +871,55 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
               </div>
             )}
 
-            <div style={cardStyle}>
-              <p style={{ margin: '0 0 8px', fontWeight: 700 }}>Format des tickets locaux</p>
-              <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-muted)' }}>
+            <div className={CARD_CLASS}>
+              <p className="mb-2 mt-0 text-sm font-bold">Format des tickets locaux</p>
+              <p className="mb-2.5 mt-0 text-xs text-[var(--text-muted)]">
                 Cette configuration s'applique aux tickets créés dans le board local Nakiros.
               </p>
 
               {pmTool && normalizedProjectKey ? (
                 <>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <div className="mb-2.5 flex flex-wrap gap-2">
                     <button
+                      type="button"
                       onClick={() => {
                         setTicketPrefixModeTouched(true);
                         setTicketPrefixMode('auto-pm');
                       }}
-                      style={chipStyle(ticketPrefixMode === 'auto-pm')}
+                      className={chipClass(ticketPrefixMode === 'auto-pm')}
                     >
                       Utiliser la clé projet PM ({normalizedProjectKey})
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setTicketPrefixModeTouched(true);
                         setTicketPrefixMode('custom');
                       }}
-                      style={chipStyle(ticketPrefixMode === 'custom')}
+                      className={chipClass(ticketPrefixMode === 'custom')}
                     >
                       Préfixe personnalisé
                     </button>
                   </div>
                   {ticketPrefixMode === 'auto-pm' && (
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-                      Format final: <code>{normalizedProjectKey}-001</code>
+                    <p className="m-0 text-xs text-[var(--text-muted)]">
+                      Format final:{' '}
+                      <code className="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-1.5 py-0.5">
+                        {normalizedProjectKey}-001
+                      </code>
                     </p>
                   )}
                 </>
               ) : (
-                <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-muted)' }}>
+                <p className="mb-2.5 mt-0 text-xs text-[var(--text-muted)]">
                   Renseigne une clé projet PM pour activer le mode automatique, sinon utilise un préfixe personnalisé.
                 </p>
               )}
 
               {(ticketPrefixMode === 'custom' || !pmTool || !normalizedProjectKey) && (
                 <>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span>Préfixe des tickets</span>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-[var(--text)]">Préfixe des tickets</span>
                     <input
                       value={ticketPrefix}
                       onChange={(e) => {
@@ -920,34 +927,37 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                         setTicketPrefix(e.target.value);
                       }}
                       placeholder="PROJ"
-                      style={{ ...inputStyle, fontFamily: 'monospace' }}
+                      className={clsx(INPUT_CLASS, 'font-mono')}
                     />
                   </label>
-                  <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-                    Format final: <code>{effectiveTicketPrefix}-001</code>
+                  <p className="mb-0 mt-2 text-xs text-[var(--text-muted)]">
+                    Format final:{' '}
+                    <code className="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-1.5 py-0.5">
+                      {effectiveTicketPrefix}-001
+                    </code>
                   </p>
                 </>
               )}
             </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={prevStep} style={btnSecondary}>← Retour</button>
-              <button onClick={nextStep} style={btnPrimary(false)}>Suivant →</button>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={prevStep}>← Retour</Button>
+              <Button onClick={nextStep}>Suivant →</Button>
             </div>
           </div>
         )}
 
         {step === 4 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={cardStyle}>
-              <p style={{ margin: '0 0 4px' }}><strong>Workspace:</strong> {name}</p>
-              <p style={{ margin: '0 0 12px' }}><strong>Structure:</strong> {topology === 'mono' ? 'Mono-repo' : 'Multi-repo'}</p>
+          <div className="flex flex-col gap-4">
+            <div className={CARD_CLASS}>
+              <p className="mb-1 mt-0"><strong>Workspace:</strong> {name}</p>
+              <p className="mb-3 mt-0"><strong>Structure:</strong> {topology === 'mono' ? 'Mono-repo' : 'Multi-repo'}</p>
 
               {topology === 'mono' && monoRepo && (
                 <>
-                  <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600 }}>Repo :</p>
-                  <p style={{ margin: '0 0 12px', fontSize: 13 }}>
-                    {monoRepo.name} — <span style={{ color: 'var(--text-muted)' }}>{monoRepo.localPath}</span>
+                  <p className="mb-1 mt-0 text-[13px] font-semibold">Repo :</p>
+                  <p className="mb-3 mt-0 text-[13px]">
+                    {monoRepo.name} — <span className="text-[var(--text-muted)]">{monoRepo.localPath}</span>
                     {' '}— {PROFILE_LABELS[monoRepo.profile]}
                   </p>
                 </>
@@ -955,11 +965,11 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
 
               {topology === 'multi' && multiRepos.length > 0 && (
                 <>
-                  <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 600 }}>Repos ({multiRepos.length}) :</p>
-                  <ul style={{ margin: '0 0 12px', paddingLeft: 18, fontSize: 13 }}>
+                  <p className="mb-1 mt-0 text-[13px] font-semibold">Repos ({multiRepos.length}) :</p>
+                  <ul className="mb-3 mt-0 list-disc pl-[18px] text-[13px]">
                     {multiRepos.map((repo) => (
                       <li key={repo.id}>
-                        {repo.name} — <span style={{ color: 'var(--text-muted)' }}>{repo.sourcePath}</span>
+                        {repo.name} — <span className="text-[var(--text-muted)]">{repo.sourcePath}</span>
                         {' '}— {PROFILE_LABELS[repo.profile]}
                       </li>
                     ))}
@@ -968,7 +978,7 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
               )}
 
               {pmTool && (
-                <p style={{ margin: '0 0 4px' }}>
+                <p className="mb-1 mt-0">
                   <strong>PM Tool:</strong>{' '}
                   {pmTool}
                   {projectKey ? ` — ${jiraProjects.find(p => p.key === projectKey)?.name ?? projectKey} (${projectKey})` : ''}
@@ -977,33 +987,30 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
               )}
 
               {pmTool === 'jira' && jiraStatus?.connected && normalizedProjectKey && (
-                <p style={{ margin: '0 0 4px' }}>
+                <p className="mb-1 mt-0">
                   <strong>Synchronisation:</strong>{' '}
                   {syncFilter === 'sprint_active' ? 'Sprint actif uniquement' : syncFilter === 'last_3_months' ? '3 derniers mois' : 'Tout le projet'}
                   {ticketCount !== null && !ticketCountLoading && (
-                    <span style={{
-                      marginLeft: 8,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      padding: '2px 7px',
-                      borderRadius: 6,
-                      background: 'var(--primary-soft)',
-                      color: 'var(--primary)',
-                    }}>
+                    <span className="ml-2 rounded-md bg-[var(--primary-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--primary)]">
                       {ticketCount.count}{ticketCount.hasMore ? '+' : ''} tickets
                     </span>
                   )}
                 </p>
               )}
 
-              <p style={{ margin: '0' }}><strong>Préfixe tickets:</strong> <code>{effectiveTicketPrefix}</code></p>
+              <p className="m-0">
+                <strong>Préfixe tickets:</strong>{' '}
+                <code className="rounded-md border border-[var(--line)] bg-[var(--bg-soft)] px-1.5 py-0.5">
+                  {effectiveTicketPrefix}
+                </code>
+              </p>
             </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={prevStep} style={btnSecondary}>← Retour</button>
-              <button onClick={() => void handleCreate()} disabled={saving} style={btnPrimary(saving)}>
-                {saving ? 'Création…' : 'Créer le workspace'}
-              </button>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={prevStep}>← Retour</Button>
+              <Button onClick={() => void handleCreate()} loading={saving}>
+                Créer le workspace
+              </Button>
             </div>
           </div>
         )}
@@ -1012,67 +1019,16 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  fontSize: 14,
-  color: 'var(--text)',
-  background: 'var(--bg-soft)',
-  width: '100%',
-  boxSizing: 'border-box',
-};
+const INPUT_CLASS =
+  'ui-form-control w-full rounded-[10px] border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--primary)] focus:outline-none';
+const CARD_CLASS = 'rounded-[10px] border border-[var(--line)] bg-[var(--bg-muted)] p-3.5';
+const MUTED_TEXT_CLASS = 'm-0 text-xs text-[var(--text-muted)]';
 
-const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-muted)',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  padding: 14,
-};
-
-function chipStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: '7px 12px',
-    border: `1px solid ${active ? 'var(--primary)' : 'var(--line)'}`,
-    borderRadius: 10,
-    background: active ? 'var(--primary-soft)' : 'var(--bg-soft)',
-    color: 'var(--text)',
-    cursor: 'pointer',
-    fontWeight: 600,
-    fontSize: 13,
-  };
+function chipClass(active: boolean): string {
+  return clsx(
+    'rounded-[10px] border px-3 py-1.5 text-[13px] font-semibold transition',
+    active
+      ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--text)]'
+      : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--text)] hover:border-[var(--line-strong)]',
+  );
 }
-
-function btnPrimary(disabled: boolean): React.CSSProperties {
-  return {
-    padding: '10px 20px',
-    background: disabled ? 'var(--line-strong)' : 'var(--primary)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    fontSize: 14,
-    fontWeight: 700,
-  };
-}
-
-const btnSecondary: React.CSSProperties = {
-  padding: '10px 20px',
-  background: 'var(--bg-muted)',
-  color: 'var(--text)',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  cursor: 'pointer',
-  fontSize: 14,
-  fontWeight: 600,
-};
-
-const dangerButton: React.CSSProperties = {
-  border: 'none',
-  background: 'none',
-  color: 'var(--danger)',
-  cursor: 'pointer',
-  fontSize: 12,
-  fontWeight: 700,
-  padding: 0,
-};

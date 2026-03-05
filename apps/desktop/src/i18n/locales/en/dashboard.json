@@ -1,0 +1,14 @@
+{
+  "home": "Home",
+  "chatAgent": "AI Chat",
+  "newWorkspace": "New",
+  "openWorkspace": "Open workspace",
+  "closeTab": "Close",
+  "noOtherWorkspace": "All workspaces are already open.",
+  "openedWorkspaceTabs": "Opened workspaces",
+  "repoCount_one": "{{count}} repo",
+  "repoCount_other": "{{count}} repos",
+  "topologyMono": "Mono-repo",
+  "topologyMulti": "Multi-repo",
+  "noRepo": "No repository in this workspace."
+}

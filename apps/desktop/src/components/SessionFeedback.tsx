@@ -1,6 +1,6 @@
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
-import type { ResolvedLanguage } from '@nakiros/shared';
-import { MESSAGES } from '../i18n.js';
+import { forwardRef, useImperativeHandle, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
 
 export interface SessionFeedbackHandle {
   autoSubmitIfPending(): void;
@@ -15,15 +15,14 @@ interface SessionFeedbackProps {
   messageCount: number;
   getDurationSeconds: () => number;
   getRawLines: () => unknown[];
-  lang: ResolvedLanguage;
 }
 
 const SessionFeedback = forwardRef<SessionFeedbackHandle, SessionFeedbackProps>(
   function SessionFeedback(
-    { sessionId, workspaceId, agent, workflow, editor, messageCount, getDurationSeconds, getRawLines, lang },
+    { sessionId, workspaceId, agent, workflow, editor, messageCount, getDurationSeconds, getRawLines },
     ref,
   ) {
-    const msg = MESSAGES[lang].feedback;
+    const { t } = useTranslation('feedback');
     const [rating, setRating] = useState<1 | -1 | null>(null);
     const [comment, setComment] = useState('');
     const [shareConversation, setShareConversation] = useState(false);
@@ -34,7 +33,7 @@ const SessionFeedback = forwardRef<SessionFeedbackHandle, SessionFeedbackProps>(
         session_id: sessionId,
         workspace_id: workspaceId,
         rating: rating!,
-        agent: agent ?? 'libre',
+        agent: agent ?? 'free',
         workflow: workflow ?? undefined,
         editor,
         duration_seconds: getDurationSeconds(),
@@ -63,27 +62,37 @@ const SessionFeedback = forwardRef<SessionFeedbackHandle, SessionFeedbackProps>(
 
     if (submitted) {
       return (
-        <div style={container}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{msg.thanks}</span>
+        <div className="shrink-0 border-t border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2">
+          <span className="text-xs text-[var(--text-muted)]">{t('thanks')}</span>
         </div>
       );
     }
 
     return (
-      <div style={container}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={questionText}>{msg.sessionQuestion}</span>
+      <div className="flex shrink-0 flex-col gap-2 border-t border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="flex-1 text-[11px] text-[var(--text-muted)]">{t('sessionQuestion')}</span>
           <button
             onClick={() => setRating(1)}
-            style={thumbButton(rating === 1)}
-            title="Utile"
+            className={clsx(
+              'rounded-md border px-[7px] py-0.5 text-sm leading-[1.4]',
+              rating === 1
+                ? 'border-[var(--primary)] bg-[var(--primary-soft)]'
+                : 'border-[var(--line)] bg-transparent',
+            )}
+            title={t('thumbsUp')}
           >
             👍
           </button>
           <button
             onClick={() => setRating(-1)}
-            style={thumbButton(rating === -1)}
-            title="Pas utile"
+            className={clsx(
+              'rounded-md border px-[7px] py-0.5 text-sm leading-[1.4]',
+              rating === -1
+                ? 'border-[var(--primary)] bg-[var(--primary-soft)]'
+                : 'border-[var(--line)] bg-transparent',
+            )}
+            title={t('thumbsDown')}
           >
             👎
           </button>
@@ -93,31 +102,31 @@ const SessionFeedback = forwardRef<SessionFeedbackHandle, SessionFeedbackProps>(
           <>
             <input
               type="text"
-              placeholder={msg.commentPlaceholder}
+              placeholder={t('commentPlaceholder')}
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              style={commentInput}
+              className="ui-form-control box-border w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-[5px] text-[11px] text-[var(--text)]"
             />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={checkboxRow}>
+            <div className="flex flex-col gap-1">
+              <label className="flex cursor-pointer items-center gap-1.5">
                 <input
                   type="checkbox"
                   checked={shareConversation}
                   onChange={(e) => setShareConversation(e.target.checked)}
-                  style={{ margin: 0 }}
+                  className="m-0"
                 />
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{msg.shareConversation}</span>
+                <span className="text-[11px] text-[var(--text-muted)]">{t('shareConversation')}</span>
               </label>
-              <span style={warningText}>{msg.shareWarning}</span>
+              <span className="pl-[18px] text-[10px] text-[var(--text-muted)] opacity-70">{t('shareWarning')}</span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="flex justify-end">
               <button
                 onClick={() => void submit({ withComment: true, withConversation: shareConversation })}
-                style={sendBtn}
+                className="rounded-md border-none bg-[var(--primary)] px-3 py-1 text-[11px] font-semibold text-white"
               >
-                {msg.send}
+                {t('send')}
               </button>
             </div>
           </>
@@ -128,70 +137,3 @@ const SessionFeedback = forwardRef<SessionFeedbackHandle, SessionFeedbackProps>(
 );
 
 export default SessionFeedback;
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const container: React.CSSProperties = {
-  borderTop: '1px solid var(--line)',
-  padding: '8px 12px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
-  flexShrink: 0,
-  background: 'var(--bg-soft)',
-};
-
-const questionText: React.CSSProperties = {
-  fontSize: 11,
-  color: 'var(--text-muted)',
-  flex: 1,
-};
-
-function thumbButton(active: boolean): React.CSSProperties {
-  return {
-    background: active ? 'var(--primary-muted, rgba(20,184,166,0.15))' : 'transparent',
-    border: active ? '1px solid var(--primary)' : '1px solid var(--line)',
-    borderRadius: 6,
-    padding: '2px 7px',
-    fontSize: 14,
-    cursor: 'pointer',
-    lineHeight: 1.4,
-  };
-}
-
-const commentInput: React.CSSProperties = {
-  background: 'var(--bg)',
-  border: '1px solid var(--line)',
-  borderRadius: 6,
-  color: 'var(--text)',
-  fontSize: 11,
-  padding: '5px 8px',
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const checkboxRow: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  cursor: 'pointer',
-};
-
-const warningText: React.CSSProperties = {
-  fontSize: 10,
-  color: 'var(--text-muted)',
-  opacity: 0.7,
-  paddingLeft: 18,
-};
-
-const sendBtn: React.CSSProperties = {
-  background: 'var(--primary)',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 6,
-  padding: '4px 12px',
-  fontSize: 11,
-  fontWeight: 600,
-  cursor: 'pointer',
-};

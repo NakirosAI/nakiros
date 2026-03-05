@@ -6,3 +6,5 @@ export * from './types/tickets.js';
 export * from './types/preferences.js';
 export * from './types/installer.js';
 export * from './types/workspace-settings.js';
+export * from './types/conversation.js';
+export * from './ipc-channels.js';

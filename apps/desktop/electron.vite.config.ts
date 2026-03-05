@@ -1,5 +1,6 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
@@ -66,6 +67,6 @@ export default defineConfig({
         input: { index: resolve(__dirname, 'src/index.html') },
       },
     },
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
   },
 });

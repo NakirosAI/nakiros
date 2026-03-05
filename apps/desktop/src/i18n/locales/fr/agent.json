@@ -1,0 +1,143 @@
+{
+  "newConversation": "Nouvelle conversation",
+  "workspaceGlobal": "Workspace (global)",
+  "tabLimitReached": "Limite de {{count}} onglets atteinte",
+  "unableToStartRun": "Impossible de demarrer l'execution de l'agent.",
+  "stoppedMarker": "_[Arrete]_",
+  "timeNow": "maintenant",
+  "timeMinutesAgo": "il y a {{count}}m",
+  "timeHoursAgo": "il y a {{count}}h",
+  "timeDaysAgo": "il y a {{count}}j",
+  "historyToday": "Aujourd'hui",
+  "historyYesterday": "Hier",
+  "historyThisWeek": "Cette semaine",
+  "historyOlder": "Plus ancien",
+  "inputPlaceholder": "Message ou /nak-agent-dev…",
+  "history": "Historique",
+  "noConversation": "Aucune conversation",
+  "agents": "Agents",
+  "provider": "Fournisseur",
+  "session": "session",
+  "conversationHistory": "Historique des conversations",
+  "new": "Nouveau",
+  "close": "Fermer",
+  "workspaceHistory": "Historique (workspace)",
+  "noSavedConversation": "Aucune conversation sauvegardee",
+  "delete": "Supprimer",
+  "quickActions": {
+    "generateContext": {
+      "label": "Générer le contexte",
+      "description": "Analyse le code + tickets et génère un contexte global"
+    },
+    "projectConfidence": {
+      "label": "Confiance projet",
+      "description": "Évalue la confiance IA sur la compréhension du projet et les docs manquants"
+    },
+    "architect": {
+      "label": "Architect",
+      "description": "Analyse l'architecture et les patterns techniques"
+    },
+    "pmAgent": {
+      "label": "PM Agent",
+      "description": "Crée et affine des tickets, gère les priorités"
+    },
+    "devAgent": {
+      "label": "Dev Agent",
+      "description": "Implémente des stories avec discipline de branche"
+    }
+  },
+  "emptyPrompt": "Lance un agent ou tape une commande",
+  "example": "Ex.",
+  "agent": "Agent",
+  "thinking": "Réflexion…",
+  "error": "Erreur",
+  "chatFree": "Chat libre",
+  "meta": "Meta",
+  "workflows": "Workflows",
+  "stop": "Stop",
+  "sendEnter": "Send (Enter)",
+  "processExitedWithCode": "Le processus s'est terminé avec le code {{code}}",
+  "sessionTitle": "Session: {{id}}",
+  "tools": {
+    "reading": "Lecture {{path}}",
+    "writing": "Écriture {{path}}",
+    "editing": "Édition {{path}}",
+    "bash": "$ {{command}}",
+    "glob": "Glob: {{pattern}}",
+    "grep": "Grep: {{pattern}} dans {{path}}",
+    "todoWrite": "Mise à jour des tâches",
+    "webFetch": "Fetch: {{url}}",
+    "webSearch": "Recherche: {{query}}",
+    "task": "Sous-agent: {{description}}"
+  },
+  "definitions": {
+    "nakiros": {
+      "label": "Nakiros",
+      "placeholder": "Parle avec Nakiros…"
+    },
+    "dev": {
+      "label": "Dev Agent",
+      "placeholder": "Message pour Dev Agent…"
+    },
+    "pm": {
+      "label": "PM Agent",
+      "placeholder": "Message pour PM Agent…"
+    },
+    "architect": {
+      "label": "Architect",
+      "placeholder": "Message pour Architect…"
+    },
+    "sm": {
+      "label": "SM Agent",
+      "placeholder": "Message pour SM Agent…"
+    },
+    "qa": {
+      "label": "QA Agent",
+      "placeholder": "Message pour QA Agent…"
+    },
+    "hotfix": {
+      "label": "Hotfix Agent",
+      "placeholder": "Message pour Hotfix Agent…"
+    },
+    "brainstorming": {
+      "label": "Brainstorming",
+      "placeholder": "Message pour Brainstorming…"
+    },
+    "dev-story": {
+      "label": "Dev Story",
+      "placeholder": "ID du ticket (ex: EX-203)"
+    },
+    "create-story": {
+      "label": "Create Story",
+      "placeholder": "Decris la story a creer…"
+    },
+    "create-ticket": {
+      "label": "Create Ticket",
+      "placeholder": "Decris le ticket a creer…"
+    },
+    "generate-context": {
+      "label": "Generate Context",
+      "placeholder": "Lancer Generate Context sur ce workspace ?"
+    },
+    "project-confidence": {
+      "label": "Project Confidence",
+      "placeholder": "Evaluer la confiance du projet ?"
+    },
+    "qa-review": {
+      "label": "QA Review",
+      "placeholder": "Lancer QA Review ?"
+    },
+    "hotfix-story": {
+      "label": "Hotfix Story",
+      "placeholder": "ID du ticket hotfix (ex: EX-203)"
+    },
+    "sprint-planning": {
+      "label": "Sprint Planning",
+      "placeholder": "Lancer Sprint Planning ?"
+    },
+    "fetch-project-context": {
+      "label": "Fetch Project Context",
+      "placeholder": "Lancer Fetch Project Context ?"
+    }
+  }
+}

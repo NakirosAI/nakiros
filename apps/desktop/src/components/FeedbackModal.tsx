@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
-import type { ResolvedLanguage } from '@nakiros/shared';
-import { MESSAGES } from '../i18n.js';
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Button, Modal, Select, Textarea } from './ui';
 
 interface Props {
-  lang: ResolvedLanguage;
   onClose: () => void;
   onToast: (message: string) => void;
 }
@@ -11,8 +10,8 @@ interface Props {
 type Category = 'bug' | 'suggestion' | 'agent' | 'workflow' | 'ux';
 type Status = 'idle' | 'sending' | 'error';
 
-export default function FeedbackModal({ lang, onClose, onToast }: Props) {
-  const msg = MESSAGES[lang].feedback;
+export default function FeedbackModal({ onClose, onToast }: Props) {
+  const { t } = useTranslation('feedback');
   const [category, setCategory] = useState<Category>('suggestion');
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<Status>('idle');
@@ -25,180 +24,49 @@ export default function FeedbackModal({ lang, onClose, onToast }: Props) {
     try {
       await window.nakiros.sendProductFeedback({ category, message });
       onClose();
-      onToast(msg.thanks);
+      onToast(t('thanks'));
     } catch {
       setStatus('error');
     }
   }
 
   return (
-    <div style={overlay} onClick={onClose}>
-      <div style={modal} onClick={(e) => e.stopPropagation()}>
-        <div style={modalHeader}>
-          <span style={modalTitle}>{msg.productTitle}</span>
-          <button onClick={onClose} style={closeBtn}>×</button>
-        </div>
+    <Modal isOpen onClose={onClose} title={t('productTitle')} size="sm">
+      <div className="flex flex-col gap-4">
+        <Select
+          label={t('categoryLabel')}
+          value={category}
+          onChange={(event) => setCategory(event.target.value as Category)}
+          options={[
+            { value: 'bug', label: t('categoryBug') },
+            { value: 'suggestion', label: t('categorySuggestion') },
+            { value: 'agent', label: t('categoryAgent') },
+            { value: 'workflow', label: t('categoryWorkflow') },
+            { value: 'ux', label: t('categoryUx') },
+          ]}
+        />
 
-        <div style={field}>
-          <label style={fieldLabel}>{msg.categoryLabel}</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value as Category)}
-            style={selectStyle}
-          >
-            <option value="bug">{msg.categories.bug}</option>
-            <option value="suggestion">{msg.categories.suggestion}</option>
-            <option value="agent">{msg.categories.agent}</option>
-            <option value="workflow">{msg.categories.workflow}</option>
-            <option value="ux">{msg.categories.ux}</option>
-          </select>
-        </div>
+        <Textarea
+          label={t('messageLabel')}
+          hint={t('messageMin')}
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          rows={5}
+          maxLength={2000}
+          autoFocus
+        />
 
-        <div style={field}>
-          <label style={fieldLabel}>{msg.messageLabel}</label>
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            rows={5}
-            maxLength={2000}
-            style={textareaStyle}
-            autoFocus
-          />
-          <span style={hintText}>{msg.messageMin}</span>
-        </div>
+        {status === 'error' && <p className="text-xs text-[var(--danger)]">{t('errorNetwork')}</p>}
 
-        {status === 'error' && (
-          <div style={errorText}>{msg.errorNetwork}</div>
-        )}
-
-        <div style={actions}>
-          <button onClick={onClose} style={cancelBtn}>{msg.cancel}</button>
-          <button onClick={() => void handleSend()} disabled={!canSend} style={sendBtn(!canSend)}>
-            {status === 'sending' ? '…' : msg.send}
-          </button>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            {t('cancel')}
+          </Button>
+          <Button onClick={() => void handleSend()} disabled={!canSend} loading={status === 'sending'}>
+            {t('send')}
+          </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const overlay: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.45)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-};
-
-const modal: React.CSSProperties = {
-  background: 'var(--bg)',
-  border: '1px solid var(--line)',
-  borderRadius: 12,
-  padding: '20px 24px',
-  width: 420,
-  maxWidth: '90vw',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 16,
-};
-
-const modalHeader: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-};
-
-const modalTitle: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 700,
-  color: 'var(--text)',
-};
-
-const closeBtn: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  fontSize: 18,
-  color: 'var(--text-muted)',
-  lineHeight: 1,
-  padding: '0 2px',
-};
-
-const field: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-};
-
-const fieldLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
-
-const selectStyle: React.CSSProperties = {
-  background: 'var(--bg-soft)',
-  border: '1px solid var(--line)',
-  borderRadius: 6,
-  color: 'var(--text)',
-  fontSize: 12,
-  padding: '6px 8px',
-  outline: 'none',
-};
-
-const textareaStyle: React.CSSProperties = {
-  background: 'var(--bg-soft)',
-  border: '1px solid var(--line)',
-  borderRadius: 6,
-  color: 'var(--text)',
-  fontSize: 12,
-  padding: '8px 10px',
-  outline: 'none',
-  resize: 'vertical',
-  fontFamily: 'inherit',
-};
-
-const hintText: React.CSSProperties = {
-  fontSize: 10,
-  color: 'var(--text-muted)',
-};
-
-const errorText: React.CSSProperties = {
-  fontSize: 11,
-  color: 'var(--danger)',
-};
-
-const actions: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: 8,
-};
-
-const cancelBtn: React.CSSProperties = {
-  background: 'transparent',
-  border: '1px solid var(--line)',
-  borderRadius: 6,
-  color: 'var(--text-muted)',
-  fontSize: 12,
-  padding: '5px 12px',
-  cursor: 'pointer',
-};
-
-function sendBtn(disabled: boolean): React.CSSProperties {
-  return {
-    background: disabled ? 'var(--bg-muted)' : 'var(--primary)',
-    border: 'none',
-    borderRadius: 6,
-    color: disabled ? 'var(--text-muted)' : '#fff',
-    fontSize: 12,
-    fontWeight: 600,
-    padding: '5px 14px',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-  };
 }

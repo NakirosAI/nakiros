@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Circle, Loader2, X } from 'lucide-react';
-import type { ResolvedLanguage } from '@nakiros/shared';
-import { MESSAGES } from '../i18n';
+import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
+import { useIpcListener } from '../hooks/useIpcListener';
 
 type Step = 1 | 2 | 3 | 4;
 
 interface OnboardingProps {
-  language: ResolvedLanguage;
   onDone: () => void;
 }
 
@@ -109,11 +109,11 @@ function AnimatedLogo({ size = 160 }: { size?: number }) {
     return () => cancelAnimationFrame(animId);
   }, [size]);
 
-  return <canvas ref={canvasRef} style={{ width: size, height: size }} />;
+  return <canvas ref={canvasRef} width={size} height={size} className="block" />;
 }
 
-export default function Onboarding({ language, onDone }: OnboardingProps) {
-  const t = MESSAGES[language].onboarding;
+export default function Onboarding({ onDone }: OnboardingProps) {
+  const { t } = useTranslation('onboarding');
   const [step, setStep] = useState<Step>(1);
   const [editors, setEditors] = useState<DetectedEditor[]>([]);
   const [progress, setProgress] = useState<OnboardingProgressEvent[]>([]);
@@ -121,223 +121,151 @@ export default function Onboarding({ language, onDone }: OnboardingProps) {
   const [installError, setInstallError] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
 
-  // Détection des éditeurs au passage à l'étape 2
   useEffect(() => {
     if (step !== 2) return;
     void window.nakiros.onboardingDetectEditors().then(setEditors);
   }, [step]);
 
-  // Installation au passage à l'étape 3
   useEffect(() => {
     if (step !== 3) return;
     setProgress([]);
     setInstallDone(false);
     setInstallError(false);
 
-    const unsub = window.nakiros.onOnboardingProgress((item: OnboardingProgressEvent) => {
-      setProgress((prev) => [...prev, item]);
-      if (item.error) setInstallError(true);
-      setTimeout(() => progressRef.current?.scrollTo(0, 99999), 50);
-    });
-
     void window.nakiros.onboardingInstall(editors).then((result: { success: boolean }) => {
       setInstallDone(true);
       if (!result.success) setInstallError(true);
-      unsub();
     });
+  }, [step, editors]);
 
-    return unsub;
-  }, [step]);
+  useIpcListener(
+    window.nakiros.onOnboardingProgress,
+    (item: OnboardingProgressEvent) => {
+      setProgress((prev) => [...prev, item]);
+      if (item.error) setInstallError(true);
+      setTimeout(() => progressRef.current?.scrollTo(0, 99999), 50);
+    },
+    [step, installDone],
+    step === 3 && !installDone,
+  );
 
   return (
-    <div style={styles.root}>
-      {/* Étape 1 — Welcome */}
+    <div className="relative flex h-screen flex-col items-center justify-center bg-[var(--bg)] p-8 text-[var(--text)]">
       {step === 1 && (
-        <div style={styles.center}>
+        <div className="flex w-full max-w-[480px] flex-col items-center gap-4 text-center">
           <AnimatedLogo size={200} />
-          <h1 style={styles.h1}>{t.welcomeTitle}</h1>
-          <p style={styles.sub}>{t.welcomeSub}</p>
-          <button style={styles.btnPrimary} onClick={() => setStep(2)}>
-            {t.welcomeBtn}
+          <h1 className="m-0 text-[28px] font-bold text-[var(--text)]">{t('welcomeTitle')}</h1>
+          <p className="m-0 text-[15px] leading-[1.6] text-[var(--text-muted)]">{t('welcomeSub')}</p>
+          <button
+            className="mt-2 rounded-lg border-none bg-[var(--primary)] px-7 py-2.5 text-sm font-semibold text-white"
+            onClick={() => setStep(2)}
+          >
+            {t('welcomeBtn')}
           </button>
         </div>
       )}
 
-      {/* Étape 2 — Detect Editors */}
       {step === 2 && (
-        <div style={styles.center}>
-          <h2 style={styles.h2}>{t.detectTitle}</h2>
-          <p style={{ ...styles.sub, marginBottom: 32 }}>{t.detectSub}</p>
-          <div style={styles.editorList}>
+        <div className="flex w-full max-w-[480px] flex-col items-center gap-4 text-center">
+          <h2 className="m-0 text-[22px] font-bold text-[var(--text)]">{t('detectTitle')}</h2>
+          <p className="mb-8 mt-0 text-[15px] leading-[1.6] text-[var(--text-muted)]">{t('detectSub')}</p>
+          <div className="mb-2 w-full rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] py-2">
             {editors.map((e) => (
-              <div key={e.id} style={styles.editorRow}>
+              <div key={e.id} className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-2.5 last:border-b-0">
                 {e.detected ? (
                   <Check size={16} color="var(--success)" strokeWidth={2.4} />
                 ) : (
                   <Circle size={16} color="var(--text-muted)" strokeWidth={2.2} />
                 )}
-                <span style={styles.editorLabel}>{e.label}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-                  {e.detected ? t.editorDetected : t.editorNotDetected}
+                <span className="flex-1 text-left text-sm font-medium">{e.label}</span>
+                <span className="text-xs text-[var(--text-muted)]">
+                  {e.detected ? t('editorDetected') : t('editorNotDetected')}
                 </span>
               </div>
             ))}
           </div>
-          <button style={styles.btnPrimary} onClick={() => setStep(3)}>
-            {t.detectBtn}
+          <button
+            className="mt-2 rounded-lg border-none bg-[var(--primary)] px-7 py-2.5 text-sm font-semibold text-white"
+            onClick={() => setStep(3)}
+          >
+            {t('detectBtn')}
           </button>
         </div>
       )}
 
-      {/* Étape 3 — Install */}
       {step === 3 && (
-        <div style={styles.center}>
-          <h2 style={styles.h2}>{t.installTitle}</h2>
-          <div ref={progressRef} style={styles.progressBox}>
+        <div className="flex w-full max-w-[480px] flex-col items-center gap-4 text-center">
+          <h2 className="m-0 text-[22px] font-bold text-[var(--text)]">{t('installTitle')}</h2>
+          <div ref={progressRef} className="flex max-h-[260px] w-full flex-col gap-2 overflow-y-auto rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] p-4">
             {progress.map((item, i) => (
-              <div key={i} style={styles.progressRow}>
+              <div key={i} className="flex items-start gap-2.5 text-left">
                 {item.error ? (
                   <X size={16} color="var(--danger)" strokeWidth={2.4} />
                 ) : (
                   <Check size={16} color="var(--success)" strokeWidth={2.4} />
                 )}
-                <span style={{ color: item.error ? 'var(--danger)' : 'var(--text)', fontSize: 13 }}>
+                <span className={clsx('text-[13px]', item.error ? 'text-[var(--danger)]' : 'text-[var(--text)]')}>
                   {item.label}
                 </span>
               </div>
             ))}
             {!installDone && (
-              <div style={styles.progressRow}>
+              <div className="flex items-start gap-2.5 text-left">
                 <Loader2 size={16} color="var(--text-muted)" strokeWidth={2.2} />
-                <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t.installSpinner}</span>
+                <span className="text-[13px] text-[var(--text-muted)]">{t('installSpinner')}</span>
               </div>
             )}
           </div>
           {installDone && (
-            <div style={{ marginTop: 24, display: 'flex', gap: 12 }}>
+            <div className="mt-6 flex gap-3">
               {installError && (
-                <button style={styles.btnSecondary} onClick={() => setStep(3)}>
-                  {t.installRetry}
+                <button
+                  className="mt-2 rounded-lg border border-[var(--line-strong)] bg-[var(--bg-card)] px-7 py-2.5 text-sm font-semibold text-[var(--text)]"
+                  onClick={() => setStep(3)}
+                >
+                  {t('installRetry')}
                 </button>
               )}
-              <button style={styles.btnPrimary} onClick={() => setStep(4)}>
-                {installError ? t.installContinueError : t.installContinue}
+              <button
+                className="mt-2 rounded-lg border-none bg-[var(--primary)] px-7 py-2.5 text-sm font-semibold text-white"
+                onClick={() => setStep(4)}
+              >
+                {installError ? t('installContinueError') : t('installContinue')}
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* Étape 4 — Done */}
       {step === 4 && (
-        <div style={styles.center}>
+        <div className="flex w-full max-w-[480px] flex-col items-center gap-4 text-center">
           <AnimatedLogo size={160} />
-          <h2 style={styles.h2}>{t.doneTitle}</h2>
-          <p style={styles.sub}>{t.doneSub}</p>
-          <button style={styles.btnPrimary} onClick={onDone}>
-            {t.doneBtn}
+          <h2 className="m-0 text-[22px] font-bold text-[var(--text)]">{t('doneTitle')}</h2>
+          <p className="m-0 text-[15px] leading-[1.6] text-[var(--text-muted)]">{t('doneSub')}</p>
+          <button
+            className="mt-2 rounded-lg border-none bg-[var(--primary)] px-7 py-2.5 text-sm font-semibold text-white"
+            onClick={onDone}
+          >
+            {t('doneBtn')}
           </button>
         </div>
       )}
 
-      {/* Indicateurs d'étapes */}
-      <div style={styles.steps}>
+      <div className="absolute bottom-8 flex gap-2">
         {([1, 2, 3, 4] as Step[]).map((s) => (
           <div
             key={s}
-            style={{
-              ...styles.stepDot,
-              background: s === step ? 'var(--primary)' : s < step ? 'var(--success)' : 'var(--line-strong)',
-            }}
+            className={clsx(
+              'h-2 w-2 rounded-full transition-all',
+              s === step
+                ? 'bg-[var(--primary)]'
+                : s < step
+                  ? 'bg-[var(--success)]'
+                  : 'bg-[var(--line-strong)]',
+            )}
           />
         ))}
       </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  root: {
-    height: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'var(--bg)',
-    color: 'var(--text)',
-    fontFamily: 'inherit',
-    padding: 32,
-    position: 'relative',
-  },
-  center: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 16,
-    maxWidth: 480,
-    width: '100%',
-    textAlign: 'center',
-  },
-  h1: { fontSize: 28, fontWeight: 700, margin: 0, color: 'var(--text)' },
-  h2: { fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--text)' },
-  sub: { fontSize: 15, color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 },
-  statusLine: { display: 'inline-flex', alignItems: 'center', gap: 8 },
-  btnPrimary: {
-    marginTop: 8,
-    padding: '10px 28px',
-    background: 'var(--primary)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  btnSecondary: {
-    marginTop: 8,
-    padding: '10px 28px',
-    background: 'var(--bg-card)',
-    color: 'var(--text)',
-    border: '1px solid var(--line-strong)',
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  editorList: {
-    width: '100%',
-    background: 'var(--bg-card)',
-    border: '1px solid var(--line)',
-    borderRadius: 10,
-    padding: '8px 0',
-    marginBottom: 8,
-  },
-  editorRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '10px 20px',
-    borderBottom: '1px solid var(--line)',
-  },
-  editorLabel: { flex: 1, textAlign: 'left', fontSize: 14, fontWeight: 500 },
-  progressBox: {
-    width: '100%',
-    maxHeight: 260,
-    overflowY: 'auto',
-    background: 'var(--bg-card)',
-    border: '1px solid var(--line)',
-    borderRadius: 10,
-    padding: 16,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
-  progressRow: { display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left' },
-  steps: {
-    position: 'absolute',
-    bottom: 32,
-    display: 'flex',
-    gap: 8,
-  },
-  stepDot: { width: 8, height: 8, borderRadius: '50%', transition: 'background 0.3s' },
-};

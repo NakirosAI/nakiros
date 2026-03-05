@@ -1,7 +1,8 @@
-import type { LocalTicket, LocalEpic, TicketStatus } from '@nakiros/shared';
+import clsx from 'clsx';
+import type { LocalEpic, LocalTicket, TicketStatus } from '@nakiros/shared';
 
-const PRIORITY_COLORS = { low: '#10b981', medium: '#f59e0b', high: '#ef4444' };
 const PRIORITY_LABELS = { low: 'Low', medium: 'Med', high: 'High' };
+const PRIORITY_CLASSES = { low: 'text-[#10b981]', medium: 'text-[#f59e0b]', high: 'text-[#ef4444]' };
 
 const STATUS_ORDER: TicketStatus[] = ['backlog', 'todo', 'in_progress', 'done'];
 
@@ -41,17 +42,10 @@ export default function TicketCard({
       role="button"
       tabIndex={0}
       aria-label={`Ouvrir ${ticket.id}`}
-      style={{
-        background: 'var(--bg-soft)',
-        border: selected ? '1px solid var(--primary)' : '1px solid var(--line)',
-        borderRadius: 10,
-        padding: '10px 12px',
-        cursor: 'pointer',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-        boxShadow: 'none',
-      }}
+      className={clsx(
+        'flex cursor-pointer flex-col gap-1.5 rounded-[10px] border bg-[var(--bg-soft)] p-[10px_12px] shadow-none',
+        selected ? 'border-[var(--primary)]' : 'border-[var(--line)]',
+      )}
       onClick={onSelect}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -60,66 +54,50 @@ export default function TicketCard({
         }
       }}
     >
-      {/* Header: priority + id */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="flex items-center justify-between">
         <span
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: PRIORITY_COLORS[ticket.priority],
-            textTransform: 'uppercase',
-          }}
+          className={clsx('text-[11px] font-bold uppercase', PRIORITY_CLASSES[ticket.priority])}
         >
           ● {PRIORITY_LABELS[ticket.priority]}
         </span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+        <span className="font-mono text-[11px] text-[var(--text-muted)]">
           {ticket.id}
         </span>
       </div>
 
-      {/* Title */}
-      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, lineHeight: 1.4 }}>
+      <p className="m-0 text-[13px] font-medium leading-[1.4]">
         {ticket.title}
       </p>
 
-      {/* Footer: epic + blockers + ctx */}
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+        className="flex flex-wrap items-center gap-1.5"
         onClick={(e) => e.stopPropagation()}
       >
         {epic && (
           <span
-            style={{
-              fontSize: 11,
-              padding: '1px 6px',
-              background: epic.color + '22',
-              color: epic.color,
-              borderRadius: 10,
-              border: `1px solid ${epic.color}44`,
-            }}
+            className="rounded-[10px] border border-[var(--line-strong)] bg-[var(--primary-soft)] px-1.5 py-0.5 text-[11px] text-[var(--primary)]"
           >
             {epic.name}
           </span>
         )}
         {hasBlockers && (
           <span
-            style={{
-              fontSize: 11,
-              color: someBlockersPending ? '#f59e0b' : '#10b981',
-            }}
+            className={clsx(
+              'text-[11px]',
+              someBlockersPending ? 'text-[#f59e0b]' : 'text-[#10b981]',
+            )}
             title={`${blockersDoneCount}/${ticket.blockedBy.length} bloquants terminés`}
           >
             {someBlockersPending ? '⚠️' : '✅'} {ticket.blockedBy.length}
           </span>
         )}
 
-        {/* Status arrows */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+        <div className="ml-auto flex gap-1">
           {currentIdx > 0 && (
             <button
               title="Reculer"
               onClick={() => onStatusChange(STATUS_ORDER[currentIdx - 1]!)}
-              style={arrowBtn}
+              className="rounded-[10px] border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-xs text-[var(--text-muted)]"
             >
               ←
             </button>
@@ -128,7 +106,7 @@ export default function TicketCard({
             <button
               title="Avancer"
               onClick={() => onStatusChange(STATUS_ORDER[currentIdx + 1]!)}
-              style={arrowBtn}
+              className="rounded-[10px] border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-xs text-[var(--text-muted)]"
             >
               →
             </button>
@@ -137,7 +115,10 @@ export default function TicketCard({
             title="Générer contexte agent"
             onClick={onContextCopy}
             disabled={copying}
-            style={{ ...arrowBtn, color: copying ? 'var(--text-muted)' : 'var(--primary)' }}
+            className={clsx(
+              'rounded-[10px] border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-xs',
+              copying ? 'text-[var(--text-muted)]' : 'text-[var(--primary)]',
+            )}
           >
             {copying ? '…' : '⚡'}
           </button>
@@ -146,13 +127,3 @@ export default function TicketCard({
     </div>
   );
 }
-
-const arrowBtn: React.CSSProperties = {
-  background: 'none',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  padding: '2px 6px',
-  cursor: 'pointer',
-  fontSize: 12,
-  color: 'var(--text-muted)',
-};

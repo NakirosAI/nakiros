@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { ResolvedLanguage } from '@nakiros/shared';
+import { useTranslation } from 'react-i18next';
+import { Button, Modal, Textarea } from './ui';
 
 interface PrdDraft {
   vision: string;
@@ -9,12 +10,12 @@ interface PrdDraft {
 }
 
 interface Props {
-  language: ResolvedLanguage;
   onClose(): void;
   onSubmit(message: string): Promise<void>;
 }
 
-export default function PrdAssistant({ language, onClose, onSubmit }: Props) {
+export default function PrdAssistant({ onClose, onSubmit }: Props) {
+  const { t } = useTranslation('context');
   const [draft, setDraft] = useState<PrdDraft>({
     vision: '',
     users: '',
@@ -23,24 +24,21 @@ export default function PrdAssistant({ language, onClose, onSubmit }: Props) {
   });
   const [status, setStatus] = useState<'idle' | 'submitting' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const isFr = language === 'fr';
 
   const prompt = useMemo(() => {
     return [
       '/nak-agent-brainstorming',
       '',
-      isFr ? 'Aide-moi à construire un PRD initial avec ce contexte:' : 'Help me build an initial PRD with this context:',
+      t('prdPromptIntro'),
       '',
       `Vision: ${draft.vision || '-'}`,
-      `${isFr ? 'Utilisateurs cibles' : 'Target users'}: ${draft.users || '-'}`,
-      `${isFr ? 'Problème principal' : 'Main problem'}: ${draft.problem || '-'}`,
-      `${isFr ? 'Contraintes' : 'Constraints'}: ${draft.constraints || '-'}`,
+      `${t('prdFieldUsers')}: ${draft.users || '-'}`,
+      `${t('prdFieldProblem')}: ${draft.problem || '-'}`,
+      `${t('prdFieldConstraints')}: ${draft.constraints || '-'}`,
       '',
-      isFr
-        ? 'À la fin de la session, sauvegarde la synthèse dans .nakiros/context/brainstorming.md.'
-        : 'At session end, save the synthesis in .nakiros/context/brainstorming.md.',
+      t('prdPromptOutro'),
     ].join('\n');
-  }, [draft, isFr]);
+  }, [draft, t]);
 
   const canSubmit = draft.vision.trim() && draft.users.trim() && draft.problem.trim();
 
@@ -62,151 +60,70 @@ export default function PrdAssistant({ language, onClose, onSubmit }: Props) {
   }
 
   return (
-    <div style={overlay}>
-      <div style={modal}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <h3 style={{ margin: 0, fontSize: 16 }}>
-            {isFr ? 'PRD Assistant' : 'PRD Assistant'}
-          </h3>
-          <button onClick={onClose} style={closeBtn}>✕</button>
-        </div>
-        <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: 12 }}>
-          {isFr
-            ? 'Ce wizard prépare un prompt pour /nak-agent-brainstorming.'
-            : 'This wizard prepares a prompt for /nak-agent-brainstorming.'}
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-          <label style={label}>
-            <span>{isFr ? 'Vision produit' : 'Product vision'}</span>
-            <textarea
-              value={draft.vision}
-              onChange={(event) => setDraft((prev) => ({ ...prev, vision: event.target.value }))}
-              rows={3}
-              style={input}
-            />
-          </label>
-          <label style={label}>
-            <span>{isFr ? 'Utilisateurs cibles' : 'Target users'}</span>
-            <textarea
-              value={draft.users}
-              onChange={(event) => setDraft((prev) => ({ ...prev, users: event.target.value }))}
-              rows={2}
-              style={input}
-            />
-          </label>
-          <label style={label}>
-            <span>{isFr ? 'Problème principal' : 'Main problem'}</span>
-            <textarea
-              value={draft.problem}
-              onChange={(event) => setDraft((prev) => ({ ...prev, problem: event.target.value }))}
-              rows={3}
-              style={input}
-            />
-          </label>
-          <label style={label}>
-            <span>{isFr ? 'Contraintes' : 'Constraints'}</span>
-            <textarea
-              value={draft.constraints}
-              onChange={(event) => setDraft((prev) => ({ ...prev, constraints: event.target.value }))}
-              rows={2}
-              style={input}
-            />
-          </label>
-        </div>
-        {error && (
-          <p style={{ margin: '10px 0 0', color: 'var(--danger)', fontSize: 12 }}>{error}</p>
-        )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 14 }}>
-          <button onClick={() => void handleCopyPrompt()} style={secondary}>
-            {isFr ? 'Copier le prompt' : 'Copy prompt'}
-          </button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose} style={secondary}>
-              {isFr ? 'Annuler' : 'Cancel'}
-            </button>
-            <button
-              onClick={() => void handleSubmit()}
-              disabled={!canSubmit || status === 'submitting'}
-              style={primary(!canSubmit || status === 'submitting')}
-            >
-              {status === 'submitting'
-                ? (isFr ? 'Ouverture…' : 'Launching…')
-                : (isFr ? 'Lancer brainstorming' : 'Launch brainstorming')}
-            </button>
-          </div>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={t('prdTitle')}
+      size="lg"
+      className="max-h-[calc(100vh-40px)] overflow-y-auto"
+    >
+      <p className="mb-0 mt-[-6px] text-xs text-[var(--text-muted)]">
+        {t('prdSubtitle')}
+      </p>
+
+      <div className="mt-3 flex flex-col gap-2.5">
+        <Textarea
+          label={t('prdFieldVision')}
+          value={draft.vision}
+          onChange={(event) => setDraft((prev) => ({ ...prev, vision: event.target.value }))}
+          rows={3}
+          className="rounded-[10px]"
+        />
+        <Textarea
+          label={t('prdFieldUsers')}
+          value={draft.users}
+          onChange={(event) => setDraft((prev) => ({ ...prev, users: event.target.value }))}
+          rows={2}
+          className="rounded-[10px]"
+        />
+        <Textarea
+          label={t('prdFieldProblem')}
+          value={draft.problem}
+          onChange={(event) => setDraft((prev) => ({ ...prev, problem: event.target.value }))}
+          rows={3}
+          className="rounded-[10px]"
+        />
+        <Textarea
+          label={t('prdFieldConstraints')}
+          value={draft.constraints}
+          onChange={(event) => setDraft((prev) => ({ ...prev, constraints: event.target.value }))}
+          rows={2}
+          className="rounded-[10px]"
+        />
+      </div>
+
+      {error && (
+        <p className="mb-0 mt-2.5 text-xs text-[var(--danger)]">{error}</p>
+      )}
+
+      <div className="mt-3.5 flex justify-between gap-2">
+        <Button type="button" variant="secondary" onClick={() => void handleCopyPrompt()} className="rounded-[10px]">
+          {t('prdCopyPrompt')}
+        </Button>
+        <div className="flex gap-2">
+          <Button type="button" variant="secondary" onClick={onClose} className="rounded-[10px]">
+            {t('prdCancel')}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={!canSubmit || status === 'submitting'}
+            className="rounded-[10px]"
+          >
+            {status === 'submitting' ? t('prdLaunching') : t('prdLaunch')}
+          </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
-}
-
-const overlay: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.35)',
-  display: 'grid',
-  placeItems: 'center',
-  zIndex: 1400,
-};
-
-const modal: React.CSSProperties = {
-  width: 'min(760px, calc(100vw - 40px))',
-  maxHeight: 'calc(100vh - 40px)',
-  overflowY: 'auto',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  background: 'var(--bg-card)',
-  padding: 16,
-  boxShadow: 'var(--shadow-lg)',
-};
-
-const closeBtn: React.CSSProperties = {
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--text-muted)',
-  cursor: 'pointer',
-  fontSize: 14,
-};
-
-const label: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  fontSize: 12,
-  color: 'var(--text-muted)',
-};
-
-const input: React.CSSProperties = {
-  width: '100%',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  padding: '8px 10px',
-  background: 'var(--bg-soft)',
-  color: 'var(--text)',
-  resize: 'vertical',
-  boxSizing: 'border-box',
-};
-
-const secondary: React.CSSProperties = {
-  border: '1px solid var(--line)',
-  background: 'var(--bg-soft)',
-  color: 'var(--text)',
-  borderRadius: 10,
-  padding: '8px 10px',
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-function primary(disabled: boolean): React.CSSProperties {
-  return {
-    border: 'none',
-    background: disabled ? 'var(--line-strong)' : 'var(--primary)',
-    color: '#fff',
-    borderRadius: 10,
-    padding: '8px 10px',
-    fontSize: 12,
-    fontWeight: 700,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-  };
 }

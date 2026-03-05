@@ -1,77 +1,60 @@
 import type { StoredRepo } from '@nakiros/shared';
-import { PROFILE_COLORS, PROFILE_LABELS } from '../utils/profiles';
+import { PROFILE_LABELS } from '../utils/profiles';
+import { truncatePath } from '../utils/strings';
+import clsx from 'clsx';
 
 interface Props {
   repo: StoredRepo;
 }
 
-function truncatePath(path: string, maxLen = 40): string {
-  if (path.length <= maxLen) return path;
-  return '…' + path.slice(-(maxLen - 1));
-}
+const PROFILE_BADGE_CLASSES = {
+  'frontend-react': 'bg-[#61dafb]',
+  'frontend-vue': 'bg-[#42b883]',
+  'frontend-angular': 'bg-[#dd0031]',
+  'backend-node': 'bg-[#68a063]',
+  'backend-python': 'bg-[#3776ab]',
+  'backend-rust': 'bg-[#ce4a00]',
+  'backend-go': 'bg-[#00add8]',
+  'mobile-rn': 'bg-[#0088cc]',
+  fullstack: 'bg-[#8b5cf6]',
+  generic: 'bg-[#6b7280]',
+} as const;
 
 export default function RepoCard({ repo }: Props) {
   async function handleOpen() {
     await window.nakiros.openPath(repo.localPath);
   }
 
-  const color = PROFILE_COLORS[repo.profile];
   const label = PROFILE_LABELS[repo.profile];
 
   return (
-    <div
-      style={{
-        border: '1px solid var(--line)',
-        borderRadius: 10,
-        padding: 16,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        background: 'var(--bg-soft)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div className="flex flex-col gap-2 rounded-[10px] border border-[var(--line)] bg-[var(--bg-soft)] p-4">
+      <div className="flex items-center gap-2">
         <span
-          style={{
-            background: color,
-            color: '#fff',
-            fontSize: 11,
-            padding: '2px 8px',
-            borderRadius: 10,
-            fontWeight: 600,
-          }}
+          className={clsx(
+            'rounded-[10px] px-2 py-0.5 text-[11px] font-semibold text-white',
+            PROFILE_BADGE_CLASSES[repo.profile],
+          )}
         >
           {label}
         </span>
-        <strong style={{ fontSize: 15 }}>{repo.name}</strong>
+        <strong className="text-[15px]">{repo.name}</strong>
       </div>
+
       {repo.role && (
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>{repo.role}</p>
+        <p className="m-0 text-[13px] text-[var(--text-muted)]">{repo.role}</p>
       )}
+
       <p
-        style={{
-          margin: 0,
-          fontSize: 12,
-          color: 'var(--text-muted)',
-          fontFamily: 'monospace',
-        }}
+        className="m-0 font-mono text-xs text-[var(--text-muted)]"
         title={repo.localPath}
       >
         {truncatePath(repo.localPath)}
       </p>
+
       <button
         onClick={handleOpen}
-        style={{
-          marginTop: 4,
-          padding: '7px 12px',
-          background: 'var(--bg-muted)',
-          border: '1px solid var(--line)',
-          borderRadius: 10,
-          cursor: 'pointer',
-          fontSize: 13,
-          alignSelf: 'flex-start',
-          fontWeight: 600,
-        }}
+        className="mt-1 self-start rounded-[10px] border border-[var(--line)] bg-[var(--bg-muted)] px-3 py-[7px] text-[13px] font-semibold text-[var(--text)]"
       >
         Ouvrir
       </button>

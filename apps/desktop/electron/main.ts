@@ -7,7 +7,7 @@ import { join, resolve } from 'path';
 
 const execFileAsync = promisify(execFile);
 import { startServer, stopServer } from '@nakiros/server';
-import { DEFAULT_MCP_SERVER_URL } from '@nakiros/shared';
+import { DEFAULT_MCP_SERVER_URL, IPC_CHANNELS } from '@nakiros/shared';
 import { getAll, save, remove } from './services/workspace.js';
 import { syncWorkspaceYaml } from './services/workspace-yaml.js';
 import { resetWorkspace } from './services/workspace-reset.js';
@@ -62,6 +62,8 @@ import type {
   AppPreferences,
   AgentInstallRequest,
   AgentProvider,
+  StoredConversation,
+  StoredAgentTabsState,
 } from '@nakiros/shared';
 
 // ─── Single-instance lock (required for protocol handling on Windows/Linux) ───
@@ -114,7 +116,7 @@ async function handleOAuthCallback(url: string): Promise<void> {
   const errorParam = parsed.searchParams.get('error');
 
   if (errorParam || !code || !state) {
-    win.webContents.send('jira:auth-error', {
+    win.webContents.send(IPC_CHANNELS['jira:auth-error'], {
       wsId: '',
       error: errorParam ?? 'Missing code or state in OAuth callback',
     });
@@ -123,7 +125,7 @@ async function handleOAuthCallback(url: string): Promise<void> {
 
   const pending = pendingOAuth.get(state);
   if (!pending) {
-    win.webContents.send('jira:auth-error', { wsId: '', error: 'Invalid OAuth state (expired or unknown)' });
+    win.webContents.send(IPC_CHANNELS['jira:auth-error'], { wsId: '', error: 'Invalid OAuth state (expired or unknown)' });
     return;
   }
   pendingOAuth.delete(state);
@@ -170,17 +172,17 @@ async function handleOAuthCallback(url: string): Promise<void> {
         jiraUrl: workspace.jiraUrl ?? resource.url,
       };
       save(updated);
-      win.webContents.send('jira:auth-complete', {
+      win.webContents.send(IPC_CHANNELS['jira:auth-complete'], {
         wsId,
         cloudUrl: resource.url,
         displayName,
         workspace: updated,
       });
     } else {
-      win.webContents.send('jira:auth-complete', { wsId, cloudUrl: resource.url, displayName });
+      win.webContents.send(IPC_CHANNELS['jira:auth-complete'], { wsId, cloudUrl: resource.url, displayName });
     }
   } catch (err) {
-    win.webContents.send('jira:auth-error', { wsId, error: String(err) });
+    win.webContents.send(IPC_CHANNELS['jira:auth-error'], { wsId, error: String(err) });
   }
 }
 
@@ -260,32 +262,32 @@ app.on('second-instance', (_, argv) => {
 
 // ─── IPC: Workspace ───────────────────────────────────────────────────────────
 
-ipcMain.handle('dialog:selectDirectory', async () => {
+ipcMain.handle(IPC_CHANNELS['dialog:selectDirectory'], async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
-ipcMain.handle('dialog:openFile', async () => {
+ipcMain.handle(IPC_CHANNELS['dialog:openFile'], async () => {
   const result = await dialog.showOpenDialog({ properties: ['openFile'] });
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
-ipcMain.handle('workspace:getAll', () => getAll());
-ipcMain.handle('workspace:save', (_, w: StoredWorkspace) => save(w));
-ipcMain.handle('workspace:delete', (_, id: string) => remove(id));
-ipcMain.handle('workspace:createRoot', (_, parentDir: string, workspaceName: string) =>
+ipcMain.handle(IPC_CHANNELS['workspace:getAll'], () => getAll());
+ipcMain.handle(IPC_CHANNELS['workspace:save'], (_, w: StoredWorkspace) => save(w));
+ipcMain.handle(IPC_CHANNELS['workspace:delete'], (_, id: string) => remove(id));
+ipcMain.handle(IPC_CHANNELS['workspace:createRoot'], (_, parentDir: string, workspaceName: string) =>
   createWorkspaceRoot(parentDir, workspaceName));
-ipcMain.handle('repo:detectProfile', (_, path: string) => detectProfile(path));
-ipcMain.handle('repo:copyLocal', (_, sourcePath: string, targetParentDir: string) =>
+ipcMain.handle(IPC_CHANNELS['repo:detectProfile'], (_, path: string) => detectProfile(path));
+ipcMain.handle(IPC_CHANNELS['repo:copyLocal'], (_, sourcePath: string, targetParentDir: string) =>
   copyRepoToDirectory(sourcePath, targetParentDir));
-ipcMain.handle('workspace:syncYaml', (_, w: StoredWorkspace) => syncWorkspaceYaml(w));
-ipcMain.handle('workspace:reset', (_, w: StoredWorkspace) => resetWorkspace(w));
-ipcMain.handle('workspace:sync', (_, w: StoredWorkspace) => {
+ipcMain.handle(IPC_CHANNELS['workspace:syncYaml'], (_, w: StoredWorkspace) => syncWorkspaceYaml(w));
+ipcMain.handle(IPC_CHANNELS['workspace:reset'], (_, w: StoredWorkspace) => resetWorkspace(w));
+ipcMain.handle(IPC_CHANNELS['workspace:sync'], (_, w: StoredWorkspace) => {
   const prefs = getPreferences();
   syncToRepos(w, prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL);
 });
-ipcMain.handle('docs:scan', (_, w: StoredWorkspace) => scanWorkspaceDocs(w));
-ipcMain.handle('docs:read', (_, absolutePath: string) => readFileSync(absolutePath, 'utf-8'));
-ipcMain.handle('shell:openPath', (_, path: string) => shell.openPath(path));
-ipcMain.handle('git:remoteUrl', async (_, repoPath: string) => {
+ipcMain.handle(IPC_CHANNELS['docs:scan'], (_, w: StoredWorkspace) => scanWorkspaceDocs(w));
+ipcMain.handle(IPC_CHANNELS['docs:read'], (_, absolutePath: string) => readFileSync(absolutePath, 'utf-8'));
+ipcMain.handle(IPC_CHANNELS['shell:openPath'], (_, path: string) => shell.openPath(path));
+ipcMain.handle(IPC_CHANNELS['git:remoteUrl'], async (_, repoPath: string) => {
   try {
     const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], { cwd: repoPath });
     return stdout.trim() || null;
@@ -293,7 +295,7 @@ ipcMain.handle('git:remoteUrl', async (_, repoPath: string) => {
     return null;
   }
 });
-ipcMain.handle('git:clone', async (_, url: string, parentDir: string) => {
+ipcMain.handle(IPC_CHANNELS['git:clone'], async (_, url: string, parentDir: string) => {
   try {
     mkdirSync(parentDir, { recursive: true });
     await execFileAsync('git', ['clone', url], { cwd: parentDir });
@@ -304,7 +306,7 @@ ipcMain.handle('git:clone', async (_, url: string, parentDir: string) => {
     return { success: false, repoPath: '', repoName: '', error };
   }
 });
-ipcMain.handle('git:init', async (_, repoPath: string) => {
+ipcMain.handle(IPC_CHANNELS['git:init'], async (_, repoPath: string) => {
   try {
     await initGitRepo(repoPath);
     return { success: true };
@@ -313,19 +315,19 @@ ipcMain.handle('git:init', async (_, repoPath: string) => {
     return { success: false, error };
   }
 });
-ipcMain.handle('preferences:get', () => getPreferences());
-ipcMain.handle('preferences:save', (_, prefs: AppPreferences) => savePreferences(prefs));
-ipcMain.handle('agents:status', (_, repoPath: string) => getAgentInstallStatus(repoPath));
-ipcMain.handle('agents:install', (_, request: AgentInstallRequest) => installAgents(request));
-ipcMain.handle('agents:global-status', () => getGlobalInstallStatus());
-ipcMain.handle('agents:install-global', () => installAgentsGlobally());
-ipcMain.handle('agents:cli-status', () => getAgentCliStatus());
+ipcMain.handle(IPC_CHANNELS['preferences:get'], () => getPreferences());
+ipcMain.handle(IPC_CHANNELS['preferences:save'], (_, prefs: AppPreferences) => savePreferences(prefs));
+ipcMain.handle(IPC_CHANNELS['agents:status'], (_, repoPath: string) => getAgentInstallStatus(repoPath));
+ipcMain.handle(IPC_CHANNELS['agents:install'], (_, request: AgentInstallRequest) => installAgents(request));
+ipcMain.handle(IPC_CHANNELS['agents:global-status'], () => getGlobalInstallStatus());
+ipcMain.handle(IPC_CHANNELS['agents:install-global'], () => installAgentsGlobally());
+ipcMain.handle(IPC_CHANNELS['agents:cli-status'], () => getAgentCliStatus());
 
 // ─── IPC: Onboarding ──────────────────────────────────────────────────────────
 
-ipcMain.handle('onboarding:detectEditors', () => detectEditors());
-ipcMain.handle('onboarding:nakirosConfigExists', () => nakirosConfigExists());
-ipcMain.handle('onboarding:install', async (event, editors: unknown[]) => {
+ipcMain.handle(IPC_CHANNELS['onboarding:detectEditors'], () => detectEditors());
+ipcMain.handle(IPC_CHANNELS['onboarding:nakirosConfigExists'], () => nakirosConfigExists());
+ipcMain.handle(IPC_CHANNELS['onboarding:install'], async (event, editors: unknown[]) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return { success: false, errors: ['No window'] };
   return installNakiros(editors as Parameters<typeof installNakiros>[0], win);
@@ -333,14 +335,14 @@ ipcMain.handle('onboarding:install', async (event, editors: unknown[]) => {
 
 // ─── IPC: Updates ─────────────────────────────────────────────────────────────
 
-ipcMain.handle('updates:check', (_, force?: boolean, channel?: 'stable' | 'beta') =>
+ipcMain.handle(IPC_CHANNELS['updates:check'], (_, force?: boolean, channel?: 'stable' | 'beta') =>
   checkForUpdates(force, channel ?? (getPreferences().agentChannel ?? 'stable')));
-ipcMain.handle('updates:apply', async (event, files: unknown[], bundleVersion: string) => {
+ipcMain.handle(IPC_CHANNELS['updates:apply'], async (event, files: unknown[], bundleVersion: string) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
   return applyUpdate(files as Parameters<typeof applyUpdate>[0], bundleVersion, win);
 });
-ipcMain.handle('updates:getVersionInfo', () => getVersionInfo());
+ipcMain.handle(IPC_CHANNELS['updates:getVersionInfo'], () => getVersionInfo());
 
 // ─── IPC: Tickets ─────────────────────────────────────────────────────────────
 
@@ -349,50 +351,50 @@ function resolveSlug(wsId: string): string {
   return ws ? toWorkspaceSlug(ws.name) : wsId;
 }
 
-ipcMain.handle('ticket:getAll', (_, wsId: string) => getTickets(resolveSlug(wsId)));
-ipcMain.handle('ticket:save', (_, wsId: string, t: LocalTicket) => saveTicket(resolveSlug(wsId), t));
-ipcMain.handle('ticket:remove', (_, wsId: string, id: string) => removeTicket(resolveSlug(wsId), id));
+ipcMain.handle(IPC_CHANNELS['ticket:getAll'], (_, wsId: string) => getTickets(resolveSlug(wsId)));
+ipcMain.handle(IPC_CHANNELS['ticket:save'], (_, wsId: string, t: LocalTicket) => saveTicket(resolveSlug(wsId), t));
+ipcMain.handle(IPC_CHANNELS['ticket:remove'], (_, wsId: string, id: string) => removeTicket(resolveSlug(wsId), id));
 
 // ─── IPC: Epics ───────────────────────────────────────────────────────────────
 
-ipcMain.handle('epic:getAll', (_, wsId: string) => getEpics(resolveSlug(wsId)));
-ipcMain.handle('epic:save', (_, wsId: string, e: LocalEpic) => saveEpic(resolveSlug(wsId), e));
-ipcMain.handle('epic:remove', (_, wsId: string, id: string) => removeEpic(resolveSlug(wsId), id));
+ipcMain.handle(IPC_CHANNELS['epic:getAll'], (_, wsId: string) => getEpics(resolveSlug(wsId)));
+ipcMain.handle(IPC_CHANNELS['epic:save'], (_, wsId: string, e: LocalEpic) => saveEpic(resolveSlug(wsId), e));
+ipcMain.handle(IPC_CHANNELS['epic:remove'], (_, wsId: string, id: string) => removeEpic(resolveSlug(wsId), id));
 
 // ─── IPC: Agent context + clipboard ──────────────────────────────────────────
 
-ipcMain.handle('agent:context', (_, wsId: string, ticketId: string, ws: StoredWorkspace) =>
+ipcMain.handle(IPC_CHANNELS['agent:context'], (_, wsId: string, ticketId: string, ws: StoredWorkspace) =>
   generateContext(resolveSlug(wsId), ticketId, ws));
-ipcMain.handle('clipboard:write', (_, text: string) => clipboard.writeText(text));
+ipcMain.handle(IPC_CHANNELS['clipboard:write'], (_, text: string) => clipboard.writeText(text));
 
 // ─── IPC: Terminal (node-pty) ─────────────────────────────────────────────────
 
-ipcMain.handle('terminal:create', (event, repoPath: string) => {
+ipcMain.handle(IPC_CHANNELS['terminal:create'], (event, repoPath: string) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const terminalId = createTerminal(
     repoPath,
-    (data) => win?.webContents.send('terminal:data', { terminalId, data }),
-    (code) => win?.webContents.send('terminal:exit', { terminalId, code }),
+    (data) => win?.webContents.send(IPC_CHANNELS['terminal:data'], { terminalId, data }),
+    (code) => win?.webContents.send(IPC_CHANNELS['terminal:exit'], { terminalId, code }),
   );
   return terminalId;
 });
 
-ipcMain.handle('terminal:write', (_, terminalId: string, data: string) => {
+ipcMain.handle(IPC_CHANNELS['terminal:write'], (_, terminalId: string, data: string) => {
   writeToTerminal(terminalId, data);
 });
 
-ipcMain.handle('terminal:resize', (_, terminalId: string, cols: number, rows: number) => {
+ipcMain.handle(IPC_CHANNELS['terminal:resize'], (_, terminalId: string, cols: number, rows: number) => {
   resizeTerminal(terminalId, cols, rows);
 });
 
-ipcMain.handle('terminal:destroy', (_, terminalId: string) => {
+ipcMain.handle(IPC_CHANNELS['terminal:destroy'], (_, terminalId: string) => {
   destroyTerminal(terminalId);
 });
 
 // ─── IPC: Agent runner (provider: claude/codex/cursor) ───────────────────────
 
 ipcMain.handle(
-  'agent:run',
+  IPC_CHANNELS['agent:run'],
   (
     event,
     repoPath: string,
@@ -427,46 +429,45 @@ ipcMain.handle(
     sessionId ?? null,
     (info) => {
       runId = info.runId;
-      win?.webContents.send('agent:start', info);
+      win?.webContents.send(IPC_CHANNELS['agent:start'], info);
     },
-    (evt) => win?.webContents.send('agent:event', { runId, event: evt }),
-    (exitCode, error, lines) => win?.webContents.send('agent:done', { runId, exitCode, error, rawLines: lines ?? [] }),
+    (evt) => win?.webContents.send(IPC_CHANNELS['agent:event'], { runId, event: evt }),
+    (exitCode, error, lines) => win?.webContents.send(IPC_CHANNELS['agent:done'], { runId, exitCode, error, rawLines: lines ?? [] }),
     additionalDirs,
     (raw) => rawLines.push(raw),
   );
   return runId;
 });
 
-ipcMain.handle('agent:cancel', (_, runId: string) => {
+ipcMain.handle(IPC_CHANNELS['agent:cancel'], (_, runId: string) => {
   cancelAgentRun(runId);
 });
 
 // ─── IPC: Conversations ───────────────────────────────────────────────────────
 
-ipcMain.handle('conversation:getAll', (_, workspaceId: string) => getConversations(resolveSlug(workspaceId)));
-ipcMain.handle('conversation:save', (_, conv: unknown) => {
-  const typedConv = conv as Parameters<typeof saveConversation>[0];
-  saveConversation(typedConv, resolveSlug(typedConv.workspaceId));
+ipcMain.handle(IPC_CHANNELS['conversation:getAll'], (_, workspaceId: string) => getConversations(resolveSlug(workspaceId)));
+ipcMain.handle(IPC_CHANNELS['conversation:save'], (_, conv: StoredConversation) => {
+  saveConversation(conv, resolveSlug(conv.workspaceId));
 });
-ipcMain.handle('conversation:delete', (_, id: string, workspaceId: string) => deleteConversation(id, resolveSlug(workspaceId)));
+ipcMain.handle(IPC_CHANNELS['conversation:delete'], (_, id: string, workspaceId: string) => deleteConversation(id, resolveSlug(workspaceId)));
 
 // ─── IPC: Agent tabs (multi-conversations state) ────────────────────────────
 
-ipcMain.handle('agentTabs:get', (_, workspaceId: string) => getAgentTabsState(resolveSlug(workspaceId)));
-ipcMain.handle('agentTabs:save', (_, workspaceId: string, state: unknown) =>
-  saveAgentTabsState(resolveSlug(workspaceId), state as Parameters<typeof saveAgentTabsState>[1]));
-ipcMain.handle('agentTabs:clear', (_, workspaceId: string) => clearAgentTabsState(resolveSlug(workspaceId)));
+ipcMain.handle(IPC_CHANNELS['agentTabs:get'], (_, workspaceId: string) => getAgentTabsState(resolveSlug(workspaceId)));
+ipcMain.handle(IPC_CHANNELS['agentTabs:save'], (_, workspaceId: string, state: StoredAgentTabsState) =>
+  saveAgentTabsState(resolveSlug(workspaceId), state));
+ipcMain.handle(IPC_CHANNELS['agentTabs:clear'], (_, workspaceId: string) => clearAgentTabsState(resolveSlug(workspaceId)));
 
 // ─── IPC: Jira OAuth ─────────────────────────────────────────────────────────
 
-ipcMain.handle('jira:startAuth', (_, wsId: string) => {
+ipcMain.handle(IPC_CHANNELS['jira:startAuth'], (_, wsId: string) => {
   const state = generateState();
   const { codeVerifier, codeChallenge } = generatePKCE();
   pendingOAuth.set(state, { codeVerifier, wsId });
   openAuthUrl(state, codeChallenge);
 });
 
-ipcMain.handle('jira:disconnect', (_, wsId: string) => {
+ipcMain.handle(IPC_CHANNELS['jira:disconnect'], (_, wsId: string) => {
   clearTokens(wsId);
   const workspaces = getAll();
   const workspace = workspaces.find((w) => w.id === wsId);
@@ -483,17 +484,17 @@ ipcMain.handle('jira:disconnect', (_, wsId: string) => {
   return null;
 });
 
-ipcMain.handle('jira:getStatus', (_, wsId: string) => getTokenMeta(wsId));
+ipcMain.handle(IPC_CHANNELS['jira:getStatus'], (_, wsId: string) => getTokenMeta(wsId));
 
-ipcMain.handle('jira:syncTickets', async (_, wsId: string, workspace: StoredWorkspace) => {
+ipcMain.handle(IPC_CHANNELS['jira:syncTickets'], async (_, wsId: string, workspace: StoredWorkspace) => {
   // Ensure we use the persisted cloudId (workspace from renderer may be stale)
   const persisted = getAll().find((w) => w.id === wsId) ?? workspace;
   return syncJiraTickets(wsId, persisted);
 });
 
-ipcMain.handle('jira:getValidToken', (_, wsId: string) => getValidAccessToken(wsId));
+ipcMain.handle(IPC_CHANNELS['jira:getValidToken'], (_, wsId: string) => getValidAccessToken(wsId));
 
-ipcMain.handle('jira:getProjects', async (_, wsId: string) => {
+ipcMain.handle(IPC_CHANNELS['jira:getProjects'], async (_, wsId: string) => {
   const token = await getValidAccessToken(wsId);
   const workspace = getAll().find((w) => w.id === wsId);
   const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
@@ -501,7 +502,7 @@ ipcMain.handle('jira:getProjects', async (_, wsId: string) => {
   return fetchProjects(token, cloudId);
 });
 
-ipcMain.handle('jira:countTickets', async (_, wsId: string, projectKey: string, syncFilter: string, boardType: string) => {
+ipcMain.handle(IPC_CHANNELS['jira:countTickets'], async (_, wsId: string, projectKey: string, syncFilter: string, boardType: string) => {
   const token = await getValidAccessToken(wsId);
   const workspace = getAll().find((w) => w.id === wsId);
   const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
@@ -509,7 +510,7 @@ ipcMain.handle('jira:countTickets', async (_, wsId: string, projectKey: string, 
   return countIssues(token, cloudId, projectKey, syncFilter as 'sprint_active' | 'last_3_months' | 'all', boardType as 'scrum' | 'kanban' | 'unknown');
 });
 
-ipcMain.handle('jira:getBoardType', async (_, wsId: string, projectKey: string) => {
+ipcMain.handle(IPC_CHANNELS['jira:getBoardType'], async (_, wsId: string, projectKey: string) => {
   const token = await getValidAccessToken(wsId);
   const workspace = getAll().find((w) => w.id === wsId);
   const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
@@ -523,11 +524,11 @@ type McpServerStatus = 'starting' | 'running' | 'stopped';
 
 function broadcastServerStatus(status: McpServerStatus): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send('server:status-change', status);
+    win.webContents.send(IPC_CHANNELS['server:status-change'], status);
   }
 }
 
-ipcMain.handle('server:getStatus', async () => {
+ipcMain.handle(IPC_CHANNELS['server:getStatus'], async () => {
   const prefs = getPreferences();
   const baseUrl = prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL;
   try {
@@ -540,15 +541,15 @@ ipcMain.handle('server:getStatus', async () => {
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────
 
-ipcMain.handle('feedback:sendSession', async (_, data: SessionFeedbackData) => {
+ipcMain.handle(IPC_CHANNELS['feedback:sendSession'], async (_, data: SessionFeedbackData) => {
   await sendSessionFeedback(data);
 });
 
-ipcMain.handle('feedback:sendProduct', async (_, data: ProductFeedbackData) => {
+ipcMain.handle(IPC_CHANNELS['feedback:sendProduct'], async (_, data: ProductFeedbackData) => {
   await sendProductFeedback(data);
 });
 
-ipcMain.handle('server:restart', async () => {
+ipcMain.handle(IPC_CHANNELS['server:restart'], async () => {
   broadcastServerStatus('starting');
   stopServer();
   await new Promise<void>((resolve) => setTimeout(resolve, 300));
@@ -601,7 +602,7 @@ app.whenReady().then(() => {
         const result = await checkForUpdates(false, channel);
         if (result.compatible && result.hasUpdate) {
           const win = BrowserWindow.getAllWindows()[0];
-          win?.webContents.send('updates:available', result);
+          win?.webContents.send(IPC_CHANNELS['updates:available'], result);
         }
       } catch {
         // Silently ignore startup update check errors

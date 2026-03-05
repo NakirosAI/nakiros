@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { StoredWorkspace } from '@nakiros/shared';
 import appIcon from '../assets/icon.svg';
-import type { ResolvedLanguage } from '@nakiros/shared';
 import { SquarePlus } from 'lucide-react';
-import { MESSAGES } from '../i18n';
 
 const RECENT_LIMIT = 5;
 
@@ -12,19 +11,6 @@ interface Props {
   onNewWorkspace(): void;
   onOpenWorkspace(id: string): void;
   bootError?: string;
-  language: ResolvedLanguage;
-}
-
-function timeAgo(iso: string, language: ResolvedLanguage): string {
-  const msg = MESSAGES[language];
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return msg.home.now;
-  if (mins < 60) return msg.home.minutesAgo(mins);
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return msg.home.hoursAgo(hours);
-  const days = Math.floor(hours / 24);
-  return msg.home.daysAgo(days);
 }
 
 export default function Home({
@@ -32,10 +18,20 @@ export default function Home({
   onNewWorkspace,
   onOpenWorkspace,
   bootError,
-  language,
 }: Props) {
-  const msg = MESSAGES[language];
+  const { t } = useTranslation('home');
   const [showAll, setShowAll] = useState(false);
+
+  function timeAgo(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1) return t('now');
+    if (mins < 60) return t('minutesAgo', { count: mins });
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return t('hoursAgo', { count: hours });
+    const days = Math.floor(hours / 24);
+    return t('daysAgo', { count: days });
+  }
 
   useEffect(() => {
     function onKeydown(event: KeyboardEvent) {
@@ -52,106 +48,73 @@ export default function Home({
   const displayed = showAll ? recentWorkspaces : recentWorkspaces.slice(0, RECENT_LIMIT);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        padding: '24px',
-        boxSizing: 'border-box',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 820,
-          background: 'var(--bg-soft)',
-          border: '1px solid var(--line)',
-          borderRadius: 14,
-          boxShadow: 'var(--shadow-sm)',
-          padding: '34px 28px 26px',
-        }}
-      >
-        <div style={{ marginBottom: 28, textAlign: 'left' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div className="box-border flex min-h-screen flex-col items-center justify-center p-6">
+      <div className="w-full max-w-[820px] rounded-[14px] border border-[var(--line)] bg-[var(--bg-soft)] px-7 pb-[26px] pt-[34px] shadow-[var(--shadow-sm)]">
+        <div className="mb-7 text-left">
+          <div className="flex items-center gap-3">
             <img
               src={appIcon}
               alt="Logo Nakiros"
               width={44}
               height={44}
-              style={{ borderRadius: 12, display: 'block' }}
+              className="block rounded-xl"
             />
-            <h1 style={{ margin: 0, fontSize: 34, fontWeight: 750, letterSpacing: '-0.02em' }}>
-              {msg.home.title}
+            <h1 className="m-0 text-[34px] font-[750] tracking-[-0.02em]">
+              {t('title')}
             </h1>
           </div>
-          <p style={{ margin: '10px 0 0', color: 'var(--text-muted)', fontSize: 15, maxWidth: 520 }}>
-            {msg.home.subtitle}
+          <p className="mb-0 mt-2.5 max-w-[520px] text-[15px] text-[var(--text-muted)]">
+            {t('subtitle')}
           </p>
         </div>
 
         {bootError && (
-          <div
-            style={{
-              marginBottom: 16,
-              border: '1px solid #f1b5b5',
-              background: '#fff3f3',
-              color: '#8b1f1f',
-              borderRadius: 10,
-              padding: '10px 12px',
-              fontSize: 13,
-            }}
-          >
+          <div className="mb-4 rounded-[10px] border border-[#f1b5b5] bg-[#fff3f3] px-3 py-2.5 text-[13px] text-[#8b1f1f]">
             {bootError}
           </div>
         )}
 
-        <div style={{ marginBottom: 28 }}>
+        <div className="mb-7">
           <button
             onClick={onNewWorkspace}
-            style={{ ...cardStyle, background: 'var(--primary-soft)', borderColor: 'var(--primary)' }}
+            className="w-[236px] rounded-xl border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] px-[18px] pb-[18px] pt-[22px] text-left"
           >
-            <span style={{ marginBottom: 10, display: 'block', color: 'var(--primary)' }}>
+            <span className="mb-2.5 block text-[var(--primary)]">
               <SquarePlus size={32} />
             </span>
-            <strong style={{ fontSize: 16, display: 'block', marginBottom: 6 }}>
-              {msg.home.createWorkspace}
+            <strong className="mb-1.5 block text-base">
+              {t('createWorkspace')}
             </strong>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              {msg.home.createWorkspaceHint}
+            <span className="text-[13px] text-[var(--text-muted)]">
+              {t('createWorkspaceHint')}
             </span>
-            <span style={shortcutPill}>Ctrl/Cmd + N</span>
+            <span className="ml-[5px] mt-3 inline-block rounded-[10px] border border-[var(--line-strong)] px-2 py-[3px] text-[11px] font-semibold text-[var(--text-muted)]">
+              Ctrl/Cmd + N
+            </span>
           </button>
         </div>
 
         {recentWorkspaces.length > 0 ? (
           <div>
-            <p
-              style={{
-                margin: '0 0 12px',
-                fontSize: 12,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                color: 'var(--text-muted)',
-              }}
-            >
-              {msg.home.recent}
+            <p className="mb-3 mt-0 text-xs font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t('recent')}
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="flex flex-col gap-2">
               {displayed.map((ws) => (
-                <button key={ws.id} onClick={() => onOpenWorkspace(ws.id)} style={recentItemStyle}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                    <span style={{ fontWeight: 700, fontSize: 14 }}>{ws.name}</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {ws.repos.length} repo{ws.repos.length > 1 ? 's' : ''}
+                <button
+                  key={ws.id}
+                  onClick={() => onOpenWorkspace(ws.id)}
+                  className="box-border flex w-full items-center justify-between rounded-[10px] border border-[var(--line)] bg-[var(--bg-soft)] px-3.5 py-3 text-left"
+                >
+                  <div className="flex flex-col items-start gap-0.5">
+                    <span className="text-sm font-bold">{ws.name}</span>
+                    <span className="text-xs text-[var(--text-muted)]">
+                      {t('repoCount', { count: ws.repos.length })}
                       {ws.pmTool ? ` · ${ws.pmTool}${ws.projectKey ? ` ${ws.projectKey}` : ''}` : ''}
                     </span>
                   </div>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                    {timeAgo(ws.lastOpenedAt, language)}
+                  <span className="whitespace-nowrap text-xs text-[var(--text-muted)]">
+                    {timeAgo(ws.lastOpenedAt)}
                   </span>
                 </button>
               ))}
@@ -159,72 +122,18 @@ export default function Home({
             {hasMore && (
               <button
                 onClick={() => setShowAll((prev) => !prev)}
-                style={{
-                  marginTop: 10,
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  color: 'var(--text-muted)',
-                  padding: '4px 2px',
-                }}
+                className="mt-2.5 border-none bg-transparent px-0.5 py-1 text-[13px] text-[var(--text-muted)]"
               >
-                {showAll
-                  ? msg.home.showLess
-                  : msg.home.showMore(recentWorkspaces.length - RECENT_LIMIT)}
+                {showAll ? t('showLess') : t('showMore', { count: recentWorkspaces.length - RECENT_LIMIT })}
               </button>
             )}
           </div>
         ) : (
-          <div
-            style={{
-              border: '1px dashed var(--line-strong)',
-              borderRadius: 10,
-              padding: '14px 16px',
-              color: 'var(--text-muted)',
-              fontSize: 13,
-            }}
-          >
-            {msg.home.noRecent}
+          <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
+            {t('noRecent')}
           </div>
         )}
       </div>
     </div>
   );
 }
-
-const shortcutPill: React.CSSProperties = {
-  marginTop: 12,
-  marginLeft: 5,
-  display: 'inline-block',
-  border: '1px solid var(--line-strong)',
-  color: 'var(--text-muted)',
-  borderRadius: 10,
-  padding: '3px 8px',
-  fontSize: 11,
-  fontWeight: 600,
-};
-
-const cardStyle: React.CSSProperties = {
-  width: 236,
-  padding: '22px 18px 18px',
-  background: 'var(--bg-soft)',
-  border: '1.5px solid var(--line)',
-  borderRadius: 12,
-  cursor: 'pointer',
-  textAlign: 'left',
-};
-
-const recentItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 14px',
-  background: 'var(--bg-soft)',
-  border: '1px solid var(--line)',
-  borderRadius: 10,
-  cursor: 'pointer',
-  textAlign: 'left',
-  width: '100%',
-  boxSizing: 'border-box',
-};

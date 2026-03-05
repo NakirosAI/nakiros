@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { useIpcListener } from '../hooks/useIpcListener';
 
 interface QuickCommand {
   label: string;
@@ -26,12 +27,20 @@ export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_C
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  useIpcListener(window.nakiros.onTerminalData, (evt) => {
+    if (evt.terminalId !== terminalIdRef.current) return;
+    termRef.current?.write(evt.data);
+  });
+
+  useIpcListener(window.nakiros.onTerminalExit, (evt) => {
+    if (evt.terminalId !== terminalIdRef.current) return;
+    termRef.current?.writeln(`\r\n\x1b[2m[Process exited with code ${String(evt.code)}]\x1b[0m`);
+  });
+
   useEffect(() => {
     if (!containerRef.current) return;
 
     let terminalId: string | null = null;
-    let removeDataListener: (() => void) | null = null;
-    let removeExitListener: (() => void) | null = null;
 
     const term = new Terminal({
       theme: {
@@ -73,31 +82,14 @@ export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_C
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Create PTY in main process
     void window.nakiros.terminalCreate(repoPath).then((id) => {
       terminalId = id;
       terminalIdRef.current = id;
 
-      // PTY output → xterm display
-      removeDataListener = window.nakiros.onTerminalData((evt) => {
-        if (evt.terminalId === id) term.write(evt.data);
-      });
-
-      // PTY exit notification
-      removeExitListener = window.nakiros.onTerminalExit((evt) => {
-        if (evt.terminalId === id) {
-          term.writeln('\r\n\x1b[2m[Process exited with code ' + String(evt.code) + ']\x1b[0m');
-        }
-      });
-
-      // User input → PTY
       term.onData((data) => void window.nakiros.terminalWrite(id, data));
-
-      // Resize event → PTY
       term.onResize(({ cols, rows }) => void window.nakiros.terminalResize(id, cols, rows));
     });
 
-    // Resize container → fit terminal
     const observer = new ResizeObserver(() => {
       fitAddonRef.current?.fit();
     });
@@ -105,8 +97,6 @@ export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_C
 
     return () => {
       observer.disconnect();
-      removeDataListener?.();
-      removeExitListener?.();
       if (terminalId) void window.nakiros.terminalDestroy(terminalId);
       term.dispose();
       termRef.current = null;
@@ -123,22 +113,10 @@ export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_C
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#0d1117' }}>
-      {/* Quick command bar */}
+    <div className="flex h-full flex-col bg-[#0d1117]">
       {quickCommands.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '7px 12px',
-            borderBottom: '1px solid #21262d',
-            background: '#161b22',
-            overflowX: 'auto',
-            flexShrink: 0,
-          }}
-        >
-          <span style={{ fontSize: 10, color: '#6e7681', whiteSpace: 'nowrap', marginRight: 4, flexShrink: 0 }}>
+        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-[#21262d] bg-[#161b22] px-3 py-[7px]">
+          <span className="mr-1 shrink-0 whitespace-nowrap text-[10px] text-[#6e7681]">
             Quick run:
           </span>
           {quickCommands.map((qc) => (
@@ -146,7 +124,7 @@ export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_C
               key={qc.command}
               onClick={() => sendCommand(qc.command)}
               title={`Run: ${qc.command}`}
-              style={quickCmdButton}
+              className="shrink-0 whitespace-nowrap rounded-[10px] border border-[#30363d] bg-[#21262d] px-[9px] py-[3px] font-mono text-[11px] text-[#8b949e]"
             >
               {qc.label}
             </button>
@@ -154,30 +132,10 @@ export default function TerminalView({ repoPath, quickCommands = DEFAULT_QUICK_C
         </div>
       )}
 
-      {/* Terminal container */}
       <div
         ref={containerRef}
-        style={{
-          flex: 1,
-          padding: '6px 10px',
-          overflow: 'hidden',
-          minHeight: 0,
-        }}
+        className="min-h-0 flex-1 overflow-hidden px-[10px] py-1.5"
       />
     </div>
   );
 }
-
-const quickCmdButton: React.CSSProperties = {
-  padding: '3px 9px',
-  background: '#21262d',
-  border: '1px solid #30363d',
-  borderRadius: 10,
-  color: '#8b949e',
-  fontSize: 11,
-  fontFamily: '"JetBrains Mono", monospace',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-  flexShrink: 0,
-  transition: 'color 0.15s, border-color 0.15s',
-};

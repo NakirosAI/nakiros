@@ -21,12 +21,10 @@ import {
   getGlobalInstallStatus,
   installAgents,
   installAgentsGlobally,
-  ensureRuntimeInDir,
   ensureCommandsInRepo,
 } from './services/agent-installer.js';
 import { detectEditors, nakirosConfigExists, installNakiros } from './services/onboarding-installer.js';
-import { checkForUpdates, applyUpdate } from './services/update-checker.js';
-import { COMMAND_TEMPLATES } from './templates-bundle.js';
+import { checkForUpdates, applyUpdate, getVersionInfo } from './services/update-checker.js';
 import { getAgentCliStatus } from './services/agent-cli.js';
 import {
   getTickets, saveTicket, removeTicket,
@@ -55,6 +53,8 @@ import {
 } from './services/jira-token-store.js';
 import { syncJiraTickets } from './services/jira-sync.js';
 import { fetchProjects, fetchProjectBoardType, countIssues } from './services/jira-connector.js';
+import { sendSessionFeedback, sendProductFeedback, retryQueue } from './services/feedback-service.js';
+import type { SessionFeedbackData, ProductFeedbackData } from './services/feedback-service.js';
 import type {
   StoredWorkspace,
   LocalTicket,
@@ -328,17 +328,19 @@ ipcMain.handle('onboarding:nakirosConfigExists', () => nakirosConfigExists());
 ipcMain.handle('onboarding:install', async (event, editors: unknown[]) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return { success: false, errors: ['No window'] };
-  return installNakiros(editors as Parameters<typeof installNakiros>[0], COMMAND_TEMPLATES, win);
+  return installNakiros(editors as Parameters<typeof installNakiros>[0], win);
 });
 
 // ─── IPC: Updates ─────────────────────────────────────────────────────────────
 
-ipcMain.handle('updates:check', (_, force?: boolean) => checkForUpdates(force));
-ipcMain.handle('updates:apply', async (event, files: unknown[]) => {
+ipcMain.handle('updates:check', (_, force?: boolean, channel?: 'stable' | 'beta') =>
+  checkForUpdates(force, channel ?? (getPreferences().agentChannel ?? 'stable')));
+ipcMain.handle('updates:apply', async (event, files: unknown[], bundleVersion: string) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
-  return applyUpdate(files as Parameters<typeof applyUpdate>[0], win);
+  return applyUpdate(files as Parameters<typeof applyUpdate>[0], bundleVersion, win);
 });
+ipcMain.handle('updates:getVersionInfo', () => getVersionInfo());
 
 // ─── IPC: Tickets ─────────────────────────────────────────────────────────────
 
@@ -416,8 +418,6 @@ ipcMain.handle(
   } catch (err) {
     console.warn(`[agent:run] Unable to ensure command templates in agent workspace: ${String(err)}`);
   }
-  // Ensure _nakiros/ runtime is present in agent workspace cwd.
-  ensureRuntimeInDir(agentWorkspacePath);
   const rawLines: unknown[] = [];
   let runId = '';
   runId = runAgentCommand(
@@ -538,6 +538,16 @@ ipcMain.handle('server:getStatus', async () => {
   }
 });
 
+// ─── Feedback ─────────────────────────────────────────────────────────────────
+
+ipcMain.handle('feedback:sendSession', async (_, data: SessionFeedbackData) => {
+  await sendSessionFeedback(data);
+});
+
+ipcMain.handle('feedback:sendProduct', async (_, data: ProductFeedbackData) => {
+  await sendProductFeedback(data);
+});
+
 ipcMain.handle('server:restart', async () => {
   broadcastServerStatus('starting');
   stopServer();
@@ -581,13 +591,15 @@ app.whenReady().then(() => {
   createWindow();
 
   void ensureMcpServer(3737);
+  void retryQueue();
 
   // Auto-check for agent/workflow updates (5s delay, respects 24h cooldown)
   setTimeout(() => {
     void (async () => {
       try {
-        const result = await checkForUpdates();
-        if (result.hasUpdate) {
+        const channel = getPreferences().agentChannel ?? 'stable';
+        const result = await checkForUpdates(false, channel);
+        if (result.compatible && result.hasUpdate) {
           const win = BrowserWindow.getAllWindows()[0];
           win?.webContents.send('updates:available', result);
         }

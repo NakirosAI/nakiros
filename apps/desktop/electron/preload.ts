@@ -166,8 +166,9 @@ contextBridge.exposeInMainWorld('nakiros', {
   },
 
   // Updates
-  checkForUpdates: (force?: boolean) => ipcRenderer.invoke('updates:check', force),
-  applyUpdate: (files: unknown[]) => ipcRenderer.invoke('updates:apply', files),
+  checkForUpdates: (force?: boolean, channel?: string) => ipcRenderer.invoke('updates:check', force, channel),
+  applyUpdate: (files: unknown[], bundleVersion: string) => ipcRenderer.invoke('updates:apply', files, bundleVersion),
+  getVersionInfo: () => ipcRenderer.invoke('updates:getVersionInfo'),
   onUpdatesAvailable: (cb: (result: unknown) => void) => {
     const listener = (_: unknown, result: unknown) => cb(result);
     ipcRenderer.on('updates:available', listener);
@@ -178,4 +179,8 @@ contextBridge.exposeInMainWorld('nakiros', {
     ipcRenderer.on('updates:progress', listener);
     return () => ipcRenderer.removeListener('updates:progress', listener);
   },
+
+  // Feedback
+  sendSessionFeedback: (data: unknown) => ipcRenderer.invoke('feedback:sendSession', data),
+  sendProductFeedback: (data: unknown) => ipcRenderer.invoke('feedback:sendProduct', data),
 });

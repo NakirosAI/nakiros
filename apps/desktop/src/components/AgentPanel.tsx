@@ -18,7 +18,8 @@ import {
   Plus,
   X,
 } from 'lucide-react';
-import type { AgentProvider, StoredRepo } from '@nakiros/shared';
+import type { AgentProvider, ResolvedLanguage, StoredRepo } from '@nakiros/shared';
+import SessionFeedback, { type SessionFeedbackHandle } from './SessionFeedback.js';
 
 interface QuickAction {
   label: string;
@@ -277,6 +278,7 @@ interface Props {
   initialMessage?: string;
   initialAgentId?: string;
   persistentHistory?: boolean;
+  lang?: ResolvedLanguage;
   onDone?: () => void;
 }
 
@@ -396,6 +398,7 @@ export default function AgentPanel({
   initialMessage,
   initialAgentId,
   persistentHistory,
+  lang = 'fr',
   onDone,
 }: Props) {
   const [tabs, setTabs] = useState<AgentTabState[]>([]);
@@ -416,6 +419,9 @@ export default function AgentPanel({
   const activeTabIdRef = useRef<string | null>(null);
   const persistTimerRef = useRef<number | null>(null);
   const initialMessageSentRef = useRef(false);
+  const sessionStartTimesRef = useRef(new Map<string, number>());
+  const tabRawLinesRef = useRef(new Map<string, unknown[]>());
+  const feedbackRefsMap = useRef(new Map<string, React.RefObject<SessionFeedbackHandle | null>>());
 
   const repoPathSet = useMemo(() => new Set(repos.map((repo) => repo.localPath)), [repos]);
   const globalWorkspacePath = useMemo(() => {
@@ -792,6 +798,11 @@ export default function AgentPanel({
       const wasCancelled = cancelledRunIdsRef.current.delete(runId);
       if (!tabId) return;
 
+      if (rawLines && rawLines.length > 0) {
+        const existing = tabRawLinesRef.current.get(tabId) ?? [];
+        tabRawLinesRef.current.set(tabId, [...existing, ...rawLines]);
+      }
+
       // Read current tab state from ref synchronously before any React state update.
       // setTabsAndRef's updater runs asynchronously (React batching), so variables set
       // inside it would be stale when checked immediately after. Use refs instead.
@@ -874,6 +885,11 @@ export default function AgentPanel({
     const tab = tabsRef.current.find((item) => item.id === tabId);
     if (!tab) return;
 
+    feedbackRefsMap.current.get(tabId)?.current?.autoSubmitIfPending();
+    feedbackRefsMap.current.delete(tabId);
+    sessionStartTimesRef.current.delete(tabId);
+    tabRawLinesRef.current.delete(tabId);
+
     if (tab.activeRunId) {
       const runId = tab.activeRunId;
       cancelledRunIdsRef.current.add(runId);
@@ -909,6 +925,9 @@ export default function AgentPanel({
     if (!currentTab || currentTab.activeRunId) return;
 
     const userMessageCount = currentTab.messages.filter((msg) => msg.role === 'user').length;
+    if (userMessageCount === 0 && !sessionStartTimesRef.current.has(tabId)) {
+      sessionStartTimesRef.current.set(tabId, Date.now());
+    }
     const shouldInjectPresetCommand = Boolean(selectedOption?.command) && userMessageCount === 0;
     if (!text && !shouldInjectPresetCommand) return;
 
@@ -1424,6 +1443,30 @@ export default function AgentPanel({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {activeTab && activeMessages.length > 0 && (() => {
+        if (!feedbackRefsMap.current.has(activeTab.id)) {
+          feedbackRefsMap.current.set(activeTab.id, { current: null });
+        }
+        const fbRef = feedbackRefsMap.current.get(activeTab.id)!;
+        return (
+          <SessionFeedback
+            ref={fbRef}
+            sessionId={activeTab.id}
+            workspaceId={workspaceId}
+            agent={selectedAgent}
+            workflow={null}
+            editor={activeTab.provider ?? 'claude'}
+            messageCount={activeMessages.length}
+            getDurationSeconds={() => {
+              const start = sessionStartTimesRef.current.get(activeTab.id);
+              return start ? Math.floor((Date.now() - start) / 1000) : 0;
+            }}
+            getRawLines={() => tabRawLinesRef.current.get(activeTab.id) ?? []}
+            lang={lang}
+          />
+        );
+      })()}
 
       <div style={inputBar}>
         {persistentHistory && (

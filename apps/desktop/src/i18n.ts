@@ -211,6 +211,28 @@ type Dictionary = {
     contextCopied: (ticketId: string) => string;
     contextCopyError: string;
   };
+  feedback: {
+    sessionQuestion: string;
+    commentPlaceholder: string;
+    shareConversation: string;
+    shareWarning: string;
+    send: string;
+    thanks: string;
+    productTitle: string;
+    productButton: string;
+    categoryLabel: string;
+    messageLabel: string;
+    messageMin: string;
+    cancel: string;
+    errorNetwork: string;
+    categories: {
+      bug: string;
+      suggestion: string;
+      agent: string;
+      workflow: string;
+      ux: string;
+    };
+  };
 };
 
 const fr: Dictionary = {
@@ -417,6 +439,28 @@ const fr: Dictionary = {
     contextCopied: (ticketId) => `Contexte ${ticketId} copié`,
     contextCopyError: 'Échec de la copie du contexte. Réessaie.',
   },
+  feedback: {
+    sessionQuestion: 'Cette conversation vous a-t-elle été utile ?',
+    commentPlaceholder: 'Un commentaire ? (optionnel)',
+    shareConversation: 'Partager cette conversation pour aider à améliorer Nakiros',
+    shareWarning: '⚠️ La conversation sera envoyée à l\'équipe Nakiros. Elle peut contenir des informations sur votre projet.',
+    send: 'Envoyer →',
+    thanks: 'Merci pour votre retour 🙏',
+    productTitle: 'Donnez-nous votre avis',
+    productButton: 'Feedback',
+    categoryLabel: 'Catégorie',
+    messageLabel: 'Votre message',
+    messageMin: 'Minimum 10 caractères',
+    cancel: 'Annuler',
+    errorNetwork: 'Impossible d\'envoyer le feedback. Réessayez.',
+    categories: {
+      bug: 'Bug',
+      suggestion: 'Suggestion',
+      agent: 'Agent',
+      workflow: 'Workflow',
+      ux: 'UX / Interface',
+    },
+  },
 };
 
 const en: Dictionary = {
@@ -622,6 +666,28 @@ const en: Dictionary = {
   toast: {
     contextCopied: (ticketId) => `${ticketId} context copied`,
     contextCopyError: 'Failed to copy context. Try again.',
+  },
+  feedback: {
+    sessionQuestion: 'Was this conversation helpful?',
+    commentPlaceholder: 'Any comment? (optional)',
+    shareConversation: 'Share this conversation to help improve Nakiros',
+    shareWarning: '⚠️ The conversation will be sent to the Nakiros team. It may contain information about your project.',
+    send: 'Send →',
+    thanks: 'Thanks for your feedback 🙏',
+    productTitle: 'Share your feedback',
+    productButton: 'Feedback',
+    categoryLabel: 'Category',
+    messageLabel: 'Your message',
+    messageMin: 'Minimum 10 characters',
+    cancel: 'Cancel',
+    errorNetwork: 'Unable to send feedback. Please try again.',
+    categories: {
+      bug: 'Bug',
+      suggestion: 'Suggestion',
+      agent: 'Agent',
+      workflow: 'Workflow',
+      ux: 'UX / Interface',
+    },
   },
 };
 

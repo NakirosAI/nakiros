@@ -10,6 +10,7 @@ import type {
 import { Settings2 } from 'lucide-react';
 import appIcon from '../assets/icon.svg';
 import ContextPanel from '../components/ContextPanel';
+import FeedbackModal from '../components/FeedbackModal';
 import GlobalSettings from '../components/GlobalSettings';
 import KanbanBoard from '../components/KanbanBoard';
 import ProjectSettings from '../components/ProjectSettings';
@@ -61,6 +62,7 @@ export default function Dashboard({
 
   const [activeTab, setActiveTab] = useState<SidebarTab>('overview');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [tickets, setTickets] = useState<LocalTicket[]>([]);
   const [epics, setEpics] = useState<LocalEpic[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<LocalTicket | null>(null);
@@ -342,6 +344,21 @@ export default function Dashboard({
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>MCP</span>
           </button>
           <button
+            onClick={() => setShowFeedbackModal(true)}
+            title={msg.feedback.productTitle}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--line)',
+              borderRadius: 8,
+              color: 'var(--text-muted)',
+              fontSize: 11,
+              padding: '4px 9px',
+              cursor: 'pointer',
+            }}
+          >
+            {msg.feedback.productButton}
+          </button>
+          <button
             onClick={() => setShowGlobalSettings((prev) => !prev)}
             title={msg.settings.title}
             aria-label={msg.settings.title}
@@ -402,7 +419,7 @@ export default function Dashboard({
 
           {!showGlobalSettings && activeTab === 'chat' && (
             <div style={{ flex: 1, minWidth: 0, display: 'flex', overflow: 'hidden' }}>
-              <ChatView workspace={workspace} />
+              <ChatView workspace={workspace} lang={language} />
             </div>
           )}
 
@@ -470,6 +487,13 @@ export default function Dashboard({
           )}
         </div>
       </div>
+      {showFeedbackModal && (
+        <FeedbackModal
+          lang={language}
+          onClose={() => setShowFeedbackModal(false)}
+          onToast={pushToast}
+        />
+      )}
       {toast && (
         <div
           style={{

@@ -35,6 +35,25 @@ interface JiraAuthErrorPayload {
   error: string;
 }
 
+interface SessionFeedbackData {
+  session_id: string;
+  workspace_id: string;
+  rating: 1 | -1;
+  comment?: string;
+  agent: string;
+  workflow?: string;
+  editor: string;
+  duration_seconds?: number;
+  message_count?: number;
+  conversation_shared?: boolean;
+  conversation?: unknown;
+}
+
+interface ProductFeedbackData {
+  category: 'bug' | 'suggestion' | 'agent' | 'workflow' | 'ux';
+  message: string;
+}
+
 declare global {
   interface DetectedEditor {
     id: 'claude' | 'cursor' | 'codex';
@@ -55,19 +74,33 @@ declare global {
   }
 
   interface UpdateManifestFile {
-    type: 'agent' | 'workflow' | 'core';
+    type: 'agent' | 'workflow' | 'command' | 'core';
     name: string;
     filename: string;
-    version: string;
-    hash: string;
-    url: string;
+    path: string;         // e.g. "agents/dev.md"
+    hash: string;         // "sha256:..."
+    downloadUrl: string;  // computed in checkForUpdates
   }
 
   interface UpdateCheckResult {
     hasUpdate: boolean;
+    compatible: boolean;
+    networkError?: boolean;
+    incompatibleReason?: string;   // "min_app_version" | "required_features"
+    incompatibleMessage?: string;
     latestVersion: string;
     changelog: string;
+    channel: string;
     changedFiles: UpdateManifestFile[];
+  }
+
+  interface BundleVersionInfo {
+    bundle_version: string;
+    channel: string;
+    app_version: string;
+    last_check: string;
+    installed_at: string;
+    files: Record<string, string>; // path → "sha256:..."
   }
 
   interface ScannedDoc {
@@ -261,10 +294,15 @@ declare global {
       onOnboardingProgress(cb: (event: OnboardingProgressEvent) => void): () => void;
 
       // Updates
-      checkForUpdates(force?: boolean): Promise<UpdateCheckResult>;
-      applyUpdate(files: UpdateManifestFile[]): Promise<void>;
+      checkForUpdates(force?: boolean, channel?: string): Promise<UpdateCheckResult>;
+      applyUpdate(files: UpdateManifestFile[], bundleVersion: string): Promise<void>;
+      getVersionInfo(): Promise<BundleVersionInfo | null>;
       onUpdatesAvailable(cb: (result: UpdateCheckResult) => void): () => void;
       onUpdatesProgress(cb: (event: { file: string; done: boolean; error?: string }) => void): () => void;
+
+      // Feedback
+      sendSessionFeedback(data: SessionFeedbackData): Promise<void>;
+      sendProductFeedback(data: ProductFeedbackData): Promise<void>;
     };
   }
 }

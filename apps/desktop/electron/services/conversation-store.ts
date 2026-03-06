@@ -18,6 +18,10 @@ function ensureSessionsDir(workspaceId: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
+function toWorkspaceSlug(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'workspace';
+}
+
 function normalizeConversation(raw: unknown): StoredConversation | null {
   if (!raw || typeof raw !== 'object') return null;
   const item = raw as Record<string, unknown>;
@@ -33,14 +37,38 @@ function normalizeConversation(raw: unknown): StoredConversation | null {
   const provider = item['provider'];
   const normalizedProvider: AgentProvider =
     provider === 'codex' || provider === 'cursor' || provider === 'claude' ? provider : 'claude';
+  const workspaceId = item['workspaceId'];
+  const repoPath = typeof item['repoPath'] === 'string' ? item['repoPath'] : '';
+  const workspaceName = typeof item['workspaceName'] === 'string'
+    ? item['workspaceName']
+    : (typeof workspaceId === 'string' ? workspaceId : '');
+  const workspaceSlug = typeof item['workspaceSlug'] === 'string'
+    ? item['workspaceSlug']
+    : toWorkspaceSlug(workspaceName || (typeof workspaceId === 'string' ? workspaceId : 'workspace'));
+  const mode = item['mode'] === 'repo' ? 'repo' : 'global';
+  const anchorRepoPath = typeof item['anchorRepoPath'] === 'string'
+    ? item['anchorRepoPath']
+    : repoPath;
+  const activeRepoPaths = Array.isArray(item['activeRepoPaths'])
+    ? item['activeRepoPaths'].filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
+    : (repoPath ? [repoPath] : []);
+  const lastResolvedRepoMentions = Array.isArray(item['lastResolvedRepoMentions'])
+    ? item['lastResolvedRepoMentions'].filter((token): token is string => typeof token === 'string' && token.trim().length > 0)
+    : [];
 
   return {
     id: item['id'],
     sessionId: item['sessionId'],
-    repoPath: typeof item['repoPath'] === 'string' ? item['repoPath'] : '',
+    workspaceId: item['workspaceId'],
+    workspaceSlug,
+    workspaceName,
+    mode,
+    anchorRepoPath,
+    activeRepoPaths,
+    lastResolvedRepoMentions,
+    repoPath,
     repoName: typeof item['repoName'] === 'string' ? item['repoName'] : '',
     provider: normalizedProvider,
-    workspaceId: item['workspaceId'],
     title: item['title'],
     agents: Array.isArray(item['agents']) ? item['agents'].filter((a) => typeof a === 'string') : [],
     createdAt: item['createdAt'],

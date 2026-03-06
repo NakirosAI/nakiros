@@ -25,7 +25,7 @@ interface Props {
 }
 
 // Names (without .md ext) expected in each repo's _nakiros/ subfolder
-const NAKIROS_EXPECTED_NAMES = ['architecture', 'conventions', 'llms.txt'];
+const NAKIROS_EXPECTED_NAMES = ['architecture', 'stack', 'conventions', 'api', 'llms.txt'];
 
 export default function ContextPanel({
   workspace,
@@ -46,7 +46,7 @@ export default function ContextPanel({
   const [lastScanAt, setLastScanAt] = useState<number | null>(null);
   const scanningRef = useRef(false);
   const hasRepos = workspace.repos.length > 0;
-  const pmWorkflow = useMemo(
+  const projectContextWorkflow = useMemo(
     () => WORKFLOW_CAPABILITIES.find((capability) => capability.id === 'fetch-project-context'),
     [],
   );
@@ -250,9 +250,9 @@ export default function ContextPanel({
               onClick={() => onOpenChat?.()}
             />
             <ActionButton
-              label={t('pmContext')}
+              label={t('productContext')}
               description="/nak-workflow-fetch-project-context"
-              badge={pmWorkflow?.status === 'beta' ? t('betaBadge') : undefined}
+              badge={projectContextWorkflow?.status === 'beta' ? t('betaBadge') : undefined}
               onClick={() => onOpenChat?.()}
             />
             <ActionButton
@@ -260,8 +260,8 @@ export default function ContextPanel({
               description={t('openChatDescription')}
               onClick={() => onOpenChat?.()}
             />
-            {pmWorkflow?.status === 'beta' && (
-              <p className="mb-0 mt-1 text-[11px] text-[var(--text-muted)]">{t('pmWorkflowBetaFallback')}</p>
+            {projectContextWorkflow?.status === 'beta' && (
+              <p className="mb-0 mt-1 text-[11px] text-[var(--text-muted)]">{t('projectContextWorkflowBetaFallback')}</p>
             )}
           </div>
         </div>

@@ -34,7 +34,7 @@ import {
 } from './services/ticket-storage.js';
 import { generateContext } from './services/agent-context.js';
 import { createTerminal, writeToTerminal, resizeTerminal, destroyTerminal } from './services/terminal.js';
-import { runAgentCommand, cancelAgentRun } from './services/agent-runner.js';
+import { runAgentCommand, cancelAgentRun, resolveAgentCwd } from './services/agent-runner.js';
 import { getConversations, saveConversation, deleteConversation } from './services/conversation-store.js';
 import { getAgentTabsState, saveAgentTabsState, clearAgentTabsState } from './services/agent-tabs-store.js';
 import {
@@ -57,6 +57,7 @@ import { fetchProjects, fetchProjectBoardType, countIssues } from './services/ji
 import { sendSessionFeedback, sendProductFeedback, retryQueue } from './services/feedback-service.js';
 import type { SessionFeedbackData, ProductFeedbackData } from './services/feedback-service.js';
 import type {
+  AgentRunRequest,
   StoredWorkspace,
   LocalTicket,
   LocalEpic,
@@ -488,47 +489,50 @@ ipcMain.handle(
   IPC_CHANNELS['agent:run'],
   (
     event,
-    repoPath: string,
-    message: string,
-    sessionId: string | null,
-    additionalDirs?: string[],
-    requestedProvider?: AgentProvider,
+    request: AgentRunRequest,
   ) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const prefs = getPreferences();
-  const provider = (
-    requestedProvider === 'claude'
-    || requestedProvider === 'codex'
-    || requestedProvider === 'cursor'
-  )
-    ? requestedProvider
-    : (prefs.agentProvider ?? 'claude');
-  const agentWorkspacePath = resolve(homedir(), '.nakiros');
-  // Use `let` + capture in onStart to avoid TDZ: onDone can fire synchronously
-  // (e.g. spawn error) before the `const runId = ...` assignment completes.
-  try {
-    ensureCommandsInRepo(agentWorkspacePath, provider);
-  } catch (err) {
-    console.warn(`[agent:run] Unable to ensure command templates in agent workspace: ${String(err)}`);
-  }
-  const rawLines: unknown[] = [];
-  let runId = '';
-  runId = runAgentCommand(
-    provider,
-    repoPath,
-    message,
-    sessionId ?? null,
-    (info) => {
-      runId = info.runId;
-      win?.webContents.send(IPC_CHANNELS['agent:start'], info);
-    },
-    (evt) => win?.webContents.send(IPC_CHANNELS['agent:event'], { runId, event: evt }),
-    (exitCode, error, lines) => win?.webContents.send(IPC_CHANNELS['agent:done'], { runId, exitCode, error, rawLines: lines ?? [] }),
-    additionalDirs,
-    (raw) => rawLines.push(raw),
-  );
-  return runId;
-});
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const prefs = getPreferences();
+    const repoPath = request.anchorRepoPath;
+    const additionalDirs = request.additionalDirs ?? request.activeRepoPaths;
+    const requestedProvider = request.provider;
+    const provider = (
+      requestedProvider === 'claude'
+      || requestedProvider === 'codex'
+      || requestedProvider === 'cursor'
+    )
+      ? requestedProvider
+      : (prefs.agentProvider ?? 'claude');
+    const agentWorkspacePath = resolve(homedir(), '.nakiros');
+    const effectiveAgentCwd = resolveAgentCwd(repoPath, additionalDirs);
+
+    try {
+      ensureCommandsInRepo(agentWorkspacePath, provider);
+    } catch (err) {
+      console.warn(`[agent:run] Unable to ensure command templates in agent workspace: ${String(err)}`);
+    }
+    try {
+      ensureCommandsInRepo(effectiveAgentCwd, provider);
+    } catch (err) {
+      console.warn(`[agent:run] Unable to ensure command templates in effective cwd ${effectiveAgentCwd}: ${String(err)}`);
+    }
+
+    const rawLines: unknown[] = [];
+    let runId = '';
+    runId = runAgentCommand(
+      provider,
+      request,
+      (info) => {
+        runId = info.runId;
+        win?.webContents.send(IPC_CHANNELS['agent:start'], info);
+      },
+      (evt) => win?.webContents.send(IPC_CHANNELS['agent:event'], { runId, event: evt }),
+      (exitCode, error, lines) => win?.webContents.send(IPC_CHANNELS['agent:done'], { runId, exitCode, error, rawLines: lines ?? [] }),
+      (raw) => rawLines.push(raw),
+    );
+    return runId;
+  },
+);
 
 ipcMain.handle(IPC_CHANNELS['agent:cancel'], (_, runId: string) => {
   cancelAgentRun(runId);

@@ -1,5 +1,5 @@
 ---
-description: 'Analyse l''architecture et le contexte PM de tous les repos du workspace. Présente les findings pour validation, puis génère les fichiers de contexte.'
+description: 'Analyse les repos du workspace comme un contexte d''onboarding et d''exécution, puis génère les fichiers de contexte stables.'
 disable-model-invocation: true
 ---
 
@@ -8,8 +8,8 @@ Command Trigger: `/nak-workflow-generate-context`
 ## Workflow Intent
 
 Produce context files for the workspace:
-- Per-repo: `{repo}/.nakiros/context/architecture.md`
-- Workspace-level (in primary repo): `.nakiros/workspace/global-context.md`, `.nakiros/workspace/pm-context.md`
+- Per-repo: `{repo}/_nakiros/architecture.md`, `stack.md`, `conventions.md`, `api.md`, `llms.txt`
+- Workspace-level: `~/.nakiros/workspaces/{workspace_slug}/context/global-context.md`, `product-context.md`, and `inter-repo.md` when needed
 
 This workflow is **interactive**: it presents its findings before generating any files, and waits for explicit user confirmation.
 

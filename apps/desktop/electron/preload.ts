@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '@nakiros/shared';
 import type {
+  AgentRunRequest,
   AgentProvider,
   StoredWorkspace,
   StoredConversation,
@@ -56,13 +57,7 @@ contextBridge.exposeInMainWorld('nakiros', {
   writeClipboard: (text: string) => ipcRenderer.invoke(IPC_CHANNELS['clipboard:write'], text),
 
   // Agent runner
-  agentRun: (
-    repoPath: string,
-    message: string,
-    sessionId: string | null = null,
-    additionalDirs?: string[],
-    provider?: AgentProvider,
-  ) => ipcRenderer.invoke(IPC_CHANNELS['agent:run'], repoPath, message, sessionId, additionalDirs, provider),
+  agentRun: (request: AgentRunRequest) => ipcRenderer.invoke(IPC_CHANNELS['agent:run'], request),
   agentCancel: (runId: string) => ipcRenderer.invoke(IPC_CHANNELS['agent:cancel'], runId),
   onAgentStart: (cb: (event: { runId: string; command: string; cwd: string }) => void) => {
     const listener = (_: unknown, payload: { runId: string; command: string; cwd: string }) => cb(payload);

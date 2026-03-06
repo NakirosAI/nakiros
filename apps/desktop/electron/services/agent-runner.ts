@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
 import { homedir, platform } from 'os';
 import { resolve } from 'path';
-import type { AgentProvider } from '@nakiros/shared';
+import type { AgentProvider, AgentRunRequest } from '@nakiros/shared';
 
 // ─── Env / shell resolution ───────────────────────────────────────────────────
 
@@ -330,10 +330,27 @@ interface RunEntry { kill: () => void }
 const runs = new Map<string, RunEntry>();
 let runCounter = 0;
 
-function resolveAgentCwd(): string {
-  const cwd = resolve(homedir(), '.nakiros');
-  mkdirSync(cwd, { recursive: true });
-  return cwd;
+function hasProjectMarkers(candidate: string): boolean {
+  return (
+    existsSync(resolve(candidate, '.nakiros.yaml'))
+    || existsSync(resolve(candidate, '_nakiros', 'workspace.yaml'))
+  );
+}
+
+export function resolveAgentCwd(repoPath?: string, additionalDirs?: string[]): string {
+  const normalizedCandidates = Array.from(new Set([
+    ...(repoPath ? [resolve(repoPath)] : []),
+    ...((additionalDirs ?? []).filter((d) => d.trim().length > 0).map((d) => resolve(d))),
+  ])).filter((candidate) => existsSync(candidate));
+
+  const projectScopedCwd = normalizedCandidates.find((candidate) => hasProjectMarkers(candidate));
+  if (projectScopedCwd) return projectScopedCwd;
+
+  if (normalizedCandidates.length > 0) return normalizedCandidates[0]!;
+
+  const fallbackCwd = resolve(homedir(), '.nakiros');
+  mkdirSync(fallbackCwd, { recursive: true });
+  return fallbackCwd;
 }
 
 export interface RunStartInfo {
@@ -344,17 +361,18 @@ export interface RunStartInfo {
 
 export function runAgentCommand(
   provider: AgentProvider,
-  repoPath: string,
-  message: string,
-  sessionId: string | null,
+  request: AgentRunRequest,
   onStart: (info: RunStartInfo) => void,
   onEvent: (event: StreamEvent) => void,
   onDone: (exitCode: number, error?: string, rawLines?: unknown[]) => void,
-  additionalDirs?: string[],
   onRawLine?: (raw: unknown) => void,
 ): string {
   const runId = `run-${++runCounter}`;
-  const cwd = resolveAgentCwd();
+  const repoPath = request.anchorRepoPath;
+  const message = request.message;
+  const sessionId = request.sessionId ?? null;
+  const additionalDirs = request.additionalDirs ?? request.activeRepoPaths;
+  const cwd = resolveAgentCwd(repoPath, additionalDirs);
   const mergedAdditionalDirs = Array.from(new Set([
     ...(repoPath ? [resolve(repoPath)] : []),
     ...((additionalDirs ?? []).filter((d) => d.trim().length > 0).map((d) => resolve(d))),

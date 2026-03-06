@@ -4,6 +4,7 @@ import { readdir, readFile, stat } from 'fs/promises';
 import { homedir } from 'os';
 import { basename, dirname, join, resolve } from 'path';
 import type { StoredWorkspace } from '@nakiros/shared';
+import { resolveWorkspaceSlug } from './workspace';
 
 export interface ScannedDoc {
   name: string;
@@ -42,12 +43,13 @@ const PRIORITY_ROOT_FILES = new Set([
 
 const PRIORITY_DIRS = ['docs', '_bmad-output', '_nakiros'];
 const GENERATED_TIQUORA_PREFIXES = [
-  '.nakiros/context/',
-  '.nakiros/workspace/',
   '_nakiros/',
 ];
 
-const GLOBAL_EXPECTED_FILES = ['global-context.md', 'inter-repo.md', 'pm-context.md'];
+const GLOBAL_EXPECTED_FILES = ['global-context.md', 'inter-repo.md', 'product-context.md'];
+const GLOBAL_FILE_ALIASES: Record<string, string[]> = {
+  'product-context.md': ['pm-context.md'],
+};
 
 function isExcluded(relPath: string): boolean {
   const normalized = relPath.replace(/\\/g, '/');
@@ -149,26 +151,35 @@ function getPrimaryRepoPath(workspace: StoredWorkspace): string {
   if (workspace.repos.length > 0) {
     return workspace.repos[0]!.localPath;
   }
-  const scratchDir = join(homedir(), '.nakiros', 'workspaces', workspace.id);
+  const scratchDir = join(
+    homedir(),
+    '.nakiros',
+    'workspaces',
+    resolveWorkspaceSlug(workspace.id, workspace.name),
+  );
   mkdirSync(scratchDir, { recursive: true });
   return scratchDir;
 }
 
-async function scanGlobalSection(workspaceId: string): Promise<GlobalSection> {
-  const contextDir = join(homedir(), '.nakiros', 'workspaces', workspaceId, 'context');
+async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSection> {
+  const workspaceSlug = resolveWorkspaceSlug(workspace.id, workspace.name);
+  const contextDir = join(homedir(), '.nakiros', 'workspaces', workspaceSlug, 'context');
   const docs: ScannedDoc[] = [];
   const missingNames: string[] = [];
 
   for (const filename of GLOBAL_EXPECTED_FILES) {
-    const absolutePath = join(contextDir, filename);
-    if (existsSync(absolutePath)) {
+    const candidates = [filename, ...(GLOBAL_FILE_ALIASES[filename] ?? [])];
+    const resolvedFilename = candidates.find((candidate) => existsSync(join(contextDir, candidate)));
+
+    if (resolvedFilename) {
+      const absolutePath = join(contextDir, resolvedFilename);
       let lastModifiedAt: number | undefined;
       try {
         const metaPath = join(contextDir, 'meta.json');
         if (existsSync(metaPath)) {
           const raw = await readFile(metaPath, 'utf-8');
           const meta = JSON.parse(raw) as Record<string, { generatedAt?: number }>;
-          lastModifiedAt = meta[filename]?.generatedAt;
+          lastModifiedAt = meta[resolvedFilename]?.generatedAt ?? meta[filename]?.generatedAt;
         }
         if (!lastModifiedAt) {
           const filestat = await stat(absolutePath);
@@ -179,7 +190,7 @@ async function scanGlobalSection(workspaceId: string): Promise<GlobalSection> {
       }
       docs.push({
         name: filename.replace(/\.md$/i, ''),
-        relativePath: `context/${filename}`,
+        relativePath: `context/${resolvedFilename}`,
         absolutePath,
         isGenerated: true,
         lastModifiedAt,
@@ -205,7 +216,7 @@ export async function scanWorkspaceDocs(workspace: StoredWorkspace): Promise<Sca
           docs: await walkMarkdown(repo.localPath, repo.llmDocs),
         })),
     ),
-    scanGlobalSection(workspace.id),
+    scanGlobalSection(workspace),
   ]);
 
   const repos = repoResults.filter((r) => r.docs.length > 0);

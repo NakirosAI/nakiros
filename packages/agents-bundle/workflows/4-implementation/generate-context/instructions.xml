@@ -1,0 +1,178 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language.</critical>
+  <critical>Write ALL output documents in document_language — optimized for AI agent consumption.</critical>
+  <critical>Every structural claim must cite a specific file path. Distinguish confirmed evidence from inference and unknowns.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+
+  <step n="1" goal="Load configuration and enumerate repos">
+    <action>Load project config from {project_config} (required). Warn but continue if missing.</action>
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Build effective config. Apply defaults: communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Check for {workspace_config}. If found, treat it as a lightweight pointer only.</action>
+    <action if="workspace_config found">Read `workspace_slug` first, then `workspace_name` from {workspace_config}.</action>
+    <action if="workspace_config found">Load `~/.nakiros/workspaces/{workspace_slug}/workspace.json` as the source of truth.</action>
+
+    <action>Determine the list of repos to analyze:
+      - If workspace_config found: {{repos_to_analyze}} = all repos listed in workspace.json
+      - Otherwise: {{repos_to_analyze}} = [current repo (project-root)]
+    </action>
+
+    <critical>MULTI-REPO COMMIT: You MUST analyze ALL repos in {{repos_to_analyze}}, not just the cwd.
+      Output this numbered list now:
+        "Repos détectés (N total) :
+         1. {name} — {localPath}
+         2. {name} — {localPath}
+         ..."
+      You are required to complete Steps 2 and 3 for EVERY repo in this list.
+    </critical>
+
+    <output>[GENERATE-CONTEXT] ✓ Config chargée | {N} repo(s) à analyser</output>
+  </step>
+
+  <step n="2" goal="Discovery — analyse workspace et onboarding view (lecture seule, aucun fichier écrit)">
+    <critical>THIS STEP IS READ-ONLY. Do NOT write any files. Collect findings in memory only.</critical>
+    <critical>Load Architect persona from ~/.nakiros/agents/architect.md. Apply architecture-scan reflex.</critical>
+
+    <action for="each repo in repos_to_analyze">
+      <action>Set {{current_repo_path}} = repo.localPath. Set {{current_repo_name}} = repo.name.</action>
+      <action>2.1 — Repo purpose: identify what business or platform responsibility this repo appears to own, citing concrete files.</action>
+      <action>2.2 — Entry Points &amp; Stack: identify main entry files and dependency manifests in {{current_repo_path}}.</action>
+      <action>2.3 — Main modules: map dominant directories/modules and the responsibilities they seem to carry.</action>
+      <action>2.4 — Contracts &amp; execution hints: capture exposed APIs/events/types, plus run/test/build commands when discoverable.</action>
+      <action>2.5 — Migration zones / debt / hotspots: flag legacy boundaries, double-writes, hard-coded infra, weak contracts, or risky areas with severity and file reference.</action>
+      <action>2.6 — Confidence: note the current understanding level and explicit unknowns.</action>
+      <action>Store findings as {{findings_repo_N}} in memory. Do not write to disk.</action>
+    </action>
+
+    <check if="workspace_config found (multi-repo)">
+      <action>2.7 — Product/system view: map main end-to-end flows, source-of-truth ownership per domain, and dependency chains between repos.</action>
+      <action>Store as {{findings_workspace_overview}} in memory.</action>
+    </check>
+
+    <output>[GENERATE-CONTEXT] ✓ Analyse complète | {N} repo(s) analysé(s) — en attente de validation</output>
+  </step>
+
+  <step n="3" goal="Présentation et validation utilisateur">
+    <critical>STOP HERE. Do NOT proceed to file generation until the user explicitly confirms.</critical>
+
+    <action>Present findings for each repo in communication_language, using this structure:
+
+      "📊 **Voici ce que j'ai compris sur [workspace_name] ({N} repos)** :
+
+      **[repo_name]** (`role`) — `localPath`
+      - Purpose : {what this repo seems to own}
+      - Stack : {language + framework + key libs}
+      - Main modules : {2–3 dominant modules or directories}
+      - Contracts &amp; execution : {key API/events/types and useful run/test clues}
+      - Risks / migration : {2–3 important observations}
+      - Confidence : {high|medium|low} — {main unknown if any}
+
+      [repeat for each repo]
+
+      {if multi-repo:}
+      **Vue système**
+      - {product purpose / end-to-end flow}
+      - {source of truth or contract dependency}
+      - {recommended repo order for a common change}
+
+      ---
+      ✅ **Tapez 'oui' pour générer les fichiers de contexte**, ou donnez vos corrections/ajouts avant que je commence."
+    </action>
+  </step>
+
+  <step n="4" goal="Spawn Repo Architect sub-agent — analyse approfondie par repo">
+    <critical>Only execute after user confirmation. Incorporate any corrections the user mentioned.</critical>
+    <critical>For EACH repo: spawn a dedicated repo-architect sub-agent via Task tool. Do NOT do the analysis yourself.</critical>
+
+    <action for="each repo in repos_to_analyze">
+      <action>Set {{current_repo_path}} = repo.localPath. Set {{current_repo_name}} = repo.name.</action>
+      <action>Set {{arch_findings_file}} = {{current_repo_path}}/_nakiros/.findings/arch.json</action>
+      <action>Ensure directory {{current_repo_path}}/_nakiros/.findings/ exists.</action>
+
+      <action>Load task template from {steps_path}/step-02-arch-agent.md.</action>
+      <action>Spawn Task (sub-agent) with the content of step-02-arch-agent.md, substituting:
+        - {{repo_name}}             = {{current_repo_name}}
+        - {{repo_path}}             = {{current_repo_path}}
+        - {{architect_agent_file}}  = ~/.nakiros/agents/architect.md
+        - {{findings_output}}       = {{arch_findings_file}}
+        - {{corrections}}           = user corrections if any, or "None"
+        - {{date}}                  = today's date
+      </action>
+
+      <output>[GENERATE-CONTEXT] ⏳ [Repo Architect] → {{current_repo_name}}…</output>
+      <output>[GENERATE-CONTEXT] ✓ [Repo Architect] findings → {{arch_findings_file}}</output>
+    </action>
+
+    <output>[GENERATE-CONTEXT] ✓ Phase Repo Architect complète — {N} repo(s) analysé(s)</output>
+  </step>
+
+  <step n="5" goal="Spawn Product Analyst sub-agent — contexte produit de l'existant">
+    <critical>Spawn a single Product Analyst sub-agent covering ALL repos in the workspace.</critical>
+
+    <action>Set {{product_findings_file}} = {product_findings}</action>
+    <action>Ensure directory {workspace_findings_dir} exists.</action>
+
+    <action>Load task template from {steps_path}/step-03-product-agent.md.</action>
+    <action>Spawn Task (sub-agent) with the content of step-03-product-agent.md, substituting:
+      - {{workspace_name}}        = {workspace_name}
+      - {{workspace_slug}}        = {workspace_slug}
+      - {{repos_list}}            = all repos in repos_to_analyze (name + localPath, one per line)
+      - {{product_agent_file}}    = ~/.nakiros/agents/product.md
+      - {{findings_output}}       = {{product_findings_file}}
+      - {{date}}                  = today's date
+      - {{corrections}}           = user corrections if any, or "None"
+    </action>
+
+    <output>[GENERATE-CONTEXT] ⏳ [Product Analyst] → workspace {workspace_name}…</output>
+    <output>[GENERATE-CONTEXT] ✓ [Product Analyst] findings → {{product_findings_file}}</output>
+  </step>
+
+  <step n="6" goal="Spawn Workspace Integrator sub-agent — dépendances et guidage d'action">
+    <check if="workspace_config found (multi-repo)">
+      <action>Set {{inter_repo_findings_file}} = {inter_repo_findings}</action>
+      <action>Ensure directory {workspace_findings_dir} exists.</action>
+
+      <action>Load task template from {steps_path}/step-04-integrator-agent.md.</action>
+      <action>Spawn Task (sub-agent) with the content of step-04-integrator-agent.md, substituting:
+        - {{workspace_name}}        = {workspace_name}
+        - {{workspace_slug}}        = {workspace_slug}
+        - {{repos_list}}            = all repos in repos_to_analyze (name + localPath, one per line)
+        - {{findings_output}}       = {{inter_repo_findings_file}}
+        - {{date}}                  = today's date
+        - {{corrections}}           = user corrections if any, or "None"
+      </action>
+
+      <output>[GENERATE-CONTEXT] ⏳ [Workspace Integrator] → workspace {workspace_name}…</output>
+      <output>[GENERATE-CONTEXT] ✓ [Workspace Integrator] findings → {{inter_repo_findings_file}}</output>
+    </check>
+
+    <check if="workspace_config not found or single-repo">
+      <output>[GENERATE-CONTEXT] ↷ [Workspace Integrator] ignoré — scope mono-repo</output>
+    </check>
+  </step>
+
+  <step n="7" goal="Synthèse — générer les fichiers finaux depuis les findings">
+    <critical>Load and follow: {steps_path}/step-02-generate.md</critical>
+    <critical>Read ALL findings JSON files before writing any output file.</critical>
+    <critical>Delete .findings/ directories after successful synthesis.</critical>
+    <critical>Do NOT distribute content to CLAUDE.md, .cursorrules, or llms.txt outside `_nakiros/`.</critical>
+    <output>[GENERATE-CONTEXT] ✓ Synthèse terminée — fichiers de contexte générés</output>
+  </step>
+
+  <step n="8" goal="Finaliser et rapporter">
+    <output>[GENERATE-CONTEXT] ✅ TERMINÉ
+Per-repo :
+{{for each repo: "├─ {repo}/_nakiros/architecture.md
+├─ {repo}/_nakiros/stack.md
+├─ {repo}/_nakiros/conventions.md
+├─ {repo}/_nakiros/api.md
+└─ {repo}/_nakiros/llms.txt"}}
+Workspace (global) :
+├─ {product_output}
+{{if multi-repo: "├─ {inter_repo_output}"}}
+└─ {global_output}
+    </output>
+  </step>
+</workflow>

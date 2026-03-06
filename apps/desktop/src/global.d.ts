@@ -4,6 +4,7 @@ import type {
   LocalTicket,
   LocalEpic,
   AppPreferences,
+  AgentRunRequest,
   AgentProvider,
   AgentInstallStatus,
   AgentInstallRequest,
@@ -236,13 +237,7 @@ declare global {
       writeClipboard(text: string): Promise<void>;
 
       // Agent runner
-      agentRun(
-        repoPath: string,
-        message: string,
-        sessionId?: string | null,
-        additionalDirs?: string[],
-        provider?: AgentProvider,
-      ): Promise<string>;
+      agentRun(request: AgentRunRequest): Promise<string>;
       agentCancel(runId: string): Promise<void>;
       onAgentStart(cb: (event: { runId: string; command: string; cwd: string }) => void): () => void;
       onAgentEvent(cb: (payload: { runId: string; event: AgentStreamEvent }) => void): () => void;

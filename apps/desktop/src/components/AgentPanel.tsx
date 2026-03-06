@@ -19,7 +19,14 @@ import {
   Plus,
   X,
 } from 'lucide-react';
-import type { AgentProvider, StoredRepo } from '@nakiros/shared';
+import type {
+  AgentProvider,
+  AgentRunRequest,
+  ChatScopeMode,
+  StoredAgentTab,
+  StoredConversation,
+  StoredRepo,
+} from '@nakiros/shared';
 import SessionFeedback, { type SessionFeedbackHandle } from './SessionFeedback.js';
 import {
   AGENT_DEFINITIONS,
@@ -45,9 +52,33 @@ interface AgentMentionOption {
   label: string;
 }
 
+interface StreamingActivityLabel {
+  primary: string;
+  detail: string;
+}
+
+interface ProjectScopeOption {
+  id: string;
+  token: string;
+  repoPath: string;
+  label: string;
+  isWorkspace: boolean;
+}
+
 interface ActiveMentionContext {
   query: string;
   start: number;
+}
+
+interface ActiveProjectScopeContext {
+  query: string;
+  start: number;
+}
+
+interface ProjectScopeResolution {
+  mentionedRepoPaths: string[];
+  mentionedTokens: string[];
+  scopeOnlyMessage: boolean;
 }
 
 // ─── Multi-agent message rendering ───────────────────────────────────────────
@@ -130,6 +161,75 @@ function extractActiveMentionContext(input: string): ActiveMentionContext | null
   return {
     query: (match[2] ?? '').toLowerCase(),
     start: match.index + mentionIndex,
+  };
+}
+
+function extractActiveProjectScopeContext(input: string): ActiveProjectScopeContext | null {
+  const projectPattern = /(^|\s)#([^\s#]*)$/;
+  const match = projectPattern.exec(input);
+  if (!match) return null;
+  const fullMatch = match[0];
+  const hashIndex = fullMatch.lastIndexOf('#');
+  if (hashIndex < 0) return null;
+  return {
+    query: (match[2] ?? '').toLowerCase(),
+    start: match.index + hashIndex,
+  };
+}
+
+function normalizeProjectScopeToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function toWorkspaceSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    || 'workspace';
+}
+
+function resolveProjectScopeInMessage(
+  input: string,
+  tokenToRepoPath: Map<string, string>,
+): ProjectScopeResolution {
+  const pattern = /(^|\s)#([^\s#]+)/g;
+  let match: RegExpExecArray | null;
+  const mentionedRepoPaths: string[] = [];
+  const mentionedTokens: string[] = [];
+  const seenRepoPaths = new Set<string>();
+  const recognizedRanges: Array<{ start: number; end: number }> = [];
+
+  while ((match = pattern.exec(input)) !== null) {
+    const leading = match[1] ?? '';
+    const rawToken = match[2] ?? '';
+    const token = normalizeProjectScopeToken(rawToken);
+    if (!token || !tokenToRepoPath.has(token)) continue;
+    const repoPath = tokenToRepoPath.get(token);
+    if (!repoPath) continue;
+    if (!seenRepoPaths.has(repoPath)) {
+      seenRepoPaths.add(repoPath);
+      mentionedRepoPaths.push(repoPath);
+    }
+    mentionedTokens.push(token);
+    const start = match.index + leading.length;
+    recognizedRanges.push({ start, end: start + 1 + rawToken.length });
+  }
+
+  let remainingText = input;
+  for (const range of recognizedRanges.slice().reverse()) {
+    remainingText = `${remainingText.slice(0, range.start)} ${remainingText.slice(range.end)}`;
+  }
+
+  return {
+    mentionedRepoPaths,
+    mentionedTokens,
+    scopeOnlyMessage: recognizedRanges.length > 0 && remainingText.trim().length === 0,
   };
 }
 
@@ -287,6 +387,10 @@ interface Message {
 interface AgentTabState {
   id: string;
   title: string;
+  mode: ChatScopeMode;
+  anchorRepoPath: string;
+  activeRepoPaths: string[];
+  lastResolvedRepoMentions: string[];
   repoPath: string;
   provider: AgentProvider;
   input: string;
@@ -344,6 +448,15 @@ function providerLabel(provider: AgentProvider): string {
   if (provider === 'codex') return 'Codex';
   if (provider === 'cursor') return 'Cursor';
   return 'Claude';
+}
+
+function pickNextRandomIndex(length: number, currentIndex: number): number {
+  if (length <= 1) return 0;
+  let nextIndex = currentIndex;
+  while (nextIndex === currentIndex) {
+    nextIndex = Math.floor(Math.random() * length);
+  }
+  return nextIndex;
 }
 
 function startsWithNakirosSlashCommand(input: string): boolean {
@@ -427,6 +540,23 @@ function MessageContent({ msg }: { msg: Pick<Message, 'content' | 'status'> }) {
   );
 }
 
+function StreamingActivityText({
+  label,
+  compact = false,
+}: {
+  label: StreamingActivityLabel;
+  compact?: boolean;
+}) {
+  return (
+    <span className={compact ? STREAMING_ACTIVITY_COMPACT_CLASS : STREAMING_ACTIVITY_CLASS}>
+      <span className={STREAMING_PULSE_DOT_CLASS} />
+      <span className="font-medium">{label.primary}</span>
+      <span className="opacity-70">·</span>
+      <span className="opacity-90">{label.detail}</span>
+    </span>
+  );
+}
+
 export default function AgentPanel({
   workspaceId,
   workspaceName,
@@ -480,13 +610,16 @@ export default function AgentPanel({
   const [tabLimitMessage, setTabLimitMessage] = useState<string | null>(null);
   const [highlightedSlashIndex, setHighlightedSlashIndex] = useState(0);
   const [highlightedMentionIndex, setHighlightedMentionIndex] = useState(0);
+  const [highlightedProjectScopeIndex, setHighlightedProjectScopeIndex] = useState(0);
   const [expandedToolPanels, setExpandedToolPanels] = useState<Record<string, boolean>>({});
+  const [thinkingStateIndex, setThinkingStateIndex] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const activeSlashItemRef = useRef<HTMLButtonElement>(null);
   const activeMentionItemRef = useRef<HTMLButtonElement>(null);
+  const activeProjectScopeItemRef = useRef<HTMLButtonElement>(null);
   const tabCounterRef = useRef(0);
   const runToTabIdRef = useRef(new Map<string, string>());
   const cancelledRunIdsRef = useRef(new Set<string>());
@@ -500,25 +633,57 @@ export default function AgentPanel({
   const sessionStartTimesRef = useRef(new Map<string, number>());
   const tabRawLinesRef = useRef(new Map<string, unknown[]>());
   const feedbackRefsMap = useRef(new Map<string, React.RefObject<SessionFeedbackHandle | null>>());
+  const workspaceSlug = useMemo(() => toWorkspaceSlug(workspaceName || workspaceId), [workspaceId, workspaceName]);
 
   const repoPathSet = useMemo(() => new Set(repos.map((repo) => repo.localPath)), [repos]);
-  const globalWorkspacePath = useMemo(() => {
-    const candidate = workspacePath?.trim();
-    if (!candidate) return null;
-    return repoPathSet.has(candidate) ? null : candidate;
-  }, [workspacePath, repoPathSet]);
-  const runnablePathSet = useMemo(() => {
-    const next = new Set(repoPathSet);
-    if (globalWorkspacePath) next.add(globalWorkspacePath);
+  const projectScopeOptions = useMemo<ProjectScopeOption[]>(() => {
+    const options: ProjectScopeOption[] = [];
+    const usedTokens = new Set<string>();
+    const reserveToken = (base: string): string => {
+      const normalized = normalizeProjectScopeToken(base) || 'repo';
+      if (!usedTokens.has(normalized)) {
+        usedTokens.add(normalized);
+        return normalized;
+      }
+      let suffix = 2;
+      while (usedTokens.has(`${normalized}-${suffix}`)) suffix += 1;
+      const token = `${normalized}-${suffix}`;
+      usedTokens.add(token);
+      return token;
+    };
+
+    for (const repo of repos) {
+      const folderName = repo.localPath.split('/').pop() ?? '';
+      const token = reserveToken(repo.name || folderName || 'repo');
+      options.push({
+        id: `${repo.localPath}::${token}`,
+        token,
+        repoPath: repo.localPath,
+        label: repo.name || folderName || repo.localPath,
+        isWorkspace: false,
+      });
+    }
+
+    return options;
+  }, [repos, t]);
+  const projectScopeTokenToRepoPath = useMemo(
+    () => new Map(projectScopeOptions.map((option) => [option.token, option.repoPath])),
+    [projectScopeOptions],
+  );
+  const projectScopeTokenByRepoPath = useMemo(() => {
+    const next = new Map<string, string>();
+    for (const option of projectScopeOptions) {
+      if (!next.has(option.repoPath)) next.set(option.repoPath, option.token);
+    }
     return next;
-  }, [repoPathSet, globalWorkspacePath]);
+  }, [projectScopeOptions]);
 
   const workspaceConversations = useMemo(
     () => conversations.filter((conv) => {
-      if (conv.workspaceId) return conv.workspaceId === workspaceId;
-      return runnablePathSet.has(conv.repoPath);
+      if (!conv.workspaceId) return false;
+      return conv.workspaceId === workspaceId;
     }),
-    [conversations, workspaceId, runnablePathSet],
+    [conversations, workspaceId],
   );
 
   const activeTab = useMemo(
@@ -536,6 +701,24 @@ export default function AgentPanel({
     [activeSlashFilter, slashCommands],
   );
   const showSlashCommands = Boolean(activeTab && !activeTab.activeRunId && activeSlashFilter);
+  const thinkingStateLabels = useMemo(
+    () => [
+      t('thinkingStates.analyzingContext'),
+      t('thinkingStates.readingWorkspace'),
+      t('thinkingStates.exploringFiles'),
+      t('thinkingStates.verifyingScope'),
+      t('thinkingStates.searchingKeyAreas'),
+      t('thinkingStates.structuringResponse'),
+      t('thinkingStates.preparingNextSteps'),
+      t('thinkingStates.crossCheckingContext'),
+      t('thinkingStates.consolidatingFindings'),
+    ],
+    [t],
+  );
+  const activeStreamingLabel = useMemo<StreamingActivityLabel>(() => ({
+    primary: t('thinkingPrimary'),
+    detail: thinkingStateLabels[thinkingStateIndex] ?? thinkingStateLabels[0] ?? t('thinking'),
+  }), [t, thinkingStateIndex, thinkingStateLabels]);
 
   const hasReachedTabLimit = tabs.length >= MAX_TABS;
   const completionNoticeCount = useMemo(
@@ -546,6 +729,15 @@ export default function AgentPanel({
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
+
+  useEffect(() => {
+    if (!activeTab?.activeRunId) return undefined;
+    setThinkingStateIndex((current) => pickNextRandomIndex(thinkingStateLabels.length, current));
+    const timer = window.setInterval(() => {
+      setThinkingStateIndex((current) => pickNextRandomIndex(thinkingStateLabels.length, current));
+    }, 2600);
+    return () => window.clearInterval(timer);
+  }, [activeTab?.activeRunId, thinkingStateLabels.length]);
 
   useEffect(() => {
     onRunCompletionNoticeChange?.(workspaceId, completionNoticeCount);
@@ -684,16 +876,18 @@ export default function AgentPanel({
   }
 
   function getRepoName(repoPath: string): string {
-    if (globalWorkspacePath && repoPath === globalWorkspacePath) return t('workspaceGlobal');
     return repos.find((repo) => repo.localPath === repoPath)?.name ?? repoPath.split('/').pop() ?? '';
   }
 
   function getDefaultRepoPath(): string {
-    return globalWorkspacePath ?? initialRepoPath ?? repos[0]?.localPath ?? '';
+    const preferredPath = workspacePath?.trim();
+    if (preferredPath && repoPathSet.has(preferredPath)) return preferredPath;
+    if (initialRepoPath && repoPathSet.has(initialRepoPath)) return initialRepoPath;
+    return repos[0]?.localPath ?? '';
   }
 
   function resolveRepoPath(candidate: string | null | undefined): string {
-    if (candidate && runnablePathSet.has(candidate)) return candidate;
+    if (candidate && repoPathSet.has(candidate)) return candidate;
     return getDefaultRepoPath();
   }
 
@@ -705,16 +899,30 @@ export default function AgentPanel({
   function buildTab(args: {
     id?: string;
     title?: string;
-    repoPath: string;
+    mode?: ChatScopeMode;
+    anchorRepoPath?: string;
+    activeRepoPaths?: string[];
+    lastResolvedRepoMentions?: string[];
+    repoPath?: string;
     provider: AgentProvider;
     sessionId?: string | null;
     conversationId?: string | null;
     messages?: Message[];
   }): AgentTabState {
+    const anchorRepoPath = resolveRepoPath(args.anchorRepoPath ?? args.repoPath ?? getDefaultRepoPath());
+    const activeRepoPaths = Array.from(new Set(
+      (args.activeRepoPaths ?? [])
+        .map((path) => resolveRepoPath(path))
+        .filter((path) => path.length > 0),
+    ));
     return {
       id: args.id ?? makeTabId(),
       title: args.title ?? defaultTabTitle,
-      repoPath: resolveRepoPath(args.repoPath),
+      mode: args.mode ?? 'global',
+      anchorRepoPath,
+      activeRepoPaths,
+      lastResolvedRepoMentions: args.lastResolvedRepoMentions ?? [],
+      repoPath: anchorRepoPath,
       provider: args.provider,
       input: '',
       messages: args.messages ?? [],
@@ -753,10 +961,16 @@ export default function AgentPanel({
     return {
       id: `conv-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
       sessionId,
-      repoPath: tab.repoPath,
-      repoName: getRepoName(tab.repoPath),
-      provider: tab.provider,
       workspaceId,
+      workspaceSlug,
+      workspaceName: workspaceName ?? workspaceId,
+      mode: tab.mode,
+      anchorRepoPath: tab.anchorRepoPath,
+      activeRepoPaths: tab.activeRepoPaths,
+      lastResolvedRepoMentions: tab.lastResolvedRepoMentions,
+      repoPath: tab.anchorRepoPath,
+      repoName: getRepoName(tab.anchorRepoPath),
+      provider: tab.provider,
       title,
       agents: [],
       createdAt: now,
@@ -788,10 +1002,16 @@ export default function AgentPanel({
       const recoveredConversation: StoredConversation = {
         id: missingConversationId,
         sessionId: storedTab.sessionId ?? `pending-${storedTab.tabId}`,
+        workspaceId,
+        workspaceSlug,
+        workspaceName: workspaceName ?? workspaceId,
+        mode: storedTab.mode ?? 'global',
+        anchorRepoPath: resolveRepoPath(storedTab.anchorRepoPath ?? repoPath),
+        activeRepoPaths: (storedTab.activeRepoPaths ?? []).map((path) => resolveRepoPath(path)),
+        lastResolvedRepoMentions: storedTab.lastResolvedRepoMentions ?? [],
         repoPath,
         repoName: getRepoName(repoPath),
         provider: isAgentProvider(storedTab.provider) ? storedTab.provider : preferredProvider,
-        workspaceId,
         title: storedTab.title || defaultTabTitle,
         agents: [],
         createdAt: now,
@@ -825,6 +1045,10 @@ export default function AgentPanel({
         return buildTab({
           id: storedTab.tabId,
           title: storedTab.title || conv?.title || defaultTabTitle,
+          mode: storedTab.mode ?? conv?.mode ?? 'global',
+          anchorRepoPath: storedTab.anchorRepoPath ?? conv?.anchorRepoPath ?? repoPath,
+          activeRepoPaths: storedTab.activeRepoPaths ?? conv?.activeRepoPaths ?? [],
+          lastResolvedRepoMentions: storedTab.lastResolvedRepoMentions ?? conv?.lastResolvedRepoMentions ?? [],
           repoPath,
           provider,
           sessionId: storedTab.sessionId ?? conv?.sessionId ?? null,
@@ -895,7 +1119,14 @@ export default function AgentPanel({
         tabs: tabs.map((tab) => ({
           tabId: tab.id,
           conversationId: tab.conversationId ?? undefined,
-          repoPath: tab.repoPath,
+          workspaceId,
+          workspaceSlug,
+          workspaceName: workspaceName ?? workspaceId,
+          mode: tab.mode,
+          anchorRepoPath: tab.anchorRepoPath,
+          activeRepoPaths: tab.activeRepoPaths,
+          lastResolvedRepoMentions: tab.lastResolvedRepoMentions,
+          repoPath: tab.anchorRepoPath,
           provider: tab.provider,
           title: tab.title,
           sessionId: tab.sessionId ?? undefined,
@@ -910,7 +1141,7 @@ export default function AgentPanel({
         persistTimerRef.current = null;
       }
     };
-  }, [workspaceId, tabs, activeTabId, tabsLoaded]);
+  }, [workspaceId, workspaceSlug, workspaceName, tabs, activeTabId, tabsLoaded]);
 
   useIpcListener(window.nakiros.onAgentStart, ({ runId, command, cwd }) => {
     const tabId = runToTabIdRef.current.get(runId);
@@ -1019,8 +1250,14 @@ export default function AgentPanel({
       if (conv) {
         upsertConversation({
           ...conv,
-          repoPath: currentTab.repoPath,
-          repoName: getRepoName(currentTab.repoPath),
+          workspaceSlug,
+          workspaceName: workspaceName ?? workspaceId,
+          mode: currentTab.mode,
+          anchorRepoPath: currentTab.anchorRepoPath,
+          activeRepoPaths: currentTab.activeRepoPaths,
+          lastResolvedRepoMentions: currentTab.lastResolvedRepoMentions,
+          repoPath: currentTab.anchorRepoPath,
+          repoName: getRepoName(currentTab.anchorRepoPath),
           provider: currentTab.provider,
           workspaceId,
           sessionId: currentTab.sessionId ?? conv.sessionId,
@@ -1128,6 +1365,23 @@ export default function AgentPanel({
     });
   }
 
+  function applyProjectScope(tabId: string, token: string) {
+    const tab = tabsRef.current.find((item) => item.id === tabId);
+    if (!tab) return;
+
+    const scopeToken = `#${token}`;
+    const projectScope = extractActiveProjectScopeContext(tab.input);
+    const nextInput = projectScope
+      ? `${tab.input.slice(0, projectScope.start)}${scopeToken} `
+      : `${tab.input}${tab.input.length > 0 && !/\s$/.test(tab.input) ? ' ' : ''}${scopeToken} `;
+
+    updateTabInput(tabId, nextInput);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(nextInput.length, nextInput.length);
+    });
+  }
+
 
   function createNewTab(opts?: { focus?: boolean; repoPath?: string; provider?: AgentProvider; title?: string }): string | null {
     if (tabsRef.current.length >= MAX_TABS) {
@@ -1137,7 +1391,8 @@ export default function AgentPanel({
 
     const active = tabsRef.current.find((tab) => tab.id === activeTabIdRef.current) ?? null;
     const tab = buildTab({
-      repoPath: opts?.repoPath ?? active?.repoPath ?? getDefaultRepoPath(),
+      anchorRepoPath: opts?.repoPath ?? active?.anchorRepoPath ?? getDefaultRepoPath(),
+      activeRepoPaths: active?.activeRepoPaths ?? [],
       provider: opts?.provider ?? active?.provider ?? defaultProvider,
       title: opts?.title,
     });
@@ -1192,14 +1447,37 @@ export default function AgentPanel({
     if (!currentTab || currentTab.activeRunId) return;
 
     const userMessageCount = currentTab.messages.filter((msg) => msg.role === 'user').length;
+    if (!text) return;
+
+    const scopeResolution = resolveProjectScopeInMessage(text, projectScopeTokenToRepoPath);
+    const nextActiveRepoPaths = scopeResolution.mentionedRepoPaths.length > 0
+      ? scopeResolution.mentionedRepoPaths.map((path) => resolveRepoPath(path))
+      : currentTab.activeRepoPaths;
+    const nextAnchorRepoPath = resolveRepoPath(
+      scopeResolution.mentionedRepoPaths[0]
+      ?? currentTab.anchorRepoPath
+      ?? currentTab.repoPath,
+    );
+    if (scopeResolution.scopeOnlyMessage) {
+      setTabsAndRef((prev) => prev.map((tab) => (
+        tab.id === tabId
+          ? {
+            ...tab,
+            input: '',
+            anchorRepoPath: nextAnchorRepoPath,
+            activeRepoPaths: nextActiveRepoPaths,
+            lastResolvedRepoMentions: scopeResolution.mentionedTokens,
+            repoPath: nextAnchorRepoPath,
+          }
+          : tab
+      )));
+      return;
+    }
+
+    const effectiveText = text;
     if (userMessageCount === 0 && !sessionStartTimesRef.current.has(tabId)) {
       sessionStartTimesRef.current.set(tabId, Date.now());
     }
-    if (!text) return;
-
-    const effectiveRepoPath = globalWorkspacePath ?? getDefaultRepoPath();
-
-    const effectiveText = text;
     const selectedDefinition = matchCommandDefinition(effectiveText, agentDefinitions);
     const title = generateTitle(effectiveText, commandLabelMap, defaultTabTitle);
     const shouldSetPendingTitle = !currentTab.conversationId && currentTab.messages.filter((msg) => msg.role === 'user').length === 0;
@@ -1213,17 +1491,23 @@ export default function AgentPanel({
       tools: [],
     };
 
-    const userRaw = { type: 'user', content: effectiveText, timestamp: new Date().toISOString() };
+    const userRaw = { type: 'user', content: text, timestamp: new Date().toISOString() };
 
     if (shouldSetPendingTitle) {
       const now = new Date().toISOString();
       createdConversation = {
         id: `conv-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
         sessionId: currentTab.sessionId ?? `pending-${Date.now()}`,
-        repoPath: effectiveRepoPath,
-        repoName: getRepoName(effectiveRepoPath),
-        provider: currentTab.provider,
         workspaceId,
+        workspaceSlug,
+        workspaceName: workspaceName ?? workspaceId,
+        mode: currentTab.mode,
+        anchorRepoPath: nextAnchorRepoPath,
+        activeRepoPaths: nextActiveRepoPaths,
+        lastResolvedRepoMentions: scopeResolution.mentionedTokens,
+        repoPath: nextAnchorRepoPath,
+        repoName: getRepoName(nextAnchorRepoPath),
+        provider: currentTab.provider,
         title,
         agents: selectedDefinition ? [selectedDefinition.id] : [],
         createdAt: now,
@@ -1237,6 +1521,14 @@ export default function AgentPanel({
       if (existing) {
         upsertConversation({
           ...existing,
+          workspaceSlug,
+          workspaceName: workspaceName ?? workspaceId,
+          mode: currentTab.mode,
+          anchorRepoPath: nextAnchorRepoPath,
+          activeRepoPaths: nextActiveRepoPaths,
+          lastResolvedRepoMentions: scopeResolution.mentionedTokens,
+          repoPath: nextAnchorRepoPath,
+          repoName: getRepoName(nextAnchorRepoPath),
           agents: existing.agents.length > 0
             ? existing.agents
             : (selectedDefinition ? [selectedDefinition.id] : []),
@@ -1254,7 +1546,10 @@ export default function AgentPanel({
         title: shouldSetPendingTitle ? title : tab.title,
         pendingTitle: shouldSetPendingTitle ? null : tab.pendingTitle,
         conversationId: tab.conversationId ?? createdConversation?.id ?? null,
-        repoPath: effectiveRepoPath,
+        anchorRepoPath: nextAnchorRepoPath,
+        activeRepoPaths: nextActiveRepoPaths,
+        lastResolvedRepoMentions: scopeResolution.mentionedTokens,
+        repoPath: nextAnchorRepoPath,
         hasUnread: false,
         hasRunCompletionNotice: false,
         messages: [...tab.messages, userMessage],
@@ -1264,17 +1559,26 @@ export default function AgentPanel({
     const nextTab = tabsRef.current.find((tab) => tab.id === tabId);
     if (!nextTab) return;
 
-    const additionalDirs = Array.from(new Set(repos.map((repo) => repo.localPath)));
+    const additionalDirs = Array.from(new Set(
+      repos.map((repo) => repo.localPath).filter((path) => path.trim().length > 0),
+    ));
     const sessionForRun = startsWithNakirosSlashCommand(effectiveText) ? null : nextTab.sessionId;
 
     try {
-      const runId = await window.nakiros.agentRun(
-        effectiveRepoPath,
-        effectiveText,
-        sessionForRun,
+      const request: AgentRunRequest = {
+        workspaceId,
+        workspaceSlug,
+        workspaceName: workspaceName ?? workspaceId,
+        mode: nextTab.mode,
+        anchorRepoPath: nextAnchorRepoPath,
+        activeRepoPaths: nextActiveRepoPaths,
+        lastResolvedRepoMentions: scopeResolution.mentionedTokens,
+        message: effectiveText,
+        sessionId: sessionForRun,
         additionalDirs,
-        nextTab.provider,
-      );
+        provider: nextTab.provider,
+      };
+      const runId = await window.nakiros.agentRun(request);
 
       runToTabIdRef.current.set(runId, tabId);
       runStartedAtRef.current.set(runId, Date.now());
@@ -1351,7 +1655,7 @@ export default function AgentPanel({
 
     const tabId = createNewTab({
       focus: true,
-      repoPath: conv.repoPath,
+      repoPath: conv.anchorRepoPath ?? conv.repoPath,
       provider: conv.provider,
       title: conv.title,
     });
@@ -1363,7 +1667,11 @@ export default function AgentPanel({
       return {
         ...tab,
         title: conv.title,
-        repoPath: resolveRepoPath(conv.repoPath),
+        mode: conv.mode ?? 'global',
+        anchorRepoPath: resolveRepoPath(conv.anchorRepoPath ?? conv.repoPath),
+        activeRepoPaths: (conv.activeRepoPaths ?? []).map((path) => resolveRepoPath(path)),
+        lastResolvedRepoMentions: conv.lastResolvedRepoMentions ?? [],
+        repoPath: resolveRepoPath(conv.anchorRepoPath ?? conv.repoPath),
         provider: conv.provider,
         sessionId: conv.sessionId,
         conversationId: conv.id,
@@ -1443,7 +1751,7 @@ export default function AgentPanel({
     if (!active || active.messages.length > 0 || active.activeRunId) {
       targetTabId = createNewTab({
         focus: true,
-        repoPath: active?.repoPath ?? getDefaultRepoPath(),
+        repoPath: active?.anchorRepoPath ?? getDefaultRepoPath(),
         provider: active?.provider ?? defaultProvider,
       });
     }
@@ -1488,6 +1796,10 @@ export default function AgentPanel({
     () => extractActiveMentionContext(activeTab?.input ?? ''),
     [activeTab?.input],
   );
+  const activeProjectScope = useMemo(
+    () => extractActiveProjectScopeContext(activeTab?.input ?? ''),
+    [activeTab?.input],
+  );
   const filteredMentionOptions = useMemo(
     () => {
       if (!activeMention) return [];
@@ -1495,16 +1807,41 @@ export default function AgentPanel({
     },
     [mentionOptions, activeMention],
   );
+  const filteredProjectScopeOptions = useMemo(
+    () => {
+      if (!activeProjectScope) return [];
+      return projectScopeOptions.filter((option) => option.token.startsWith(activeProjectScope.query));
+    },
+    [projectScopeOptions, activeProjectScope],
+  );
   const showMentionMenu = Boolean(activeTab && !activeTab.activeRunId && activeMention);
+  const showProjectScopeMenu = Boolean(activeTab && !activeTab.activeRunId && activeProjectScope);
   const feedbackAgent = activeCommandDefinition?.kind === 'agent' ? activeCommandDefinition.id : null;
   const feedbackWorkflow = activeCommandDefinition?.kind === 'workflow' ? activeCommandDefinition.id : null;
   const historyCount = workspaceConversations.length;
   const isInputDisabled = !activeTab || !!activeTab.activeRunId;
   const canSend = Boolean(activeTab && !activeTab.activeRunId && activeTab.input.trim());
+  const activeScopeTokens = useMemo(
+    () => (activeTab?.activeRepoPaths ?? [])
+      .map((repoPath) => {
+        const token = projectScopeTokenByRepoPath.get(repoPath);
+        if (!token) return null;
+        return {
+          token,
+          repoPath,
+        };
+      })
+      .filter((item): item is { token: string; repoPath: string } => item !== null),
+    [activeTab?.activeRepoPaths, projectScopeTokenByRepoPath],
+  );
 
   useEffect(() => {
     setHighlightedMentionIndex(0);
   }, [activeMention?.start, activeMention?.query, activeTabId]);
+
+  useEffect(() => {
+    setHighlightedProjectScopeIndex(0);
+  }, [activeProjectScope?.start, activeProjectScope?.query, activeTabId]);
 
   useEffect(() => {
     if (filteredMentionOptions.length === 0) return;
@@ -1512,11 +1849,23 @@ export default function AgentPanel({
   }, [filteredMentionOptions.length]);
 
   useEffect(() => {
+    if (filteredProjectScopeOptions.length === 0) return;
+    setHighlightedProjectScopeIndex((prev) => Math.min(prev, filteredProjectScopeOptions.length - 1));
+  }, [filteredProjectScopeOptions.length]);
+
+  useEffect(() => {
     if (!showMentionMenu || filteredMentionOptions.length === 0) return;
     window.requestAnimationFrame(() => {
       activeMentionItemRef.current?.scrollIntoView({ block: 'nearest' });
     });
   }, [showMentionMenu, filteredMentionOptions.length, highlightedMentionIndex]);
+
+  useEffect(() => {
+    if (!showProjectScopeMenu || filteredProjectScopeOptions.length === 0) return;
+    window.requestAnimationFrame(() => {
+      activeProjectScopeItemRef.current?.scrollIntoView({ block: 'nearest' });
+    });
+  }, [showProjectScopeMenu, filteredProjectScopeOptions.length, highlightedProjectScopeIndex]);
 
   return (
     <div className={clsx('relative flex h-full w-full min-w-0 overflow-hidden bg-[var(--bg)]', persistentHistory ? 'flex-row' : 'flex-col')}>
@@ -1587,6 +1936,9 @@ export default function AgentPanel({
       <div className={HEADER_CLASS}>
         <Bot size={15} color="var(--primary)" />
         <span className="text-xs font-bold text-[var(--text)]">{t('agents')}</span>
+        <span className={SESSION_BADGE_CLASS}>
+          {workspaceName ?? workspaceId}
+        </span>
 
         {activeTab?.runningCommand && (
           <span className={RUNNING_INDICATOR_CLASS}>
@@ -1596,6 +1948,18 @@ export default function AgentPanel({
 
         {!activeTab?.runningCommand && (
           <div className="ml-auto flex items-center gap-1.5">
+            <span className={PROJECT_SCOPE_BADGE_CLASS}>
+              {activeTab?.mode === 'repo' ? t('modeRepo') : t('modeGlobal')}
+            </span>
+            {activeScopeTokens.map(({ token, repoPath }) => (
+              <span
+                key={token}
+                title={t('projectScopeTitle', { project: getRepoName(repoPath) })}
+                className={PROJECT_SCOPE_BADGE_CLASS}
+              >
+                #{token}
+              </span>
+            ))}
             {activeTab?.sessionId && (
               <span title={t('sessionTitle', { id: activeTab.sessionId })} className={SESSION_BADGE_CLASS}>
                 ↺ {providerLabel(activeTab.provider)} {t('session')}
@@ -1756,9 +2120,6 @@ export default function AgentPanel({
                 <div className={AGENT_HEADER_CLASS}>
                   <Bot size={13} color="var(--primary)" />
                   <span className="text-[11px] font-bold text-[var(--primary)]">{t('agent')}</span>
-                  {msg.status === 'streaming' && !msg.tools.length && !msg.content && (
-                    <span className="text-[10px] text-[var(--text-muted)]">{t('thinking')}</span>
-                  )}
                   {msg.status === 'error' && (
                     <span className="text-[10px] text-[#ef4444]">{t('error')}</span>
                   )}
@@ -1805,6 +2166,14 @@ export default function AgentPanel({
 
                 {(msg.content.trim() || msg.status === 'error') && (
                   <MessageContent msg={msg} />
+                )}
+                {msg.status === 'streaming' && (
+                  <div className="mt-1">
+                    <StreamingActivityText
+                      label={activeStreamingLabel}
+                      compact={Boolean(msg.content.trim())}
+                    />
+                  </div>
                 )}
               </div>
             )}
@@ -1918,6 +2287,45 @@ export default function AgentPanel({
             )}
           </div>
         )}
+        {!showSlashCommands && !showMentionMenu && showProjectScopeMenu && (
+          <div className={SLASH_MENU_CLASS}>
+            <div className={SLASH_MENU_HEADER_CLASS}>
+              <span>{t('projectScopes')}</span>
+              <span>{t('projectHint')}</span>
+            </div>
+            {filteredProjectScopeOptions.length === 0 ? (
+              <div className={SLASH_MENU_EMPTY_CLASS}>{t('projectNoMatch')}</div>
+            ) : (
+              <div className="max-h-[220px] overflow-y-auto">
+                {filteredProjectScopeOptions.map((option, index) => {
+                  const active = index === highlightedProjectScopeIndex;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      aria-selected={active}
+                      ref={active ? activeProjectScopeItemRef : undefined}
+                      className={slashMenuItemClass(active)}
+                      onMouseEnter={() => setHighlightedProjectScopeIndex(index)}
+                      onClick={() => activeTab && applyProjectScope(activeTab.id, option.token)}
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className={slashMenuCursorClass(active)} />
+                        <div className="min-w-0">
+                          <div className={slashMenuCommandClass(active)}>#{option.token}</div>
+                          <div className={slashMenuLabelClass(active)}>{option.label}</div>
+                        </div>
+                      </div>
+                      <span className={slashMenuKindBadgeClass(active)}>
+                        {option.isWorkspace ? t('allProjectsBadge') : t('projectBadge')}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
         <div className={INPUT_GRID_CLASS}>
           <div className="col-span-10 min-w-0">
             <textarea
@@ -1969,6 +2377,36 @@ export default function AgentPanel({
                     if (nextMention) {
                       e.preventDefault();
                       applyAgentMention(activeTab.id, nextMention.tag);
+                      return;
+                    }
+                    if (e.key === 'Tab') {
+                      e.preventDefault();
+                      return;
+                    }
+                  }
+                }
+                if (activeTab && !showSlashCommands && !showMentionMenu && showProjectScopeMenu) {
+                  if (e.key === 'ArrowDown') {
+                    if (filteredProjectScopeOptions.length > 0) {
+                      e.preventDefault();
+                      setHighlightedProjectScopeIndex((prev) => (prev + 1) % filteredProjectScopeOptions.length);
+                      return;
+                    }
+                  }
+                  if (e.key === 'ArrowUp') {
+                    if (filteredProjectScopeOptions.length > 0) {
+                      e.preventDefault();
+                      setHighlightedProjectScopeIndex((prev) => (
+                        prev - 1 + filteredProjectScopeOptions.length
+                      ) % filteredProjectScopeOptions.length);
+                      return;
+                    }
+                  }
+                  if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+                    const nextProject = filteredProjectScopeOptions[highlightedProjectScopeIndex] ?? filteredProjectScopeOptions[0];
+                    if (nextProject) {
+                      e.preventDefault();
+                      applyProjectScope(activeTab.id, nextProject.token);
                       return;
                     }
                     if (e.key === 'Tab') {
@@ -2054,6 +2492,14 @@ const RUNNING_INDICATOR_CLASS =
   'ml-auto max-w-[280px] truncate font-mono text-[10px] text-[var(--primary)]';
 const SESSION_BADGE_CLASS =
   'cursor-default rounded-[10px] bg-[var(--primary-soft)] px-1.5 py-px font-mono text-[10px] text-[var(--primary)]';
+const PROJECT_SCOPE_BADGE_CLASS =
+  'cursor-default rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] px-1.5 py-px font-mono text-[10px] text-[var(--text)]';
+const STREAMING_ACTIVITY_CLASS =
+  'inline-flex max-w-full items-center gap-1.5 rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] px-2 py-1 text-[10px] text-[var(--text-muted)]';
+const STREAMING_ACTIVITY_COMPACT_CLASS =
+  'inline-flex max-w-full items-center gap-1 text-[10px] text-[var(--text-muted)]';
+const STREAMING_PULSE_DOT_CLASS =
+  'inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[var(--primary)]';
 const NEW_CONV_BUTTON_CLASS =
   'inline-flex shrink-0 items-center gap-1 rounded-[10px] border border-[var(--line)] bg-transparent px-2 py-[3px] text-[11px] text-[var(--text-muted)] disabled:opacity-50';
 const NEW_CONV_BUTTON_SMALL_CLASS =

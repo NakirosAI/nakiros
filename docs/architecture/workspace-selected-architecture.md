@@ -79,6 +79,6 @@ Nouveau type UI `WorkflowCapability`:
 2. Beta: `create-ticket`, `create-story`, `fetch-project-context`, `qa-review`
 
 ## PRD Assistant
-1. Trigger standard: `/tiq-agent-brainstorming`
-2. Sortie attendue: `.nakiros/context/brainstorming.md`
+1. Trigger standard: `/nak-agent-brainstorming`
+2. Sortie attendue: `~/.nakiros/workspaces/{workspace_slug}/context/brainstorming.md`
 3. Re-scan docs apres execution pour remonter le document

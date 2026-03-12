@@ -36,9 +36,9 @@ nak server start                 # Démarre le serveur MCP local
 **Ce qu'il fait concrètement :**
 - Détecte l'éditeur IA utilisé (Claude Code → `.claude/commands/`, Codex → `.codex/prompts/`, Cursor → `.cursor/commands/`)
 - Déploie les commandes d'agents dans l'environnement approprié
-- Crée les dossiers de travail `.nakiros/` dans le repo
+- Crée le runtime global `~/.nakiros/` et les workspaces sous `~/.nakiros/workspaces/{workspace_slug}/`
 - Configure la connexion Jira MCP si sélectionné
-- Copie les définitions d'agents et de workflows dans `_nakiros/`
+- Copie les définitions d'agents et de workflows dans `~/.nakiros/` et écrit les pointeurs repo-side dans `_nakiros/`
 
 ---
 
@@ -69,7 +69,7 @@ Nakiros orchestre des **workflows en plusieurs étapes** activés par des comman
 ```
 1. /nak-workflow-dev-story (commande dans Claude Code ou Codex)
          ↓
-2. Chargement config effective (global ~/.nakiros + projet .nakiros.yaml)
+2. Chargement du contexte runtime (profil global ~/.nakiros/config.yaml + pointeur repo `_nakiros/workspace.yaml` + workspace.json)
          ↓
 3. Fetch du ticket Jira via MCP → passage en "In Progress"
    Démarrage du worklog
@@ -94,7 +94,7 @@ Nakiros orchestre des **workflows en plusieurs étapes** activés par des comman
    - Worklog poussé
    - Commentaire avec lien PR
          ↓
-9. Tous les artefacts persistés localement dans .nakiros/
+9. Tous les artefacts persistés localement dans `~/.nakiros/workspaces/{workspace_slug}/` ou dans `_nakiros/` selon leur portée
 ```
 
 **Autres workflows disponibles :**
@@ -163,8 +163,8 @@ Un **processus unique** (port 3737) qui :
 ```
 Claude Code (cwd=/repo-frontend)
     → MCP Server localhost:3737
-    → /ws/{workspace-1-uuid}/mcp
-    → contexte isolé workspace 1
+    → /ws/{workspace-id}/mcp
+    → contexte isolé du workspace résolu depuis `_nakiros/workspace.yaml`
     → outils Jira, GitHub pour ce workspace
 ```
 
@@ -200,15 +200,15 @@ L'extension VS Code est **architecturée mais non fonctionnelle aujourd'hui**. L
     └──────┬──────┘       └─────────────────┘
            │
     ┌──────▼──────────────────────┐
-    │    _nakiros/ (runtime)      │
-    │  agents/ + workflows/       │
-    │  7 personas + 9 workflows   │
+    │    _nakiros/ (repo docs)    │
+    │  workspace.yaml + docs      │
+    │  architecture / stack / API │
     └─────────────────────────────┘
            │ artefacts
     ┌──────▼──────────────────────┐
-    │      .nakiros/ (data)       │
-    │  state, context, runs,      │
-    │  stories, tickets, reports  │
+    │     ~/.nakiros/ (runtime)   │
+    │  agents, workflows,         │
+    │  workspaces, runs, reports  │
     └─────────────────────────────┘
 ```
 
@@ -219,23 +219,19 @@ L'extension VS Code est **architecturée mais non fonctionnelle aujourd'hui**. L
 **Trois niveaux de config en cascade :**
 
 ```
-~/.nakiros/config.yaml            (profil utilisateur global)
-    ↓ surchargé par
-{repo}/.nakiros.yaml              (config projet, versionné)
-    ↓ surchargé par
-{repo}/.nakiros.workspace.yaml    (config workspace, auto-généré)
+~/.nakiros/config.yaml                     (profil utilisateur global)
+    ↓ combiné avec
+{repo}/_nakiros/workspace.yaml            (pointeur léger: workspace_name + workspace_slug)
+    ↓ résout vers
+~/.nakiros/workspaces/{workspace_slug}/workspace.json   (source de vérité workspace)
     ↓
-Config effective au runtime
+Contexte effectif au runtime
 ```
 
-**Exemple `.nakiros.yaml` :**
+**Exemple `_nakiros/workspace.yaml` :**
 ```yaml
-pm_tool: jira
-git_host: github
-branch_pattern: 'feature/{ticket}'
-jira:
-  project_key: PROJ
-  board_id: '123'
+workspace_name: Exploitation
+workspace_slug: exploitation
 ```
 
 ---

@@ -24,7 +24,7 @@ Nakiros maintient un fichier de version locale qui trace ce qui est installé :
   "files": {
     "agents/dev.md": "sha256:abc123...",
     "agents/pm.md": "sha256:def456...",
-    "workflows/dev-story.yaml": "sha256:ghi789..."
+    "workflows/4-implementation/dev-story/workflow.yaml": "sha256:ghi789..."
   }
 }
 ```

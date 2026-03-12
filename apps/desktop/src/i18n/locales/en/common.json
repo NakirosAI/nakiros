@@ -2,5 +2,5 @@
   "appName": "Nakiros",
   "loadingWorkspace": "Loading workspace…",
   "workspaceLoadError": "Unable to load local workspaces. Check folder permissions.",
-  "updateBanner": "✨ Agent update available (v{{version}})"
+  "updateBanner": "Agent update available (v{{version}})"
 }

@@ -50,6 +50,9 @@ export default function ContextPanel({
     () => WORKFLOW_CAPABILITIES.find((capability) => capability.id === 'fetch-project-context'),
     [],
   );
+  const globalDocs = scanResult?.globalSection.docs ?? [];
+  const globalDecisionDocs = scanResult?.globalSection.decisionDocs ?? [];
+  const globalMissingNames = scanResult?.globalSection.missingNames ?? [];
 
   useEffect(() => {
     if (!scanStartedAt || !scanning) return;
@@ -71,7 +74,9 @@ export default function ContextPanel({
       .then((result) => {
         setScanResult(result);
         const repoDocsCount = result.repos.reduce((sum, repo) => sum + repo.docs.length, 0);
-        const globalDocsCount = result.globalSection?.docs.length ?? 0;
+        const globalDocsCount =
+          (result.globalSection?.docs.length ?? 0) +
+          (result.globalSection?.decisionDocs?.length ?? 0);
         const docsCount = repoDocsCount + globalDocsCount;
         setLastScanDocsCount(docsCount);
         setLastScanDurationMs(Date.now() - startedAt);
@@ -159,11 +164,13 @@ export default function ContextPanel({
           ) : (
             <>
               <SectionHeader label={t('globalSection')} />
-              {scanResult.globalSection.docs.length === 0 && scanResult.globalSection.missingNames.length === 0 ? (
+              {globalDocs.length === 0 &&
+              globalDecisionDocs.length === 0 &&
+              globalMissingNames.length === 0 ? (
                 <EmptyGlobalSection onGenerate={() => onOpenChat?.()} />
               ) : (
                 <>
-                  {scanResult.globalSection.docs.map((doc) => (
+                  {globalDocs.map((doc) => (
                     <DocRow
                       key={doc.absolutePath}
                       doc={doc}
@@ -172,13 +179,30 @@ export default function ContextPanel({
                       onRegenerate={() => onOpenChat?.()}
                     />
                   ))}
-                  {scanResult.globalSection.missingNames.map((name) => (
+                  {globalMissingNames.map((name) => (
                     <MissingDocRow
                       key={name}
                       name={name}
                       onGenerate={() => onOpenChat?.()}
                     />
                   ))}
+                  {globalDecisionDocs.length > 0 && (
+                    <div>
+                      <div className="px-[14px] pb-0.5 pt-[5px] pl-6 font-mono text-[10px] text-[var(--text-muted)]">
+                        {t('decisionsFolder')}
+                      </div>
+                      {globalDecisionDocs.map((doc) => (
+                        <DocRow
+                          key={doc.absolutePath}
+                          doc={doc}
+                          isSelected={selectedDoc?.absolutePath === doc.absolutePath}
+                          onSelect={() => setSelectedDoc(doc)}
+                          onRegenerate={() => onOpenChat?.()}
+                          indent
+                        />
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
 

@@ -84,7 +84,7 @@ IL Y A 3 JOURS
 
 Chaque session est sauvegardée dans :
 ```
-~/.nakiros/workspaces/{id}/sessions/{session-id}.json
+~/.nakiros/workspaces/{workspace_slug}/sessions/{session-id}.json
 ```
 
 Format :
@@ -212,7 +212,7 @@ Affiche uniquement les éditeurs détectés sur la machine. Les éditeurs non in
 
 Chaque session reçoit automatiquement dans son system prompt :
 
-1. `~/.nakiros/workspaces/{id}/context/global-context.md` — vision globale du workspace
+1. `~/.nakiros/workspaces/{workspace_slug}/context/global-context.md` — vision globale du workspace
 2. `{repo}/_nakiros/llms.txt` — contexte condensé de chaque repo du workspace
 3. Liste des tickets actifs du sprint en cours (résumé)
 4. Date et heure courantes

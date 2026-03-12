@@ -9,7 +9,10 @@ const execFileAsync = promisify(execFile);
 import { startServer, stopServer } from '@nakiros/server';
 import { DEFAULT_MCP_SERVER_URL, IPC_CHANNELS } from '@nakiros/shared';
 import { getAll, save, remove } from './services/workspace.js';
+import { getHydratedWorkspaces, saveCanonicalWorkspace } from './services/workspace-remote.js';
 import { syncWorkspaceYaml } from './services/workspace-yaml.js';
+import { getAuthState, signIn, signOut } from './services/auth.js';
+import { getMyOrg, listMyOrgs, createOrg, deleteOrg, listOrgMembers, addOrgMember, leaveOrg, removeOrgMember, cancelInvitation, acceptInvitations } from './services/org.js';
 import { resetWorkspace } from './services/workspace-reset.js';
 import { detectProfile } from './services/profile-detector.js';
 import { syncToRepos } from './services/workspace-sync.js';
@@ -58,6 +61,9 @@ import { sendSessionFeedback, sendProductFeedback, retryQueue } from './services
 import type { SessionFeedbackData, ProductFeedbackData } from './services/feedback-service.js';
 import type {
   AgentRunRequest,
+  AuthCompletePayload,
+  AuthErrorPayload,
+  AuthSignedOutPayload,
   StoredWorkspace,
   LocalTicket,
   LocalEpic,
@@ -105,14 +111,18 @@ async function handleOAuthCallback(url: string): Promise<void> {
   }
 
   if (parsed.protocol !== 'nakiros:') return;
-  if (parsed.hostname !== 'oauth') return;
 
   const win = BrowserWindow.getAllWindows()[0];
-  if (!win) return;
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  }
 
-  // Bring window to front
-  if (win.isMinimized()) win.restore();
-  win.focus();
+  // ── Nakiros auth callback — handled by BrowserWindow popup in signIn() ──
+  if (parsed.hostname === 'auth') return;
+
+  // ── Jira OAuth callback ───────────────────────────────────────────────
+  if (parsed.hostname !== 'oauth') return;
 
   const code = parsed.searchParams.get('code');
   const state = parsed.searchParams.get('state');
@@ -328,8 +338,9 @@ ipcMain.handle(IPC_CHANNELS['dialog:openFile'], async () => {
   const result = await dialog.showOpenDialog({ properties: ['openFile'] });
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
-ipcMain.handle(IPC_CHANNELS['workspace:getAll'], () => getAll());
+ipcMain.handle(IPC_CHANNELS['workspace:getAll'], () => getHydratedWorkspaces());
 ipcMain.handle(IPC_CHANNELS['workspace:save'], (_, w: StoredWorkspace) => save(w));
+ipcMain.handle(IPC_CHANNELS['workspace:saveCanonical'], (_, w: StoredWorkspace) => saveCanonicalWorkspace(w));
 ipcMain.handle(IPC_CHANNELS['workspace:delete'], (_, id: string) => remove(id));
 ipcMain.handle(IPC_CHANNELS['workspace:createRoot'], (_, parentDir: string, workspaceName: string) =>
   createWorkspaceRoot(parentDir, workspaceName));
@@ -374,6 +385,10 @@ ipcMain.handle(IPC_CHANNELS['git:init'], async (_, repoPath: string) => {
   }
 });
 ipcMain.handle(IPC_CHANNELS['preferences:get'], () => getPreferences());
+ipcMain.handle(IPC_CHANNELS['preferences:getSystemLanguage'], () => {
+  const locale = app.getPreferredSystemLanguages()[0] ?? app.getLocale() ?? 'en';
+  return locale.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+});
 ipcMain.handle(IPC_CHANNELS['preferences:save'], (_, prefs: AppPreferences) => savePreferences(prefs));
 ipcMain.handle(IPC_CHANNELS['agents:status'], (_, repoPath: string) => getAgentInstallStatus(repoPath));
 ipcMain.handle(IPC_CHANNELS['agents:install'], (_, request: AgentInstallRequest) => installAgents(request));
@@ -402,6 +417,56 @@ ipcMain.handle(IPC_CHANNELS['updates:apply'], async (event, files: unknown[], bu
   return applyUpdate(files as Parameters<typeof applyUpdate>[0], bundleVersion, win);
 });
 ipcMain.handle(IPC_CHANNELS['updates:getVersionInfo'], () => getVersionInfo());
+
+// ─── IPC: Auth ────────────────────────────────────────────────────────────────
+
+ipcMain.handle(IPC_CHANNELS['auth:getState'], () => getAuthState());
+ipcMain.handle(IPC_CHANNELS['org:getMine'], () => getMyOrg());
+ipcMain.handle(IPC_CHANNELS['org:listMine'], () => listMyOrgs());
+ipcMain.handle(IPC_CHANNELS['org:create'], (_event, name: string, slug: string) => createOrg(name, slug));
+ipcMain.handle(IPC_CHANNELS['org:delete'], (_event, orgId: string) => deleteOrg(orgId));
+ipcMain.handle(IPC_CHANNELS['org:listMembers'], (_event, orgId: string) => listOrgMembers(orgId));
+ipcMain.handle(
+  IPC_CHANNELS['org:addMember'],
+  (_event, orgId: string, email: string, role: 'member' | 'admin', inviterEmail?: string) =>
+    addOrgMember(orgId, email, role, inviterEmail),
+);
+ipcMain.handle(IPC_CHANNELS['org:leave'], (_event, orgId: string) => leaveOrg(orgId));
+ipcMain.handle(IPC_CHANNELS['org:removeMember'], (_event, orgId: string, userId: string) => removeOrgMember(orgId, userId));
+ipcMain.handle(IPC_CHANNELS['org:cancelInvitation'], (_event, orgId: string, invitationId: string) => cancelInvitation(orgId, invitationId));
+ipcMain.handle(IPC_CHANNELS['org:acceptInvitations'], (_event, email: string) => acceptInvitations(email));
+ipcMain.handle(IPC_CHANNELS['auth:signIn'], async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  signIn(win ?? undefined)
+    .then((result) => {
+      win?.webContents.send(IPC_CHANNELS['auth:complete'], { email: result.email } satisfies AuthCompletePayload);
+      for (const ws of getAll()) {
+        try { syncWorkspaceYaml(ws); } catch (error) {
+          console.error(`[auth] Failed to sync workspace "${ws.name}" after sign-in:`, error);
+        }
+      }
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Authentication failed';
+      if (message !== 'Cancelled') {
+        win?.webContents.send(IPC_CHANNELS['auth:error'], { message } satisfies AuthErrorPayload);
+      }
+    });
+});
+ipcMain.handle(IPC_CHANNELS['auth:signOut'], async () => {
+  await signOut();
+  // Re-sync workspaces to remove the token from .claude/settings.json
+  for (const ws of getAll()) {
+    try {
+      syncWorkspaceYaml(ws);
+    } catch (error) {
+      console.error(`[auth] Failed to sync workspace "${ws.name}" after sign-out:`, error);
+    }
+  }
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send(IPC_CHANNELS['auth:signedOut'], {} satisfies AuthSignedOutPayload);
+  }
+});
 
 // ─── IPC: Tickets ─────────────────────────────────────────────────────────────
 

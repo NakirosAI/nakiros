@@ -1,5 +1,3 @@
-@import "tailwindcss";
-
 @font-face {
   font-family: 'Space Mono';
   src: url('./assets/fonts/SpaceMono-Regular.ttf') format('truetype');
@@ -33,6 +31,7 @@
 }
 
 :root {
+  /* ── Nakiros design tokens ──────────────────────────────────────────────── */
   --bg: #080808;
   --bg-card: #111111;
   --bg-soft: #111111;
@@ -49,6 +48,22 @@
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 20px 48px rgba(13, 158, 158, 0.18);
   --grid-line: rgba(240, 240, 240, 0.05);
+
+  /* ── shadcn/ui bridge — maps Radix/shadcn vars to our design tokens ─────── */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--bg-card);
+  --card-foreground: var(--text);
+  --muted: var(--bg-muted);
+  --muted-foreground: var(--text-muted);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--primary);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--text);
+  --accent: var(--primary-soft);
+  --accent-foreground: var(--primary);
+  --radius: 0.5rem;
 }
 
 :root[data-theme='dark'] {

@@ -74,14 +74,14 @@
           <action>Display generated content</action>
           <ask> [a] Advanced Elicitation, [c] Continue, [p] Party-Mode, [y] YOLO the rest of this document only. WAIT for response. <if
               response="a">
-              <action>Start the advanced elicitation workflow {project-root}/~/.nakiros/core/workflows/advanced-elicitation/workflow.xml</action>
+              <action>Start the advanced elicitation workflow ~/.nakiros/core/workflows/advanced-elicitation/workflow.xml</action>
             </if>
             <if
               response="c">
               <action>Continue to next step</action>
             </if>
             <if response="p">
-              <action>Start the party-mode workflow {project-root}/~/.nakiros/core/workflows/party-mode/workflow.md</action>
+              <action>Start the party-mode workflow ~/.nakiros/core/workflows/party-mode/workflow.md</action>
             </if>
             <if
               response="y">
@@ -225,7 +225,7 @@
     <critical-rules>
       • This is the complete workflow execution engine
       • You MUST Follow instructions exactly as written
-      • The workflow execution engine is governed by: {project-root}/~/.nakiros/core/tasks/workflow.xml
+      • The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml
       • You MUST have already loaded and processed: {installed_path}/workflow.yaml
       • This workflow uses INTENT-DRIVEN PLANNING - adapt organically to product type and context
       • YOU ARE FACILITATING A CONVERSATION With a user to produce a final document step by step. The whole process is meant to be

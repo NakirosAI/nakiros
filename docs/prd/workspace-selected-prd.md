@@ -39,7 +39,7 @@ La V1 conserve une **vue unique** pour tous les profils, avec des informations p
 1. Nouvelle navigation: `Overview -> Product -> Delivery -> Settings`
 2. Ecran `Overview` par defaut
 3. `Product Context` avec actions IA
-4. `PRD Assistant` via `/tiq-agent-brainstorming`
+4. `PRD Assistant` via `/nak-agent-brainstorming`
 5. `Delivery` avec Ticket Hub unifie
 6. Affichage des workflows `Stable/Beta`
 
@@ -49,7 +49,7 @@ La V1 conserve une **vue unique** pour tous les profils, avec des informations p
 3. Nouvelles APIs Electron/IPC (reuse de l'existant)
 
 ## Decisons verrouillees
-1. Commande PRD Assistant: `/tiq-agent-brainstorming`
-2. Sortie attendue brainstorming: `.nakiros/context/brainstorming.md`
+1. Commande PRD Assistant: `/nak-agent-brainstorming`
+2. Sortie attendue brainstorming: `~/.nakiros/workspaces/{workspace_slug}/context/brainstorming.md`
 3. Aucune reference produit a `tiq-workflow-brainstorming`
 4. Rollout progressif en phases

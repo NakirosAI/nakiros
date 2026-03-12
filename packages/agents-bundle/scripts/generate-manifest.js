@@ -17,7 +17,7 @@ const MANIFEST_PATH = resolve(BUNDLE_DIR, 'manifest.json');
 
 const SCAN_DIRS = [
   { dir: 'agents', type: 'agent', recursive: false },
-  { dir: 'workflows', type: 'workflow', recursive: false },
+  { dir: 'workflows', type: 'workflow', recursive: true },
   { dir: 'commands', type: 'command', recursive: false },
   { dir: 'core', type: 'core', recursive: true },
 ];
@@ -29,6 +29,7 @@ function hashFile(filePath) {
 function scanDir(dirPath, type, recursive) {
   const entries = [];
   for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
     const fullPath = join(dirPath, entry.name);
     if (entry.isDirectory() && recursive) {
       entries.push(...scanDir(fullPath, type, true));
@@ -60,7 +61,7 @@ for (const { dir, type, recursive } of SCAN_DIRS) {
   files.push(...scanDir(dirPath, type, recursive));
 }
 
-manifest.files = files;
+manifest.files = files.sort((a, b) => a.path.localeCompare(b.path));
 writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 console.log(`manifest.json updated — ${files.length} file(s) indexed.`);
 files.forEach((f) => console.log(`  ${f.type.padEnd(9)} ${f.path}`));

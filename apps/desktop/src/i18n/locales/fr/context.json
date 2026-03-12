@@ -10,10 +10,11 @@
   "aiActions": "Actions IA",
   "prdAssistant": "PRD Assistant",
   "generateContext": "Générer le contexte",
-  "pmContext": "Contexte PM",
+  "productContext": "Contexte produit",
   "globalSection": "Global",
+  "decisionsFolder": "decisions/",
   "betaBadge": "Bêta",
-  "pmWorkflowBetaFallback": "Workflow visible en bêta. Si indisponible, utilise Generate Context puis complète avec Contexte PM.",
+  "projectContextWorkflowBetaFallback": "Workflow visible en bêta. Si indisponible, utilise Generate Context puis complète avec le contexte produit.",
   "openChat": "Discussion libre",
   "openChatDescription": "Chat agent sans workflow imposé",
   "regenerate": "Régénérer",
@@ -45,5 +46,5 @@
   "prdLaunch": "Lancer brainstorming",
   "prdLaunching": "Ouverture…",
   "prdPromptIntro": "Aide-moi à construire un PRD initial avec ce contexte:",
-  "prdPromptOutro": "À la fin de la session, sauvegarde la synthèse dans .nakiros/context/brainstorming.md."
+  "prdPromptOutro": "À la fin de la session, sauvegarde la synthèse dans ~/.nakiros/workspaces/{workspace_slug}/context/brainstorming.md."
 }

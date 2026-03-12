@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node", "@cloudflare/workers-types"],
+    "outDir": "../../tmp/worker-tests"
+  },
+  "include": [
+    "src/index.ts",
+    "src/types.ts",
+    "src/storage.ts",
+    "src/schema.ts",
+    "src/auth.ts",
+    "src/mcp.ts",
+    "src/email.ts",
+    "src/access-control.test.ts"
+  ],
+  "exclude": []
+}

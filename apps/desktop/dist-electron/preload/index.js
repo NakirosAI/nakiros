@@ -1,6 +1,15 @@
 "use strict";
 const electron = require("electron");
 const IPC_CHANNELS = {
+  "auth:complete": "auth:complete",
+  "auth:continue": "auth:continue",
+  "auth:error": "auth:error",
+  "auth:getState": "auth:getState",
+  "auth:openOAuthPopup": "auth:openOAuthPopup",
+  "auth:signIn": "auth:signIn",
+  "auth:signOut": "auth:signOut",
+  "auth:signedOut": "auth:signedOut",
+  "auth:submit": "auth:submit",
   "agent:cancel": "agent:cancel",
   "agent:context": "agent:context",
   "agent:done": "agent:done",
@@ -42,6 +51,16 @@ const IPC_CHANNELS = {
   "jira:getValidToken": "jira:getValidToken",
   "jira:startAuth": "jira:startAuth",
   "jira:syncTickets": "jira:syncTickets",
+  "org:create": "org:create",
+  "org:delete": "org:delete",
+  "org:getMine": "org:getMine",
+  "org:listMine": "org:listMine",
+  "org:listMembers": "org:listMembers",
+  "org:addMember": "org:addMember",
+  "org:leave": "org:leave",
+  "org:removeMember": "org:removeMember",
+  "org:cancelInvitation": "org:cancelInvitation",
+  "org:acceptInvitations": "org:acceptInvitations",
   "notification:openAgentChat": "notification:openAgentChat",
   "notification:showAgentRun": "notification:showAgentRun",
   "onboarding:detectEditors": "onboarding:detectEditors",
@@ -49,6 +68,7 @@ const IPC_CHANNELS = {
   "onboarding:nakirosConfigExists": "onboarding:nakirosConfigExists",
   "onboarding:progress": "onboarding:progress",
   "preferences:get": "preferences:get",
+  "preferences:getSystemLanguage": "preferences:getSystemLanguage",
   "preferences:save": "preferences:save",
   "repo:copyLocal": "repo:copyLocal",
   "repo:detectProfile": "repo:detectProfile",
@@ -75,6 +95,7 @@ const IPC_CHANNELS = {
   "workspace:getAll": "workspace:getAll",
   "workspace:reset": "workspace:reset",
   "workspace:save": "workspace:save",
+  "workspace:saveCanonical": "workspace:saveCanonical",
   "workspace:sync": "workspace:sync",
   "workspace:syncYaml": "workspace:syncYaml"
 };
@@ -88,6 +109,7 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
   openFilePicker: () => electron.ipcRenderer.invoke(IPC_CHANNELS["dialog:openFile"]),
   getWorkspaces: () => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:getAll"]),
   saveWorkspace: (w) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:save"], w),
+  saveWorkspaceCanonical: (w) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:saveCanonical"], w),
   deleteWorkspace: (id) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:delete"], id),
   createWorkspaceRoot: (parentDir, workspaceName) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:createRoot"], parentDir, workspaceName),
   detectProfile: (path) => electron.ipcRenderer.invoke(IPC_CHANNELS["repo:detectProfile"], path),
@@ -100,6 +122,7 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
   gitClone: (url, parentDir) => electron.ipcRenderer.invoke(IPC_CHANNELS["git:clone"], url, parentDir),
   gitInit: (repoPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["git:init"], repoPath),
   getPreferences: () => electron.ipcRenderer.invoke(IPC_CHANNELS["preferences:get"]),
+  getSystemLanguage: () => electron.ipcRenderer.invoke(IPC_CHANNELS["preferences:getSystemLanguage"]),
   savePreferences: (prefs) => electron.ipcRenderer.invoke(IPC_CHANNELS["preferences:save"], prefs),
   getAgentInstallStatus: (repoPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:status"], repoPath),
   installAgents: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:install"], request),
@@ -119,7 +142,7 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
   generateContext: (wsId, ticketId, ws) => electron.ipcRenderer.invoke(IPC_CHANNELS["agent:context"], wsId, ticketId, ws),
   writeClipboard: (text) => electron.ipcRenderer.invoke(IPC_CHANNELS["clipboard:write"], text),
   // Agent runner
-  agentRun: (repoPath, message, sessionId = null, additionalDirs, provider) => electron.ipcRenderer.invoke(IPC_CHANNELS["agent:run"], repoPath, message, sessionId, additionalDirs, provider),
+  agentRun: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["agent:run"], request),
   agentCancel: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["agent:cancel"], runId),
   onAgentStart: (cb) => {
     const listener = (_, payload) => cb(payload);
@@ -239,5 +262,34 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
   },
   // Feedback
   sendSessionFeedback: (data) => electron.ipcRenderer.invoke(IPC_CHANNELS["feedback:sendSession"], data),
-  sendProductFeedback: (data) => electron.ipcRenderer.invoke(IPC_CHANNELS["feedback:sendProduct"], data)
+  sendProductFeedback: (data) => electron.ipcRenderer.invoke(IPC_CHANNELS["feedback:sendProduct"], data),
+  // Auth
+  authGetState: () => electron.ipcRenderer.invoke(IPC_CHANNELS["auth:getState"]),
+  orgGetMine: () => electron.ipcRenderer.invoke(IPC_CHANNELS["org:getMine"]),
+  orgListMine: () => electron.ipcRenderer.invoke(IPC_CHANNELS["org:listMine"]),
+  orgCreate: (name, slug) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:create"], name, slug),
+  orgDelete: (orgId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:delete"], orgId),
+  orgListMembers: (orgId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:listMembers"], orgId),
+  orgAddMember: (orgId, email, role, inviterEmail) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:addMember"], orgId, email, role, inviterEmail),
+  orgLeave: (orgId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:leave"], orgId),
+  orgCancelInvitation: (orgId, invitationId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:cancelInvitation"], orgId, invitationId),
+  orgAcceptInvitations: (email) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:acceptInvitations"], email),
+  orgRemoveMember: (orgId, userId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:removeMember"], orgId, userId),
+  authSignIn: () => electron.ipcRenderer.invoke(IPC_CHANNELS["auth:signIn"]),
+  authSignOut: () => electron.ipcRenderer.invoke(IPC_CHANNELS["auth:signOut"]),
+  onAuthComplete: (cb) => {
+    const listener = (_, data) => cb(data);
+    electron.ipcRenderer.on(IPC_CHANNELS["auth:complete"], listener);
+    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["auth:complete"], listener);
+  },
+  onAuthError: (cb) => {
+    const listener = (_, data) => cb(data);
+    electron.ipcRenderer.on(IPC_CHANNELS["auth:error"], listener);
+    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["auth:error"], listener);
+  },
+  onAuthSignedOut: (cb) => {
+    const listener = (_, data) => cb(data);
+    electron.ipcRenderer.on(IPC_CHANNELS["auth:signedOut"], listener);
+    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["auth:signedOut"], listener);
+  }
 });

@@ -10,5 +10,13 @@
   "repoCount_other": "{{count}} repos",
   "topologyMono": "Mono-repo",
   "topologyMulti": "Multi-repo",
-  "noRepo": "Aucun repo dans ce workspace."
+  "noRepo": "Aucun repo dans ce workspace.",
+  "mcpLocal": "Local",
+  "mcpRemote": "Distant",
+  "mcpBadge": "MCP {{mode}}",
+  "accountConnected": "Connecté",
+  "accountDisconnected": "Déconnecté",
+  "accountBadge": "Compte {{status}}",
+  "accountBadgeAriaLabel": "Statut du compte : {{status}}",
+  "accountDisconnectedHint": "Aucun compte connecté. Ouvre les paramètres pour te connecter."
 }

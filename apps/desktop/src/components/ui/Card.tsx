@@ -1,29 +1,61 @@
-import { type HTMLAttributes } from 'react';
-import clsx from 'clsx';
+import * as React from 'react';
+import { cn } from '@/lib/utils';
 
-export type CardPadding = 'sm' | 'md' | 'lg';
-
-interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  padding?: CardPadding;
-}
-
-const PADDING_CLASSES: Record<CardPadding, string> = {
-  sm: 'p-3',
-  md: 'p-4',
-  lg: 'p-6',
-};
-
-export function Card({ padding = 'md', className, children, ...props }: CardProps) {
+function Card({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
-      className={clsx(
-        'rounded-xl border border-[var(--line)] bg-[var(--bg-card)] shadow-sm',
-        PADDING_CLASSES[padding],
+      data-slot="card"
+      className={cn(
+        'rounded-xl border border-border bg-card text-card-foreground shadow-[var(--shadow-lg)]',
         className,
       )}
       {...props}
-    >
-      {children}
-    </div>
+    />
   );
 }
+
+function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="card-header"
+      className={cn('flex flex-col gap-2 p-6', className)}
+      {...props}
+    />
+  );
+}
+
+function CardTitle({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="card-title"
+      className={cn('text-2xl font-semibold tracking-tight text-foreground', className)}
+      {...props}
+    />
+  );
+}
+
+function CardDescription({ className, ...props }: React.ComponentProps<'p'>) {
+  return (
+    <p
+      data-slot="card-description"
+      className={cn('text-sm text-muted-foreground', className)}
+      {...props}
+    />
+  );
+}
+
+function CardContent({ className, ...props }: React.ComponentProps<'div'>) {
+  return <div data-slot="card-content" className={cn('px-6 pb-6', className)} {...props} />;
+}
+
+function CardFooter({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="card-footer"
+      className={cn('flex items-center px-6 pb-6', className)}
+      {...props}
+    />
+  );
+}
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };

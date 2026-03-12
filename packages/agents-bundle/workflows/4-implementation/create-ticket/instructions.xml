@@ -1,0 +1,147 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language.</critical>
+  <critical>Generate ticket content in document_language.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+
+  <step n="1" goal="Load configuration">
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Apply defaults when missing: communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Call Nakiros MCP tool workspace_info to get workspace metadata (pmTool, documentLanguage). Use {workspace_config} workspace_slug (if present) only for local artifact directory paths.</action>
+    <action>Set {{pm_tool}} from workspace_info.pmTool, defaulting to "none" when absent.</action>
+    <action if="workspace_info.documentLanguage exists">Override {{document_language}} with workspace_info.documentLanguage.</action>
+    <output>[CREATE-TICKET] ✓ Config loaded</output>
+  </step>
+
+  <step n="2" goal="Choose ticket type">
+    <ask>What type of ticket do you want to create?
+- (bug) Bug report — something is broken
+- (feature) Feature request — new functionality
+- (task) Task — technical work without direct user value
+- (chore) Chore — maintenance, dependency updates, refactoring</ask>
+    <action>Capture user choice as {{ticket_type}}.</action>
+  </step>
+
+  <step n="3" goal="Gather ticket information (conversational)">
+    <critical>Ask one question at a time. Keep it natural and fast — tickets should take 2–3 minutes to create.</critical>
+
+    <ask>Give me a title for this {{ticket_type}}. (short, action-oriented)</ask>
+    <action>Capture as {{ticket_title}}.</action>
+
+    <ask>Describe it briefly. What's happening / what needs to happen?</ask>
+    <action>Capture as {{ticket_description}}.</action>
+
+    <check if="ticket_type is bug">
+      <ask>Steps to reproduce? (or "N/A" if obvious)</ask>
+      <action>Capture as {{steps_to_reproduce}}.</action>
+      <ask>Expected vs actual behavior?</ask>
+      <action>Capture as {{expected_vs_actual}}.</action>
+    </check>
+
+    <ask>Acceptance criteria — how do we know it's done? (bullet points, as many as needed)</ask>
+    <action>Capture as {{acceptance_criteria}}. Keep iterating until criteria are explicit and testable.</action>
+
+    <ask>Priority? (critical / high / medium / low)</ask>
+    <action>Capture as {{priority}}.</action>
+
+    <ask>Any labels, components, or assignee? (or "skip")</ask>
+    <action>Capture optional metadata as {{labels}}, {{assignee}}.</action>
+
+    <output>[CREATE-TICKET] ✓ Info gathered</output>
+  </step>
+
+  <step n="4" goal="Generate and review ticket">
+    <action>Build ticket content in {{document_language}}:
+
+      **Type**: {{ticket_type}}
+      **Title**: {{ticket_title}}
+      **Priority**: {{priority}}
+
+      **Description**:
+      {{ticket_description}}
+
+      {{if bug: "**Steps to Reproduce**:\n" + steps_to_reproduce + "\n\n**Expected vs Actual**:\n" + expected_vs_actual}}
+
+      **Acceptance Criteria**:
+      {{acceptance_criteria}}
+
+      {{if labels: "**Labels**: " + labels}}
+      {{if assignee: "**Assignee**: " + assignee}}
+    </action>
+
+    <ask>Here's the ticket:
+
+---
+{{ticket_content}}
+---
+
+Looks good?
+- (yes) Create it in {{pm_tool}}
+- (edit) Let me change [field]
+- (no) Cancel</ask>
+
+    <check if="user chooses edit">
+      <ask>What needs to change?</ask>
+      <action>Apply edits to ticket content.</action>
+      <goto step="4" />
+    </check>
+
+    <check if="user chooses no">
+      <output>[CREATE-TICKET] ⏸ Cancelled</output>
+      <action>HALT workflow.</action>
+    </check>
+  </step>
+
+  <step n="5" goal="Create ticket in PM tool">
+    <check if="pm_tool is none">
+      <action>Ensure directory exists: {tickets_dir}.</action>
+      <action>Save ticket locally to {tickets_dir}/{{slugified_title}}.json with all fields + status = "draft".</action>
+      <output>[CREATE-TICKET] ⚠ Saved locally (no PM tool configured)</output>
+      <action>GOTO step 6.</action>
+    </check>
+
+    <action if="pm_tool is not none">Create ticket in {{pm_tool}} via PM MCP:
+      - Type: {{ticket_type}} → mapped to PM issue type
+      - Summary: {{ticket_title}}
+      - Description: {{ticket_content}}
+      - Priority: {{priority}}
+      - Labels: {{labels if present}}
+      - Assignee: {{assignee if present}}
+    </action>
+
+    <check if="PM MCP create succeeds">
+      <action>Capture returned ID as {{ticketId}}.</action>
+      <action>Ensure directory exists: {tickets_dir}.</action>
+      <action>Persist artifact to {created_ticket_file} (JSON) with all fields, ticketId, pm_url, created_at.</action>
+      <output>[CREATE-TICKET] ✓ Created in {{pm_tool}} | ID: {{ticketId}}</output>
+    </check>
+
+    <check if="PM MCP create fails">
+      <ask>Couldn't create ticket in {{pm_tool}}.
+(retry) Try again?
+(queue) Save locally and queue for retry?
+(skip) Save locally only?</ask>
+      <check if="retry"><goto step="5" /></check>
+      <check if="queue or skip">
+        <action>Save ticket locally. Queue retry if chosen.</action>
+        <output>[CREATE-TICKET] ⚠ Saved locally{{queue ? ", queued for retry" : ""}}</output>
+      </check>
+    </check>
+  </step>
+
+  <step n="6" goal="Done — next steps">
+    <output>[CREATE-TICKET] ✅ DONE
+Title: {{ticket_title}}
+ID: {{ticketId or "local-only"}}
+    </output>
+
+    <ask>What next?
+- (dev) Start dev-story on {{ticketId}}
+- (done) That's it</ask>
+
+    <check if="user chooses dev">
+      <output>Run /nak:workflow:dev-story {{ticketId}} to begin implementation.</output>
+    </check>
+  </step>
+</workflow>

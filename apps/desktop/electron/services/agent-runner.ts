@@ -331,10 +331,7 @@ const runs = new Map<string, RunEntry>();
 let runCounter = 0;
 
 function hasProjectMarkers(candidate: string): boolean {
-  return (
-    existsSync(resolve(candidate, '.nakiros.yaml'))
-    || existsSync(resolve(candidate, '_nakiros', 'workspace.yaml'))
-  );
+  return existsSync(resolve(candidate, '_nakiros', 'workspace.yaml'));
 }
 
 export function resolveAgentCwd(repoPath?: string, additionalDirs?: string[]): string {
@@ -371,6 +368,7 @@ export function runAgentCommand(
   const repoPath = request.anchorRepoPath;
   const message = request.message;
   const sessionId = request.sessionId ?? null;
+  const participantId = request.participantId ?? null;
   const additionalDirs = request.additionalDirs ?? request.activeRepoPaths;
   const cwd = resolveAgentCwd(repoPath, additionalDirs);
   const mergedAdditionalDirs = Array.from(new Set([
@@ -388,6 +386,9 @@ export function runAgentCommand(
   });
 
   console.log(`[agent-runner] Starting run ${runId} (${formatProviderName(provider)}) (session: ${sessionId ?? 'new'})`);
+  if (participantId) {
+    console.log(`[agent-runner] Participant: ${participantId}`);
+  }
   console.log(`[agent-runner] Shell: ${userShell}`);
   console.log(`[agent-runner] CWD: ${cwd}`);
   console.log(`[agent-runner] Add-dirs: ${addDirCount > 0 ? addDirCount : '(none)'}`);

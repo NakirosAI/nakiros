@@ -2,8 +2,10 @@ import type { Server } from "node:http";
 
 import { createHttpServer } from "./http-server.js";
 
-export { readWorkspace, readWorkspaces } from "./storage.js";
-export { resolveWorkspaceId } from "./workspace-resolver.js";
+export type { IStorage } from "./storage.js";
+export { SQLiteStorage } from "./storage.js";
+export { getDb } from "./db/index.js";
+export * as dbSchema from "./db/schema.js";
 
 let httpServer: Server | null = null;
 

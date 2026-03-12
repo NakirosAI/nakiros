@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { AgentProvider, StoredAgentTab, StoredAgentTabsState } from '@nakiros/shared';
+import type { StoredAgentTab, StoredAgentTabsState } from '@nakiros/shared';
+import { normalizeParticipants, normalizeProvider, toWorkspaceSlug } from './store-utils.js';
 
 type AgentTabsByWorkspace = Record<string, StoredAgentTabsState>;
 
@@ -10,15 +11,6 @@ const STORE_PATH = join(NAKIROS_DIR, 'agent-tabs.json');
 
 function ensureDir() {
   if (!existsSync(NAKIROS_DIR)) mkdirSync(NAKIROS_DIR, { recursive: true });
-}
-
-function normalizeProvider(value: unknown): AgentProvider {
-  if (value === 'codex' || value === 'cursor' || value === 'claude') return value;
-  return 'claude';
-}
-
-function toWorkspaceSlug(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'workspace';
 }
 
 function normalizeTab(raw: unknown, workspaceId: string): StoredAgentTab | null {
@@ -43,6 +35,7 @@ function normalizeTab(raw: unknown, workspaceId: string): StoredAgentTab | null 
   const lastResolvedRepoMentions = Array.isArray(item['lastResolvedRepoMentions'])
     ? item['lastResolvedRepoMentions'].filter((token): token is string => typeof token === 'string' && token.trim().length > 0)
     : [];
+  const participants = normalizeParticipants(item['participants'], repoPath);
 
   return {
     tabId: item['tabId'],
@@ -56,6 +49,8 @@ function normalizeTab(raw: unknown, workspaceId: string): StoredAgentTab | null 
     lastResolvedRepoMentions,
     repoPath,
     provider: normalizeProvider(item['provider']),
+    participants,
+    activeParticipantId: typeof item['activeParticipantId'] === 'string' ? item['activeParticipantId'] : undefined,
     title: typeof item['title'] === 'string' ? item['title'] : 'Nouvelle conversation',
     sessionId: typeof item['sessionId'] === 'string' ? item['sessionId'] : undefined,
   };

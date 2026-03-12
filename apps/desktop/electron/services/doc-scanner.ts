@@ -22,6 +22,7 @@ export interface ScannedRepo {
 
 export interface GlobalSection {
   docs: ScannedDoc[];
+  decisionDocs: ScannedDoc[];
   missingNames: string[];
 }
 
@@ -164,8 +165,21 @@ function getPrimaryRepoPath(workspace: StoredWorkspace): string {
 async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSection> {
   const workspaceSlug = resolveWorkspaceSlug(workspace.id, workspace.name);
   const contextDir = join(homedir(), '.nakiros', 'workspaces', workspaceSlug, 'context');
+  const decisionsDir = join(contextDir, 'decisions');
   const docs: ScannedDoc[] = [];
+  const decisionDocs: ScannedDoc[] = [];
   const missingNames: string[] = [];
+  let meta: Record<string, { generatedAt?: number }> = {};
+
+  try {
+    const metaPath = join(contextDir, 'meta.json');
+    if (existsSync(metaPath)) {
+      const raw = await readFile(metaPath, 'utf-8');
+      meta = JSON.parse(raw) as Record<string, { generatedAt?: number }>;
+    }
+  } catch {
+    // ignore
+  }
 
   for (const filename of GLOBAL_EXPECTED_FILES) {
     const candidates = [filename, ...(GLOBAL_FILE_ALIASES[filename] ?? [])];
@@ -175,12 +189,7 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
       const absolutePath = join(contextDir, resolvedFilename);
       let lastModifiedAt: number | undefined;
       try {
-        const metaPath = join(contextDir, 'meta.json');
-        if (existsSync(metaPath)) {
-          const raw = await readFile(metaPath, 'utf-8');
-          const meta = JSON.parse(raw) as Record<string, { generatedAt?: number }>;
-          lastModifiedAt = meta[resolvedFilename]?.generatedAt ?? meta[filename]?.generatedAt;
-        }
+        lastModifiedAt = meta[resolvedFilename]?.generatedAt ?? meta[filename]?.generatedAt;
         if (!lastModifiedAt) {
           const filestat = await stat(absolutePath);
           lastModifiedAt = filestat.mtimeMs;
@@ -200,7 +209,41 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
     }
   }
 
-  return { docs, missingNames };
+  try {
+    const entries = await readdir(decisionsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.toLowerCase().endsWith('.md')) continue;
+
+      const absolutePath = join(decisionsDir, entry.name);
+      let lastModifiedAt: number | undefined;
+      try {
+        const filestat = await stat(absolutePath);
+        lastModifiedAt = filestat.mtimeMs;
+      } catch {
+        // ignore
+      }
+
+      decisionDocs.push({
+        name: entry.name.replace(/\.md$/i, ''),
+        relativePath: `context/decisions/${entry.name}`,
+        absolutePath,
+        isGenerated: true,
+        lastModifiedAt,
+      });
+    }
+  } catch {
+    // ignore missing decisions dir
+  }
+
+  decisionDocs.sort((a, b) => {
+    if (a.lastModifiedAt && b.lastModifiedAt && a.lastModifiedAt !== b.lastModifiedAt) {
+      return b.lastModifiedAt - a.lastModifiedAt;
+    }
+    return a.relativePath.localeCompare(b.relativePath);
+  });
+
+  return { docs, decisionDocs, missingNames };
 }
 
 export async function scanWorkspaceDocs(workspace: StoredWorkspace): Promise<ScanResult> {

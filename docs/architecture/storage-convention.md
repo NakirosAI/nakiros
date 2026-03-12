@@ -39,7 +39,7 @@ Dossier caché dans le home de l'utilisateur. Contient tout ce qui est global à
       context/                         # Contexte global inter-repo (généré par Generate Context)
         global-context.md              # Vue d'ensemble du projet multi-repo
         inter-repo.md                  # Contrats et dépendances entre repos
-        pm-context.md                  # Contexte PM : épics, roadmap, objectifs sprint
+        product-context.md             # Contexte produit : finalité, workflows, domaines, migrations
 
       reports/
         daily/                         # Dailies générés automatiquement en fin de journée
@@ -55,14 +55,18 @@ Dossier caché dans le home de l'utilisateur. Contient tout ce qui est global à
         {session-id}.json              # Contenu : agent utilisé, messages, outils appelés, timestamp
 
       runs/                            # Traces d'exécution des workflows
-        {run-id}/
-          workflow.md                  # Workflow exécuté (ex: dev-story)
-          ticket.json                  # Snapshot du ticket au moment du run
-          result.md                    # Résultat et artefacts produits
-          status.json                  # Statut : success / error / in-progress
+        steps/
+          {run-id}-challenge.md        # Challenge gate et snapshots intermédiaires
+          context-{date}-{branch}.md   # Artefacts de contexte intermédiaires
+          project-understanding-confidence-{date}.md
+        {run-id}.json                  # Manifest de run et métadonnées
+        {run-id}-mr-report.md          # Rapport MR si généré
+
+      state/
+        active-run.json                # Run en cours si un workflow d'exécution est actif
 
       stories/                         # Stories créées localement (sans PM tool externe)
-        {story-id}.md
+        {ticket-id}.json
 ```
 
 ### Convention de nommage du slug workspace
@@ -106,7 +110,7 @@ Dossier visible à la racine de chaque repo Git. Contient uniquement la document
 ```
 {repo}/
   _nakiros/
-    workspace.yaml   # ID du workspace Nakiros (requis par le MCP server pour le routing par cwd)
+    workspace.yaml   # Pointeur léger vers le workspace global
     architecture.md  # Vision architecturale du repo (généré par agent Architect)
     stack.md         # Stack technique, versions, dépendances clés
     conventions.md   # Conventions de code, patterns dominants, règles du projet
@@ -116,7 +120,7 @@ Dossier visible à la racine de chaque repo Git. Contient uniquement la document
 
 ### Responsabilités de ce dossier
 
-- **workspace.yaml** : contient `workspace_id: {id}` — lu par le MCP server pour router les requêtes par cwd. Seul fichier Nakiros qui référence l'ID interne.
+- **workspace.yaml** : contient `workspace_name` et `workspace_slug`. Il sert de pointeur léger ; la source de vérité complète reste `~/.nakiros/workspaces/{workspace_slug}/workspace.json`.
 - **architecture.md** : généré par l'agent Architect via `Generate Context`. Décrit la structure du repo, les modules principaux, les patterns utilisés, les décisions techniques importantes.
 - **stack.md** : liste le stack technique détecté et documenté. Utile pour l'onboarding et pour les agents.
 - **conventions.md** : conventions de nommage, structure des fichiers, patterns à suivre. Les agents Dev s'appuient dessus pour produire du code cohérent.
@@ -137,9 +141,9 @@ Dossier visible à la racine de chaque repo Git. Contient uniquement la document
 - De tickets ou d'issues
 - De rapports de daily ou de rétro
 - D'historique de sessions
-- De données liées à un workspace Nakiros spécifique (sauf `workspace.yaml` pour le routing MCP)
+- De données runtime liées à un workspace Nakiros spécifique (sauf `workspace.yaml` comme pointeur)
 
-Ces données appartiennent à `~/.nakiros/workspaces/{workspace-name-slug}/`.
+Ces données appartiennent à `~/.nakiros/workspaces/{workspace_slug}/`.
 
 ---
 
@@ -151,18 +155,24 @@ Quand un agent doit écrire un fichier, il suit cette règle :
 |---|---|
 | Ticket synchronisé depuis Jira | `~/.nakiros/workspaces/{slug}/tickets/` |
 | Epic synchronisé depuis Jira | `~/.nakiros/workspaces/{slug}/epics/` |
+| Brainstorming workspace | `~/.nakiros/workspaces/{slug}/context/brainstorming.md` |
 | Contexte global multi-repo | `~/.nakiros/workspaces/{slug}/context/global-context.md` |
-| Contexte PM (épics, roadmap) | `~/.nakiros/workspaces/{slug}/context/pm-context.md` |
+| Contexte produit (finalité, workflows) | `~/.nakiros/workspaces/{slug}/context/product-context.md` |
 | Daily généré | `~/.nakiros/workspaces/{slug}/reports/daily/` |
 | Rétrospective générée | `~/.nakiros/workspaces/{slug}/reports/retro/` |
 | Rapport Project Confidence | `~/.nakiros/workspaces/{slug}/reports/confidence/` |
 | Trace d'exécution de workflow | `~/.nakiros/workspaces/{slug}/runs/` |
-| ID workspace (routing MCP) | `{repo}/_nakiros/workspace.yaml` |
+| État de run actif | `~/.nakiros/workspaces/{slug}/state/active-run.json` |
+| Pointeur workspace repo-side | `{repo}/_nakiros/workspace.yaml` |
 | Architecture du repo | `{repo}/_nakiros/architecture.md` |
 | Stack technique du repo | `{repo}/_nakiros/stack.md` |
 | Conventions du repo | `{repo}/_nakiros/conventions.md` |
 | Contexte condensé llms.txt | `{repo}/_nakiros/llms.txt` |
 | Doc API / contrats inter-repo | `{repo}/_nakiros/api.md` |
+| Notes dev liées à un ticket | `{repo}/_nakiros/dev-notes/{ticketId}.md` |
+| Revue QA | `{repo}/_nakiros/qa-reviews/{ticketId}-{date}.md` |
+| Bug report | `{repo}/_nakiros/bugs/{bugId}.md` |
+| Post-mortem / incident | `{repo}/_nakiros/incidents/{ticketId}-postmortem.md` |
 
 ---
 
@@ -200,20 +210,20 @@ Les fichiers dans `{repo}/_nakiros/` sont accessibles aux agents directement via
 
 ## 6. Implémentation côté code
 
-### Résolution slug → dossier (`main.ts`)
+### Résolution slug → dossier
 
 ```typescript
-function resolveSlug(wsId: string): string {
-  const ws = getAll().find((w) => w.id === wsId);
-  return ws ? toWorkspaceSlug(ws.name) : wsId; // fallback wsId uniquement si introuvable
+function resolveWorkspaceSlug(id: string, name: string): string {
+  const existingDir = findExistingDir(id, getWorkspacesRoot());
+  return existingDir ? basename(existingDir) : toWorkspaceSlug(name);
 }
 ```
 
-Tous les handlers IPC qui touchent ticket-storage passent par `resolveSlug(wsId)`.
+Tous les services qui touchent `~/.nakiros/workspaces/{slug}/...` passent par cette résolution pour éviter de recréer un dossier basé sur l'ID.
 
 ### Règle critique sur la création de répertoires (`ticket-storage.ts`)
 
 Les fonctions de **lecture** (`getTickets`, `getEpics`) ne créent **jamais** de répertoire.
 Les fonctions d'**écriture** (`saveTicket`, `saveEpic`, `bulkSaveTickets`, `bulkSaveEpics`) créent le répertoire si besoin via `ensureTicketsDir` / `ensureEpicsDir`.
 
-Cela évite la création de dossiers fantômes avec l'ID timestamp si `resolveSlug` échoue sur une lecture.
+Cela évite la création de dossiers fantômes avec l'ID timestamp si la résolution du slug échoue sur une lecture.

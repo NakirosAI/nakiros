@@ -11,7 +11,7 @@ export interface AgentEnvironmentStatus {
 
 export interface AgentInstallStatus {
   repoPath: string;
-  hasNakirosConfig: boolean;
+  hasWorkspacePointer: boolean;
   environments: AgentEnvironmentStatus[];
 }
 

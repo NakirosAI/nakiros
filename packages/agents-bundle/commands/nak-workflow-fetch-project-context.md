@@ -11,11 +11,11 @@ Collect project metadata, tool configuration, active branch details, and relevan
 
 ## Required Inputs
 
-- `.nakiros.yaml`
 - Current repository state
+- `_nakiros/workspace.yaml` when the project is workspace-backed
 - Optional PM ticket id
 
 ## Output
 
-- Context artifact in `.nakiros/workflows/steps/`
+- Context artifact in `~/.nakiros/workspaces/{workspace_slug}/runs/steps/`
 - Reusable context pointer for subsequent workflow steps

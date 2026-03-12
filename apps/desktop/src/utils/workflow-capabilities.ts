@@ -42,7 +42,7 @@ export const WORKFLOW_CAPABILITIES: WorkflowCapability[] = [
     label: 'Fetch Project Context',
     command: '/nak-workflow-fetch-project-context',
     status: 'beta',
-    fallbackMessage: 'Workflow visible en Beta. Si indisponible, utilise Generate Context puis complète avec Contexte PM.',
+    fallbackMessage: 'Workflow visible en Beta. Si indisponible, utilise Generate Context puis complète avec le contexte produit.',
   },
   {
     id: 'qa-review',
@@ -56,6 +56,6 @@ export const WORKFLOW_CAPABILITIES: WorkflowCapability[] = [
     label: 'Project Confidence',
     command: '/nak-workflow-project-understanding-confidence',
     status: 'beta',
-    fallbackMessage: 'Workflow visible en Beta. Si indisponible, lance Architect + PM context et documente les gaps manuellement.',
+    fallbackMessage: 'Workflow visible en Beta. Si indisponible, lance Architect + Product context et documente les gaps manuellement.',
   },
 ];

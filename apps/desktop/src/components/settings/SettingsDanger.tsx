@@ -40,10 +40,7 @@ export function SettingsDanger({ workspace, onDeleted }: SettingsDangerProps) {
       <h3 className="mb-2.5 mt-0 text-[13px] font-bold text-[var(--danger)]">{t('deleteWorkspaceTitle')}</h3>
       <p className="mb-3 mt-0 text-xs text-[var(--text-muted)]">
         {t('deleteWorkspaceDesc')}
-        {' '}<code className="text-[11px]">_nakiros/</code>,{' '}
-        <code className="text-[11px]">.nakiros/</code>,{' '}
-        <code className="text-[11px]">.nakiros.yaml</code>,{' '}
-        <code className="text-[11px]">.nakiros.workspace.yaml</code>.
+        {' '}<code className="text-[11px]">_nakiros/</code>.
         <br />
         {t('deleteWorkspaceSafeFiles')} <code className="text-[11px]">CLAUDE.md</code>, <code className="text-[11px]">.cursorrules</code> {t('deleteWorkspaceSafeFilesAnd')} <code className="text-[11px]">llms.txt</code> {t('deleteWorkspaceSafeFilesEnd')}
       </p>
@@ -105,4 +102,3 @@ export function SettingsDanger({ workspace, onDeleted }: SettingsDangerProps) {
     </Card>
   );
 }
-

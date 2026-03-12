@@ -44,7 +44,7 @@ Centraliser le contexte projet et les actions IA de cadrage.
 ### Actions IA
 1. `PRD Assistant` (recommande)
 2. `Generer le contexte`
-3. `Contexte PM` (badge Beta)
+3. `Contexte produit` (badge Beta)
 
 ### Etat vide
 1. Aucun repo -> message explicite
@@ -60,8 +60,8 @@ Modal avec 4 champs:
 
 ### Submit
 1. Construit un prompt structure
-2. Lance `/tiq-agent-brainstorming`
-3. Demande explicitement la sauvegarde dans `.nakiros/context/brainstorming.md`
+2. Lance `/nak-agent-brainstorming`
+3. Demande explicitement la sauvegarde dans `~/.nakiros/workspaces/{workspace_slug}/context/brainstorming.md`
 
 ### Completion
 1. Fermeture modal
@@ -109,7 +109,7 @@ Onglets:
 ### Execution
 1. Selection repo
 2. CTA principal `Lancer dev-story`
-3. Lancement `/tiq-workflow-dev-story`
+3. Lancement `/nak-workflow-dev-story`
 4. Stream agent integre via `AgentPanel`
 5. Etat dernier run affiche
 

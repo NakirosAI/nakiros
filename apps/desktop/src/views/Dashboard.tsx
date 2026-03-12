@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import type {
+  AuthState,
   LocalTicket,
   StoredWorkspace,
 } from '@nakiros/shared';
@@ -13,12 +14,16 @@ import Sidebar, { type SidebarTab } from '../components/Sidebar';
 import { usePreferences } from '../hooks/usePreferences';
 import { useTickets } from '../hooks/useTickets';
 import { useWorkspace } from '../hooks/useWorkspace';
+import type { GlobalSettingsSection } from '../components/GlobalSettings';
 
 interface Props {
   onUpdateWorkspace(workspace: StoredWorkspace): Promise<void>;
   onNewWorkspace(): void;
   onGoHome(): void;
+  authState: AuthState;
   serverStatus: 'starting' | 'running' | 'stopped';
+  updateBanner: UpdateCheckResult | null;
+  onDismissUpdateBanner(): void;
   onRestartServer(): void;
   openAgentRunChatTarget?: OpenAgentRunChatPayload | null;
 }
@@ -27,11 +32,15 @@ export default function Dashboard({
   onUpdateWorkspace,
   onNewWorkspace,
   onGoHome,
+  authState,
   serverStatus,
+  updateBanner,
+  onDismissUpdateBanner,
   onRestartServer,
   openAgentRunChatTarget,
 }: Props) {
   const { t } = useTranslation('dashboard');
+  const { t: tCommon } = useTranslation('common');
   const { t: tSidebar } = useTranslation('sidebar');
   const { t: tToast } = useTranslation('toast');
   const { t: tSettings } = useTranslation('settings');
@@ -59,6 +68,7 @@ export default function Dashboard({
 
   const [activeTab, setActiveTab] = useState<SidebarTab>('overview');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
+  const [globalSettingsSection, setGlobalSettingsSection] = useState<GlobalSettingsSection>('general');
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<LocalTicket | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
@@ -193,6 +203,11 @@ export default function Dashboard({
     (candidate) => !openWorkspaces.some((openedWorkspace) => openedWorkspace.id === candidate.id),
   );
   const workspaceMenuPositionClass = workspaceMenuSide === 'right' ? 'left-0' : 'right-0';
+  const mcpModeLabel = isLocalServer ? t('mcpLocal') : t('mcpRemote');
+  const accountLabel = authState.isAuthenticated ? t('accountConnected') : t('accountDisconnected');
+  const accountTitle = authState.isAuthenticated
+    ? authState.email ?? t('accountConnected')
+    : t('accountDisconnectedHint');
 
   function toggleWorkspaceMenu() {
     const rect = workspaceMenuButtonRef.current?.getBoundingClientRect();
@@ -205,6 +220,30 @@ export default function Dashboard({
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
+      {updateBanner && (
+        <div className="flex shrink-0 items-center gap-3 border-b border-[#0f766e] bg-[#0f766e] px-[18px] py-2 text-[13px] text-white">
+          <span className="flex-1 font-semibold">
+            {tCommon('updateBanner', { version: updateBanner.latestVersion })}
+          </span>
+          <button
+            onClick={() => {
+              setGlobalSettingsSection('agent-nakiros');
+              setShowGlobalSettings(true);
+            }}
+            className="rounded-[10px] border border-white/25 bg-white/12 px-3 py-1 text-[12px] font-bold text-white"
+          >
+            {tSettings('updateNow')}
+          </button>
+          <button
+            onClick={onDismissUpdateBanner}
+            className="border-0 bg-transparent px-1 text-[18px] leading-none text-white/90"
+            aria-label={tSettings('closeSettings')}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--bg-soft)] px-[18px]">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <button
@@ -317,7 +356,7 @@ export default function Dashboard({
                     : 'MCP stopped — click to restart'
             }
             className={clsx(
-              'flex items-center gap-[5px] rounded-lg border-none bg-transparent px-2 py-1',
+              'flex items-center gap-[5px] rounded-lg border border-[var(--line)] bg-[var(--bg-muted)] px-2 py-1 text-[11px]',
               (!isLocalServer || serverStatus === 'starting') && 'opacity-60',
             )}
           >
@@ -331,7 +370,29 @@ export default function Dashboard({
                     : 'bg-[var(--danger)]',
               )}
             />
-            <span className="text-[11px] text-[var(--text-muted)]">MCP</span>
+            <span className="text-[var(--text-muted)]">
+              {t('mcpBadge', { mode: mcpModeLabel })}
+            </span>
+          </button>
+          <button
+            onClick={() => {
+              setGlobalSettingsSection('general');
+              setShowGlobalSettings(true);
+            }}
+            title={accountTitle}
+            aria-label={t('accountBadgeAriaLabel', { status: accountLabel })}
+            className={clsx(
+              'flex items-center gap-[5px] rounded-lg border border-[var(--line)] bg-[var(--bg-muted)] px-2 py-1 text-[11px]',
+              authState.isAuthenticated ? 'text-[var(--text)]' : 'text-[var(--text-muted)]',
+            )}
+          >
+            <span
+              className={clsx(
+                'h-[7px] w-[7px] shrink-0 rounded-full',
+                authState.isAuthenticated ? 'bg-[var(--success)]' : 'bg-[var(--line-strong)]',
+              )}
+            />
+            <span>{t('accountBadge', { status: accountLabel })}</span>
           </button>
           <button
             onClick={() => setShowFeedbackModal(true)}
@@ -341,7 +402,10 @@ export default function Dashboard({
             {tFeedback('productButton')}
           </button>
           <button
-            onClick={() => setShowGlobalSettings((prev) => !prev)}
+            onClick={() => {
+              setGlobalSettingsSection('general');
+              setShowGlobalSettings((prev) => !prev);
+            }}
             title={tSettings('title')}
             aria-label={tSettings('title')}
             className={clsx(
@@ -373,6 +437,7 @@ export default function Dashboard({
         <div className="flex flex-1 overflow-hidden">
           <DashboardRouter
             showGlobalSettings={showGlobalSettings}
+            globalSettingsSection={globalSettingsSection}
             activeTab={activeTab}
             workspace={workspace}
             openWorkspaces={openWorkspaces}
@@ -408,6 +473,7 @@ export default function Dashboard({
               setOpenPrdAssistantSignal((prev) => prev + 1);
             }}
             onCloseGlobalSettings={() => setShowGlobalSettings(false)}
+            onGlobalUpdateApplied={onDismissUpdateBanner}
             onChatRunCompletionNoticeChange={handleChatRunCompletionNoticeChange}
           />
         </div>

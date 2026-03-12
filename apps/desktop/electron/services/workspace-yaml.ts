@@ -2,6 +2,8 @@ import { app } from 'electron';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { StoredWorkspace } from '@nakiros/shared';
+import { resolveWorkspaceSlug } from './workspace.js';
+import { getStoredToken } from './auth.js';
 
 export function getWorkspaceAppDir(wsId: string): string {
   const dir = join(app.getPath('userData'), wsId);
@@ -38,40 +40,56 @@ function buildWorkspaceYaml(workspace: StoredWorkspace): string {
   ].filter(Boolean).join('\n') + '\n';
 }
 
+function buildWorkspacePointerYaml(workspace: StoredWorkspace): string {
+  const workspaceSlug = resolveWorkspaceSlug(workspace.id, workspace.name);
+  return [
+    '# Managed by Nakiros',
+    `workspace_name: ${workspace.name}`,
+    `workspace_slug: ${workspaceSlug}`,
+    '',
+  ].join('\n');
+}
+
+function writeWorkspacePointer(repoPath: string, pointerYaml: string): void {
+  const nakirosDir = join(repoPath, '_nakiros');
+  mkdirSync(nakirosDir, { recursive: true });
+  writeFileSync(join(nakirosDir, 'workspace.yaml'), pointerYaml, 'utf-8');
+}
+
+function writeClaudeMcpSettings(repoPath: string, workspaceId: string): void {
+  const claudeDir = join(repoPath, '.claude');
+  mkdirSync(claudeDir, { recursive: true });
+
+  const apiBase = process.env['NAKIROS_API_URL'] ?? 'https://api.nakiros.com';
+  const token = getStoredToken(); // from Electron safeStorage, set after Clerk sign-in
+
+  const settings = {
+    mcpServers: {
+      nakiros: {
+        type: 'http',
+        url: `${apiBase}/ws/${workspaceId}/mcp`,
+        ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+      },
+    },
+  };
+  writeFileSync(join(claudeDir, 'settings.json'), JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+}
+
 /**
- * Écrit workspace.yaml dans app support ET dans workspacePath (.nakiros.workspace.yaml).
- * - App support = source de vérité Nakiros
- * - workspacePath = cible user (mono: repo unique, multi: dossier parent workspace)
- * Returns: cwd à utiliser pour lancer l'agent
+ * Writes the internal app-support workspace YAML and propagates the lightweight
+ * workspace pointer to each repository in the workspace.
  */
 export function syncWorkspaceYaml(workspace: StoredWorkspace): string {
   const yaml = buildWorkspaceYaml(workspace);
+  const pointerYaml = buildWorkspacePointerYaml(workspace);
 
-  // 1. Écrire dans app support (source de vérité)
   const appDir = getWorkspaceAppDir(workspace.id);
   writeFileSync(join(appDir, 'workspace.yaml'), yaml, 'utf-8');
 
-  // 2. Propager dans la cible workspace utilisateur
-  if (workspace.workspacePath) {
-    mkdirSync(workspace.workspacePath, { recursive: true });
-    writeFileSync(join(workspace.workspacePath, '.nakiros.workspace.yaml'), yaml, 'utf-8');
-
-    for (const repo of workspace.repos) {
-      if (repo.localPath !== workspace.workspacePath) {
-        writeFileSync(join(repo.localPath, '.nakiros.workspace.yaml'), yaml, 'utf-8');
-      }
-    }
-
-    return workspace.workspacePath;
+  for (const repo of workspace.repos) {
+    writeWorkspacePointer(repo.localPath, pointerYaml);
+    writeClaudeMcpSettings(repo.localPath, workspace.id);
   }
 
-  // Compat: fallback primary repo si ancien workspace sans workspacePath
-  const primaryRepoPath = workspace.repos[0]?.localPath;
-  if (primaryRepoPath) {
-    writeFileSync(join(primaryRepoPath, '.nakiros.workspace.yaml'), yaml, 'utf-8');
-    return primaryRepoPath;
-  }
-
-  // Fallback: workspace dir en app support
-  return appDir;
+  return workspace.workspacePath ?? workspace.repos[0]?.localPath ?? appDir;
 }

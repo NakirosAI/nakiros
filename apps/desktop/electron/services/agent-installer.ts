@@ -208,7 +208,7 @@ export function getAgentInstallStatus(repoPath: string): AgentInstallStatus {
 
   return {
     repoPath: resolvedRepoPath,
-    hasNakirosConfig: existsSync(resolve(resolvedRepoPath, '.nakiros.yaml')),
+    hasWorkspacePointer: existsSync(resolve(resolvedRepoPath, '_nakiros', 'workspace.yaml')),
     environments,
   };
 }

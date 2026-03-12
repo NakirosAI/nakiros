@@ -1,6 +1,6 @@
 {
   "title": "Nakiros",
-  "subtitle": "Multi-repo orchestration with a fast local workflow. Workspaces are stored locally by Nakiros, with repos as optional links.",
+  "subtitle": "Multi-repo orchestration with a fast local workflow. Workspaces are synced through Nakiros Cloud and cached locally for offline access.",
   "createWorkspace": "Create workspace",
   "createWorkspaceHint": "Configure a new guided project",
   "recent": "Recent workspaces",

@@ -1,0 +1,18 @@
+name = "nakiros-api"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nakiros-api"
+database_id = "d433afb5-c5ea-41c9-8d8b-177f2cc92711"
+
+[dev]
+port = 8788
+inspector_port = 9230
+
+# Secrets (set via `wrangler secret put`):
+#   MELODY_AUTH_CLIENT_ID     — OAuth2 client ID for S2S user lookup (scope: read_user)
+#   MELODY_AUTH_CLIENT_SECRET — OAuth2 client secret
+#   RESEND_API_KEY            — Resend API key for sending invitation emails

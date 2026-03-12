@@ -21,7 +21,7 @@ console.log(`  NAKIROS_API_KEY_STABLE = ${API_KEYS.stable ? `"${API_KEYS.stable.
 console.log(`  NAKIROS_API_KEY_BETA   = ${API_KEYS.beta ? `"${API_KEYS.beta.slice(0, 8)}…" (${API_KEYS.beta.length} chars)` : '(empty)'}`);
 
 interface BundleManifestFile {
-  type: 'agent' | 'workflow';
+  type: 'agent' | 'workflow' | 'command' | 'core';
   name: string;
   filename: string;
   path: string;
@@ -51,7 +51,7 @@ export interface BundleVersionInfo {
 }
 
 export interface UpdateManifestFile {
-  type: 'agent' | 'workflow';
+  type: 'agent' | 'workflow' | 'command' | 'core';
   name: string;
   filename: string;
   path: string;
@@ -187,13 +187,6 @@ export async function checkForUpdates(
 
 // ─── Apply update ─────────────────────────────────────────────────────────────
 
-const SUBDIR_MAP: Record<string, string> = {
-  agent: 'agents',
-  workflow: 'workflows',
-  command: 'commands',
-  core: 'core',
-};
-
 export async function applyUpdate(
   files: UpdateManifestFile[],
   bundleVersion: string,
@@ -209,9 +202,8 @@ export async function applyUpdate(
   const updatedHashes: Record<string, string> = {};
 
   for (const file of files) {
-    const subdir = SUBDIR_MAP[file.type] ?? file.type;
-    const targetDir = join(GLOBAL_DIR, subdir);
-    const targetPath = join(targetDir, file.filename);
+    const targetPath = join(GLOBAL_DIR, file.path);
+    const targetDir = join(targetPath, '..');
 
     try {
       const res = await fetch(file.downloadUrl, {

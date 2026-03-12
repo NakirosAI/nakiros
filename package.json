@@ -16,8 +16,9 @@
     "desktop:make:zip:x64": "pnpm --filter @nakiros/desktop make:zip:x64"
   },
   "devDependencies": {
-    "turbo": "^2",
-    "typescript": "^5.9.0"
+    "tslib": "^2.8.1",
+    "turbo": "^2.8.15",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=20"

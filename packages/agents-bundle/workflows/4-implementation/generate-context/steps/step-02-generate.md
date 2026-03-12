@@ -19,13 +19,11 @@ Read specialist findings and synthesize them into stable, human- and AI-readable
 
 ## STEP A — Load all findings
 
-1. Re-read `{project-root}/_nakiros/workspace.yaml`.
-2. If the pointer file exists:
-   - read `workspace_slug` first, then `workspace_name`
-   - load `~/.nakiros/workspaces/{workspace_slug}/workspace.json` to get the definitive repo list
+1. Call Nakiros MCP tool `workspace_info` to get workspace id, name, topology, and repoCount.
+2. Call Nakiros MCP tool `workspace_repos` to get the definitive repo list (name, role, localPath, profile).
 3. For EACH repo in `repos_to_process`: read `{repo_localPath}/_nakiros/.findings/arch.json` fully.
-4. Read `~/.nakiros/workspaces/{workspace_slug}/.findings/product.json` fully.
-5. If multi-repo: read `~/.nakiros/workspaces/{workspace_slug}/.findings/inter-repo.json` if present.
+4. Read `{workspace_findings_dir}/product.json` fully.
+5. If multi-repo: read `{workspace_findings_dir}/inter-repo.json` if present.
 6. Apply any corrections the user mentioned in the conversation before [C] was selected.
 
 Announce:
@@ -42,15 +40,15 @@ Corrections intégrées : {oui si mentionnées, non sinon}
 
 ---
 
-## STEP B — Generate repo documents
+## STEP B — Generate repo context via Nakiros MCP
 
 For EACH repo in `repos_to_process`:
 
-Create `{repo_localPath}/_nakiros/` if missing.
+### 1. Store `architecture` context
 
-### 1. Write `architecture.md`
+Compose the content as markdown, then call: `repo_context_set({repo_name}, "architecture", <content>)`
 
-Write `{repo_localPath}/_nakiros/architecture.md`:
+Content format:
 
 ```markdown
 # Architecture — {repo_name}
@@ -92,11 +90,13 @@ Unknowns:
 {confidence.unknowns or "None"}
 ```
 
-Announce: `✓ architecture.md → {repo_localPath}/_nakiros/architecture.md`
+Announce: `✓ repo_context_set({repo_name}, "architecture") → stored in Nakiros MCP`
 
-### 2. Write `stack.md`
+### 2. Store `stack` context
 
-Write `{repo_localPath}/_nakiros/stack.md`:
+Compose the content as markdown, then call: `repo_context_set({repo_name}, "stack", <content>)`
+
+Content format:
 
 ```markdown
 # Stack — {repo_name}
@@ -122,11 +122,13 @@ Test: `{commands.test or "Not found"}`
 {external_services or "None confirmed"}
 ```
 
-Announce: `✓ stack.md → {repo_localPath}/_nakiros/stack.md`
+Announce: `✓ repo_context_set({repo_name}, "stack") → stored in Nakiros MCP`
 
-### 3. Write `conventions.md`
+### 3. Store `conventions` context
 
-Write `{repo_localPath}/_nakiros/conventions.md`:
+Compose the content as markdown, then call: `repo_context_set({repo_name}, "conventions", <content>)`
+
+Content format:
 
 ```markdown
 # Conventions — {repo_name}
@@ -145,11 +147,13 @@ Write `{repo_localPath}/_nakiros/conventions.md`:
 {brief synthesis from patterns + hotspots on how to work safely in this repo}
 ```
 
-Announce: `✓ conventions.md → {repo_localPath}/_nakiros/conventions.md`
+Announce: `✓ repo_context_set({repo_name}, "conventions") → stored in Nakiros MCP`
 
-### 4. Write `api.md`
+### 4. Store `api` context
 
-Write `{repo_localPath}/_nakiros/api.md`:
+Compose the content as markdown, then call: `repo_context_set({repo_name}, "api", <content>)`
+
+Content format:
 
 ```markdown
 # API & Contracts — {repo_name}
@@ -170,11 +174,13 @@ Unknowns:
 {confidence.unknowns or "None"}
 ```
 
-Announce: `✓ api.md → {repo_localPath}/_nakiros/api.md`
+Announce: `✓ repo_context_set({repo_name}, "api") → stored in Nakiros MCP`
 
-### 5. Write `_nakiros/llms.txt`
+### 5. Store `llms` context
 
-Write `{repo_localPath}/_nakiros/llms.txt` as a short directive context:
+Compose the content as plain text, then call: `repo_context_set({repo_name}, "llms", <content>)`
+
+Content format:
 
 ```text
 # {repo_name}
@@ -198,15 +204,15 @@ Watch out for:
 {top hotspots / migration zones / risks}
 ```
 
-Announce: `✓ llms.txt → {repo_localPath}/_nakiros/llms.txt`
+Announce: `✓ repo_context_set({repo_name}, "llms") → stored in Nakiros MCP`
 
 ---
 
-## STEP C — Generate `product-context.md` (workspace level)
+## STEP C — Store `product` context (workspace level)
 
-Create `~/.nakiros/workspaces/{workspace_slug}/context/` if missing.
+Compose the content as markdown from `product.json`, then call: `workspace_context_set("product", <content>)`
 
-Write `~/.nakiros/workspaces/{workspace_slug}/context/product-context.md` from `product.json`:
+Content format:
 
 ```markdown
 # Product Context — {workspace_name}
@@ -243,15 +249,17 @@ Unknowns:
 {confidence.unknowns or "None"}
 ```
 
-Announce: `✓ product-context.md → ~/.nakiros/workspaces/{workspace_slug}/context/product-context.md`
+Announce: `✓ workspace_context_set("product") → stored in Nakiros MCP`
 
 ---
 
-## STEP D — Generate `inter-repo.md` (if multi-repo)
+## STEP D — Store `interRepo` context (if multi-repo)
 
 If `repos_to_process` has more than 1 repo and `inter-repo.json` exists:
 
-Write `~/.nakiros/workspaces/{workspace_slug}/context/inter-repo.md`:
+Compose the content as markdown, then call: `workspace_context_set("interRepo", <content>)`
+
+Content format:
 
 ```markdown
 # Inter-repo Relationships — {workspace_name}
@@ -285,15 +293,17 @@ Unknowns:
 {confidence.unknowns or "None"}
 ```
 
-Announce: `✓ inter-repo.md → ~/.nakiros/workspaces/{workspace_slug}/context/inter-repo.md`
+Announce: `✓ workspace_context_set("interRepo") → stored in Nakiros MCP`
 
 ---
 
-## STEP E — Generate `global-context.md` (workspace synthesis)
+## STEP E — Store `global` context (workspace synthesis)
 
-Load all generated repo docs plus `product-context.md` fully before writing.
+Load all context generated in Steps B, C, D (from memory) before composing the global synthesis.
 
-Write `~/.nakiros/workspaces/{workspace_slug}/context/global-context.md`:
+Compose the content as markdown, then call: `workspace_context_set("global", <content>)`
+
+Content format:
 
 ```markdown
 # {workspace_name} — Global Context
@@ -329,16 +339,16 @@ Write `~/.nakiros/workspaces/{workspace_slug}/context/global-context.md`:
 Summarize overall confidence and key unknowns from repo + product + inter-repo findings.
 ```
 
-Announce: `✓ global-context.md → ~/.nakiros/workspaces/{workspace_slug}/context/global-context.md`
+Announce: `✓ workspace_context_set("global") → stored in Nakiros MCP`
 
 ---
 
 ## STEP F — Cleanup findings directories
 
-After all files are successfully written:
+After all MCP writes succeed:
 
 - Delete `{repo_localPath}/_nakiros/.findings/` for each repo
-- Delete `~/.nakiros/workspaces/{workspace_slug}/.findings/`
+- Delete `{workspace_findings_dir}/`
 
 Announce: `✓ Cleanup — findings temporaires supprimés`
 
@@ -349,45 +359,47 @@ Announce: `✓ Cleanup — findings temporaires supprimés`
 Present the completion summary:
 
 ```text
-✅ [GENERATE-CONTEXT] Contexte généré avec succès
+✅ [GENERATE-CONTEXT] Contexte généré avec succès — stocké dans Nakiros MCP
 
 Par repo :
 {for each repo:
-  ├─ {repo}/_nakiros/architecture.md
-  ├─ {repo}/_nakiros/stack.md
-  ├─ {repo}/_nakiros/conventions.md
-  ├─ {repo}/_nakiros/api.md
-  └─ {repo}/_nakiros/llms.txt
+  ├─ repo_context_set({repo}, "architecture") ✓
+  ├─ repo_context_set({repo}, "stack") ✓
+  ├─ repo_context_set({repo}, "conventions") ✓
+  ├─ repo_context_set({repo}, "api") ✓
+  └─ repo_context_set({repo}, "llms") ✓
 }
 
-Niveau workspace (global) :
-├─ ~/.nakiros/workspaces/{workspace_slug}/context/global-context.md
-├─ ~/.nakiros/workspaces/{workspace_slug}/context/product-context.md
-{if multi-repo: "└─ ~/.nakiros/workspaces/{workspace_slug}/context/inter-repo.md"}
+Niveau workspace :
+├─ workspace_context_set("global") ✓
+├─ workspace_context_set("product") ✓
+{if multi-repo: "└─ workspace_context_set("interRepo") ✓"}
+
+Accessible via : workspace_global_context, workspace_product_context, repo_context_get({repo})
 ```
 
 ---
 
 ## SUCCESS METRICS
 
-- All findings files were read before writing any doc
-- Repo docs written:
-  - `architecture.md`
-  - `stack.md`
-  - `conventions.md`
-  - `api.md`
-  - `llms.txt`
-- Workspace docs written:
-  - `product-context.md`
-  - `global-context.md`
-  - `inter-repo.md` when multi-repo
-- Confidence and unknowns are preserved in generated docs
-- Findings directories cleaned up
+- All findings files were read before calling any MCP write tool
+- Nakiros MCP tools called for each repo:
+  - `repo_context_set({repo}, "architecture")`
+  - `repo_context_set({repo}, "stack")`
+  - `repo_context_set({repo}, "conventions")`
+  - `repo_context_set({repo}, "api")`
+  - `repo_context_set({repo}, "llms")`
+- Nakiros MCP tools called for workspace:
+  - `workspace_context_set("product")`
+  - `workspace_context_set("global")`
+  - `workspace_context_set("interRepo")` when multi-repo
+- Confidence and unknowns are preserved in generated content
+- Findings directories cleaned up after MCP writes succeed
 
 ## FAILURE MODES
 
-- Writing any output before reading findings
-- Reintroducing ticket/sprint/backlog noise into `product-context.md`
-- Putting workspace docs inside a repo `_nakiros/`
+- Calling any MCP write tool before reading all findings
+- Writing markdown files to `_nakiros/` instead of calling MCP tools
+- Reintroducing ticket/sprint/backlog noise into the `product` context
 - Omitting repo execution guidance
-- Distributing content outside the official Nakiros locations
+- Failing to clean up `.findings/` after successful MCP writes

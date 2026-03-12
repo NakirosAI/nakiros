@@ -26,7 +26,7 @@ Enrichir la vue Product avec trois changements précis :
 
 ### Changement : Ajouter la section Global en premier
 
-La section Global doit apparaître en tête de liste, avant les repos. Elle pointe vers les fichiers dans `~/.nakiros/workspaces/{id}/context/`.
+La section Global doit apparaître en tête de liste, avant les repos. Elle pointe vers les fichiers dans `~/.nakiros/workspaces/{workspace_slug}/context/`.
 
 Structure complète du listing :
 
@@ -36,7 +36,7 @@ DOCUMENTS
   GLOBAL
     global-context.md        Généré il y a 2 jours  [↻]
     inter-repo.md            Généré il y a 2 jours  [↻]
-    pm-context.md            Généré il y a 5 jours  [↻]
+    product-context.md       Généré il y a 5 jours  [↻]
 
   TENANT-MANAGEMENT
     README                   Modifié il y a 1 jour
@@ -147,8 +147,8 @@ architecture.md
 
 | Donnée | Source |
 |---|---|
-| Fichiers context global | ~/.nakiros/workspaces/{id}/context/ |
+| Fichiers context global | ~/.nakiros/workspaces/{workspace_slug}/context/ |
 | Fichiers _nakiros repo | {repo}/_nakiros/ |
 | README et autres .md | {repo}/ (lecture directe du filesystem) |
-| Date de génération | Métadonnée stockée dans ~/.nakiros/workspaces/{id}/context/meta.json |
+| Date de génération | Métadonnée stockée dans ~/.nakiros/workspaces/{workspace_slug}/context/meta.json |
 | Date de modification README | git log --follow -1 {fichier} |

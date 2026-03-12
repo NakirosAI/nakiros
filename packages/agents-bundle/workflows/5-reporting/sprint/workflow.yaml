@@ -1,0 +1,27 @@
+name: sprint
+description: "Sprint planning and retrospective: review current sprint state, plan next sprint, distribute tickets, update PM"
+author: "Nakiros"
+
+# Workflow engine bootstrap
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+# Workflow components
+installed_path: "~/.nakiros/workflows/5-reporting/sprint"
+instructions: "{installed_path}/instructions.xml"
+
+# Runtime paths
+profile_config: "~/.nakiros/config.yaml"
+workspace_config: "{project-root}/_nakiros/workspace.yaml"
+workspace_root_dir: "~/.nakiros/workspaces/{workspace_slug}"
+sprints_dir: "{workspace_root_dir}/reports/sprint"
+reports_dir: "{workspace_root_dir}/reports/retro"
+
+# PM defaults
+pm_done_status: "Done"
+pm_in_progress_status: "In Progress"
+pm_todo_status: "To Do"
+
+# Defaults
+default_communication_language: "Français"
+default_document_language: "English"

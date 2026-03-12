@@ -1,6 +1,21 @@
 import type { AgentProvider } from './preferences.js';
 
 export type ChatScopeMode = 'global' | 'repo';
+export type ConversationParticipantStatus = 'idle' | 'running' | 'waiting' | 'error';
+
+export interface ConversationParticipant {
+  participantId: string;
+  agentId: string;
+  provider: AgentProvider;
+  sessionId: string | null;
+  conversationId: string | null;
+  anchorRepoPath: string;
+  activeRepoPaths: string[];
+  summary: string;
+  openQuestions: string[];
+  lastUsedAt: string;
+  status: ConversationParticipantStatus;
+}
 
 export interface WorkspaceScopedSessionState {
   workspaceId: string;
@@ -25,6 +40,7 @@ export interface StoredConversation {
   repoPath: string;
   repoName: string;
   provider: AgentProvider;
+  participants: ConversationParticipant[];
   title: string;
   agents: string[];
   createdAt: string;
@@ -44,6 +60,8 @@ export interface StoredAgentTab {
   lastResolvedRepoMentions: string[];
   repoPath: string;
   provider: AgentProvider;
+  participants: ConversationParticipant[];
+  activeParticipantId?: string;
   title: string;
   sessionId?: string;
 }
@@ -58,5 +76,6 @@ export interface AgentRunRequest extends WorkspaceScopedSessionState {
   message: string;
   provider?: AgentProvider;
   sessionId?: string | null;
+  participantId?: string | null;
   additionalDirs?: string[];
 }

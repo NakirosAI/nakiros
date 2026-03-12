@@ -2,7 +2,7 @@
 
 ## Phase 0 - Documentation
 1. Creer le pack docs PRD/Architecture/UX/UI/Plan/QA.
-2. Verifier alignement commande PRD Assistant (`/tiq-agent-brainstorming`).
+2. Verifier alignement commande PRD Assistant (`/nak-agent-brainstorming`).
 
 ## Phase 1 - Shell + Overview (priorite P1)
 ### Fichiers
@@ -43,12 +43,12 @@
 ### Taches
 1. Transformer ContextPanel en studio contexte
 2. Ajouter action PRD Assistant
-3. Lancer `/tiq-agent-brainstorming` avec prompt structure
+3. Lancer `/nak-agent-brainstorming` avec prompt structure
 4. Re-scan docs a la fin
 
 ### Done criteria
 1. Brainstorming lance depuis Product Context
-2. `.nakiros/context/brainstorming.md` visible apres run
+2. `~/.nakiros/workspaces/{workspace_slug}/context/brainstorming.md` visible apres run
 
 ## Phase 4 - Workflow availability
 ### Fichiers

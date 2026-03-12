@@ -5,7 +5,7 @@ import type {
   StoredWorkspace,
 } from '@nakiros/shared';
 import ContextPanel from '../ContextPanel';
-import GlobalSettings from '../GlobalSettings';
+import GlobalSettings, { type GlobalSettingsSection } from '../GlobalSettings';
 import KanbanBoard from '../KanbanBoard';
 import ProjectSettings from '../ProjectSettings';
 import TicketDetail from '../TicketDetail';
@@ -15,6 +15,7 @@ import ChatView from '../../views/ChatView';
 
 interface DashboardRouterProps {
   showGlobalSettings: boolean;
+  globalSettingsSection: GlobalSettingsSection;
   activeTab: SidebarTab;
   workspace: StoredWorkspace;
   openWorkspaces: StoredWorkspace[];
@@ -43,11 +44,13 @@ interface DashboardRouterProps {
   onGoHome(): void;
   onOpenPrdAssistant(): void;
   onCloseGlobalSettings(): void;
+  onGlobalUpdateApplied(): void;
   onChatRunCompletionNoticeChange(workspaceId: string, pendingCount: number): void;
 }
 
 export function DashboardRouter({
   showGlobalSettings,
+  globalSettingsSection,
   activeTab,
   workspace,
   openWorkspaces,
@@ -76,6 +79,7 @@ export function DashboardRouter({
   onGoHome,
   onOpenPrdAssistant,
   onCloseGlobalSettings,
+  onGlobalUpdateApplied,
   onChatRunCompletionNoticeChange,
 }: DashboardRouterProps) {
   const chatSelected = activeTab === 'chat';
@@ -103,6 +107,8 @@ export function DashboardRouter({
       {showGlobalSettings && (
         <GlobalSettings
           onClose={onCloseGlobalSettings}
+          initialSection={globalSettingsSection}
+          onUpdateApplied={onGlobalUpdateApplied}
         />
       )}
 

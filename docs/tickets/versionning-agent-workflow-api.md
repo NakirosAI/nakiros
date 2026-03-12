@@ -80,7 +80,7 @@ Télécharge un fichier spécifique du bundle.
 | Paramètre | Description |
 |---|---|
 | `version` | Version du bundle (ex: 1.2.0) |
-| `path` | Chemin du fichier (ex: agents/dev.md, workflows/dev-story.yaml) |
+| `path` | Chemin du fichier (ex: `agents/dev.md`, `workflows/4-implementation/dev-story/workflow.yaml`) |
 
 **Paramètres query :**
 

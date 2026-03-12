@@ -25,11 +25,10 @@ export function TicketTabArtifacts({ targetRepo, ticketId }: TicketTabArtifactsP
       </div>
       <div className="flex flex-col gap-2 rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] p-[13px]">
         <h4 className="m-0 text-[13px] font-bold tracking-[0.02em]">{t('artifactsContext')}</h4>
-        <div className="text-xs leading-[1.45] text-[var(--text)]"><code>.nakiros/context/brainstorming.md</code></div>
-        <div className="text-xs leading-[1.45] text-[var(--text)]"><code>.nakiros/context/tickets/{ticketId}.md</code></div>
-        <div className="text-xs leading-[1.45] text-[var(--text)]"><code>.nakiros/context/dev-notes/{ticketId}.md</code></div>
+        <div className="text-xs leading-[1.45] text-[var(--text)]"><code>~/.nakiros/workspaces/{"{workspace_slug}"}/context/brainstorming.md</code></div>
+        <div className="text-xs leading-[1.45] text-[var(--text)]"><code>{targetRepo ? `${targetRepo.localPath}/_nakiros/tickets/${ticketId}.md` : `{repo}/_nakiros/tickets/${ticketId}.md`}</code></div>
+        <div className="text-xs leading-[1.45] text-[var(--text)]"><code>{targetRepo ? `${targetRepo.localPath}/_nakiros/dev-notes/${ticketId}.md` : `{repo}/_nakiros/dev-notes/${ticketId}.md`}</code></div>
       </div>
     </div>
   );
 }
-

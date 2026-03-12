@@ -102,7 +102,7 @@ Exemples :
 - Dev Agent · EX-203 · Coding feature · il y a 12 min
 - SM Agent · EX-118 · Posting team summary · il y a 1h
 
-Clic sur une ligne ouvre le run dans ~/.nakiros/workspaces/{id}/runs/
+Clic sur une ligne ouvre le run dans ~/.nakiros/workspaces/{workspace_slug}/runs/
 
 Mise à jour en temps réel : polling toutes les 5 secondes ou websocket si disponible.
 
@@ -126,7 +126,7 @@ Types d'alertes et conditions de déclenchement :
 
 ## Zone 5 — Daily Report
 
-Visible uniquement si un daily existe pour la veille dans ~/.nakiros/workspaces/{id}/reports/daily/
+Visible uniquement si un daily existe pour la veille dans ~/.nakiros/workspaces/{workspace_slug}/reports/daily/
 
 Titre : "Daily · [date d'hier]"
 
@@ -160,10 +160,10 @@ Toutes locales — aucun appel IA nécessaire pour générer cette page.
 
 | Donnée | Source |
 |---|---|
-| Tickets du sprint actif | ~/.nakiros/workspaces/{id}/tickets/ |
+| Tickets du sprint actif | ~/.nakiros/workspaces/{workspace_slug}/tickets/ |
 | Statut des agents | MCP server localhost:3737 |
-| Execution Feed | ~/.nakiros/workspaces/{id}/runs/ |
-| Daily d'hier | ~/.nakiros/workspaces/{id}/reports/daily/ |
+| Execution Feed | ~/.nakiros/workspaces/{workspace_slug}/runs/ |
+| Daily d'hier | ~/.nakiros/workspaces/{workspace_slug}/reports/daily/ |
 | Commits récents | git log sur les repos du workspace |
 | PRs ouvertes | Jira API via MCP |
 

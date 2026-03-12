@@ -1,6 +1,6 @@
 {
   "title": "Nakiros",
-  "subtitle": "Orchestration multi-repo avec un flux local rapide. Les workspaces sont stockés localement par Nakiros, avec repos optionnels.",
+  "subtitle": "Orchestration multi-repo avec un flux local rapide. Les workspaces sont synchronisés via Nakiros Cloud et mis en cache localement pour l’accès hors ligne.",
   "createWorkspace": "Créer un workspace",
   "createWorkspaceHint": "Configurer un nouveau projet guidé",
   "recent": "Workspaces récents",

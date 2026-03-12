@@ -15,6 +15,10 @@ database_id = "50f1c2a9-eb67-40a3-96e7-bfa3d366c4b8"
 binding = "R2_BUCKET"
 bucket_name = "nakiros-feedback-conversations"
 
+[dev]
+port = 8789
+inspector_port = 9231
+
 # ─── Secrets (set via `wrangler secret put`) ──────────────────────────────────
 # NAKIROS_FEEDBACK_KEY
 #

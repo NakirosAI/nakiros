@@ -10,7 +10,7 @@ What is production-ready today:
 
 - CLI bootstrap and installation flow (`init`, `install`)
 - Multi-environment command deployment (Codex, Cursor, Claude Code, or manual path)
-- Runtime workspace bootstrap (`.nakiros/`) and workflow engine copy (`_nakiros/`)
+- Runtime workspace bootstrap (`~/.nakiros/`) and repo-side pointer/docs (`_nakiros/`)
 - Implemented execution workflow: `dev-story`
 
 ## Why Nakiros
@@ -81,14 +81,14 @@ npx @nakiros/nakiros@dev init
 
 `init` does the following:
 
-1. asks for PM tool (`jira`, `gitlab`, `none`), git host, and branch pattern
+1. asks for PM tool (`jira`, `gitlab`, `none`), git host, branch pattern, and workspace metadata
 2. asks for user/language defaults
 3. creates/updates:
-   - project config: `.nakiros.yaml`
    - user profile: `~/.nakiros/config.yaml`
+   - workspace runtime metadata under `~/.nakiros/workspaces/{slug}/`
 4. deploys prompt commands to detected environments
-5. creates local workspace folders under `.nakiros/`
-6. copies runtime assets under `_nakiros/`
+5. creates the global runtime under `~/.nakiros/`
+6. writes `_nakiros/workspace.yaml` and repo-side docs/runtime helpers under `_nakiros/`
 
 To redeploy/update prompts and runtime assets later:
 
@@ -123,17 +123,6 @@ Supported auto-detected targets:
 
 ## Config
 
-Project config (`.nakiros.yaml`, required):
-
-```yaml
-pm_tool: jira
-git_host: github
-branch_pattern: 'feature/{ticket}'
-jira:
-  project_key: PROJ
-  board_id: '123'
-```
-
 User profile (`~/.nakiros/config.yaml`, optional base):
 
 ```yaml
@@ -143,11 +132,22 @@ communication_language: 'fr'
 document_language: 'fr'
 ```
 
-Effective runtime config = global profile (base) + project config (override).
+Workspace pointer (`_nakiros/workspace.yaml`, repo-side):
+
+```yaml
+workspace_name: Exploitation
+workspace_slug: exploitation
+```
+
+Workspace source of truth (`~/.nakiros/workspaces/{workspace_slug}/workspace.json`):
+- workspace name / slug
+- repo list and local paths
+- PM/project metadata
+- runtime state for workspace-scoped workflows
 
 ## Dev Story Workflow
 
-Current implemented workflow: `_nakiros/workflows/4-implementation/dev-story`.
+Current implemented workflow: `~/.nakiros/workflows/4-implementation/dev-story/workflow.yaml`.
 
 High-level behavior:
 
@@ -167,14 +167,14 @@ Persona behavior in this workflow:
 
 Artifacts are persisted under:
 
-- `.nakiros/state/active-run.json`
-- `.nakiros/workflows/runs/`
-- `.nakiros/workflows/steps/`
+- `~/.nakiros/workspaces/{workspace_slug}/state/active-run.json`
+- `~/.nakiros/workspaces/{workspace_slug}/runs/`
+- `~/.nakiros/workspaces/{workspace_slug}/runs/steps/`
 
 ## Limitations (Current Dev Version)
 
-- Only `dev-story` is fully implemented in `_nakiros/workflows/...`
-- `create-story`, `create-ticket`, `fetch-project-context` command files are present, but corresponding runtime workflows are not yet fully shipped in this repo version
+- `dev-story` is the most complete workflow today.
+- Other workflows are present in the bundle and are being normalized around `~/.nakiros/workspaces/{workspace_slug}/`.
 
 ## Development
 

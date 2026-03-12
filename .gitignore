@@ -5,6 +5,7 @@ _bmad*
 .cursor/
 .npm-cache/
 dist/
+.agents/
 node_modules/
 .nakiros.yaml
 
@@ -28,3 +29,5 @@ apps/desktop/.generated-icons/
 
 # VS Code Extension
 apps/vscode-extension/*.vsix
+tmp/
+_nakiros/

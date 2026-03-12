@@ -1,63 +1,60 @@
-import { type ButtonHTMLAttributes, type ReactNode } from 'react';
-import clsx from 'clsx';
+import * as React from 'react';
+import { Slot } from '@radix-ui/react-slot';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '@/lib/utils';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
-export type ButtonSize = 'sm' | 'md' | 'lg';
+const buttonVariants = cva(
+  [
+    'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,box-shadow,background-color,border-color]',
+    'disabled:pointer-events-none disabled:opacity-50',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+    '[&_svg]:pointer-events-none [&_svg]:shrink-0',
+  ].join(' '),
+  {
+    variants: {
+      variant: {
+        default: 'bg-primary text-primary-foreground hover:brightness-110',
+        secondary: 'border border-border bg-secondary text-secondary-foreground hover:text-foreground',
+        outline: 'border border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground',
+        ghost: 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+        destructive: 'bg-destructive text-destructive-foreground hover:brightness-95',
+        link: 'text-primary underline-offset-4 hover:underline',
+      },
+      size: {
+        default: 'h-9 px-4 py-2',
+        sm: 'h-8 rounded-md px-3 text-xs',
+        lg: 'h-11 rounded-md px-5 text-base',
+        icon: 'size-9',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+      size: 'default',
+    },
+  },
+);
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  loading?: boolean;
-  icon?: ReactNode;
-  iconPosition?: 'left' | 'right';
-}
+type ButtonProps = React.ComponentProps<'button'> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean;
+  };
 
-const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: 'bg-[var(--primary)] text-white border border-[var(--primary)] hover:brightness-110',
-  secondary: 'bg-[var(--bg-soft)] text-[var(--text-muted)] border border-[var(--line)] hover:text-[var(--text)] hover:border-[var(--line-strong)]',
-  danger: 'bg-[var(--danger)] text-black border border-[var(--danger)] hover:brightness-95',
-  ghost: 'bg-transparent text-[var(--text-muted)] border border-transparent hover:text-[var(--text)] hover:border-[var(--line)]',
-};
-
-const SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-xs',
-  md: 'h-9 px-4 text-sm',
-  lg: 'h-11 px-5 text-base',
-};
-
-export function Button({
+function Button({
   className,
-  variant = 'primary',
-  size = 'md',
-  loading = false,
-  icon,
-  iconPosition = 'left',
-  disabled,
-  children,
+  variant,
+  size,
+  asChild = false,
   ...props
 }: ButtonProps) {
-  const isDisabled = disabled || loading;
+  const Comp = asChild ? Slot : 'button';
 
   return (
-    <button
-      className={clsx(
-        'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition disabled:cursor-not-allowed disabled:opacity-50',
-        VARIANT_CLASSES[variant],
-        SIZE_CLASSES[size],
-        className,
-      )}
-      disabled={isDisabled}
+    <Comp
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    >
-      {loading ? (
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-      ) : (
-        icon && iconPosition === 'left' && <span className="shrink-0">{icon}</span>
-      )}
-
-      <span>{children}</span>
-
-      {!loading && icon && iconPosition === 'right' && <span className="shrink-0">{icon}</span>}
-    </button>
+    />
   );
 }
+
+export { Button, buttonVariants };

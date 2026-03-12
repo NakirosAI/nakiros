@@ -19,13 +19,13 @@
 3. Actions IA visibles:
    - PRD Assistant
    - Generer contexte
-   - Contexte PM (Beta)
+   - Contexte produit (Beta)
 4. Badge Beta visible sur l'action PM.
 
 ## 4. PRD Assistant
 1. Ouverture modal depuis Product Context.
 2. Validation des champs requis.
-3. Submit lance `/tiq-agent-brainstorming`.
+3. Submit lance `/nak-agent-brainstorming`.
 4. Bouton copy prompt fonctionne.
 5. Fin de session: re-scan docs et toast de confirmation.
 
@@ -37,7 +37,7 @@
 
 ## 6. Execution ticket
 1. Dans `Execution`, CTA `Lancer dev-story` present.
-2. Lancement utilise `/tiq-workflow-dev-story`.
+2. Lancement utilise `/nak-workflow-dev-story`.
 3. Agent panel embarque s'ouvre dans le hub.
 4. Statut run ticket se met a jour (`running` puis `success`).
 

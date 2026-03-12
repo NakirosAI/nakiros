@@ -1,4 +1,13 @@
 import type {
+  AuthCompletePayload,
+  AuthErrorPayload,
+  AuthSignedOutPayload,
+  AuthState,
+  OrgRole,
+  OrganizationInfo,
+  OrganizationInvitationAcceptanceResult,
+  OrganizationInvitationResult,
+  OrganizationMemberListItem,
   StoredWorkspace,
   AgentProfile,
   LocalTicket,
@@ -9,6 +18,7 @@ import type {
   AgentInstallStatus,
   AgentInstallRequest,
   AgentInstallSummary,
+  ResolvedLanguage,
   StoredConversation,
   StoredAgentTabsState,
 } from '@nakiros/shared';
@@ -129,6 +139,7 @@ declare global {
 
   interface GlobalSection {
     docs: ScannedDoc[];
+    decisionDocs: ScannedDoc[];
     missingNames: string[];
   }
 
@@ -174,6 +185,7 @@ declare global {
       openFilePicker(): Promise<string | null>;
       getWorkspaces(): Promise<StoredWorkspace[]>;
       saveWorkspace(w: StoredWorkspace): Promise<void>;
+      saveWorkspaceCanonical(w: StoredWorkspace): Promise<void>;
       deleteWorkspace(id: string): Promise<void>;
       createWorkspaceRoot(parentDir: string, workspaceName: string): Promise<string>;
       detectProfile(localPath: string): Promise<AgentProfile>;
@@ -186,6 +198,7 @@ declare global {
       gitClone(url: string, parentDir: string): Promise<{ success: boolean; repoPath: string; repoName: string; error?: string }>;
       gitInit(repoPath: string): Promise<{ success: boolean; error?: string }>;
       getPreferences(): Promise<AppPreferences>;
+      getSystemLanguage(): Promise<ResolvedLanguage>;
       savePreferences(prefs: AppPreferences): Promise<void>;
       getAgentInstallStatus(repoPath: string): Promise<AgentInstallStatus>;
       installAgents(request: AgentInstallRequest): Promise<AgentInstallSummary>;
@@ -297,6 +310,24 @@ declare global {
       // Feedback
       sendSessionFeedback(data: SessionFeedbackData): Promise<void>;
       sendProductFeedback(data: ProductFeedbackData): Promise<void>;
+
+      // Auth
+      authGetState(): Promise<AuthState>;
+      orgGetMine(): Promise<OrganizationInfo | undefined>;
+      orgListMine(): Promise<OrganizationInfo[]>;
+      orgCreate(name: string, slug: string): Promise<{ organizationId: string; organizationName: string; organizationSlug: string }>;
+      orgDelete(orgId: string): Promise<void>;
+      orgListMembers(orgId: string): Promise<OrganizationMemberListItem[]>;
+      orgAddMember(orgId: string, email: string, role: OrgRole, inviterEmail?: string): Promise<OrganizationInvitationResult>;
+      orgLeave(orgId: string): Promise<void>;
+      orgCancelInvitation(orgId: string, invitationId: string): Promise<void>;
+      orgAcceptInvitations(email: string): Promise<OrganizationInvitationAcceptanceResult>;
+      orgRemoveMember(orgId: string, userId: string): Promise<void>;
+      authSignIn(): Promise<void>;
+      authSignOut(): Promise<void>;
+      onAuthComplete(cb: (data: AuthCompletePayload) => void): () => void;
+      onAuthError(cb: (data: AuthErrorPayload) => void): () => void;
+      onAuthSignedOut(cb: (data: AuthSignedOutPayload) => void): () => void;
     };
   }
 }

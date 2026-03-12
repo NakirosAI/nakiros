@@ -4,10 +4,11 @@ import clsx from 'clsx';
 import { Button } from '../components/ui';
 import { PROFILE_LABELS } from '../utils/profiles';
 import { useIpcListener } from '../hooks/useIpcListener';
+import { syncWorkspaceArtifacts } from '../utils/workspace-sync';
 
 interface Props {
   initialDirectory?: string;
-  onCreated(workspace: StoredWorkspace): void;
+  onCreated(workspace: StoredWorkspace): Promise<void>;
   onCancel(): void;
 }
 
@@ -462,9 +463,8 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
         lastOpenedAt: new Date().toISOString(),
       };
 
-      await window.nakiros.saveWorkspace(workspace);
-      await window.nakiros.syncWorkspaceYaml(workspace);
-      await window.nakiros.syncWorkspace(workspace);
+      await window.nakiros.saveWorkspaceCanonical(workspace);
+      await syncWorkspaceArtifacts(workspace);
 
       if (workspace.pmTool === 'jira' && workspace.projectKey && jiraStatus?.connected) {
         setStatus('Synchronisation Jira en cours…');
@@ -474,7 +474,7 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
         }
       }
 
-      onCreated(workspace);
+      await onCreated(workspace);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

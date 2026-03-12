@@ -15,7 +15,7 @@ Afficher un écran de démarrage guidé juste après la création d'un workspace
 L'écran Getting Started s'affiche uniquement dans deux cas :
 
 1. Juste après la création d'un nouveau workspace — première ouverture
-2. Si `~/.nakiros/workspaces/{id}/` existe mais qu'aucune étape n'a encore été complétée
+2. Si `~/.nakiros/workspaces/{workspace_slug}/` existe mais qu'aucune étape n'a encore été complétée
 
 Il disparaît définitivement une fois les 3 étapes complétées. L'utilisateur peut aussi le fermer manuellement avec un bouton "Passer — je configure manuellement" discret en bas de page.
 
@@ -103,9 +103,10 @@ Dans chaque repo du workspace :
 
 Dans le workspace global :
 ```
-~/.nakiros/workspaces/{id}/context/
+~/.nakiros/workspaces/{workspace_slug}/context/
   global-context.md
   inter-repo.md
+  product-context.md
 ```
 
 ### Complétion automatique
@@ -126,13 +127,13 @@ Message affiché : "Complétez d'abord la génération du contexte."
 ### Ce qui se passe au clic sur "Lancer →"
 
 1. Redirection vers la vue **Chat IA**
-2. Ouverture automatique d'une nouvelle session intitulée *"Project Confidence · [nom du workspace]"*
+2. Ouverture automatique d'une nouvelle session intitulée *"Project Understanding Confidence · [nom du workspace]"*
 3. Agent sélectionné automatiquement : **Architect**
-4. Lancement automatique de `/nak-workflow-project-confidence`
+4. Lancement automatique de `/nak-workflow-project-understanding-confidence`
 
 ### Fichiers produits
 ```
-~/.nakiros/workspaces/{id}/reports/confidence/
+~/.nakiros/workspaces/{workspace_slug}/reports/confidence/
   {date}.json
 ```
 
@@ -151,13 +152,13 @@ L'étape 3 est grisée tant que l'étape 2 n'est pas complétée.
 1. Redirection vers la vue **Chat IA**
 2. Ouverture automatique d'une nouvelle session intitulée *"PM Challenge · Sprint [nom du sprint actif]"*
 3. Agent sélectionné automatiquement : **PM Agent**
-4. Lancement automatique de `/nak-workflow-pm-challenge` avec injection automatique des tickets synchronisés du sprint actif comme contexte
+4. Lancement automatique de `/nak-agent-pm` avec injection automatique des tickets synchronisés du sprint actif comme contexte
 5. Le PM Agent analyse la cohérence des épics, la qualité des AC, le scope des stories
 
 ### Fichiers produits
 Les commentaires et suggestions du PM Agent sont persistés dans :
 ```
-~/.nakiros/workspaces/{id}/sessions/{session-id}.json
+~/.nakiros/workspaces/{workspace_slug}/sessions/{session-id}.json
 ```
 
 ### Complétion automatique

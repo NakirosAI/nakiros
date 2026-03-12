@@ -1,114 +1,117 @@
-import { app } from 'electron';
-import {
-  readFileSync,
-  writeFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-} from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+
+import { eq } from 'drizzle-orm';
+
+import { getDb, dbSchema } from '@nakiros/server';
 import type { StoredWorkspace } from '@nakiros/shared';
 
-function toSlug(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'workspace';
+export function toWorkspaceSlug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'workspace';
 }
 
-function getWorkspacesRoot(): string {
-  const dir = join(homedir(), '.nakiros', 'workspaces');
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-function findExistingDir(id: string, root: string): string | null {
-  if (!existsSync(root)) return null;
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const jsonPath = join(root, entry.name, 'workspace.json');
-    if (!existsSync(jsonPath)) continue;
-    try {
-      const ws = JSON.parse(readFileSync(jsonPath, 'utf-8')) as StoredWorkspace;
-      if (ws.id === id) return join(root, entry.name);
-    } catch { /* ignore malformed */ }
-  }
-  return null;
-}
-
-function uniqueSlugDir(name: string, root: string): string {
-  const base = toSlug(name);
-  let slug = base;
-  let i = 2;
-  while (existsSync(join(root, slug))) {
-    slug = `${base}-${i++}`;
-  }
-  return join(root, slug);
-}
-
-// One-time migration from old userData/workspaces.json → ~/.nakiros/workspaces/{slug}/workspace.json
+// ---------------------------------------------------------------------------
+// One-time migration: ~/.nakiros/workspaces/{slug}/workspace.json → SQLite
+// ---------------------------------------------------------------------------
 let migrationDone = false;
 function migrateIfNeeded(): void {
   if (migrationDone) return;
   migrationDone = true;
-  const oldPath = join(app.getPath('userData'), 'workspaces.json');
-  if (!existsSync(oldPath)) return;
+
+  const nakirosRoot = join(homedir(), '.nakiros', 'workspaces');
+  if (!existsSync(nakirosRoot)) return;
+
+  let entries: string[];
   try {
-    const old = JSON.parse(readFileSync(oldPath, 'utf-8')) as StoredWorkspace[];
-    for (const ws of old) {
-      save(ws);
+    entries = readdirSync(nakirosRoot, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+  } catch {
+    return;
+  }
+
+  const db = getDb();
+  for (const slug of entries) {
+    const jsonPath = join(nakirosRoot, slug, 'workspace.json');
+    if (!existsSync(jsonPath)) continue;
+    try {
+      const ws = JSON.parse(readFileSync(jsonPath, 'utf-8')) as StoredWorkspace;
+      const existing = db.select().from(dbSchema.workspaces).where(eq(dbSchema.workspaces.id, ws.id)).all();
+      if (existing.length === 0) {
+        db.insert(dbSchema.workspaces)
+          .values({ id: ws.id, name: ws.name, data: JSON.stringify(ws), updatedAt: new Date().toISOString() })
+          .run();
+        console.log(`[Nakiros] Migrated workspace "${ws.name}" (${ws.id}) to SQLite`);
+      }
+      renameSync(jsonPath, `${jsonPath}.migrated`);
+    } catch (err) {
+      console.error(`[Nakiros] Failed to migrate workspace from ${jsonPath}:`, err);
     }
-    renameSync(oldPath, `${oldPath}.migrated`);
-    console.log(`[Nakiros] Migrated ${old.length} workspace(s) to ~/.nakiros/workspaces/`);
-  } catch (err) {
-    console.error('[Nakiros] Migration from userData failed:', err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Public API — synchronous (better-sqlite3 is sync)
+// ---------------------------------------------------------------------------
 
 export function getAll(): StoredWorkspace[] {
   migrateIfNeeded();
-  const root = getWorkspacesRoot();
-  const result: StoredWorkspace[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const jsonPath = join(root, entry.name, 'workspace.json');
-    if (!existsSync(jsonPath)) continue;
-    try {
-      result.push(JSON.parse(readFileSync(jsonPath, 'utf-8')) as StoredWorkspace);
-    } catch { /* ignore malformed */ }
-  }
-  return result;
+  const rows = getDb().select().from(dbSchema.workspaces).all();
+  return rows.map((r) => JSON.parse(r.data) as StoredWorkspace);
 }
 
 export function save(workspace: StoredWorkspace): void {
-  const root = getWorkspacesRoot();
-  const existingDir = findExistingDir(workspace.id, root);
-  const newSlug = toSlug(workspace.name);
-  const newDir = join(root, newSlug);
+  migrateIfNeeded();
+  const now = new Date().toISOString();
+  getDb()
+    .insert(dbSchema.workspaces)
+    .values({ id: workspace.id, name: workspace.name, data: JSON.stringify(workspace), updatedAt: now })
+    .onConflictDoUpdate({
+      target: dbSchema.workspaces.id,
+      set: { name: workspace.name, data: JSON.stringify(workspace), updatedAt: now },
+    })
+    .run();
+}
 
-  let targetDir: string;
+export function replaceAll(workspaces: StoredWorkspace[]): void {
+  migrateIfNeeded();
+  const db = getDb();
+  const now = new Date().toISOString();
+  const incomingIds = new Set(workspaces.map((workspace) => workspace.id));
+  const existingRows = db.select({ id: dbSchema.workspaces.id }).from(dbSchema.workspaces).all();
 
-  if (existingDir) {
-    // Workspace already saved — rename folder if workspace name changed
-    if (existingDir !== newDir && !existsSync(newDir)) {
-      renameSync(existingDir, newDir);
-      targetDir = newDir;
-    } else {
-      targetDir = existingDir;
+  for (const row of existingRows) {
+    if (!incomingIds.has(row.id)) {
+      db.delete(dbSchema.workspaces).where(eq(dbSchema.workspaces.id, row.id)).run();
     }
-  } else {
-    // New workspace — find a unique slug dir
-    targetDir = uniqueSlugDir(workspace.name, root);
-    mkdirSync(targetDir, { recursive: true });
   }
 
-  writeFileSync(join(targetDir, 'workspace.json'), JSON.stringify(workspace, null, 2), 'utf-8');
+  for (const workspace of workspaces) {
+    db
+      .insert(dbSchema.workspaces)
+      .values({ id: workspace.id, name: workspace.name, data: JSON.stringify(workspace), updatedAt: now })
+      .onConflictDoUpdate({
+        target: dbSchema.workspaces.id,
+        set: { name: workspace.name, data: JSON.stringify(workspace), updatedAt: now },
+      })
+      .run();
+  }
 }
 
 export function remove(id: string): void {
-  const root = getWorkspacesRoot();
-  const dir = findExistingDir(id, root);
-  if (dir) {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  getDb().delete(dbSchema.workspaces).where(eq(dbSchema.workspaces.id, id)).run();
+}
+
+// Kept for compatibility with workspace-yaml.ts and other callers
+export function resolveWorkspaceSlug(_id: string, name: string): string {
+  return toWorkspaceSlug(name);
+}
+
+export function ensureNakirosDirs(): void {
+  mkdirSync(join(homedir(), '.nakiros', 'workspaces'), { recursive: true });
 }

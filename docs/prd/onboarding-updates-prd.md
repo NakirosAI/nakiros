@@ -97,14 +97,39 @@ Bouton : "Installer les agents →"
     hotfix.md
     brainstorming.md
   workflows/           # Workflows installés
-    dev-story.yaml
-    create-story.md
-    create-ticket.md
-    generate-context.md
-    project-confidence.md
-    qa-review.md
-    hotfix-story.yaml
-    sprint.md
+    4-implementation/
+      create-story/
+        workflow.yaml
+        instructions.xml
+        checklist.md
+      create-ticket/
+        workflow.yaml
+        instructions.xml
+      dev-story/
+        workflow.yaml
+        instructions.xml
+        checklist.md
+      fetch-project-context/
+        workflow.yaml
+        instructions.xml
+      generate-context/
+        workflow.yaml
+        instructions.xml
+        steps/
+      hotfix-story/
+        workflow.yaml
+        instructions.xml
+      project-understanding-confidence/
+        workflow.yaml
+        instructions.xml
+        checklist.md
+      qa-review/
+        workflow.yaml
+        instructions.xml
+    5-reporting/
+      sprint/
+        workflow.yaml
+        instructions.xml
   workspaces/          # Vide à ce stade
   version.json         # Version actuelle des agents/workflows installés
 ```
@@ -117,7 +142,7 @@ Installing Nakiros agents...
 
 ✅ ~/.nakiros/ created
 ✅ Agents installed (7/7)
-✅ Workflows installed (8/8)
+✅ Workflows installed
 ✅ Claude Code commands deployed
 ✅ Cursor commands deployed
 ✅ version.json saved

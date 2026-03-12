@@ -29,15 +29,39 @@ Créer le dossier suivant à la racine du mono repo :
     hotfix.md
     brainstorming.md
   workflows/
-    dev-story.yaml
-    create-story.md
-    create-ticket.md
-    generate-context.md
-    project-confidence.md
-    qa-review.md
-    hotfix-story.yaml
-    sprint-planning.md
-    sprint-retro.md
+    4-implementation/
+      create-story/
+        workflow.yaml
+        instructions.xml
+        checklist.md
+      create-ticket/
+        workflow.yaml
+        instructions.xml
+      dev-story/
+        workflow.yaml
+        instructions.xml
+        checklist.md
+      fetch-project-context/
+        workflow.yaml
+        instructions.xml
+      generate-context/
+        workflow.yaml
+        instructions.xml
+        steps/
+      hotfix-story/
+        workflow.yaml
+        instructions.xml
+      project-understanding-confidence/
+        workflow.yaml
+        instructions.xml
+        checklist.md
+      qa-review/
+        workflow.yaml
+        instructions.xml
+    5-reporting/
+      sprint/
+        workflow.yaml
+        instructions.xml
   manifest.json
   CHANGELOG.md
 ```
@@ -74,8 +98,8 @@ Le manifest.json est la source de vérité pour les mises à jour. Il doit être
     {
       "type": "workflow",
       "name": "dev-story",
-      "filename": "dev-story.yaml",
-      "path": "workflows/dev-story.yaml",
+      "filename": "workflow.yaml",
+      "path": "workflows/4-implementation/dev-story/workflow.yaml",
       "hash": "sha256:ghi789..."
     }
   ]
@@ -120,15 +144,39 @@ nakiros-assets/
           hotfix.md
           brainstorming.md
         workflows/
-          dev-story.yaml
-          create-story.md
-          create-ticket.md
-          generate-context.md
-          project-confidence.md
-          qa-review.md
-          hotfix-story.yaml
-          sprint-planning.md
-          sprint-retro.md
+          4-implementation/
+            create-story/
+              workflow.yaml
+              instructions.xml
+              checklist.md
+            create-ticket/
+              workflow.yaml
+              instructions.xml
+            dev-story/
+              workflow.yaml
+              instructions.xml
+              checklist.md
+            fetch-project-context/
+              workflow.yaml
+              instructions.xml
+            generate-context/
+              workflow.yaml
+              instructions.xml
+              steps/
+            hotfix-story/
+              workflow.yaml
+              instructions.xml
+            project-understanding-confidence/
+              workflow.yaml
+              instructions.xml
+              checklist.md
+            qa-review/
+              workflow.yaml
+              instructions.xml
+          5-reporting/
+            sprint/
+              workflow.yaml
+              instructions.xml
       1.1.0/
         ...
     beta/

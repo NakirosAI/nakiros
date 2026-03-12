@@ -7,6 +7,7 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: false,
+  external: ["better-sqlite3"],
   outExtension({ format }) {
     return {
       js: format === "cjs" ? ".cjs" : ".js"

@@ -5,20 +5,16 @@
   <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
 
   <step n="1" goal="Load configuration (silent)">
-    <action>Load project config from {project_config} if present (optional for context fetch — warn if missing but continue).</action>
     <action>Load profile config from {profile_config} when available (optional).</action>
-    <action>Build effective config as: profile config (base) + project config (override).</action>
     <action>Apply defaults when missing: communication_language={default_communication_language}, document_language={default_document_language}.</action>
     <output>[CONTEXT] ✓ Config loaded</output>
   </step>
 
-  <step n="2" goal="Discover workspace scope">
-    <action>Check for {workspace_config}. If found, treat it as a lightweight pointer only.</action>
-    <action if="workspace config found">Read `workspace_slug` first, then `workspace_name` from {workspace_config}.</action>
-    <action if="workspace config found">Load `~/.nakiros/workspaces/{workspace_slug}/workspace.json` as the source of truth and extract all repos (name, role, localPath).</action>
-    <action if="workspace config found">Set {{workspace_root_dir}} = `~/.nakiros/workspaces/{workspace_slug}`.</action>
-    <action if="workspace config found">Set {{is_multi_repo}} = true when workspace.json contains more than one repo; otherwise false.</action>
-    <action if="workspace config not found">Set {{is_multi_repo}} = false. Single-repo scope using {project-root}. Do not assume any global workspace context.</action>
+  <step n="2" goal="Discover workspace scope via Nakiros MCP">
+    <action>Call Nakiros MCP tool `workspace_info` to get workspace metadata (id, name, pmTool, projectKey, topology, repoCount).</action>
+    <action if="workspace_info succeeds">Extract workspace name, topology, and repoCount. Set {{is_multi_repo}} = (topology == "multi" OR repoCount > 1).</action>
+    <action if="workspace_info succeeds">Call Nakiros MCP tool `workspace_repos` to get all repos (name, role, localPath, profile, llmDocs). Store as {{workspace_repos}}.</action>
+    <action if="workspace_info fails or returns empty">Set {{is_multi_repo}} = false. Single-repo scope using {project-root}. Do not assume any global workspace context.</action>
     <output>[CONTEXT] ✓ Workspace scope: {{is_multi_repo ? "workspace-backed (" + workspace_repos.length + " repos)" : "single-repo"}}</output>
   </step>
 
@@ -30,49 +26,28 @@
     <output>[CONTEXT] ✓ Git state captured | Branch: {{current_branch}}</output>
   </step>
 
-  <step n="4" goal="Load existing context documents (repo + workspace)">
-    <critical>Repo-scoped docs live in each repo's own `_nakiros/`. Workspace-scoped docs live under `~/.nakiros/workspaces/{workspace_slug}/context/`.</critical>
+  <step n="4" goal="Load existing context via Nakiros MCP">
+    <critical>All workspace and repo context is stored in the Nakiros MCP server — do NOT read from local filesystem `_nakiros/` directories.</critical>
 
     <check if="is_multi_repo">
       <action>For each repo in {{workspace_repos}}:
-        - Check {repo.localPath}/_nakiros/ for:
-          - architecture.md → append to {{arch_contexts}} with repo name as prefix
-          - stack.md → append to {{stack_contexts}} with repo name as prefix
-          - conventions.md → append to {{conventions_contexts}} with repo name as prefix
-          - api.md → append to {{api_contexts}} with repo name as prefix
-          - llms.txt → note presence
-          - qa-reviews/ → note presence and count
-          - dev-notes/ → note presence and count
-          - incidents/ → note presence and count
-          - bugs/ → note presence and count
-        - Note last modified date for freshness assessment
+        - Call Nakiros MCP tool `repo_context_get({repo.name})`
+        - Extract available fields: architecture, stack, conventions, api, llms, updatedAt
+        - Append to {{repo_contexts}} map keyed by repo name
+        - Note which fields are populated and their updatedAt for freshness assessment
       </action>
-      <action>Also check {{workspace_root_dir}}/context/ for workspace-level docs:
-        - product-context.md → {{product_context}}
-        - pm-context.md → {{product_context_legacy}} (fallback only)
-        - brainstorming.md → {{brainstorming_context}}
-        - global-context.md → {{global_context}}
-        - inter-repo.md → {{inter_repo_context}}
-      </action>
+      <action>Call Nakiros MCP tool `workspace_global_context` → {{global_context}}</action>
+      <action>Call Nakiros MCP tool `workspace_product_context` → {{product_context}}</action>
     </check>
 
     <check if="not is_multi_repo">
-      <action>Check {project-root}/_nakiros/ for:
-        - architecture.md → {{arch_context}}
-        - stack.md → {{stack_context}}
-        - conventions.md → {{conventions_context}}
-        - api.md → {{api_context}}
-        - llms.txt → {{llms_context}}
-        - qa-reviews/ → note presence and count
-        - dev-notes/ → note presence and count
-        - incidents/ → note presence and count
-        - bugs/ → note presence and count
-      </action>
-      <action>If {workspace_config} exists, also check {{workspace_root_dir}}/context/ for product-context.md (fallback: pm-context.md), brainstorming.md, and global-context.md.</action>
+      <action>Call Nakiros MCP tool `repo_context_get({workspace_repos[0].name})` → extract architecture, stack, conventions, api, llms into {{arch_context}}, {{stack_context}}, {{conventions_context}}, {{api_context}}, {{llms_context}}</action>
+      <action>Call Nakiros MCP tool `workspace_global_context` → {{global_context}}</action>
+      <action>Call Nakiros MCP tool `workspace_product_context` → {{product_context}}</action>
     </check>
 
-    <action>Note which context documents exist and their approximate freshness (last modified date if available).</action>
-    <output>[CONTEXT] ✓ Existing docs: {{list of found docs per repo or "none"}}</output>
+    <action>Note which context fields are populated and their freshness (updatedAt when present).</action>
+    <output>[CONTEXT] ✓ Existing context: {{list of populated fields per repo, or "none"}}</output>
   </step>
 
   <step n="5" goal="Load ticket context (optional)">
@@ -114,15 +89,16 @@
       {{recent_commits}}
       - Uncommitted changes: {{git_status or "none"}}
 
-      ## Existing Repo Documents
+      ## Existing Repo Context (via Nakiros MCP)
       {{if is_multi_repo:
-        For each repo: "### {repo.name}\n{list of found docs with last modified dates}"
+        For each repo: "### {repo.name}\n{list of populated context fields (architecture, stack, conventions, api, llms) with updatedAt}"
       }}
-      {{if not is_multi_repo: list of found repo docs with last modified dates}}
+      {{if not is_multi_repo: list of populated context fields with updatedAt}}
 
-      ## Existing Workspace Documents
-      {{if workspace_config exists: list of product-context (or legacy pm-context), brainstorming, global-context, inter-repo with last modified dates}}
-      {{if workspace_config does not exist: "No global workspace context configured"}}
+      ## Existing Workspace Context (via Nakiros MCP)
+      {{if global_context: "- global: populated"}}
+      {{if product_context: "- product: populated"}}
+      {{if neither: "No workspace context generated yet — run /nak-workflow-generate-context to generate"}}
 
       ## Ticket Context
       {{ticket_context if present, else "No ticket provided"}}
@@ -133,8 +109,8 @@
     <action>Display a concise summary to the user:
       - Workspace: {{single or workspace-backed with repo count}}
       - Branch: {{current_branch}}
-      - Repo docs per repo: {{list grouped by repo, with freshness}}
-      - Workspace docs: {{product-context or legacy pm-context, brainstorming, global-context, inter-repo if present}}
+      - Repo context per repo: {{list of populated fields grouped by repo, with freshness}}
+      - Workspace context: {{global: populated/empty, product: populated/empty}}
       - Ticket: {{ticketId or "none"}}
       - Artifact: {{context_file}}
     </action>

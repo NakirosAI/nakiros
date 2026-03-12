@@ -1,24 +1,28 @@
 
-> @tiqora/desktop@0.0.1 build /Users/thomasailleaume/Perso/timetrackerAgent/apps/desktop
+> @nakiros/desktop@1.0.0 build /Users/thomasailleaume/Perso/timetrackerAgent/apps/desktop
 > electron-vite build
 
 vite v6.4.1 building SSR bundle for production...
 transforming...
-✓ 8 modules transformed.
+✓ 825 modules transformed.
 rendering chunks...
-out/main/index.js  18.72 kB
-✓ built in 56ms
+dist-electron/main/index.js  2,163.12 kB
+✓ built in 2.28s
 vite v6.4.1 building SSR bundle for production...
 transforming...
-✓ 1 modules transformed.
+✓ 14 modules transformed.
 rendering chunks...
-out/preload/index.js  1.97 kB
-✓ built in 6ms
+dist-electron/preload/index.js  16.72 kB
+✓ built in 37ms
 vite v6.4.1 building for production...
 transforming...
-✓ 1741 modules transformed.
+✓ 2105 modules transformed.
 rendering chunks...
-../out/renderer/index.html                   0.39 kB
-../out/renderer/assets/index-CACtegjA.css    1.83 kB
-../out/renderer/assets/index-DJ2MaNuM.js   718.07 kB
-✓ built in 1.10s
+../dist-electron/renderer/index.html                                    0.38 kB
+../dist-electron/renderer/assets/SpaceMono-Bold-Dyp2aizM.ttf           97.26 kB
+../dist-electron/renderer/assets/SpaceMono-Regular-Ba0nOT4a.ttf        98.32 kB
+../dist-electron/renderer/assets/SpaceMono-BoldItalic-Cfx5I7zT.ttf    103.29 kB
+../dist-electron/renderer/assets/SpaceMono-Italic-Bsn02tz1.ttf        112.91 kB
+../dist-electron/renderer/assets/index-CPpRtlOg.css                    70.95 kB
+../dist-electron/renderer/assets/index-Cjpy68in.js                  1,700.29 kB
+✓ built in 2.04s

@@ -27,19 +27,15 @@ Do not write files in this step.
 
 ## STEP 1A — Load configuration
 
-1. Load `{project-root}/.nakiros.yaml` (required). Warn but continue if missing.
-2. Load `~/.nakiros/config.yaml` if available (optional).
-3. Apply defaults: `communication_language = Français`, `document_language = English`.
-4. Read `{project-root}/_nakiros/workspace.yaml` if present.
-5. If `_nakiros/workspace.yaml` exists:
-   - treat it as a lightweight pointer only
-   - read `workspace_slug` first, then `workspace_name`
-   - load `~/.nakiros/workspaces/{workspace_slug}/workspace.json` as the source of truth
-6. Build `repos_to_analyze`:
-   - If workspace config found → full list from `workspace.json.repos`
-   - Otherwise → `[current repo only]`
+1. Load `~/.nakiros/config.yaml` if available (optional).
+2. Apply defaults: `communication_language = Français`, `document_language = English`.
+3. Call Nakiros MCP tool `workspace_info` to get workspace metadata (id, name, topology, repoCount).
+4. Call Nakiros MCP tool `workspace_repos` to get the full repo list (name, role, localPath, profile).
+5. Build `repos_to_analyze`:
+   - If MCP returns repos → full list from workspace_repos
+   - Otherwise (MCP unavailable) → `[current repo only]`
 
-7. Guard rail:
+6. Guard rail:
    - If the current working directory is `~/.nakiros` and `{project-root}/_nakiros/workspace.yaml` is missing, STOP.
    - Report a scope error instead of analyzing `.nakiros`.
    - Tell the user the workflow was launched from the agent runtime instead of the selected repo/workspace.
@@ -137,25 +133,25 @@ Vue système
   • {recommended repo order for a common change}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Fichiers qui seront générés :
+Contexte qui sera généré (via Nakiros MCP) :
 
-Par repo (dans chaque repo respectif) :
-  • {repo1}/_nakiros/architecture.md
-  • {repo1}/_nakiros/stack.md
-  • {repo1}/_nakiros/conventions.md
-  • {repo1}/_nakiros/api.md
-  • {repo1}/_nakiros/llms.txt
+Par repo :
+  • repo_context_set({repo1}, "architecture")
+  • repo_context_set({repo1}, "stack")
+  • repo_context_set({repo1}, "conventions")
+  • repo_context_set({repo1}, "api")
+  • repo_context_set({repo1}, "llms")
   ...
 
-Niveau workspace (global) :
-  • ~/.nakiros/workspaces/{workspace_slug}/context/global-context.md
-  • ~/.nakiros/workspaces/{workspace_slug}/context/product-context.md
-{if multi-repo: "  • ~/.nakiros/workspaces/{workspace_slug}/context/inter-repo.md"}
+Niveau workspace :
+  • workspace_context_set("global")
+  • workspace_context_set("product")
+{if multi-repo: "  • workspace_context_set(\"interRepo\")"}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Apportez vos corrections ou ajouts ici si nécessaire.
 
-[C] Confirmer et générer les fichiers de contexte
+[C] Confirmer et générer le contexte
 ```
 
 ---

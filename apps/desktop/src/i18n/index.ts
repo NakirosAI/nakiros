@@ -14,6 +14,7 @@ import frContext from './locales/fr/context.json';
 import frOverview from './locales/fr/overview.json';
 import frTicket from './locales/fr/ticket.json';
 import frAgent from './locales/fr/agent.json';
+import frAuth from './locales/fr/auth.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -28,45 +29,63 @@ import enContext from './locales/en/context.json';
 import enOverview from './locales/en/overview.json';
 import enTicket from './locales/en/ticket.json';
 import enAgent from './locales/en/agent.json';
+import enAuth from './locales/en/auth.json';
+import { resolveLanguage } from '../utils/language';
+import type { ResolvedLanguage } from '@nakiros/shared';
 
-void i18n.use(initReactI18next).init({
-  resources: {
-    fr: {
-      common: frCommon,
-      home: frHome,
-      dashboard: frDashboard,
-      sidebar: frSidebar,
-      board: frBoard,
-      settings: frSettings,
-      onboarding: frOnboarding,
-      toast: frToast,
-      feedback: frFeedback,
-      context: frContext,
-      overview: frOverview,
-      ticket: frTicket,
-      agent: frAgent,
-    },
-    en: {
-      common: enCommon,
-      home: enHome,
-      dashboard: enDashboard,
-      sidebar: enSidebar,
-      board: enBoard,
-      settings: enSettings,
-      onboarding: enOnboarding,
-      toast: enToast,
-      feedback: enFeedback,
-      context: enContext,
-      overview: enOverview,
-      ticket: enTicket,
-      agent: enAgent,
-    },
+const resources = {
+  fr: {
+    common: frCommon,
+    home: frHome,
+    dashboard: frDashboard,
+    sidebar: frSidebar,
+    board: frBoard,
+    settings: frSettings,
+    onboarding: frOnboarding,
+    toast: frToast,
+    feedback: frFeedback,
+    context: frContext,
+    overview: frOverview,
+    ticket: frTicket,
+    agent: frAgent,
+    auth: frAuth,
   },
-  lng: 'en',
-  fallbackLng: 'en',
-  interpolation: {
-    escapeValue: false,
+  en: {
+    common: enCommon,
+    home: enHome,
+    dashboard: enDashboard,
+    sidebar: enSidebar,
+    board: enBoard,
+    settings: enSettings,
+    onboarding: enOnboarding,
+    toast: enToast,
+    feedback: enFeedback,
+    context: enContext,
+    overview: enOverview,
+    ticket: enTicket,
+    agent: enAgent,
+    auth: enAuth,
   },
-});
+};
+
+async function detectInitialLanguage(): Promise<ResolvedLanguage> {
+  try {
+    return await window.nakiros.getSystemLanguage();
+  } catch {
+    return resolveLanguage('system');
+  }
+}
+
+export const i18nReady = (async () => {
+  const lng = await detectInitialLanguage();
+  await i18n.use(initReactI18next).init({
+    resources,
+    lng,
+    fallbackLng: 'en',
+    interpolation: {
+      escapeValue: false,
+    },
+  });
+})();
 
 export default i18n;

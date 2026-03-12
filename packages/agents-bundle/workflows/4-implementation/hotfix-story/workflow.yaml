@@ -1,0 +1,34 @@
+name: hotfix-story
+description: "Fast-track production incident workflow: triage, minimal-scope fix, expedited MR, production sync"
+author: "Nakiros"
+
+# Workflow engine bootstrap
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+# Workflow components
+installed_path: "~/.nakiros/workflows/4-implementation/hotfix-story"
+instructions: "{installed_path}/instructions.xml"
+
+# Runtime paths
+profile_config: "~/.nakiros/config.yaml"
+workspace_config: "{project-root}/_nakiros/workspace.yaml"
+workspace_root_dir: "~/.nakiros/workspaces/{workspace_slug}"
+active_run_file: "{workspace_root_dir}/state/active-run.json"
+workflow_runs_dir: "{workspace_root_dir}/runs"
+sync_queue_file: "{workspace_root_dir}/sync/queue.json"
+
+# PM tracking
+pm_in_progress_status: "In Progress"
+pm_review_status: "In Review"
+pm_done_status: "Done"
+worklog_rounding_minutes: 15
+minimum_worklog_minutes: 15
+
+# Hotfix-specific
+hotfix_branch_prefix: "hotfix/"
+
+# Defaults
+default_user_name: "Developer"
+default_communication_language: "Français"
+default_document_language: "English"

@@ -11,31 +11,18 @@ installed_path: "~/.nakiros/workflows/4-implementation/generate-context"
 steps_path: "{installed_path}/steps"
 
 # Runtime paths
-project_config: "{project-root}/.nakiros.yaml"
 profile_config: "~/.nakiros/config.yaml"
 workspace_config: "{project-root}/_nakiros/workspace.yaml"
-workspace_root_dir: "~/.nakiros/workspaces/{workspace_slug}"
-workspace_context_dir: "{workspace_root_dir}/context"
-workspace_findings_dir: "{workspace_root_dir}/.findings"
-
-# Output paths - per repo
-per_repo_doc_dir: "{repo_localPath}/_nakiros"
-per_repo_architecture: "{per_repo_doc_dir}/architecture.md"
-per_repo_stack: "{per_repo_doc_dir}/stack.md"
-per_repo_conventions: "{per_repo_doc_dir}/conventions.md"
-per_repo_api: "{per_repo_doc_dir}/api.md"
-per_repo_llms: "{per_repo_doc_dir}/llms.txt"
-
-# Output paths - workspace level
-workspace_output_dir: "{workspace_context_dir}"
-global_output: "{workspace_output_dir}/global-context.md"
-product_output: "{workspace_output_dir}/product-context.md"
-inter_repo_output: "{workspace_output_dir}/inter-repo.md"
 
 # Findings paths - temporary, written by sub-agents, cleaned up after synthesis
-arch_findings: "{per_repo_doc_dir}/.findings/arch.json"
+workspace_findings_dir: "{project-root}/_nakiros/.findings/workspace"
+arch_findings: "{repo_localPath}/_nakiros/.findings/arch.json"
 product_findings: "{workspace_findings_dir}/product.json"
 inter_repo_findings: "{workspace_findings_dir}/inter-repo.json"
+
+# Output: stored in Nakiros MCP server (not local filesystem)
+# Use repo_context_set(repoName, field, content) for per-repo context
+# Use workspace_context_set(field, content) for workspace-level context
 
 # Defaults
 default_communication_language: "Français"

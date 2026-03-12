@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { AgentProvider, StoredConversation } from '@nakiros/shared';
+import type { StoredConversation } from '@nakiros/shared';
+import { normalizeParticipants, normalizeProvider, toWorkspaceSlug } from './store-utils.js';
 
 const NAKIROS_DIR = join(homedir(), '.nakiros');
 
@@ -18,9 +19,6 @@ function ensureSessionsDir(workspaceId: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
-function toWorkspaceSlug(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'workspace';
-}
 
 function normalizeConversation(raw: unknown): StoredConversation | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -34,9 +32,6 @@ function normalizeConversation(raw: unknown): StoredConversation | null {
     || typeof item['lastUsedAt'] !== 'string'
   ) return null;
 
-  const provider = item['provider'];
-  const normalizedProvider: AgentProvider =
-    provider === 'codex' || provider === 'cursor' || provider === 'claude' ? provider : 'claude';
   const workspaceId = item['workspaceId'];
   const repoPath = typeof item['repoPath'] === 'string' ? item['repoPath'] : '';
   const workspaceName = typeof item['workspaceName'] === 'string'
@@ -55,6 +50,7 @@ function normalizeConversation(raw: unknown): StoredConversation | null {
   const lastResolvedRepoMentions = Array.isArray(item['lastResolvedRepoMentions'])
     ? item['lastResolvedRepoMentions'].filter((token): token is string => typeof token === 'string' && token.trim().length > 0)
     : [];
+  const participants = normalizeParticipants(item['participants'], repoPath);
 
   return {
     id: item['id'],
@@ -68,7 +64,8 @@ function normalizeConversation(raw: unknown): StoredConversation | null {
     lastResolvedRepoMentions,
     repoPath,
     repoName: typeof item['repoName'] === 'string' ? item['repoName'] : '',
-    provider: normalizedProvider,
+    provider: normalizeProvider(item['provider']),
+    participants,
     title: item['title'],
     agents: Array.isArray(item['agents']) ? item['agents'].filter((a) => typeof a === 'string') : [],
     createdAt: item['createdAt'],

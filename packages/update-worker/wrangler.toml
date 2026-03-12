@@ -9,6 +9,10 @@ bucket_name = "nakiros-assets"
 [triggers]
 routes = ["updates.nakiros.com/*"]
 
+[dev]
+port = 8790
+inspector_port = 9232
+
 # ─── Secrets (set via `wrangler secret put`) ──────────────────────────────────
 # NAKIROS_API_KEY_STABLE
 # NAKIROS_API_KEY_BETA

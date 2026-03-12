@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Languages, Plug, Sparkles, X } from 'lucide-react';
+import { Bot, Building2, Languages, Plug, Sparkles, X } from 'lucide-react';
 import clsx from 'clsx';
 import type { AppPreferences } from '@nakiros/shared';
 import { Button } from './ui';
 import { usePreferences } from '../hooks/usePreferences';
 import { AGENT_DEFINITIONS, resolveAgentDefinitions, type AgentDefinition } from '../constants/agents';
+import { SettingsOrganization } from './settings';
 import {
   GlobalSettingsAgentAISection,
   GlobalSettingsAgentNakirosSection,
@@ -18,11 +19,15 @@ import {
 
 interface Props {
   onClose(): void;
+  initialSection?: SettingsSection;
+  onUpdateApplied?(): void;
 }
 
-type SettingsSection = 'general' | 'agent-ai' | 'mcp-nakiros' | 'agent-nakiros';
+type SettingsSection = 'general' | 'organization' | 'agent-ai' | 'mcp-nakiros' | 'agent-nakiros';
 
-export default function GlobalSettings({ onClose }: Props) {
+export type GlobalSettingsSection = SettingsSection;
+
+export default function GlobalSettings({ onClose, initialSection = 'general', onUpdateApplied }: Props) {
   const { t } = useTranslation('settings');
   const { preferences, updatePreferences } = usePreferences();
   const [status, setStatus] = useState<GlobalSettingsStatus>('idle');
@@ -34,7 +39,7 @@ export default function GlobalSettings({ onClose }: Props) {
   const [updateMsg, setUpdateMsg] = useState('');
   const [versionInfo, setVersionInfo] = useState<BundleVersionInfo | null>(null);
   const [agentDefinitions, setAgentDefinitions] = useState<AgentDefinition[]>(AGENT_DEFINITIONS);
-  const [section, setSection] = useState<SettingsSection>('general');
+  const [section, setSection] = useState<SettingsSection>(initialSection);
   const [mcpServerInput, setMcpServerInput] = useState(preferences.mcpServerUrl ?? '');
 
   useEffect(() => {
@@ -46,6 +51,11 @@ export default function GlobalSettings({ onClose }: Props) {
 
   useEffect(() => {
     void window.nakiros.getVersionInfo().then(setVersionInfo);
+  }, []);
+
+  useEffect(() => {
+    void handleCheckUpdates();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -84,6 +94,10 @@ export default function GlobalSettings({ onClose }: Props) {
     setMcpServerInput(preferences.mcpServerUrl ?? '');
   }, [preferences.mcpServerUrl]);
 
+  useEffect(() => {
+    setSection(initialSection);
+  }, [initialSection]);
+
   async function handleCheckUpdates(channelOverride?: 'stable' | 'beta') {
     setUpdateStatus('checking');
     setUpdateMsg('');
@@ -114,6 +128,7 @@ export default function GlobalSettings({ onClose }: Props) {
       setUpdateStatus('success');
       setUpdateMsg(t('updatedTo', { version: updateResult.latestVersion }));
       setUpdateResult(null);
+      onUpdateApplied?.();
     } catch {
       setUpdateStatus('error');
       setUpdateMsg(t('updateFailed'));
@@ -150,6 +165,7 @@ export default function GlobalSettings({ onClose }: Props) {
 
   const nav = [
     { id: 'general' as const, label: t('navGeneral'), icon: <Languages size={15} /> },
+    { id: 'organization' as const, label: t('navOrganization'), icon: <Building2 size={15} /> },
     { id: 'agent-ai' as const, label: t('navAgentAI'), icon: <Bot size={15} /> },
     { id: 'mcp-nakiros' as const, label: t('navMcpNakiros'), icon: <Plug size={15} /> },
     { id: 'agent-nakiros' as const, label: t('navAgentNakiros'), icon: <Sparkles size={15} /> },
@@ -201,6 +217,10 @@ export default function GlobalSettings({ onClose }: Props) {
               statusText={statusText}
               onUpdate={update}
             />
+          )}
+
+          {section === 'organization' && (
+            <SettingsOrganization />
           )}
 
           {section === 'agent-ai' && (

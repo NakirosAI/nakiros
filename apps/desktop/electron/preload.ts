@@ -3,6 +3,16 @@ import { IPC_CHANNELS } from '@nakiros/shared';
 import type {
   AgentRunRequest,
   AgentProvider,
+  AuthCompletePayload,
+  AuthErrorPayload,
+  AuthSignedOutPayload,
+  AuthState,
+  OrgRole,
+  OrganizationInfo,
+  OrganizationInvitationAcceptanceResult,
+  OrganizationInvitationResult,
+  OrganizationMemberListItem,
+  ResolvedLanguage,
   StoredWorkspace,
   StoredConversation,
   StoredAgentTabsState,
@@ -19,6 +29,7 @@ contextBridge.exposeInMainWorld('nakiros', {
   openFilePicker: () => ipcRenderer.invoke(IPC_CHANNELS['dialog:openFile']),
   getWorkspaces: () => ipcRenderer.invoke(IPC_CHANNELS['workspace:getAll']),
   saveWorkspace: (w: unknown) => ipcRenderer.invoke(IPC_CHANNELS['workspace:save'], w),
+  saveWorkspaceCanonical: (w: unknown) => ipcRenderer.invoke(IPC_CHANNELS['workspace:saveCanonical'], w),
   deleteWorkspace: (id: string) => ipcRenderer.invoke(IPC_CHANNELS['workspace:delete'], id),
   createWorkspaceRoot: (parentDir: string, workspaceName: string) =>
     ipcRenderer.invoke(IPC_CHANNELS['workspace:createRoot'], parentDir, workspaceName),
@@ -33,6 +44,7 @@ contextBridge.exposeInMainWorld('nakiros', {
   gitClone: (url: string, parentDir: string) => ipcRenderer.invoke(IPC_CHANNELS['git:clone'], url, parentDir),
   gitInit: (repoPath: string) => ipcRenderer.invoke(IPC_CHANNELS['git:init'], repoPath),
   getPreferences: () => ipcRenderer.invoke(IPC_CHANNELS['preferences:get']),
+  getSystemLanguage: () => ipcRenderer.invoke(IPC_CHANNELS['preferences:getSystemLanguage']) as Promise<ResolvedLanguage>,
   savePreferences: (prefs: unknown) => ipcRenderer.invoke(IPC_CHANNELS['preferences:save'], prefs),
   getAgentInstallStatus: (repoPath: string) => ipcRenderer.invoke(IPC_CHANNELS['agents:status'], repoPath),
   installAgents: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS['agents:install'], request),
@@ -207,4 +219,36 @@ contextBridge.exposeInMainWorld('nakiros', {
   // Feedback
   sendSessionFeedback: (data: unknown) => ipcRenderer.invoke(IPC_CHANNELS['feedback:sendSession'], data),
   sendProductFeedback: (data: unknown) => ipcRenderer.invoke(IPC_CHANNELS['feedback:sendProduct'], data),
+
+  // Auth
+  authGetState: () => ipcRenderer.invoke(IPC_CHANNELS['auth:getState']) as Promise<AuthState>,
+  orgGetMine: () => ipcRenderer.invoke(IPC_CHANNELS['org:getMine']) as Promise<OrganizationInfo | undefined>,
+  orgListMine: () => ipcRenderer.invoke(IPC_CHANNELS['org:listMine']) as Promise<OrganizationInfo[]>,
+  orgCreate: (name: string, slug: string) => ipcRenderer.invoke(IPC_CHANNELS['org:create'], name, slug) as Promise<{ organizationId: string; organizationName: string; organizationSlug: string }>,
+  orgDelete: (orgId: string) => ipcRenderer.invoke(IPC_CHANNELS['org:delete'], orgId) as Promise<void>,
+  orgListMembers: (orgId: string) => ipcRenderer.invoke(IPC_CHANNELS['org:listMembers'], orgId) as Promise<OrganizationMemberListItem[]>,
+  orgAddMember: (orgId: string, email: string, role: OrgRole, inviterEmail?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS['org:addMember'], orgId, email, role, inviterEmail) as Promise<OrganizationInvitationResult>,
+  orgLeave: (orgId: string) => ipcRenderer.invoke(IPC_CHANNELS['org:leave'], orgId) as Promise<void>,
+  orgCancelInvitation: (orgId: string, invitationId: string) => ipcRenderer.invoke(IPC_CHANNELS['org:cancelInvitation'], orgId, invitationId) as Promise<void>,
+  orgAcceptInvitations: (email: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS['org:acceptInvitations'], email) as Promise<OrganizationInvitationAcceptanceResult>,
+  orgRemoveMember: (orgId: string, userId: string) => ipcRenderer.invoke(IPC_CHANNELS['org:removeMember'], orgId, userId) as Promise<void>,
+  authSignIn: () => ipcRenderer.invoke(IPC_CHANNELS['auth:signIn']),
+  authSignOut: () => ipcRenderer.invoke(IPC_CHANNELS['auth:signOut']),
+  onAuthComplete: (cb: (data: AuthCompletePayload) => void) => {
+    const listener = (_: unknown, data: AuthCompletePayload) => cb(data);
+    ipcRenderer.on(IPC_CHANNELS['auth:complete'], listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS['auth:complete'], listener);
+  },
+  onAuthError: (cb: (data: AuthErrorPayload) => void) => {
+    const listener = (_: unknown, data: AuthErrorPayload) => cb(data);
+    ipcRenderer.on(IPC_CHANNELS['auth:error'], listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS['auth:error'], listener);
+  },
+  onAuthSignedOut: (cb: (data: AuthSignedOutPayload) => void) => {
+    const listener = (_: unknown, data: AuthSignedOutPayload) => cb(data);
+    ipcRenderer.on(IPC_CHANNELS['auth:signedOut'], listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS['auth:signedOut'], listener);
+  },
 });

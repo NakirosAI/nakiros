@@ -21,5 +21,17 @@
   "updating": "Updating…",
   "doneTitle": "Nakiros is ready.",
   "doneSub": "Create your first workspace to get started.",
-  "doneBtn": "Create my first workspace →"
+  "doneBtn": "Create my first workspace →",
+  "workspaceGettingStartedEyebrow": "Getting Started",
+  "workspaceGettingStartedTitle": "Workspace “{{name}}” is ready",
+  "workspaceGettingStartedDescription": "Your workspace now exists in Nakiros Cloud and is cached locally for offline reads. The next onboarding stage will guide the team through context generation, project confidence, and ticket challenge.",
+  "workspaceGettingStartedStepLabel": "Step {{number}}",
+  "workspaceGettingStartedStepContextTitle": "Generate the shared project context",
+  "workspaceGettingStartedStepContextDescription": "Analyze the selected repositories and produce the reference docs your agents will rely on.",
+  "workspaceGettingStartedStepConfidenceTitle": "Assess project understanding",
+  "workspaceGettingStartedStepConfidenceDescription": "Measure what the system understands about the codebase and surface any remaining blind spots.",
+  "workspaceGettingStartedStepTicketsTitle": "Challenge synchronized tickets",
+  "workspaceGettingStartedStepTicketsDescription": "Review the current delivery scope before development starts so the workspace is operational end to end.",
+  "workspaceGettingStartedContinue": "Open workspace",
+  "workspaceGettingStartedBack": "Back to home"
 }

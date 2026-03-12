@@ -35,4 +35,5 @@ export interface StoredWorkspace {
   context?: WorkspaceContext;
   boardType?: 'scrum' | 'kanban' | 'unknown';
   syncFilter?: 'sprint_active' | 'last_3_months' | 'all';
+  ownerId?: string;
 }

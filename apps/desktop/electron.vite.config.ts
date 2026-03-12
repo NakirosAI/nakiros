@@ -59,6 +59,7 @@ export default defineConfig({
       alias: {
         '@nakiros/shared': sharedEntry,
         '@nakiros/server': serverEntry,
+        '@': resolve(__dirname, 'src'),
       },
     },
     build: {

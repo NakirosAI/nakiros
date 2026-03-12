@@ -7,9 +7,8 @@
   <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
 
   <step n="1" goal="Load configuration and enumerate repos">
-    <action>Load project config from {project_config} (required). Warn but continue if missing.</action>
     <action>Load profile config from {profile_config} when available (optional).</action>
-    <action>Build effective config. Apply defaults: communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Apply defaults when missing: communication_language={default_communication_language}, document_language={default_document_language}.</action>
     <action>Check for {workspace_config}. If found, treat it as a lightweight pointer only.</action>
     <action if="workspace_config found">Read `workspace_slug` first, then `workspace_name` from {workspace_config}.</action>
     <action if="workspace_config found">Load `~/.nakiros/workspaces/{workspace_slug}/workspace.json` as the source of truth.</action>

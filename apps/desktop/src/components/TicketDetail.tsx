@@ -5,6 +5,7 @@ import type {
   AgentProvider,
   LocalEpic,
   LocalTicket,
+  OnboardingChatLaunchRequest,
   StoredRepo,
   StoredWorkspace,
   TicketPriority,
@@ -32,6 +33,7 @@ interface Props {
   onContextCopy(): void;
   copying: boolean;
   defaultProvider: AgentProvider;
+  onLaunchChat?(request: OnboardingChatLaunchRequest): void;
 }
 
 export default function TicketDetail({
@@ -47,6 +49,7 @@ export default function TicketDetail({
   onContextCopy,
   copying,
   defaultProvider,
+  onLaunchChat,
 }: Props) {
   const { t: tt, i18n } = useTranslation('ticket');
   const locale = i18n.language.startsWith('fr') ? 'fr-FR' : 'en-US';
@@ -138,9 +141,8 @@ export default function TicketDetail({
       return;
     }
     setExecutionError(null);
-    setExecutionRunning(true);
     const command = '/nak-workflow-dev-story';
-    const nextMessage = [
+    const initialMessage = [
       command,
       '',
       `${tt('commandTicketLabel')}: ${currentTicket.id}`,
@@ -152,7 +154,27 @@ export default function TicketDetail({
         : [`- ${tt('toComplete')}`]),
     ].join('\n');
 
-    setExecutionMessage(nextMessage);
+    if (onLaunchChat) {
+      onLaunchChat({
+        requestId: crypto.randomUUID(),
+        title: currentTicket.id,
+        agentId: 'dev-story',
+        command,
+        initialMessage,
+      });
+      setExecutionRunning(true);
+      await save({
+        ...currentTicket,
+        lastRunAt: new Date().toISOString(),
+        lastRunStatus: 'running',
+        lastRunProvider: defaultProvider,
+        lastRunCommand: command,
+      });
+      return;
+    }
+
+    setExecutionRunning(true);
+    setExecutionMessage(initialMessage);
     setExecutionLaunchKey((prev) => prev + 1);
 
     await save({

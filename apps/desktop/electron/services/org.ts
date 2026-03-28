@@ -1,4 +1,4 @@
-import { getStoredToken } from './auth.js';
+import { ensureValidAccessToken } from './auth.js';
 import { createAddOrgMemberPayload } from './org-payload.js';
 import type {
   OrgRole,
@@ -77,12 +77,12 @@ function normalizeOrgMembers(payload: unknown): OrgMember[] {
  * Returns all organizations the authenticated user belongs to.
  */
 export async function listMyOrgs(): Promise<OrgInfo[]> {
-  const token = getStoredToken();
-  if (!token) return [];
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return [];
 
   try {
     const res = await fetch(`${WORKER_API}/orgs/mine`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${resolved.token}` },
     });
     if (!res.ok) return [];
     return normalizeOrgList(await res.json().catch(() => []));
@@ -103,12 +103,12 @@ export async function getMyOrg(): Promise<OrgInfo | undefined> {
  * Creates a new organization. Throws with a user-facing message on failure.
  */
 export async function createOrg(name: string, slug: string): Promise<CreateOrgResult> {
-  const token = getStoredToken();
-  if (!token) throw new Error('Not authenticated');
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? 'Session expired. Sign in again.' : 'Not authenticated');
 
   const res = await fetch(`${WORKER_API}/orgs`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${resolved.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, slug }),
   });
 
@@ -134,12 +134,12 @@ export async function createOrg(name: string, slug: string): Promise<CreateOrgRe
  * Deletes an organization. Admin only.
  */
 export async function deleteOrg(orgId: string): Promise<void> {
-  const token = getStoredToken();
-  if (!token) throw new Error('Not authenticated');
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? 'Session expired. Sign in again.' : 'Not authenticated');
 
   const res = await fetch(`${WORKER_API}/orgs/${orgId}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${resolved.token}` },
   });
 
   if (!res.ok) {
@@ -152,11 +152,11 @@ export async function deleteOrg(orgId: string): Promise<void> {
  * Lists members of an organization. Admin only.
  */
 export async function listOrgMembers(orgId: string): Promise<OrgMember[]> {
-  const token = getStoredToken();
-  if (!token) throw new Error('Not authenticated');
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? 'Session expired. Sign in again.' : 'Not authenticated');
 
   const res = await fetch(`${WORKER_API}/orgs/${orgId}/members`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${resolved.token}` },
   });
 
   if (!res.ok) throw new Error(`Failed to list members: ${res.status}`);
@@ -173,12 +173,12 @@ export async function addOrgMember(
   role: OrgRole,
   inviterEmail?: string,
 ): Promise<AddMemberResult> {
-  const token = getStoredToken();
-  if (!token) throw new Error('Not authenticated');
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? 'Session expired. Sign in again.' : 'Not authenticated');
 
   const res = await fetch(`${WORKER_API}/orgs/${orgId}/members`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${resolved.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(createAddOrgMemberPayload(email, role, inviterEmail)),
   });
 
@@ -211,12 +211,12 @@ export async function addOrgMember(
  * Removes a member from an organization. Admin only.
  */
 export async function removeOrgMember(orgId: string, userId: string): Promise<void> {
-  const token = getStoredToken();
-  if (!token) throw new Error('Not authenticated');
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? 'Session expired. Sign in again.' : 'Not authenticated');
 
   const res = await fetch(`${WORKER_API}/orgs/${orgId}/members/${userId}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${resolved.token}` },
   });
 
   if (!res.ok) {
@@ -229,12 +229,12 @@ export async function removeOrgMember(orgId: string, userId: string): Promise<vo
  * Leaves the current organization for the authenticated user.
  */
 export async function leaveOrg(orgId: string): Promise<void> {
-  const token = getStoredToken();
-  if (!token) throw new Error('Not authenticated');
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? 'Session expired. Sign in again.' : 'Not authenticated');
 
   const res = await fetch(`${WORKER_API}/orgs/${orgId}/members/me`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${resolved.token}` },
   });
 
   if (!res.ok) {
@@ -247,12 +247,12 @@ export async function leaveOrg(orgId: string): Promise<void> {
  * Cancels a pending invitation. Admin only.
  */
 export async function cancelInvitation(orgId: string, invitationId: string): Promise<void> {
-  const token = getStoredToken();
-  if (!token) throw new Error('Not authenticated');
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? 'Session expired. Sign in again.' : 'Not authenticated');
 
   const res = await fetch(`${WORKER_API}/orgs/${orgId}/invitations/${invitationId}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${resolved.token}` },
   });
 
   if (!res.ok) {
@@ -265,13 +265,13 @@ export async function cancelInvitation(orgId: string, invitationId: string): Pro
  * Auto-accepts any pending invitations for the given email. Called after sign-in.
  */
 export async function acceptInvitations(email: string): Promise<OrganizationInvitationAcceptanceResult> {
-  const token = getStoredToken();
-  if (!token) return { joined: 0 };
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return { joined: 0 };
 
   try {
     const res = await fetch(`${WORKER_API}/invitations/accept`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${resolved.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
     if (!res.ok) return { joined: 0 };

@@ -1,0 +1,401 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language resolved from profile and workspace settings.</critical>
+  <critical>Generate technical agent artifacts (challenge.md, implementation notes, validation) in ENGLISH for agent performance.</critical>
+  <critical>Generate all PM-facing content (ticket comments, review package) in {{document_language}}.</critical>
+  <critical>Commits are ALWAYS in ENGLISH (dev standard). This is non-negotiable.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+  <critical>Do not report "completed" until all implementation, validation, and PM sync activities are truly finished.</critical>
+
+  <step n="1" goal="Load and validate nakiros configuration (silent mode)">
+    <!-- STEP 1.0: Pull remote context and start sync watcher (silent) -->
+    <action>Run silently: `nakiros workspace get` (auto-detected from cwd). Parse the JSON output and store as {{workspace_get_result}}. The field {{workspace_get_result.artifacts}} contains the localPath of every available context file. If the command fails or nakiros is not installed, continue without remote context (degraded mode).</action>
+    <action>Run silently in background: `nakiros sync start`. This starts the file watcher that will push any context file modified during this session to the cloud. Ignore failures silently.</action>
+
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Apply defaults when missing: user_name={default_user_name}, idle_threshold_minutes={default_idle_threshold_minutes}, communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Resolve workspace scope from {workspace_config}. If the repo pointer exists, read `workspace_slug` from `{project-root}/_nakiros/workspace.yaml`, then load `~/.nakiros/workspaces/{workspace_slug}/workspace.yaml` as the canonical workspace map. If the pointer is missing, continue in single-repo mode rooted at {project-root}.</action>
+    <action>Load workspace-global context first by calling context.workspace.get for keys product, global, interRepo, and architecture when available. Use repo-local `_nakiros/` slices only after the workspace-level map is understood.</action>
+    <action>Set {{workspace_repo_list}} from canonical workspace yaml `repos`. In single-repo fallback mode, set it to the current repo only.</action>
+    <action>Set {{pm_tool}} from canonical workspace yaml `workspace.pm_tool`, defaulting to "none" when absent.</action>
+    <action>Set {{branch_pattern}} from canonical workspace yaml `workspace.branch_pattern` when present, fallback to {profile_config} branch_pattern.</action>
+    <action if="canonical workspace yaml document_language exists">Override {{document_language}} with `workspace.document_language`.</action>
+    <action>Infer {{git_host}} from the primary repo URL in {{workspace_repo_list}} using the provider domain or SSH host (github, gitlab, gitea). Leave empty if it cannot be determined.</action>
+    <action>Resolve {{repo_slug}} from the primary impacted repo in {{workspace_repo_list}}. If only one repo exists, use it. If multiple repos are impacted and no primary repo is clear, ask the user which repo owns this execution before proceeding.</action>
+
+    <action>Set gitflow defaults when workspace settings omit them: feature={default_feature_base_branch}, bugfix={default_bugfix_base_branch}, hotfix={default_hotfix_base_branch}.</action>
+    <action>Validate required delivery settings: pm_tool, git_host, branch_pattern.</action>
+    <action if="pm_tool is none or git_host is empty or branch_pattern is empty">HALT: "✗ Blocking workspace configuration error: missing pmTool, branchPattern, or a detectable git host. Complete workspace settings in Nakiros Desktop before starting dev-story."</action>
+
+    <output>[WORKFLOW] Étape 1/9 — Load configuration ✓
+Config loaded and validated</output>
+  </step>
+
+  <step n="2" goal="Apply active run guard">
+    <action>Read {active_run_file} if present.</action>
+    <check if="an active run exists and is not completed">
+      <output>⚠ Active workflow run found for {{active_ticket_or_run}}.</output>
+      <ask>Do you want to resume this run or close it before starting another one?
+
+---
+
+**What would you like to do?**
+
+1. Resume this run
+2. Close it and start a new one</ask>
+      <check if="user chooses resume">
+        <action>Resume existing run and continue.</action>
+      </check>
+      <check if="user chooses close">
+        <action>Mark previous run closed, then continue.</action>
+      </check>
+    </check>
+    <output>[WORKFLOW] Étape 2/9 — Apply run guard ✓</output>
+  </step>
+
+  <step n="3" goal="Resolve ticket context and transition to In Progress">
+    <action>If a ticket ID is provided, retrieve the ticket via the configured Nakiros PM integration before challenge/implementation.</action>
+    <action>If pm_tool is configured and no ticket provided, ask user to choose: work on existing ticket or create new ticket.</action>
+    <action if="pm_tool is not none and ticket was retrieved">Capture PM tracking identifiers (ticket key/id, workspace/project identifiers, available transitions) needed for status, comments, and worklog operations.</action>
+
+    <check if="ticket retrieval fails">
+      <ask>Ticket retrieval failed. Retry via the configured PM integration or continue in standalone mode? (retry/standalone)
+
+---
+
+**What would you like to do?**
+
+1. Retry retrieval
+2. Continue in standalone mode</ask>
+      <check if="user chooses retry">
+        <action>Retry retrieval once and continue if successful.</action>
+      </check>
+      <check if="user chooses standalone">
+        <action>Continue with explicit ambiguity warning and queue sync retry metadata in {sync_queue_file}.</action>
+      </check>
+    </check>
+
+    <action if="pm_tool is not none and ticket was retrieved">IMMEDIATELY transition ticket to {pm_in_progress_status} via the Nakiros PM action/integration layer with comment: "Starting analysis and implementation preparation. Run ID: {{runId}}"</action>
+    <action if="pm_tool is not none and ticket was retrieved">Capture timestamp as {{worklog_start_time}} for worklog calculation (includes challenge + implementation duration).</action>
+
+    <check if="PM In Progress transition fails">
+      <action>Log warning: "⚠ Could not transition ticket to In Progress. Queued in {sync_queue_file} for retry. Continuing with implementation."</action>
+    </check>
+
+    <output>[WORKFLOW] Étape 3/9 — Resolve ticket context ✓
+Ticket context resolved | PM status: In Progress | Worklog tracking started</output>
+  </step>
+
+  <step n="4" goal="Run mandatory PM challenge gate (rigorous)">
+    <critical>No implementation starts before challenge is thoroughly passed. This is a critical gate.</critical>
+    <action>Capture current active persona as {{entry_persona}}.</action>
+    <action>Load PM persona from ~/.nakiros/agents/pm.md for this challenge gate.</action>
+
+    <action>Conduct rigorous PM-quality challenge on the ticket analyzing:
+      1. CLARITY: Is the user story or ticket description clear and unambiguous?
+      2. CONSISTENCY: Do acceptance criteria align with ticket intent? Any contradictions?
+      3. SCOPE: Is the scope bounded and realistic? Any hidden dependencies?
+      4. ALIGNMENT: Does this ticket make sense in the project context? Check against project goals/architecture if available.
+      5. TESTABILITY: Are acceptance criteria measurable and testable? Can QA/user verify completion?
+      6. RISKS: What could go wrong? What dependencies exist? What's the impact of this work?
+    </action>
+    <action>Before concluding the challenge, reconcile the ticket against workspace-global product and architecture context, then use repo-local `_nakiros/` detail only for implementation ownership and constraints.</action>
+    <action>Load architect-defined technical execution tasks when available from the story, linked backlog tasks, or `_nakiros/backlog/tasks/`. Treat those tasks as the execution source of truth for sequencing when they exist.</action>
+
+    <action>Create challenge artifact at {workflow_steps_dir}/{{runId}}-challenge.md (ENGLISH) with these sections:
+      - **Ticket Intent**: What problem does this solve?
+      - **Acceptance Criteria** (checked): ✓ or ✗ for each AC
+      - **PM Challenge Verdict**: PASS or FAIL with justification
+      - **Scope Boundaries**: What's included, what's out-of-scope
+      - **Implementation Approach**: High-level technical direction
+      - **Technical Task Plan**: ordered list of architect-defined tasks to execute, or an explicit note that no task breakdown was found
+      - **Risks & Blockers**: What could go wrong? Any known issues?
+      - **Dependencies**: Other tickets, external systems, prerequisites
+      - **Testability Notes**: How to verify implementation is complete
+    </action>
+
+    <check if="PM challenge identifies critical gaps or ambiguities">
+      <action>Restore persona to {{entry_persona}}.</action>
+      <action>Set run state to awaiting_user.</action>
+      <ask>⚠️ Challenge gate FAILED. Issues found:
+      [List the specific gaps/ambiguities]
+
+      Please clarify the ticket or update it in the configured PM tool before implementation can proceed. Waiting for your input.</ask>
+    </check>
+
+    <check if="ticket is clear and challenge passes">
+      <action if="pm_tool is not none and ticket was retrieved">Post challenge summary comment on ticket in {{document_language}}:
+        "✓ Challenge Gate PASSED
+        - Scope: [1-2 sentences on what will be built]
+        - Approach: [1-2 sentences on technical direction]
+        - Key Risks: [bullet points if any]
+        - Branch planning: pending gitflow resolution | Run: {{runId}}"
+      </action>
+      <action>Restore persona to {{entry_persona}} before step 5+ implementation work.</action>
+      <output>[WORKFLOW] Étape 4/9 — PM challenge gate ✓
+Gate PASSED — ready for implementation</output>
+    </check>
+  </step>
+
+  <step n="5" goal="Resolve gitflow branch, create dedicated worktree, and persist run state">
+    <action>Classify work type before touching git:
+      - hotfix if the ticket is explicitly a production incident, urgent production fix, or tagged hotfix
+      - bugfix if it is a defect but not production-critical
+      - feature otherwise
+    </action>
+    <action>Resolve {{branch_base}} from work type:
+      - feature -> {default_feature_base_branch}
+      - bugfix -> {default_bugfix_base_branch}
+      - hotfix -> {default_hotfix_base_branch}, unless workspace default branch is master
+    </action>
+    <action>Resolve branch name from ticket ID + slug using branch_pattern from effective config, while preserving the gitflow family (`feature/`, `bugfix/`, `hotfix/`, or workspace equivalent).</action>
+    <action>Resolve {{worktree_path}} under {worktrees_root_dir}/{{repo_slug}}/{{branchName}}.</action>
+    <action>Create or reuse a dedicated git worktree at {{worktree_path}} bound to {{branchName}} from {{branch_base}}. Never execute implementation on the repo's default checkout.</action>
+    <action>Confirm the worktree is clean before implementation starts. If not clean, HALT with a blocking message naming the conflicting files or branch state.</action>
+    <action>Ensure directories exist: {workflow_runs_dir} and {workflow_steps_dir}.</action>
+
+    <action>Persist active run state to {active_run_file} and run artifact to {workflow_runs_dir}/{{runId}}.json, including:
+      - ticketId, branchName, branch_base, worktree_path, runId
+      - status: "in_progress"
+      - timestamps: challenge_started_at, implementation_started_at, last_activity_at
+      - worklog_start_time: {{worklog_start_time}} (for final worklog calculation)
+      - pm_tool, git_host, document_language (for later reporting)
+    </action>
+
+    <output>[WORKFLOW] Étape 5/9 — Gitflow and worktree ✓
+Branch resolved: {{branchName}} from {{branch_base}} | Worktree: {{worktree_path}} | Run ID: {{runId}}</output>
+  </step>
+
+  <step n="6" goal="Implement scope with test-first discipline + mandatory commit">
+    <critical>Follow the approved challenge scope EXACTLY; do not implement out-of-scope features.</critical>
+    <critical>At the end of this step, you MUST make a git commit with conventional commit messages.</critical>
+
+    <action>Load Developer persona from ~/.nakiros/agents/dev.md for implementation and test execution.</action>
+    <action>Plan concrete implementation work from the challenge + workspace-global context + ticket context + architect-defined technical tasks.</action>
+    <action>If architect-defined technical tasks exist, respect their sequencing as authoritative. Execute them in order unless the task metadata explicitly allows parallelization.</action>
+    <action>If the story lacks a usable technical task breakdown and implementation order is unclear, HALT and ask for Architect clarification instead of inventing a new breakdown silently.</action>
+    <action>When multiple tasks exist, track which task is active (`back`, `front`, `tests`, etc.) and update run notes as the workflow advances through them.</action>
+    <action>For multi-repo stories, treat workspace-global architecture as the dependency map and execute repo-local work from the dedicated owning repo worktree only.</action>
+    <action>Write failing tests first when feasible (red), implement minimal code (green), then refactor safely (refactor).</action>
+    <action>Run targeted and regression tests.</action>
+    <action>Update run artifacts and notes under {workspace_root_dir} as work progresses, always from inside {{worktree_path}}.</action>
+
+    <action if="pm_tool is not none and ticket was retrieved">Publish at least one progress comment during implementation through the configured PM integration with done/next/blockers. Format: "✓ Done: [X] | Next: [Y] | Blockers: [Z]" and update last_activity_at in run state.</action>
+
+    <check if="implementation is blocked and pm_tool is not none and ticket was retrieved">
+      <action>Transition ticket to {pm_blocked_status} via the Nakiros PM action/integration layer (if available), otherwise add explicit blocker comment.</action>
+    </check>
+
+    <action if="required dependency or architectural change exceeds scope">ASK user approval: "This change exceeds approved scope. Approve to proceed? (yes/no)"</action>
+
+    <action>After all implementation is complete:
+      1. Run all tests one final time (regression check).
+      2. Generate conventional commit messages based on changes:
+         - Use "feat:" for new features (from ticket intent)
+         - Use "fix:" for bug fixes
+         - Use "refactor:" for code refactoring
+         - Use "test:" for test-only changes
+         - Add ticket ID in footer: "Fixes {{ticketId}}"
+      3. Stage all changes: git add .
+      4. Commit with message(s):
+         "feat: [brief description from ticket] ({{ticketId}})
+
+         - Implementation detail 1
+         - Implementation detail 2
+         - Testing notes
+
+         Fixes {{ticketId}}"
+    </action>
+
+    <action>Push branch to remote immediately after commit from {{worktree_path}}: git push -u origin {{branchName}}</action>
+
+    <action>Update run state: mark implementation_completed_at timestamp.</action>
+
+    <output>[WORKFLOW] Étape 6/9 — Implementation ✓
+Implementation complete | Changes committed to {{branchName}}</output>
+  </step>
+
+  <step n="7" goal="Generate review package and request developer validation">
+    <critical>Review package is MANDATORY. Create file, display to developer, and get explicit approval before proceeding.</critical>
+
+    <action>STEP 7.1: Analyze all changes made since branch creation.
+      1. Run: git diff {{branch_base}}..HEAD
+      2. Identify all modified files
+      3. Note test additions/modifications
+      4. Understand the overall implementation scope
+    </action>
+
+    <action>STEP 7.2: Generate comprehensive review package content in {{document_language}}.
+      Use git diff analysis to fill in concrete details for each section:
+
+      **Title**: [Brief summary of what was implemented, extracted from commit message and challenge scope]
+
+      **Description**:
+      [1-2 paragraphs: What problem does this solve? What was implemented? Why this approach?]
+
+      **Technical Choices**:
+      - [Key decision 1 with justification]
+      - [Key decision 2 with justification]
+      - [Libraries/tools introduced and why]
+
+      **Technical Task Execution Order**:
+      - [Task 1]: [Why first]
+      - [Task 2]: [Why next]
+
+      **Changes Made** (from git diff):
+      - [File 1]: [What changed and why]
+      - [File 2]: [What changed and why]
+      [List ALL significant files changed]
+
+      **Testing**:
+      - Unit tests: [List files and what they test]
+      - Integration tests: [If applicable]
+      - Manual testing: [Step-by-step verification instructions]
+
+      **How to Run**:
+      1. [Setup prerequisites]
+      2. [Build command]
+      3. [Run command to demonstrate feature]
+      4. [Expected output/behavior]
+
+      **Deployment Notes**:
+      - Migrations: [Yes/No - describe if yes]
+      - Environment variables: [List if any]
+      - Breaking changes: [Yes/No - describe if yes]
+      - Rollback plan: [How to rollback if needed]
+
+      **Reviewed By**: [Developer name]
+      **Reviewed At**: [Current timestamp]
+    </action>
+
+    <action>STEP 7.3: WRITE the review package file to {workflow_runs_dir}/{{runId}}-mr-report.md with the generated content.</action>
+
+    <action>STEP 7.4: Display the review package to the developer and ask for explicit validation.</action>
+
+    <ask>✓ Review package generated and saved to: {workflow_runs_dir}/{{runId}}-mr-report.md
+
+Please review carefully:
+- [ ] Title and description accurately reflect the work?
+- [ ] All files changed are documented?
+- [ ] Testing instructions are clear and complete?
+- [ ] Deployment notes are accurate?
+
+---
+
+**What would you like to do?**
+
+1. Approve the review package
+2. Edit specific sections
+3. Regenerate with new guidance</ask>
+
+    <check if="developer chooses edit">
+      <action>Ask developer what needs to be changed in the report.</action>
+      <action>Apply the requested edits to the review package file.</action>
+      <action>Display updated report and re-ask for validation.</action>
+    </check>
+
+    <check if="developer chooses regenerate">
+      <action>Ask developer for guidance on what should be different.</action>
+      <action>Re-generate the review package with new guidance and save to file.</action>
+      <action>Display updated report and re-ask for validation.</action>
+    </check>
+
+    <check if="developer chooses approve">
+      <action>STEP 7.5: Generate SCM review action payload at {workflow_runs_dir}/{{runId}}-mr-payload.json with source branch, target branch, title, and description extracted from the approved review package.</action>
+      <action>Mark run state: mr_report_approved_at = now, mr_report_path = {workflow_runs_dir}/{{runId}}-mr-report.md, mr_payload_path = {workflow_runs_dir}/{{runId}}-mr-payload.json</action>
+      <output>[WORKFLOW] Étape 7/9 — Review package ✓
+Review package approved and SCM review payload prepared</output>
+    </check>
+  </step>
+
+  <step n="8" goal="Validate definition of done checklist">
+    <action>Load and execute validation checklist from {validation}.</action>
+    <action>If checklist fails, return to implementation/validation until pass or HALT with explicit blockers.</action>
+    <output>[WORKFLOW] Étape 8/9 — Definition of done ✓</output>
+  </step>
+
+  <step n="9" goal="Move to Review, prepare MR action handoff, sync ticket, and finalize worklog">
+    <critical>This is the final step. Ensure all syncs are complete before marking done.</critical>
+    <action>Restore persona to {{entry_persona}} before final workflow status communication.</action>
+
+    <check if="work is complete and validation passed and MR report approved">
+      <!-- STEP 9.1: Compute Worklog -->
+      <action if="pm_tool is not none and ticket was retrieved">
+        Compute time spent from {{worklog_start_time}} to now, rounding to {worklog_rounding_minutes} minutes with minimum {minimum_worklog_minutes} minutes.
+        If timestamps unavailable, ask user: "How much time did you spend on this ticket (in minutes)?"
+        Store as {{total_worklog_minutes}}.
+      </action>
+
+      <!-- STEP 9.2: Prepare MR/PR action handoff -->
+      <action>STEP 9.2a: Do NOT create the MR/PR directly in this workflow. Treat {workflow_runs_dir}/{{runId}}-mr-payload.json as the canonical handoff artifact for a future Nakiros SCM action.</action>
+      <action>STEP 9.2b: If the user already created the MR/PR manually, capture the provided URL as {{mr_url}}. Otherwise leave {{mr_url}} empty and keep the payload ready for later backend execution.</action>
+
+      <!-- STEP 9.3: Transition PM ticket to Review -->
+      <action if="pm_tool is not none and ticket was retrieved">
+        Transition ticket to {pm_review_status} (or {pm_done_status} if no review stage) via the Nakiros PM action/integration layer.
+      </action>
+
+      <!-- STEP 9.4: Push Final PM Sync -->
+      <action if="pm_tool is not none and ticket was retrieved">
+        Add final completion comment to ticket in {{document_language}}:
+        "✓ IMPLEMENTATION COMPLETE
+
+        Branch: {{branchName}}
+        Worktree: {{worktree_path}}
+        Review package: {workflow_runs_dir}/{{runId}}-mr-report.md
+        MR action payload: {workflow_runs_dir}/{{runId}}-mr-payload.json
+        MR: {{mr_url}}
+        Time spent: {{total_worklog_minutes}} minutes
+
+        Delivered:
+        - All acceptance criteria met
+        - Architect-defined technical tasks executed in approved order
+        - Tests passing (unit + regression)
+        - Code review ready
+
+        Next: Await code review and MR/PR creation via Nakiros action or manual submission"
+      </action>
+
+      <action if="pm_tool is not none and ticket was retrieved">
+        Push worklog via the configured PM integration: {{total_worklog_minutes}} minutes
+      </action>
+
+      <check if="final PM/MR sync fails">
+        <action>Log warning: "⚠ Final PM/MR sync failed. Queued in {sync_queue_file} for retry."</action>
+        <action>Queue retry metadata with MR URL, worklog, and status transition details.</action>
+      </check>
+
+      <!-- STEP 9.5: Flush sync and stop watcher -->
+      <action>Run silently: `nakiros sync push` (flush final state of all context files to cloud). Ignore failures silently.</action>
+      <action>Run silently: `nakiros sync stop` (stops the background file watcher). Ignore failures silently.</action>
+
+      <!-- STEP 9.6: Mark Complete -->
+      <action>Mark run state as completed and persist to {active_run_file} and {workflow_runs_dir}/{{runId}}.json.</action>
+      <action>Update run state: completed_at = now, status = "completed", final_mr_url = {{mr_url}}, final_worktree_path = {{worktree_path}}</action>
+
+      <output>[WORKFLOW] Étape 9/9 — Final sync ✓</output>
+      <output>[WORKFLOW] ✅ COMPLETE
+      ├─ Ticket: {{ticketId}} → Review
+      ├─ Branch: {{branchName}} (base: {{branch_base}})
+      ├─ Worktree: {{worktree_path}}
+      ├─ Review package: {workflow_runs_dir}/{{runId}}-mr-report.md
+      ├─ MR payload: {workflow_runs_dir}/{{runId}}-mr-payload.json
+      ├─ MR: {{mr_url}}
+      ├─ Time: {{total_worklog_minutes}} minutes
+      └─ Artifacts: {workflow_runs_dir}/{{runId}}/
+      </output>
+    </check>
+
+    <check if="validation failed">
+      <action>Restore run state to in_progress.</action>
+      <output>[WORKFLOW] ✗ DoD validation failed. Return to implementation.</output>
+    </check>
+
+    <check if="waiting on user input">
+      <action if="pm_tool is not none and ticket was retrieved">Add ticket comment: "Awaiting clarification on [topic]. Paused implementation."</action>
+      <action>Mark run state as awaiting_user and persist atomically.</action>
+      <output>[WORKFLOW] ⏸ AWAITING_USER — clarification needed before proceeding</output>
+    </check>
+  </step>
+</workflow>

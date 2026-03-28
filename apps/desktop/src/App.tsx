@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
   AuthState,
+  OnboardingChatLaunchRequest,
   StoredWorkspace,
   AppPreferences,
 } from '@nakiros/shared';
@@ -50,7 +51,23 @@ export default function App() {
   const [authState, setAuthState] = useState<AuthState>({ isAuthenticated: false });
   const [updateBanner, setUpdateBanner] = useState<UpdateCheckResult | null>(null);
   const [openAgentRunChatTarget, setOpenAgentRunChatTarget] = useState<OpenAgentRunChatPayload | null>(null);
+  const [pendingLaunchRequest, setPendingLaunchRequest] = useState<OnboardingChatLaunchRequest | null>(null);
+  const [workspaceSyncState, setWorkspaceSyncState] = useState<{ syncing: boolean; lastSyncAt: Date | null; error: string | null }>({ syncing: false, lastSyncAt: null, error: null });
   const dashboardUpdateCheckStartedRef = useRef(false);
+
+  async function refreshAuthStateQuietly() {
+    const nextAuthState = await window.nakiros.authGetState();
+    if (!nextAuthState.isAuthenticated) {
+      setAuthState(nextAuthState);
+      setView((current) => (current.name === 'auth' ? current : { name: 'auth', sessionExpired: nextAuthState.sessionExpired }));
+      return nextAuthState;
+    }
+
+    const org = await window.nakiros.orgGetMine().catch(() => undefined);
+    const resolvedAuthState: AuthState = { ...nextAuthState, orgId: org?.id };
+    setAuthState(resolvedAuthState);
+    return resolvedAuthState;
+  }
 
   async function syncAuthenticatedOrgState(emailHint?: string) {
     const nextAuthState = await window.nakiros.authGetState();
@@ -71,6 +88,7 @@ export default function App() {
   }
 
   async function bootWorkspaces() {
+    setWorkspaceSyncState({ syncing: true, lastSyncAt: null, error: null });
     try {
       const [ws, prefs, status, configExists] = await Promise.all([
         window.nakiros.getWorkspaces(),
@@ -79,6 +97,13 @@ export default function App() {
         window.nakiros.nakirosConfigExists(),
       ]);
       setWorkspaces(ws);
+      // Pull remote context for each workspace (fire-and-forget — no-op if offline/unauthenticated)
+      for (const w of ws) void window.nakiros.pullContext(w);
+      // Pull artifacts from R2 for each workspace (getWorkspaces also starts the sync watcher)
+      setWorkspaceSyncState({ syncing: true, lastSyncAt: null, error: null });
+      Promise.all(ws.map((w) => window.nakiros.artifactPullAll(w.id, w)))
+        .then(() => setWorkspaceSyncState({ syncing: false, lastSyncAt: new Date(), error: null }))
+        .catch(() => setWorkspaceSyncState((prev) => ({ syncing: false, lastSyncAt: prev.lastSyncAt, error: null })));
       const resolvedPrefs: AppPreferences = {
         theme: 'dark',
         language: prefs.language ?? 'system',
@@ -93,12 +118,24 @@ export default function App() {
       void i18n.changeLanguage(resolveLanguage(resolvedPrefs.language));
       setServerStatus(status);
       setBootError(null);
+      setWorkspaceSyncState({ syncing: false, lastSyncAt: new Date(), error: null });
       if (!configExists) {
         setView({ name: 'onboarding' });
         return;
       }
-    } catch {
+      // Restore last opened workspace so the user lands back where they left off
+      const lastOpened = ws.length > 0
+        ? [...ws].sort((a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime())[0]!
+        : null;
+      if (lastOpened) {
+        setOpenedWorkspaceIds([lastOpened.id]);
+        setActiveWorkspaceId(lastOpened.id);
+        setView({ name: 'dashboard' });
+        return;
+      }
+    } catch (err) {
       setBootError(t('workspaceLoadError'));
+      setWorkspaceSyncState((prev) => ({ syncing: false, lastSyncAt: prev.lastSyncAt, error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setView((current) => (
         current.name === 'loading' || current.name === 'auth'
@@ -136,6 +173,24 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void refreshAuthStateQuietly().catch(() => undefined);
+    }, 60_000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      void refreshAuthStateQuietly().catch(() => undefined);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useIpcListener(window.nakiros.onServerStatusChange, setServerStatus);
   useIpcListener(window.nakiros.onAuthComplete, (data) => {
     void syncAuthenticatedOrgState(data.email).catch(() => {
@@ -147,6 +202,20 @@ export default function App() {
   });
   useIpcListener(window.nakiros.onUpdatesAvailable, (result) => {
     if (result.compatible && result.hasUpdate) setUpdateBanner(result);
+  });
+  useIpcListener(window.nakiros.onSyncEvent, (event) => {
+    if (event.type === 'sync:started' || event.type === 'sync:push-requested') {
+      // Watcher just started or on-demand push triggered — reconciliation is about to run
+      setWorkspaceSyncState((prev) => ({ ...prev, syncing: true, error: null }));
+    } else if (event.type === 'sync:reconcile-done') {
+      // Initial reconciliation finished (all files checked, pushed or skipped)
+      setWorkspaceSyncState({ syncing: false, lastSyncAt: new Date(), error: null });
+    } else if (event.type === 'sync:pushed' && event['status'] === 'ok') {
+      // Individual file pushed — update timestamp but keep syncing until reconcile-done
+      setWorkspaceSyncState((prev) => ({ ...prev, lastSyncAt: new Date() }));
+    } else if (event.type === 'sync:error') {
+      setWorkspaceSyncState((prev) => ({ ...prev, syncing: false, error: String(event['message'] ?? 'Sync error') }));
+    }
   });
   useIpcListener(window.nakiros.onOpenAgentRunChat, (payload) => {
     const target: OpenAgentRunChatPayload = {
@@ -319,6 +388,10 @@ export default function App() {
     return (
       <WorkspaceGettingStarted
         workspace={createdWorkspace}
+        onLaunchChat={(request) => {
+          setPendingLaunchRequest(request);
+          void openWorkspace(createdWorkspace);
+        }}
         onContinue={() => {
           void openWorkspace(createdWorkspace);
         }}
@@ -381,8 +454,10 @@ export default function App() {
         <Dashboard
           authState={authState}
           serverStatus={serverStatus}
+          workspaceSyncState={workspaceSyncState}
           updateBanner={updateBanner}
           openAgentRunChatTarget={openAgentRunChatTarget}
+          launchChatRequest={pendingLaunchRequest}
           onUpdateWorkspace={handleUpdateWorkspace}
           onDismissUpdateBanner={() => setUpdateBanner(null)}
           onNewWorkspace={() => setView({ name: 'setup' })}
@@ -393,7 +468,10 @@ export default function App() {
             });
             setView({ name: 'home' });
           }}
-          onRestartServer={() => { void window.nakiros.restartServer(); }}
+          onGoGettingStarted={(workspaceId) => {
+            setPendingLaunchRequest(null);
+            setView({ name: 'getting-started', workspaceId });
+          }}
         />
       </WorkspaceProvider>
     </PreferencesProvider>

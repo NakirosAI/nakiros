@@ -3,6 +3,8 @@
   "workspaceGlobal": "Workspace (global)",
   "tabLimitReached": "Limite de {{count}} onglets atteinte",
   "unableToStartRun": "Impossible de demarrer l'execution de l'agent.",
+  "workspaceLaunchDeniedViewer": "Votre role dans ce workspace ne permet pas de lancer des agents.",
+  "workspaceLaunchDeniedNotAdded": "Vous n'etes pas ajoute a ce workspace. Demandez a un owner ou admin de vous attribuer un role.",
   "stoppedMarker": "_[Arrete]_",
   "timeNow": "maintenant",
   "timeMinutesAgo": "il y a {{count}}m",
@@ -99,6 +101,7 @@
     "repos": "Repos",
     "mode": {
       "dispatch": "Dispatch",
+      "consult": "Consulter",
       "askUser": "Question utilisateur",
       "synthesize": "Synthèse",
       "documentDecision": "Décision"
@@ -110,6 +113,9 @@
       "needsUserDecision": "Décision utilisateur requise"
     }
   },
+  "agentJoined": "── {{name}} a rejoint la conversation ──",
+  "agentJoinedWithProvider": "── {{name}} ({{provider}}) a rejoint la conversation ──",
+  "providerNotConfigured": "Provider '{{provider}}' non configuré — vérifie tes réglages globaux",
   "stop": "Stop",
   "sendEnter": "Send (Enter)",
   "processExitedWithCode": "Le processus s'est terminé avec le code {{code}}",
@@ -127,9 +133,13 @@
     "task": "Sous-agent: {{description}}"
   },
   "definitions": {
-    "nakiros": {
-      "label": "Nakiros",
-      "placeholder": "Parle avec Nakiros…"
+    "cto": {
+      "label": "CTO",
+      "placeholder": "Parle avec CTO…"
+    },
+    "ceo": {
+      "label": "CEO",
+      "placeholder": "Parle avec CEO…"
     },
     "dev": {
       "label": "Dev Agent",
@@ -151,10 +161,6 @@
       "label": "QA Agent",
       "placeholder": "Message pour QA Agent…"
     },
-    "hotfix": {
-      "label": "Hotfix Agent",
-      "placeholder": "Message pour Hotfix Agent…"
-    },
     "brainstorming": {
       "label": "Brainstorming",
       "placeholder": "Message pour Brainstorming…"
@@ -171,6 +177,10 @@
       "label": "Create Ticket",
       "placeholder": "Decris le ticket a creer…"
     },
+    "plan-feature": {
+      "label": "Plan Feature",
+      "placeholder": "Decris la feature a planifier…"
+    },
     "generate-context": {
       "label": "Generate Context",
       "placeholder": "Lancer Generate Context sur ce workspace ?"
@@ -183,10 +193,6 @@
       "label": "QA Review",
       "placeholder": "Lancer QA Review ?"
     },
-    "hotfix-story": {
-      "label": "Hotfix Story",
-      "placeholder": "ID du ticket hotfix (ex: EX-203)"
-    },
     "sprint-planning": {
       "label": "Sprint Planning",
       "placeholder": "Lancer Sprint Planning ?"
@@ -194,6 +200,10 @@
     "fetch-project-context": {
       "label": "Fetch Project Context",
       "placeholder": "Lancer Fetch Project Context ?"
+    },
+    "sprint-retro": {
+      "label": "Sprint Retro",
+      "placeholder": "Lancer Sprint Retro ?"
     }
   }
 }

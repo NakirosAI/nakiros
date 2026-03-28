@@ -1,0 +1,32 @@
+name: create-story
+description: "Elicit and create an implementation-ready story with PM persona, workspace-global context, and clear acceptance criteria"
+author: "Nakiros"
+
+# Workflow engine bootstrap (required by ~/.nakiros/core/tasks/workflow.xml)
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+# Workflow components
+installed_path: "~/.nakiros/workflows/2-pm/create-story"
+instructions: "{installed_path}/instructions.xml"
+validation: "{installed_path}/checklist.md"
+
+# Runtime paths
+profile_config: "~/.nakiros/config.yaml"
+workspace_config: "workspace.yaml"
+workspace_root_dir: "~/.nakiros/workspaces/{workspace_slug}"
+workspace_context_root: "~/.nakiros/workspaces/{workspace_slug}/context"
+story_artifact_dir: "{workspace_root_dir}/stories"
+created_story_file: "{story_artifact_dir}/{{story_slug}}.json"
+sync_queue_file: "{workspace_root_dir}/sync/queue.json"
+
+# PM defaults
+pm_in_progress_status: "In Progress"
+pm_review_status: "In Review"
+pm_done_status: "Done"
+
+# Defaults applied by instructions.xml after config merge
+default_user_name: "Developer"
+default_idle_threshold_minutes: 15
+default_communication_language: "Français"
+default_document_language: "English"

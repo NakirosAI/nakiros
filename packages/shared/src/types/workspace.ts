@@ -24,3 +24,27 @@ export interface WorkspaceConfig {
   pmTool?: 'jira' | 'github' | 'gitlab' | 'linear';
   projectKey?: string;
 }
+
+export type WorkspaceStructure = 'mono-repo' | 'multi-repo';
+
+export interface WorkspaceYamlRepo {
+  name: string;
+  role: string;
+  localPath: string;
+  profile: AgentProfile;
+}
+
+
+export interface CanonicalWorkspaceYaml {
+  name: string;
+  slug: string;
+  structure: WorkspaceStructure;
+  repos: WorkspaceYamlRepo[];
+  pmTool?: 'jira' | 'github' | 'gitlab' | 'linear';
+  projectKey?: string;
+  documentLanguage?: string;
+  branchPattern?: string;
+  boardType?: 'scrum' | 'kanban' | 'unknown';
+  syncFilter?: 'sprint_active' | 'last_3_months' | 'all';
+  pmBoardId?: string;
+}

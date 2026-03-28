@@ -1,4 +1,5 @@
 import type { AgentProvider } from './preferences.js';
+import type { ArtifactContext } from './artifact-review.js';
 
 export type ChatScopeMode = 'global' | 'repo';
 export type ConversationParticipantStatus = 'idle' | 'running' | 'waiting' | 'error';
@@ -7,7 +8,8 @@ export interface ConversationParticipant {
   participantId: string;
   agentId: string;
   provider: AgentProvider;
-  sessionId: string | null;
+  providerSessionId?: string | null;
+  sessionId?: string | null;      // legacy alias for providerSessionId
   conversationId: string | null;
   anchorRepoPath: string;
   activeRepoPaths: string[];
@@ -29,7 +31,7 @@ export interface WorkspaceScopedSessionState {
 
 export interface StoredConversation {
   id: string;
-  sessionId: string;
+  sessionId: string;              // legacy compatibility field; orchestrator-backed conversations mirror id here
   workspaceId: string;
   workspaceSlug: string;
   workspaceName: string;
@@ -51,6 +53,7 @@ export interface StoredConversation {
 export interface StoredAgentTab {
   tabId: string;
   conversationId?: string;
+  nakirosConversationId?: string;  // legacy alias for conversationId when restored from older tab state
   workspaceId: string;
   workspaceSlug: string;
   workspaceName: string;
@@ -63,7 +66,9 @@ export interface StoredAgentTab {
   participants: ConversationParticipant[];
   activeParticipantId?: string;
   title: string;
-  sessionId?: string;
+  providerSessionId?: string;
+  sessionId?: string;             // legacy alias for providerSessionId
+  artifactContext?: ArtifactContext | null;
 }
 
 export interface StoredAgentTabsState {
@@ -75,7 +80,10 @@ export interface StoredAgentTabsState {
 export interface AgentRunRequest extends WorkspaceScopedSessionState {
   message: string;
   provider?: AgentProvider;
-  sessionId?: string | null;
+  providerSessionId?: string | null;
+  sessionId?: string | null;       // legacy alias for providerSessionId
+  conversationId?: string | null;  // conv_xxx — identifies the nakiros conversation
+  agentId?: string | null;         // 'nakiros', 'architect', 'pm', etc.
   participantId?: string | null;
   additionalDirs?: string[];
 }

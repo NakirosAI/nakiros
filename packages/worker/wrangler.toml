@@ -3,16 +3,35 @@ main = "src/index.ts"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+[route]
+pattern = "api.nakiros.com"
+zone_name = "nakiros.com"
+custom_domain = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "nakiros-api"
 database_id = "d433afb5-c5ea-41c9-8d8b-177f2cc92711"
 
+[[r2_buckets]]
+binding = "CONTEXT_BUCKET"
+bucket_name = "nakiros-context"
+
 [dev]
 port = 8788
 inspector_port = 9230
 
-# Secrets (set via `wrangler secret put`):
+[[secrets_store_secrets]]
+binding = "PROVIDER_CREDENTIALS_MASTER_KEY"
+store_id = "386ccc406d524ae787ade94c87327349"
+secret_name = "PROVIDER_CREDENTIALS_MASTER_KEY"
+
+# Secrets:
 #   MELODY_AUTH_CLIENT_ID     — OAuth2 client ID for S2S user lookup (scope: read_user)
 #   MELODY_AUTH_CLIENT_SECRET — OAuth2 client secret
 #   RESEND_API_KEY            — Resend API key for sending invitation emails
+#
+# Secrets Store binding required for provider credential encryption:
+# Expected secret value: base64-encoded 32-byte AES-256-GCM key
+# Local dev fallback if Secrets Store is unavailable:
+#   wrangler secret put PROVIDER_CREDENTIALS_MASTER_KEY

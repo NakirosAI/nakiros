@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { StoredWorkspace, AgentProfile } from '@nakiros/shared';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { AuthState, OrganizationInfo, StoredWorkspace, AgentProfile, JiraSyncFilter } from '@nakiros/shared';
 import clsx from 'clsx';
 import { Button } from '../components/ui';
 import { PROFILE_LABELS } from '../utils/profiles';
-import { useIpcListener } from '../hooks/useIpcListener';
+import { useJiraConnection } from '../hooks/useJiraConnection';
+import { useJiraProjectInsights } from '../hooks/useJiraProjectInsights';
+import { formatJiraError } from '../utils/jira-errors';
 import { syncWorkspaceArtifacts } from '../utils/workspace-sync';
 
 interface Props {
@@ -16,21 +19,6 @@ type Topology = 'mono' | 'multi';
 type Step = 1 | 2 | 3 | 4;
 type MonoSource = 'local' | 'remote' | 'new';
 type TicketPrefixMode = 'auto-pm' | 'custom';
-type SyncFilter = 'sprint_active' | 'last_3_months' | 'all';
-type BoardType = 'scrum' | 'kanban' | 'unknown';
-
-interface JiraStatus {
-  connected: boolean;
-  cloudUrl?: string;
-  displayName?: string;
-}
-
-interface JiraProject {
-  id: string;
-  key: string;
-  name: string;
-  projectTypeKey: string;
-}
 
 type MultiRepoCandidate = {
   id: string;
@@ -73,9 +61,11 @@ function toRepo(path: string, profile: AgentProfile): StoredWorkspace['repos'][n
 }
 
 export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }: Props) {
+  const { t } = useTranslation('settings');
   const [step, setStep] = useState<Step>(1);
   const [topology, setTopology] = useState<Topology>('mono');
   const [workspaceDraftId] = useState(() => Date.now().toString());
+  const createdWorkspaceRef = useRef(false);
 
   const [name, setName] = useState('');
   const [ticketPrefix, setTicketPrefix] = useState('PROJ');
@@ -84,6 +74,7 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
   const [ticketPrefixModeTouched, setTicketPrefixModeTouched] = useState(false);
   const [pmTool, setPmTool] = useState<StoredWorkspace['pmTool'] | ''>('');
   const [projectKey, setProjectKey] = useState('');
+  const [jiraUrl, setJiraUrl] = useState('');
 
   const [monoSource, setMonoSource] = useState<MonoSource>('local');
   const [monoRepo, setMonoRepo] = useState<StoredWorkspace['repos'][number] | null>(null);
@@ -96,18 +87,22 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [jiraStatus, setJiraStatus] = useState<JiraStatus | null>(null);
-  const [jiraStatusLoading, setJiraStatusLoading] = useState(false);
-  const [jiraConnecting, setJiraConnecting] = useState(false);
-  const [jiraProjects, setJiraProjects] = useState<JiraProject[]>([]);
-  const [jiraProjectsLoading, setJiraProjectsLoading] = useState(false);
-  const [jiraAuthError, setJiraAuthError] = useState<string | null>(null);
-  const [syncFilter, setSyncFilter] = useState<SyncFilter>('sprint_active');
-  const [boardType, setBoardType] = useState<BoardType | null>(null);
-  const [jiraBoardId, setJiraBoardId] = useState<string | null>(null);
-  const [boardDetecting, setBoardDetecting] = useState(false);
-  const [ticketCount, setTicketCount] = useState<{ count: number; hasMore: boolean } | null>(null);
-  const [ticketCountLoading, setTicketCountLoading] = useState(false);
+  const [syncFilter, setSyncFilter] = useState<JiraSyncFilter>('sprint_active');
+  const [authState, setAuthState] = useState<AuthState | null>(null);
+  const [availableOrganizations, setAvailableOrganizations] = useState<OrganizationInfo[]>([]);
+  const [ownershipLoading, setOwnershipLoading] = useState(true);
+  const [workspaceOwnerId, setWorkspaceOwnerId] = useState<string | null>(null);
+
+  const jiraConnection = useJiraConnection({
+    workspaceId: workspaceDraftId,
+    enabled: pmTool === 'jira',
+  });
+  const jiraInsights = useJiraProjectInsights({
+    workspaceId: workspaceDraftId,
+    enabled: pmTool === 'jira' && jiraConnection.status?.connected === true,
+    projectKey: normalizeTicketPrefix(projectKey) || undefined,
+    syncFilter,
+  });
 
   const totalSteps = 4;
 
@@ -134,6 +129,39 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
       cancelled = true;
     };
   }, [initialDirectory]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const [nextAuthState, currentOrg, orgs] = await Promise.all([
+          window.nakiros.authGetState().catch(() => ({ isAuthenticated: false } as AuthState)),
+          window.nakiros.orgGetMine().catch(() => undefined),
+          window.nakiros.orgListMine().catch(() => []),
+        ]);
+
+        if (cancelled) return;
+
+        setAuthState(nextAuthState);
+        setAvailableOrganizations(orgs);
+
+        if (nextAuthState.isAuthenticated && nextAuthState.userId) {
+          setWorkspaceOwnerId(currentOrg?.id ?? nextAuthState.userId);
+        } else {
+          setWorkspaceOwnerId(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setOwnershipLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleNameChange(value: string) {
     setName(value);
@@ -252,114 +280,39 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
   }, [pmTool, normalizedProjectKey, ticketPrefixModeTouched, ticketPrefixMode]);
 
   useEffect(() => {
-    if (pmTool !== 'jira') return;
-    let cancelled = false;
-    setJiraStatusLoading(true);
-    void window.nakiros
-      .jiraGetStatus(workspaceDraftId)
-      .then((nextStatus) => {
-        if (cancelled) return;
-        setJiraStatus(nextStatus);
-        if (nextStatus.connected) {
-          void loadJiraProjects();
-        } else {
-          setJiraProjects([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setJiraStatusLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    if (pmTool === 'jira') return;
+    void window.nakiros.jiraDisconnect(workspaceDraftId).catch(() => undefined);
   }, [pmTool, workspaceDraftId]);
 
-  useIpcListener(
-    window.nakiros.onJiraAuthComplete,
-    (data) => {
-      if (data.wsId !== workspaceDraftId) return;
-      setJiraConnecting(false);
-      setJiraAuthError(null);
-      setJiraStatus({ connected: true, cloudUrl: data.cloudUrl, displayName: data.displayName });
-      void loadJiraProjects();
-    },
-    [workspaceDraftId],
-    pmTool === 'jira',
-  );
-
-  useIpcListener(
-    window.nakiros.onJiraAuthError,
-    (data) => {
-      if (data.wsId !== workspaceDraftId) return;
-      setJiraConnecting(false);
-      setJiraAuthError(data.error);
-    },
-    [workspaceDraftId],
-    pmTool === 'jira',
-  );
-
-  useEffect(() => {
-    if (pmTool !== 'jira' || !jiraStatus?.connected || !normalizedProjectKey || boardDetecting) {
-      setTicketCount(null);
-      return;
-    }
-    let cancelled = false;
-    setTicketCountLoading(true);
-    void window.nakiros
-      .jiraCountTickets(workspaceDraftId, normalizedProjectKey, syncFilter, boardType ?? 'unknown')
-      .then((count) => { if (!cancelled) setTicketCount(count); })
-      .catch(() => { if (!cancelled) setTicketCount(null); })
-      .finally(() => { if (!cancelled) setTicketCountLoading(false); });
-    return () => { cancelled = true; };
-  }, [pmTool, jiraStatus?.connected, normalizedProjectKey, syncFilter, boardType, boardDetecting, workspaceDraftId]);
-
-  useEffect(() => {
-    if (pmTool !== 'jira' || !jiraStatus?.connected || !normalizedProjectKey) {
-      setBoardType(null);
-      setJiraBoardId(null);
-      return;
-    }
-    let cancelled = false;
-    setBoardDetecting(true);
-    void window.nakiros
-      .jiraGetBoardType(workspaceDraftId, normalizedProjectKey)
-      .then(({ boardType: bt, boardId }: { boardType: BoardType; boardId: string | null }) => {
-        if (cancelled) return;
-        setBoardType(bt);
-        setJiraBoardId(boardId);
-      })
-      .finally(() => {
-        if (!cancelled) setBoardDetecting(false);
-      });
-    return () => { cancelled = true; };
-  }, [pmTool, jiraStatus?.connected, normalizedProjectKey, workspaceDraftId]);
-
-  function loadJiraProjects() {
-    setJiraProjectsLoading(true);
-    setJiraAuthError(null);
-    void window.nakiros
-      .jiraGetProjects(workspaceDraftId)
-      .then(setJiraProjects)
-      .catch((err) => {
-        setJiraProjects([]);
-        setJiraAuthError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => setJiraProjectsLoading(false));
-  }
-
   async function handleJiraConnect() {
-    setJiraConnecting(true);
-    setJiraAuthError(null);
-    await window.nakiros.jiraStartAuth(workspaceDraftId);
+    await jiraConnection.connect(jiraUrl);
   }
 
   async function handleJiraDisconnect() {
-    await window.nakiros.jiraDisconnect(workspaceDraftId);
-    setJiraStatus({ connected: false });
-    setJiraProjects([]);
-    setJiraAuthError(null);
+    await jiraConnection.disconnect();
   }
+
+  useEffect(() => () => {
+    if (createdWorkspaceRef.current) return;
+    void window.nakiros.jiraDisconnect(workspaceDraftId).catch(() => undefined);
+  }, [workspaceDraftId]);
+
+  useEffect(() => {
+    if (pmTool !== 'jira' || jiraUrl.trim() || !jiraConnection.status?.cloudUrl) return;
+    setJiraUrl(jiraConnection.status.cloudUrl);
+  }, [jiraConnection.status?.cloudUrl, jiraUrl, pmTool]);
+
+  const boardType = jiraInsights.boardType;
+  const jiraBoardId = jiraInsights.boardId;
+  const boardDetecting = jiraInsights.boardDetecting;
+  const ticketCount = jiraInsights.ticketCount;
+  const ticketCountLoading = jiraInsights.ticketCountLoading;
+  const jiraStatus = jiraConnection.status;
+  const jiraStatusLoading = jiraConnection.statusLoading;
+  const jiraConnecting = jiraConnection.connecting;
+  const jiraProjects = jiraConnection.projects;
+  const jiraProjectsLoading = jiraConnection.projectsLoading;
+  const jiraAuthError = formatJiraError(t, jiraConnection.error);
 
   async function prepareMonoRepo(): Promise<{ workspacePath: string; repos: StoredWorkspace['repos'] }> {
     if (monoSource === 'local') {
@@ -449,6 +402,7 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
       const workspace: StoredWorkspace = {
         id: workspaceDraftId,
         name,
+        ownerId: workspaceOwnerId ?? undefined,
         workspacePath: prepared.workspacePath,
         repos: prepared.repos,
         topology,
@@ -456,6 +410,10 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
         ticketCounter: 0,
         pmTool: pmTool || undefined,
         projectKey: projectKey || undefined,
+        jiraUrl: jiraUrl.trim() || undefined,
+        jiraConnected: jiraStatus?.connected || undefined,
+        jiraCloudId: jiraStatus?.cloudId,
+        jiraCloudUrl: jiraStatus?.cloudUrl,
         pmBoardId: jiraBoardId ?? undefined,
         boardType: boardType ?? undefined,
         syncFilter,
@@ -474,6 +432,7 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
         }
       }
 
+      createdWorkspaceRef.current = true;
       await onCreated(workspace);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -535,6 +494,42 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                 autoFocus
               />
             </label>
+
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-[var(--text)]">{t('workspaceOwnerLabel')}</span>
+              {ownershipLoading ? (
+                <p className={MUTED_TEXT_CLASS}>{t('workspaceOwnerLoading')}</p>
+              ) : !authState?.isAuthenticated || !authState.userId ? (
+                <p className={MUTED_TEXT_CLASS}>{t('workspaceOwnerSignInHint')}</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setWorkspaceOwnerId(authState.userId ?? null)}
+                      className={chipClass(workspaceOwnerId === authState.userId)}
+                    >
+                      {t('workspaceOwnerPersonal')}
+                    </button>
+                    {availableOrganizations.map((org) => (
+                      <button
+                        key={org.id}
+                        type="button"
+                        onClick={() => setWorkspaceOwnerId(org.id)}
+                        className={chipClass(workspaceOwnerId === org.id)}
+                      >
+                        {t('workspaceOwnerOrganization', { name: org.name })}
+                      </button>
+                    ))}
+                  </div>
+                  <p className={MUTED_TEXT_CLASS}>
+                    {workspaceOwnerId === authState.userId
+                      ? t('workspaceOwnerPersonalHint')
+                      : t('workspaceOwnerOrganizationHint')}
+                  </p>
+                </div>
+              )}
+            </div>
 
             <p className="m-0 text-sm text-[var(--text-muted)]">Structure du workspace</p>
             <div className="flex gap-3">
@@ -739,30 +734,47 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
 
             {pmTool === 'jira' && (
               <div className={CARD_CLASS}>
-                <p className="mb-2 mt-0 text-sm font-bold">Connexion Jira</p>
+                <p className="mb-2 mt-0 text-sm font-bold">{t('jiraAuthSection')}</p>
+                <label className="mb-3 flex flex-col gap-1">
+                  <span className="text-sm font-medium text-[var(--text)]">{t('jiraUrl')}</span>
+                  <input
+                    value={jiraUrl}
+                    onChange={(event) => setJiraUrl(event.target.value)}
+                    placeholder="https://my-team.atlassian.net"
+                    className={INPUT_CLASS}
+                  />
+                </label>
+                <p className="mb-3 mt-0 text-xs text-[var(--text-muted)]">{t('jiraUrlHint')}</p>
                 {jiraStatusLoading ? (
-                  <p className={MUTED_TEXT_CLASS}>Vérification de la connexion…</p>
+                  <p className={MUTED_TEXT_CLASS}>{t('jiraStatusChecking')}</p>
                 ) : jiraStatus?.connected ? (
                   <div className="flex flex-col gap-2.5">
                     <p className={MUTED_TEXT_CLASS}>
-                      Connecté en tant que {jiraStatus.displayName ?? 'utilisateur'} ({jiraStatus.cloudUrl ?? 'site Jira'}).
+                      {t('jiraConnectedAs', {
+                        name: jiraStatus.displayName ?? '',
+                        url: jiraStatus.cloudUrl ?? '',
+                      })}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      <Button variant="secondary" onClick={() => void handleJiraDisconnect()}>Déconnecter</Button>
-                      <Button variant="secondary" onClick={loadJiraProjects}>Rafraîchir les projets</Button>
+                      <Button variant="secondary" onClick={() => void handleJiraDisconnect()}>
+                        {t('jiraDisconnect')}
+                      </Button>
+                      <Button variant="secondary" onClick={() => void jiraConnection.loadProjects()}>
+                        {t('jiraRefreshProjects')}
+                      </Button>
                     </div>
                     {jiraProjectsLoading ? (
-                      <p className={MUTED_TEXT_CLASS}>Chargement des projets…</p>
+                      <p className={MUTED_TEXT_CLASS}>{t('jiraProjectLoading')}</p>
                     ) : (
                       <>
                         <label className="flex flex-col gap-1">
-                          <span className="text-sm font-medium text-[var(--text)]">Projet Jira</span>
+                          <span className="text-sm font-medium text-[var(--text)]">{t('jiraProjectLabel')}</span>
                           <select
                             value={projectKey}
                             onChange={(e) => setProjectKey(e.target.value)}
                             className={INPUT_CLASS}
                           >
-                            <option value="">Sélectionner un projet</option>
+                            <option value="">{t('jiraProjectPlaceholder')}</option>
                             {jiraProjects.map((project) => (
                               <option key={project.id} value={project.key}>
                                 {project.name} ({project.key})
@@ -773,11 +785,11 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                         {normalizedProjectKey && (
                           <div className="mt-1 flex items-center gap-2">
                             {boardDetecting && (
-                              <span className={MUTED_TEXT_CLASS}>Détection du board…</span>
+                              <span className={MUTED_TEXT_CLASS}>{t('jiraBoardDetecting')}</span>
                             )}
                             {!boardDetecting && boardType && boardType !== 'unknown' && (
                               <span className="rounded-md bg-[var(--primary-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--primary)]">
-                                {boardType}
+                                {t('jiraBoardDetected', { boardType })}
                               </span>
                             )}
                           </div>
@@ -788,39 +800,29 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                 ) : (
                   <div className="flex flex-col gap-2.5">
                     <p className={MUTED_TEXT_CLASS}>
-                      Connecte Jira pour sélectionner directement le projet et récupérer sa clé.
+                      {t('jiraSetupConnectHint')}
                     </p>
                     <div>
                       <Button
                         onClick={() => void handleJiraConnect()}
                         loading={jiraConnecting}
                       >
-                        Se connecter à Jira
+                        {jiraConnecting ? t('jiraConnecting') : t('jiraConnectBtn')}
                       </Button>
                     </div>
-                    <p className={MUTED_TEXT_CLASS}>
-                      Ou renseigne la clé projet manuellement:
-                    </p>
-                    <input
-                      value={projectKey}
-                      onChange={(e) => setProjectKey(e.target.value.toUpperCase())}
-                      placeholder="PROJ"
-                      className={INPUT_CLASS}
-                    />
                   </div>
                 )}
                 {jiraAuthError && (
                   <div className="mt-2.5 flex flex-col gap-1.5">
-                    <p className="m-0 text-xs text-[var(--danger)]">
-                      Connexion Jira échouée — {jiraAuthError}
-                    </p>
+                    <p className="m-0 text-xs text-[var(--danger)]">{jiraAuthError}</p>
+                    <p className="m-0 text-xs text-[var(--text-muted)]">{t('jiraRetryHint')}</p>
                     <Button
                       onClick={() => void handleJiraConnect()}
                       variant="secondary"
                       size="sm"
                       className="self-start"
                     >
-                      Réessayer
+                      {t('jiraRetry')}
                     </Button>
                   </div>
                 )}
@@ -829,12 +831,12 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
 
             {pmTool === 'jira' && jiraStatus?.connected && normalizedProjectKey && (
               <div className={CARD_CLASS}>
-                <p className="mb-2.5 mt-0 text-sm font-bold">Synchroniser les tickets</p>
+                <p className="mb-2.5 mt-0 text-sm font-bold">{t('jiraSyncSection')}</p>
                 {([
-                  { value: 'sprint_active', label: 'Sprint actif uniquement', desc: boardType === 'scrum' ? 'Tickets du sprint en cours. (Recommandé)' : 'Tickets non terminés. (Recommandé)' },
-                  { value: 'last_3_months', label: '3 derniers mois', desc: 'Tickets créés ou modifiés dans les 3 derniers mois.' },
-                  { value: 'all', label: 'Tout le projet', desc: 'Tous les tickets. Peut être très volumineux.' },
-                ] as { value: SyncFilter; label: string; desc: string }[]).map((opt) => (
+                  { value: 'sprint_active', label: boardType === 'scrum' ? t('jiraSyncFilterSprint') : t('jiraSyncFilterSprintKanban'), desc: t('jiraSyncFilterSprintDescription') },
+                  { value: 'last_3_months', label: t('jiraSyncFilterRecent'), desc: t('jiraSyncFilterRecentDescription') },
+                  { value: 'all', label: t('jiraSyncFilterAll'), desc: t('jiraSyncFilterAllDescription') },
+                ] as { value: JiraSyncFilter; label: string; desc: string }[]).map((opt) => (
                   <label
                     key={opt.value}
                     className="mb-2.5 flex cursor-pointer items-start gap-2.5"
@@ -862,7 +864,11 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                               : 'bg-[var(--primary-soft)] text-[var(--primary)]',
                           )}
                         >
-                          {ticketCountLoading ? '…' : ticketCount !== null ? `${ticketCount.count}${ticketCount.hasMore ? '+' : ''} tickets` : ''}
+                          {ticketCountLoading
+                            ? t('jiraTicketEstimateLoading')
+                            : ticketCount !== null
+                              ? t('jiraTicketEstimate', { count: ticketCount.count, suffix: ticketCount.hasMore ? '+' : '' })
+                              : ''}
                         </span>
                       )}
                     </span>

@@ -1,14 +1,15 @@
 import { type ReactNode } from 'react';
-import { BookOpen, Kanban, LayoutDashboard, MessageSquare, Settings2 } from 'lucide-react';
+import { BookOpen, Kanban, LayoutDashboard, List, MessageSquare, Package } from 'lucide-react';
 import clsx from 'clsx';
 
-export type SidebarTab = 'overview' | 'chat' | 'product' | 'delivery' | 'settings';
+export type SidebarTab = 'overview' | 'chat' | 'product' | 'delivery' | 'backlog' | 'settings';
 
 interface Props {
   active: SidebarTab;
   onChange(tab: SidebarTab): void;
   labels: Record<SidebarTab, string>;
   chatHasCompletionNotice?: boolean;
+  chatHasPendingPreview?: boolean;
 }
 
 const navTabs: { id: Exclude<SidebarTab, 'settings'>; icon: ReactNode }[] = [
@@ -16,9 +17,10 @@ const navTabs: { id: Exclude<SidebarTab, 'settings'>; icon: ReactNode }[] = [
   { id: 'chat', icon: <MessageSquare size={18} /> },
   { id: 'product', icon: <BookOpen size={18} /> },
   { id: 'delivery', icon: <Kanban size={18} /> },
+  { id: 'backlog', icon: <List size={18} /> },
 ];
 
-export default function Sidebar({ active, onChange, labels, chatHasCompletionNotice = false }: Props) {
+export default function Sidebar({ active, onChange, labels, chatHasCompletionNotice = false, chatHasPendingPreview = false }: Props) {
   return (
     <div className="flex w-[68px] shrink-0 flex-col items-center border-r border-[var(--line)] bg-[var(--bg-soft)] py-2.5">
       <div className="flex flex-col items-center gap-0.5">
@@ -29,6 +31,7 @@ export default function Sidebar({ active, onChange, labels, chatHasCompletionNot
             label={labels[tab.id]}
             active={active === tab.id}
             showCompletionNotice={tab.id === 'chat' && chatHasCompletionNotice}
+            showPendingPreview={tab.id === 'chat' && chatHasPendingPreview}
             onClick={() => onChange(tab.id)}
           />
         ))}
@@ -38,7 +41,7 @@ export default function Sidebar({ active, onChange, labels, chatHasCompletionNot
 
       <div className="flex w-full justify-center border-t border-[var(--line)] pt-2">
         <SidebarButton
-          icon={<Settings2 size={18} />}
+          icon={<Package size={18} />}
           label={labels.settings}
           active={active === 'settings'}
           onClick={() => onChange('settings')}
@@ -53,12 +56,14 @@ function SidebarButton({
   label,
   active,
   showCompletionNotice,
+  showPendingPreview,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
   active: boolean;
   showCompletionNotice?: boolean;
+  showPendingPreview?: boolean;
   onClick(): void;
 }) {
   return (
@@ -74,6 +79,9 @@ function SidebarButton({
     >
       {showCompletionNotice && (
         <span className="absolute right-[11px] top-[11px] h-2 w-2 rounded-full bg-[#14b8a6]" />
+      )}
+      {!showCompletionNotice && showPendingPreview && (
+        <span className="absolute right-[11px] top-[11px] h-2 w-2 rounded-full bg-[var(--primary)]" />
       )}
       {icon}
       <span

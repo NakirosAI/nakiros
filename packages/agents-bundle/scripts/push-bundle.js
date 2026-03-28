@@ -103,7 +103,7 @@ if (!FORCE && !DRY_RUN) {
 const versionedPrefix = `channels/${channel}/${version}`;
 console.log(`\nStep 3/4 — Uploading bundle files to ${versionedPrefix}/...`);
 
-const SKIP = new Set(['scripts', 'CHANGELOG.md', 'package.json', '.wrangler']);
+const SKIP = new Set(['scripts', 'CHANGELOG.md', 'package.json', '.wrangler', '.DS_Store', '.markdownlintrc.json']);
 
 function walkDir(dir, baseDir) {
   const entries = readdirSync(dir, { withFileTypes: true });

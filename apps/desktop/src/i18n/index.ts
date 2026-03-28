@@ -15,6 +15,10 @@ import frOverview from './locales/fr/overview.json';
 import frTicket from './locales/fr/ticket.json';
 import frAgent from './locales/fr/agent.json';
 import frAuth from './locales/fr/auth.json';
+import frWorkspaceSetup from './locales/fr/workspace-setup.json';
+import frBacklog from './locales/fr/backlog.json';
+import frDelivery from './locales/fr/delivery.json';
+import frSpec from './locales/fr/spec.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -30,6 +34,10 @@ import enOverview from './locales/en/overview.json';
 import enTicket from './locales/en/ticket.json';
 import enAgent from './locales/en/agent.json';
 import enAuth from './locales/en/auth.json';
+import enWorkspaceSetup from './locales/en/workspace-setup.json';
+import enBacklog from './locales/en/backlog.json';
+import enDelivery from './locales/en/delivery.json';
+import enSpec from './locales/en/spec.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -49,6 +57,10 @@ const resources = {
     ticket: frTicket,
     agent: frAgent,
     auth: frAuth,
+    'workspace-setup': frWorkspaceSetup,
+    backlog: frBacklog,
+    delivery: frDelivery,
+    spec: frSpec,
   },
   en: {
     common: enCommon,
@@ -65,6 +77,10 @@ const resources = {
     ticket: enTicket,
     agent: enAgent,
     auth: enAuth,
+    'workspace-setup': enWorkspaceSetup,
+    backlog: enBacklog,
+    delivery: enDelivery,
+    spec: enSpec,
   },
 };
 

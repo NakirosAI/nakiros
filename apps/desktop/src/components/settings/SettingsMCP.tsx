@@ -39,7 +39,7 @@ export function SettingsMCP({ workspace, onUpdate }: SettingsBaseProps) {
         <h2 className="mb-1 mt-0 text-xl font-bold">{t('mcpTitle')}</h2>
         <p className="m-0 text-[13px] text-[var(--text-muted)]">{t('mcpSubtitle')}</p>
       </div>
-      <Card padding="md" className="rounded-[10px] bg-[var(--bg-soft)]">
+      <Card className="rounded-[16px] border-[var(--line)] bg-[var(--bg-soft)] p-5 shadow-none">
         <div className="mb-3 flex justify-end">
           <Button type="button" variant="secondary" size="sm" onClick={handleAdd}>
             {t('mcpAdd')}
@@ -75,7 +75,7 @@ export function SettingsMCP({ workspace, onUpdate }: SettingsBaseProps) {
 function MCPRow({ mcp, onToggle, onEdit, onDelete }: { mcp: WorkspaceMCP; onToggle(): void; onEdit(): void; onDelete(): void }) {
   const { t } = useTranslation('settings');
   return (
-    <Card padding="sm" className="mb-2 flex items-start gap-2.5 rounded-[10px] bg-[var(--bg-card)]">
+    <Card className="mb-3 flex items-start gap-3 rounded-[14px] border-[var(--line)] bg-[var(--bg-card)] p-4 shadow-none">
       <button
         type="button"
         onClick={onToggle}
@@ -137,10 +137,7 @@ function MCPForm({ mcp: initial, onSave, onCancel }: { mcp: WorkspaceMCP; onSave
   }
 
   return (
-    <Card
-      padding="md"
-      className="mb-2 flex flex-col gap-2.5 rounded-[10px] border-[var(--primary)] bg-[var(--bg-muted)]"
-    >
+    <Card className="mb-3 flex flex-col gap-3 rounded-[16px] border-[var(--line)] bg-[var(--bg-card)] p-5 shadow-none">
       <div className="flex gap-2.5">
         <Input
           label={t('mcpName')}
@@ -148,7 +145,7 @@ function MCPForm({ mcp: initial, onSave, onCancel }: { mcp: WorkspaceMCP; onSave
           onChange={(e) => setName(e.target.value)}
           placeholder="github"
           containerClassName="flex-1"
-          className="rounded-[10px] border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-2 text-[13px]"
+          className="rounded-[12px] border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 text-[13px]"
         />
         <Input
           label={t('mcpCommand')}
@@ -156,7 +153,7 @@ function MCPForm({ mcp: initial, onSave, onCancel }: { mcp: WorkspaceMCP; onSave
           onChange={(e) => setCommand(e.target.value)}
           placeholder="npx"
           containerClassName="flex-[2]"
-          className="rounded-[10px] border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-2 text-[13px]"
+          className="rounded-[12px] border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 text-[13px]"
         />
       </div>
 
@@ -166,7 +163,7 @@ function MCPForm({ mcp: initial, onSave, onCancel }: { mcp: WorkspaceMCP; onSave
         onChange={(e) => setArgsText(e.target.value)}
         placeholder={'-y\n@modelcontextprotocol/server-github'}
         rows={3}
-        className="rounded-[10px] border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-2 font-mono text-xs"
+        className="rounded-[12px] border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 font-mono text-xs"
       />
 
       <div>
@@ -182,13 +179,13 @@ function MCPForm({ mcp: initial, onSave, onCancel }: { mcp: WorkspaceMCP; onSave
               value={pair.key}
               onChange={(e) => setEnvPairs((pairs) => pairs.map((item, idx) => idx === index ? { ...item, key: e.target.value } : item))}
               placeholder={t('mcpEnvKey')}
-              className="ui-form-control flex-1 rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-2 font-mono text-xs text-[var(--text)]"
+              className="ui-form-control flex-1 rounded-[12px] border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 font-mono text-xs text-[var(--text)]"
             />
             <input
               value={pair.value}
               onChange={(e) => setEnvPairs((pairs) => pairs.map((item, idx) => idx === index ? { ...item, value: e.target.value } : item))}
               placeholder={t('mcpEnvValue')}
-              className="ui-form-control flex-[2] rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-2 font-mono text-xs text-[var(--text)]"
+              className="ui-form-control flex-[2] rounded-[12px] border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 font-mono text-xs text-[var(--text)]"
             />
             <Button
               type="button"
@@ -219,4 +216,3 @@ function MCPForm({ mcp: initial, onSave, onCancel }: { mcp: WorkspaceMCP; onSave
     </Card>
   );
 }
-

@@ -1,0 +1,17 @@
+{
+  "editor": {
+    "placeholder": "Le spec apparaîtra ici au fil de la conversation…"
+  },
+  "view": {
+    "titlePlaceholder": "Nom de la feature",
+    "statusIdle": "Idle",
+    "statusInProgress": "En cours",
+    "statusValidated": "Validé",
+    "badgeModified": "modifié",
+    "validateButton": "✓ Valider",
+    "tabSpec": "Spec",
+    "tabChat": "Chat",
+    "chatWelcome": "Je suis votre PM agent. Décrivez la feature que vous souhaitez créer.",
+    "chatTitle": "Feature Spec"
+  }
+}

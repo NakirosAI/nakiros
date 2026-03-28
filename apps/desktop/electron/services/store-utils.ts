@@ -24,7 +24,12 @@ export function normalizeParticipants(raw: unknown, fallbackRepoPath: string): C
       participantId: item['participantId'],
       agentId: item['agentId'],
       provider: normalizeProvider(item['provider']),
-      sessionId: typeof item['sessionId'] === 'string' ? item['sessionId'] : null,
+      providerSessionId: typeof item['providerSessionId'] === 'string'
+        ? item['providerSessionId']
+        : (typeof item['sessionId'] === 'string' ? item['sessionId'] : null),
+      sessionId: typeof item['providerSessionId'] === 'string'
+        ? item['providerSessionId']
+        : (typeof item['sessionId'] === 'string' ? item['sessionId'] : null),
       conversationId: typeof item['conversationId'] === 'string' ? item['conversationId'] : null,
       anchorRepoPath: typeof item['anchorRepoPath'] === 'string' ? item['anchorRepoPath'] : fallbackRepoPath,
       activeRepoPaths: Array.isArray(item['activeRepoPaths'])

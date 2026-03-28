@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Product Page — Redesign Proposal</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg-soft: #161b22;
+      --bg-card: #1c2128;
+      --bg-muted: #21262d;
+      --line: #30363d;
+      --line-strong: #484f58;
+      --text: #e6edf3;
+      --text-muted: #7d8590;
+      --primary: #14b8a6;
+      --primary-dim: rgba(20,184,166,0.12);
+      --success: #3fb950;
+      --warning: #d29922;
+      --danger: #f85149;
+      --purple: #bc8cff;
+      --blue: #58a6ff;
+      --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-soft);
+      flex-shrink: 0;
+    }
+    .topbar-logo {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: var(--primary);
+      display: grid; place-items: center;
+      font-size: 14px; font-weight: 800; color: #000;
+    }
+    .topbar-tabs {
+      display: flex; gap: 4px; flex: 1;
+    }
+    .topbar-tab {
+      padding: 4px 12px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-size: 12px; font-weight: 600;
+      cursor: pointer; color: var(--text-muted);
+      background: transparent;
+    }
+    .topbar-tab.active {
+      border-color: var(--line-strong);
+      background: var(--bg-card);
+      color: var(--text);
+    }
+    .topbar-right {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 8px; border-radius: 6px;
+      border: 1px solid var(--line);
+      font-size: 11px; color: var(--text-muted);
+      background: var(--bg-muted);
+    }
+    .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--success);
+    }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar nav ── */
+    .sidenav {
+      width: 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 0;
+      border-right: 1px solid var(--line);
+      background: var(--bg-soft);
+      gap: 2px;
+    }
+    .sidenav-btn {
+      width: 48px; height: 48px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 3px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      color: var(--text-muted);
+      background: transparent;
+      font-size: 18px;
+    }
+    .sidenav-btn span {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.03em;
+    }
+    .sidenav-btn.active {
+      border-color: var(--primary);
+      background: var(--bg-muted);
+      color: var(--primary);
+    }
+    .sidenav-spacer { flex: 1; }
+
+    /* ── Left panel: product tree ── */
+    .product-tree {
+      width: 260px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+      background: var(--bg-soft);
+      overflow: hidden;
+    }
+    .tree-header {
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .tree-header h2 {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+    }
+    .tree-header button {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+    .tree-scroll { flex: 1; overflow-y: auto; padding: 6px 0; }
+
+    /* PRD item */
+    .tree-prd {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      border-radius: 0;
+      border-left: 2px solid transparent;
+      transition: background 0.1s;
+    }
+    .tree-prd:hover { background: var(--bg-muted); }
+    .tree-prd.selected {
+      background: var(--primary-dim);
+      border-left-color: var(--primary);
+    }
+    .tree-prd-icon {
+      font-size: 14px; flex-shrink: 0;
+    }
+    .tree-prd-label {
+      flex: 1; min-width: 0;
+    }
+    .tree-prd-label strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tree-prd-label span {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .tree-status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Section separator */
+    .tree-section {
+      padding: 10px 14px 4px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+    }
+
+    /* Feature item */
+    .tree-feature {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px 7px 20px;
+      cursor: pointer;
+      border-left: 2px solid transparent;
+    }
+    .tree-feature:hover { background: var(--bg-muted); }
+    .tree-feature.selected {
+      background: var(--primary-dim);
+      border-left-color: var(--primary);
+    }
+    .tree-feature-icon { font-size: 13px; flex-shrink: 0; }
+    .tree-feature-label {
+      flex: 1; min-width: 0;
+    }
+    .tree-feature-label strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tree-feature-label span {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .tree-feature-badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .badge-wip { background: rgba(210,153,34,0.15); color: var(--warning); }
+    .badge-done { background: rgba(63,185,80,0.12); color: var(--success); }
+    .badge-new { background: rgba(88,166,255,0.12); color: var(--blue); }
+
+    /* Add feature */
+    .tree-add {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px 6px 20px;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 12px;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+    .tree-add:hover { color: var(--primary); }
+
+    /* ── Main content ── */
+    .main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Feature header */
+    .feature-header {
+      padding: 14px 20px 0;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-soft);
+      flex-shrink: 0;
+    }
+    .feature-header-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .feature-header-icon {
+      font-size: 20px; margin-top: 1px;
+    }
+    .feature-header-info { flex: 1; min-width: 0; }
+    .feature-header-info h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .feature-header-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .meta-chip {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--line);
+      color: var(--text-muted);
+      background: var(--bg-muted);
+    }
+    .meta-chip.wip { border-color: rgba(210,153,34,0.4); color: var(--warning); background: rgba(210,153,34,0.08); }
+    .feature-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: var(--bg-muted);
+      color: var(--text);
+    }
+    .btn:hover { background: var(--bg-card); }
+    .btn.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #000;
+    }
+    .btn.primary:hover { opacity: 0.9; }
+    .btn.ghost {
+      background: transparent;
+      border-color: transparent;
+      color: var(--text-muted);
+    }
+    .btn.ghost:hover { background: var(--bg-muted); color: var(--text); }
+
+    /* Feature tabs */
+    .feature-tabs {
+      display: flex;
+      gap: 0;
+    }
+    .feature-tab {
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      border-bottom: 2px solid transparent;
+      transition: color 0.1s;
+    }
+    .feature-tab:hover { color: var(--text); }
+    .feature-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+    .feature-tab-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--bg-muted);
+      color: var(--text-muted);
+      margin-left: 5px;
+    }
+
+    /* ── Content area ── */
+    .content-area {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+    }
+
+    /* Editor side */
+    .editor-side {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--line);
+    }
+    .editor-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-soft);
+      flex-shrink: 0;
+    }
+    .editor-toolbar-left { flex: 1; display: flex; align-items: center; gap: 6px; }
+    .save-status {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    .editor-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 32px;
+      background: var(--bg);
+      line-height: 1.7;
+    }
+    .editor-body h1 {
+      font-size: 20px; font-weight: 700;
+      color: var(--text); margin-bottom: 6px;
+    }
+    .editor-body .subtitle {
+      font-size: 13px; color: var(--text-muted);
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .editor-body h2 {
+      font-size: 14px; font-weight: 700;
+      color: var(--text); margin: 20px 0 8px;
+    }
+    .editor-body p {
+      font-size: 13px; color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+    .editor-body ul {
+      padding-left: 18px; margin-bottom: 10px;
+    }
+    .editor-body li {
+      font-size: 13px; color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .editor-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+      text-align: center;
+      padding: 40px;
+    }
+    .editor-placeholder .icon { font-size: 32px; opacity: 0.4; }
+    .editor-placeholder h3 { font-size: 14px; font-weight: 600; color: var(--text); }
+    .editor-placeholder p { font-size: 12px; color: var(--text-muted); max-width: 280px; }
+
+    /* Chat side */
+    .chat-side {
+      width: 360px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-soft);
+    }
+    .chat-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .chat-header-icon { font-size: 14px; }
+    .chat-header h3 {
+      font-size: 12px; font-weight: 700;
+      color: var(--text); flex: 1;
+    }
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .chat-msg {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .chat-msg-avatar {
+      width: 24px; height: 24px;
+      border-radius: 6px;
+      display: grid; place-items: center;
+      font-size: 12px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .avatar-ai { background: var(--primary); color: #000; font-weight: 800; }
+    .avatar-user { background: var(--bg-muted); color: var(--text-muted); font-weight: 700; }
+    .chat-msg-body {
+      flex: 1;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      background: var(--bg-card);
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+    }
+    .chat-msg-body.user-msg {
+      background: var(--bg-muted);
+      color: var(--text);
+    }
+    .chat-msg-body strong { color: var(--text); }
+    .chat-suggestion {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 0 12px;
+      margin-bottom: 4px;
+    }
+    .suggestion-chip {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      color: var(--text-muted);
+      background: var(--bg-card);
+      cursor: pointer;
+    }
+    .suggestion-chip:hover { border-color: var(--primary); color: var(--primary); }
+    .chat-input-area {
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .chat-input {
+      width: 100%;
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+    .chat-input textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      font-size: 12px;
+      color: var(--text);
+      font-family: var(--font);
+      line-height: 1.5;
+      min-height: 36px;
+      max-height: 100px;
+    }
+    .chat-input textarea::placeholder { color: var(--text-muted); }
+    .chat-send {
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      background: var(--primary);
+      border: none;
+      cursor: pointer;
+      display: grid; place-items: center;
+      font-size: 14px;
+      color: #000;
+      flex-shrink: 0;
+    }
+
+    /* Stories tab */
+    .stories-panel {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      background: var(--bg);
+    }
+    .stories-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .stories-toolbar h3 {
+      font-size: 13px; font-weight: 700; color: var(--text);
+    }
+    .story-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--bg-card);
+      margin-bottom: 6px;
+      cursor: pointer;
+    }
+    .story-card:hover { border-color: var(--line-strong); }
+    .story-id {
+      font-size: 10px;
+      font-family: monospace;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .story-content { flex: 1; min-width: 0; }
+    .story-content strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+    .story-content p {
+      font-size: 11px; color: var(--text-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .story-status {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .s-todo { background: var(--bg-muted); color: var(--text-muted); }
+    .s-wip { background: rgba(210,153,34,0.15); color: var(--warning); }
+    .s-done { background: rgba(63,185,80,0.12); color: var(--success); }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      text-align: center;
+      gap: 10px;
+    }
+    .empty-state .icon { font-size: 28px; opacity: 0.35; }
+    .empty-state h3 { font-size: 13px; font-weight: 600; color: var(--text); }
+    .empty-state p { font-size: 12px; color: var(--text-muted); max-width: 240px; line-height: 1.5; }
+
+    /* PRD main view */
+    .prd-view {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 32px;
+      background: var(--bg);
+    }
+    .prd-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .prd-toolbar h1 { flex: 1; font-size: 18px; font-weight: 700; }
+    .prd-section { margin-bottom: 20px; }
+    .prd-section h2 { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .prd-section p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+    .prd-section ul { padding-left: 16px; }
+    .prd-section li { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; line-height: 1.5; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo">N</div>
+  <div class="topbar-tabs">
+    <div class="topbar-tab">my-saas-project</div>
+    <div class="topbar-tab">other-project</div>
+    <div style="width:24px;height:24px;border-radius:7px;border:1px solid var(--line);background:transparent;display:grid;place-items:center;font-size:14px;color:var(--text-muted);cursor:pointer;margin-left:2px;">+</div>
+  </div>
+  <div class="topbar-right">
+    <div class="badge"><span class="dot"></span> MCP local</div>
+    <div class="badge"><span class="dot"></span> Connected</div>
+    <div class="badge" style="cursor:pointer;">⚙</div>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR NAV -->
+  <div class="sidenav">
+    <div class="sidenav-btn" title="Overview">⊞<span>Home</span></div>
+    <div class="sidenav-btn" title="Chat">💬<span>Chat</span></div>
+    <div class="sidenav-btn active" title="Product">📦<span>Product</span></div>
+    <div class="sidenav-btn" title="Delivery">📋<span>Backlog</span></div>
+    <div class="sidenav-btn" title="Sprint">🚀<span>Sprint</span></div>
+    <div class="sidenav-spacer"></div>
+    <div class="sidenav-btn" title="Settings">⚙<span>Settings</span></div>
+  </div>
+
+  <!-- PRODUCT TREE -->
+  <div class="product-tree">
+    <div class="tree-header">
+      <h2>Product</h2>
+      <button>+ Feature</button>
+    </div>
+    <div class="tree-scroll">
+
+      <!-- PRD -->
+      <div class="tree-section">Vision</div>
+      <div class="tree-prd" onclick="showView('prd')">
+        <div class="tree-prd-icon">📄</div>
+        <div class="tree-prd-label">
+          <strong>Product Requirements</strong>
+          <span>PRD · mis à jour il y a 2j</span>
+        </div>
+        <div class="tree-status-dot" style="background:var(--success);"></div>
+      </div>
+
+      <!-- Features -->
+      <div class="tree-section">Features</div>
+
+      <div class="tree-feature selected" onclick="showView('feature-spec')">
+        <div class="tree-feature-icon">📦</div>
+        <div class="tree-feature-label">
+          <strong>Onboarding Flow</strong>
+          <span>Spec · UX · 4 stories</span>
+        </div>
+        <div class="tree-feature-badge badge-wip">WIP</div>
+      </div>
+
+      <div class="tree-feature" onclick="showView('feature-empty')">
+        <div class="tree-feature-icon">📦</div>
+        <div class="tree-feature-label">
+          <strong>AI Agent Launcher</strong>
+          <span>Spec · UX · 6 stories</span>
+        </div>
+        <div class="tree-feature-badge badge-done">Done</div>
+      </div>
+
+      <div class="tree-feature" onclick="showView('feature-new')">
+        <div class="tree-feature-icon">📦</div>
+        <div class="tree-feature-label">
+          <strong>Backlog Integration</strong>
+          <span>Spec uniquement</span>
+        </div>
+        <div class="tree-feature-badge badge-new">Draft</div>
+      </div>
+
+      <button class="tree-add" onclick="showView('feature-create')">
+        + Nouvelle feature
+      </button>
+
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main" id="main-content">
+    <!-- Default: Feature view (Spec tab active) -->
+  </div>
+
+</div>
+
+<script>
+  function showView(view) {
+    // Update tree selection
+    document.querySelectorAll('.tree-feature, .tree-prd').forEach(el => el.classList.remove('selected'));
+    if (view === 'prd') {
+      document.querySelector('.tree-prd').classList.add('selected');
+    } else if (view.startsWith('feature')) {
+      const items = document.querySelectorAll('.tree-feature');
+      if (view === 'feature-spec' || view === 'feature-empty' || view === 'feature-stories') items[0].classList.add('selected');
+      if (view === 'feature-new') items[2].classList.add('selected');
+    }
+
+    const main = document.getElementById('main-content');
+
+    if (view === 'prd') {
+      main.innerHTML = `
+        <div class="prd-view">
+          <div class="prd-toolbar">
+            <h1>📄 Product Requirements Document</h1>
+            <button class="btn">📤 Partager</button>
+            <button class="btn primary">✨ Modifier avec l'agent</button>
+          </div>
+          <div class="prd-section">
+            <h2>Vision</h2>
+            <p>Nakiros est une plateforme qui démocratise la méthodologie BMAD auprès de toutes les équipes produit — pas seulement les développeurs. Un PO peut désormais parler produit avec des agents IA spécialisés et obtenir les mêmes artefacts structurés qu'un dev BMAD expérimenté.</p>
+          </div>
+          <div class="prd-section">
+            <h2>Problème</h2>
+            <p>Aujourd'hui, BMAD est réservé aux développeurs qui savent manipuler des fichiers markdown et lancer des workflows en CLI. Les PO/SM non-techniques en sont exclus, ce qui crée un fossé dans la collaboration produit-dev.</p>
+          </div>
+          <div class="prd-section">
+            <h2>Solution</h2>
+            <p>Nakiros Desktop expose la méthodologie BMAD via une interface conversationnelle par rôle :</p>
+            <ul>
+              <li>Le PO parle à l'agent Produit → génère PRD, feature specs, UX designs</li>
+              <li>Le SM parle à l'agent SM → génère sprints, retrospectives, rapports</li>
+              <li>Le dev reçoit les mêmes artefacts structurés, sans rien changer à son workflow</li>
+            </ul>
+          </div>
+          <div class="prd-section">
+            <h2>Périmètre v1</h2>
+            <ul>
+              <li>✅ Workspace produit avec arborescence par feature</li>
+              <li>✅ Éditeur WYSIWYG + agent contextuel par artefact</li>
+              <li>✅ Stories générées depuis les feature specs</li>
+              <li>🔜 Sync Jira bi-directionnelle</li>
+              <li>🔜 Agent SM pour la gestion de sprint</li>
+            </ul>
+          </div>
+        </div>
+      `;
+    }
+
+    else if (view === 'feature-spec' || view === 'feature-empty' || view === 'feature-stories') {
+      const activeTab = view === 'feature-stories' ? 'stories' : 'spec';
+      renderFeatureView(main, activeTab);
+    }
+
+    else if (view === 'feature-new') {
+      main.innerHTML = `
+        <div class="feature-header">
+          <div class="feature-header-top">
+            <div class="feature-header-icon">📦</div>
+            <div class="feature-header-info">
+              <h1>Backlog Integration</h1>
+              <div class="feature-header-meta">
+                <span class="meta-chip">Draft</span>
+                <span class="meta-chip">0 stories</span>
+              </div>
+            </div>
+            <div class="feature-header-actions">
+              <button class="btn primary" onclick="renderFeatureView(document.getElementById('main-content'), 'spec', true)">✨ Créer la spec avec l'agent</button>
+            </div>
+          </div>
+          <div class="feature-tabs">
+            <button class="feature-tab active">Spec</button>
+            <button class="feature-tab">UX Design</button>
+            <button class="feature-tab">Stories <span class="feature-tab-count">0</span></button>
+          </div>
+        </div>
+        <div class="content-area">
+          <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);">
+            <div class="empty-state" style="flex:1;">
+              <div class="icon">📝</div>
+              <h3>Aucune spec encore</h3>
+              <p>Lance l'agent PM pour créer la feature spec de Backlog Integration à partir du PRD.</p>
+              <button class="btn primary" style="margin-top:4px;">✨ Créer avec l'agent</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    else if (view === 'feature-create') {
+      main.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;flex:1;height:100%;background:var(--bg);">
+          <div style="background:var(--bg-card);border:1px solid var(--line);border-radius:16px;padding:32px;width:400px;display:flex;flex-direction:column;gap:16px;">
+            <h2 style="font-size:15px;font-weight:700;">Nouvelle feature</h2>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Nom</label>
+              <input type="text" placeholder="ex: Notifications push" style="background:var(--bg-muted);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:var(--font);outline:none;" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Description courte (optionnel)</label>
+              <textarea rows="3" placeholder="Ce que cette feature doit accomplir..." style="background:var(--bg-muted);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:var(--font);outline:none;resize:none;line-height:1.5;"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
+              <button class="btn" onclick="showView('feature-spec')">Annuler</button>
+              <button class="btn primary">✨ Créer + lancer l'agent</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  function renderFeatureView(main, activeTab, generateMode) {
+    const specContent = `
+      <div class="editor-toolbar">
+        <div class="editor-toolbar-left">
+          <span class="meta-chip">Feature Spec</span>
+          <span class="save-status">Sauvegardé</span>
+        </div>
+        <button class="btn ghost" onclick="toggleChat()">✨ ${document.getElementById('chat-side') ? 'Fermer l\'agent' : 'Ouvrir l\'agent'}</button>
+      </div>
+      <div class="editor-body">
+        <h1>Onboarding Flow</h1>
+        <p class="subtitle">Feature Spec · mis à jour il y a 2 heures · généré par l'agent PM</p>
+        <h2>Contexte & Objectif</h2>
+        <p>L'onboarding est le premier contact de l'utilisateur avec Nakiros. Il doit permettre à un PO non-technique de configurer son workspace en moins de 5 minutes, connecter son outil PM (Jira / Linear) et lancer son premier agent.</p>
+        <h2>Critères d'acceptance</h2>
+        <ul>
+          <li>L'utilisateur peut créer un workspace sans configuration technique</li>
+          <li>La connexion Jira se fait via OAuth (pas de token manuel)</li>
+          <li>Le premier agent se lance depuis l'écran de bienvenue</li>
+          <li>L'onboarding est skippable à tout moment</li>
+        </ul>
+        <h2>Hors périmètre</h2>
+        <ul>
+          <li>Onboarding multi-utilisateurs (v2)</li>
+          <li>Import depuis Confluence</li>
+        </ul>
+        <h2>Notes de design</h2>
+        <p>Voir UX Design pour les maquettes. Le flow principal est : Bienvenue → Créer workspace → Connecter Jira → Lancer agent.</p>
+      </div>
+    `;
+
+    const uxContent = `
+      <div class="editor-toolbar">
+        <div class="editor-toolbar-left">
+          <span class="meta-chip">UX Design</span>
+          <span class="save-status">Sauvegardé</span>
+        </div>
+        <button class="btn ghost">✨ Ouvrir l'agent</button>
+      </div>
+      <div class="editor-body">
+        <h1>Onboarding Flow — UX Design</h1>
+        <p class="subtitle">UX Design · mis à jour il y a 1 jour · généré par l'agent UX</p>
+        <h2>Flow principal</h2>
+        <p>L'onboarding suit un wizard en 3 étapes avec une barre de progression visible en permanence.</p>
+        <ul>
+          <li><strong>Étape 1 — Workspace</strong> : Nom du workspace, sélection des repos</li>
+          <li><strong>Étape 2 — Connexion PM</strong> : OAuth Jira / Linear / GitHub Projects</li>
+          <li><strong>Étape 3 — Premier agent</strong> : Lancement guidé de l'agent PM</li>
+        </ul>
+        <h2>Principes UX</h2>
+        <ul>
+          <li>Aucun champ technique (pas de tokens, pas de config YAML)</li>
+          <li>Skip possible à chaque étape</li>
+          <li>Reprise possible depuis Settings si onboarding incomplet</li>
+        </ul>
+      </div>
+    `;
+
+    const storiesContent = `
+      <div class="stories-panel">
+        <div class="stories-toolbar">
+          <h3>4 stories · Onboarding Flow</h3>
+          <button class="btn primary">✨ Générer des stories</button>
+        </div>
+        <div class="story-card">
+          <span class="story-id">#12</span>
+          <div class="story-content">
+            <strong>Créer un workspace sans configuration technique</strong>
+            <p>En tant que PO, je veux créer un workspace en donnant juste un nom, sans toucher à des fichiers YAML</p>
+          </div>
+          <span class="story-status s-done">Done</span>
+        </div>
+        <div class="story-card">
+          <span class="story-id">#13</span>
+          <div class="story-content">
+            <strong>Connexion Jira via OAuth</strong>
+            <p>En tant que PO, je veux connecter mon Jira sans copier-coller de token API</p>
+          </div>
+          <span class="story-status s-wip">In progress</span>
+        </div>
+        <div class="story-card">
+          <span class="story-id">#14</span>
+          <div class="story-content">
+            <strong>Barre de progression de l'onboarding</strong>
+            <p>En tant qu'utilisateur, je veux voir où j'en suis dans le wizard d'onboarding</p>
+          </div>
+          <span class="story-status s-todo">Todo</span>
+        </div>
+        <div class="story-card">
+          <span class="story-id">#15</span>
+          <div class="story-content">
+            <strong>Skip de l'onboarding</strong>
+            <p>En tant qu'utilisateur expérimenté, je veux pouvoir skipper l'onboarding</p>
+          </div>
+          <span class="story-status s-todo">Todo</span>
+        </div>
+      </div>
+    `;
+
+    const tabContent = activeTab === 'stories' ? storiesContent : (activeTab === 'ux' ? uxContent : specContent);
+
+    main.innerHTML = `
+      <div class="feature-header">
+        <div class="feature-header-top">
+          <div class="feature-header-icon">📦</div>
+          <div class="feature-header-info">
+            <h1>Onboarding Flow</h1>
+            <div class="feature-header-meta">
+              <span class="meta-chip wip">WIP</span>
+              <span class="meta-chip">4 stories</span>
+              <span class="meta-chip">Spec ✓ · UX ✓</span>
+            </div>
+          </div>
+          <div class="feature-header-actions">
+            <button class="btn">📤 Exporter</button>
+            <button class="btn primary" onclick="showChatSide()">✨ Agent</button>
+          </div>
+        </div>
+        <div class="feature-tabs">
+          <button class="feature-tab ${activeTab === 'spec' ? 'active' : ''}" onclick="renderFeatureView(document.getElementById('main-content'), 'spec')">Spec</button>
+          <button class="feature-tab ${activeTab === 'ux' ? 'active' : ''}" onclick="renderFeatureView(document.getElementById('main-content'), 'ux')">UX Design</button>
+          <button class="feature-tab ${activeTab === 'stories' ? 'active' : ''}" onclick="renderFeatureView(document.getElementById('main-content'), 'stories')">Stories <span class="feature-tab-count">4</span></button>
+        </div>
+      </div>
+      <div class="content-area" id="content-area">
+        <div class="editor-side" id="editor-side">
+          ${tabContent}
+        </div>
+        <div class="chat-side" id="chat-side" style="display:none;">
+          <div class="chat-header">
+            <span class="chat-header-icon">✨</span>
+            <h3>Agent PM — Onboarding Flow</h3>
+            <button class="btn ghost" style="padding:2px 6px;font-size:11px;" onclick="hideChatSide()">✕</button>
+          </div>
+          <div class="chat-messages">
+            <div class="chat-msg">
+              <div class="chat-msg-avatar avatar-ai">N</div>
+              <div class="chat-msg-body">
+                <strong>Bonjour !</strong> Je suis votre agent PM. Je peux vous aider à affiner la spec de cette feature, générer des stories, ou mettre à jour le UX Design.<br/><br/>Que voulez-vous faire ?
+              </div>
+            </div>
+          </div>
+          <div class="chat-suggestion">
+            <span class="suggestion-chip">Affiner les critères d'acceptance</span>
+            <span class="suggestion-chip">Générer des stories</span>
+            <span class="suggestion-chip">Valider la spec</span>
+          </div>
+          <div class="chat-input-area">
+            <div class="chat-input">
+              <textarea placeholder="Demandez à l'agent de modifier la spec…" rows="1"></textarea>
+              <button class="chat-send">↑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function showChatSide() {
+    const chat = document.getElementById('chat-side');
+    if (chat) chat.style.display = 'flex';
+    const editor = document.getElementById('editor-side');
+    if (editor) editor.style.flexBasis = '0';
+  }
+
+  function hideChatSide() {
+    const chat = document.getElementById('chat-side');
+    if (chat) chat.style.display = 'none';
+    const editor = document.getElementById('editor-side');
+    if (editor) editor.style.flexBasis = '';
+  }
+
+  // Init
+  showView('feature-spec');
+</script>
+</body>
+</html>

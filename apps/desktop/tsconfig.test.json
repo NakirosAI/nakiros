@@ -5,6 +5,8 @@
   },
   "include": [
     "electron/services/org-payload.ts",
-    "electron/services/org-payload.test.ts"
+    "electron/services/org-payload.test.ts",
+    "electron/services/workspace-members.ts",
+    "electron/services/workspace-members.test.ts"
   ]
 }

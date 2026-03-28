@@ -1,0 +1,274 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language.</critical>
+  <critical>Write confidence artifacts in document_language. Keep internal keys and machine fields in English.</critical>
+  <critical>Every confidence claim must be backed by concrete evidence (file path, command output, or observable repository signal).</critical>
+  <critical>This workflow is strict: confidence is meaningful only when ALL repos are covered.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+
+  <step n="1" goal="Load configuration and scoring model">
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Apply defaults when missing: communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Load scoring thresholds and weights from workflow config:
+      - confident threshold = {score_threshold_confident}
+      - partial threshold = {score_threshold_partial}
+      - minimum repo coverage percent = {minimum_repo_coverage_percent}
+      - weights = skills:{weight_skill_coverage}, understanding:{weight_project_understanding}, docs+ticketing:{weight_documentation_ticket_readiness}, testability:{weight_testability_readiness}, operability:{weight_operational_readiness}
+    </action>
+    <output>[CONFIDENCE] Étape 1/10 — Load configuration ✓</output>
+  </step>
+
+  <step n="2" goal="Set workspace-control artifact repository (default, enforced)">
+    <critical>Confidence reports must be written in the global workspace runtime, not in an application repo.</critical>
+    <action>Set {{execution_repository_mode}} = "workspace-control".</action>
+    <action>Set {{confidence_artifact_repo_path}} = {workspace_root_dir}.</action>
+    <action>Set {{confidence_steps_dir}} = {steps_dir}.</action>
+    <action>Set {{confidence_workspace_dir}} = {workspace_confidence_dir}.</action>
+    <output>[CONFIDENCE] Étape 2/10 — Set artifact repository ✓
+Execution repository mode: workspace-control (enforced) | Artifact root: {{confidence_artifact_repo_path}}</output>
+  </step>
+
+  <step n="3" goal="Discover workspace scope (all repos)">
+    <action>Check for {workspace_config}. If found, treat it as a lightweight pointer only.</action>
+    <check if="workspace config not found">
+      <ask>No `_nakiros/workspace.yaml` found at {workspace_config}. Provide a workspace yaml path, or continue in single-repo mode. (path/single)
+
+---
+
+**What would you like to do?**
+
+1. Provide the workspace yaml path
+2. Continue in single-repo mode
+      </ask>
+      <check if="user provides path">
+        <action>Load workspace config from provided path and read `workspace_slug` first, then `workspace_name`.</action>
+      </check>
+      <check if="user chooses single">
+        <action>Continue in single-repo mode.</action>
+      </check>
+    </check>
+
+    <action if="workspace config found">Load `~/.nakiros/workspaces/{workspace_slug}/workspace.yaml` as the canonical workspace map.</action>
+    <action if="canonical workspace yaml exists">Set {{is_multi_repo}} = (`workspace.structure` == "multi-repo" OR repo_count &gt; 1) and {{repos_to_analyze}} = all repos from canonical workspace yaml `repos`.</action>
+    <action if="canonical workspace yaml is missing">Set {{is_multi_repo}} = false and {{repos_to_analyze}} = [{project-root}] as single repo scope.</action>
+    <action>Set {{primary_repo}} as first repo in {{repos_to_analyze}} (or project-root for single repo mode).</action>
+    <critical>You MUST analyze every repo in {{repos_to_analyze}}. No partial scan.</critical>
+    <output>[CONFIDENCE] Étape 3/10 — Discover workspace scope ✓
+Scope resolved: {{is_multi_repo ? "multi-repo (" + repos_to_analyze.length + ")" : "single-repo"}}</output>
+  </step>
+
+  <step n="4" goal="Collect mandatory evidence per repo">
+    <critical>Do not mark a repo as covered unless ALL mandatory categories have evidence with concrete file references.</critical>
+
+    <action for="each repo in repos_to_analyze">
+      <action>Category A - Required tech and skills:
+        - Detect stack from manifests (package.json, requirements.txt, Cargo.toml, go.mod, pom.xml, etc.).
+        - Build required skills list (frameworks, language runtime, DB, infra, testing framework).
+        - Collect available skill/capability signals (local skills, _nakiros agents/workflows, PM integration, MCP/tooling setup).
+      </action>
+
+      <action>Category B - Functional understanding:
+        - Summarize what this repo does in the project (2-5 concrete bullets).
+        - Back each statement with file references (README/docs + key implementation files).
+      </action>
+
+      <action>Category C - Documentation and ticketing readiness:
+        - Verify existence/quality of docs needed to create good tickets (domain flows, architecture, AC references, constraints, glossary).
+        - Mark missing docs that prevent reliable story/ticket elaboration.
+      </action>
+
+      <action>Category D - Testability readiness:
+        - Identify how to run tests (unit/integration/e2e) and prerequisites.
+        - Detect test frameworks, scripts, fixtures, env files, and CI test jobs.
+        - Capture exact runnable commands when available.
+      </action>
+
+      <action>Category E - Operational readiness:
+        - Verify CI/CD and deployment/rollback clues (pipelines, Dockerfile, infra manifests, runbooks).
+        - Note what is missing to deploy safely.
+      </action>
+
+      <action>Store per-repo evidence record {{repo_evidence_N}} with:
+        - repo_name, role, localPath
+        - required_skills
+        - available_capabilities
+        - functional_understanding_summary
+        - docs_ticketing_findings
+        - testability_findings
+        - operational_findings
+        - missing_categories (if any)
+      </action>
+    </action>
+
+    <output>[CONFIDENCE] Étape 4/10 — Collect evidence ✓
+Mandatory evidence collected for {{repos_to_analyze.length}} repo(s)</output>
+  </step>
+
+  <step n="5" goal="Run strict repo coverage gate">
+    <critical>Coverage gate must pass before allowing a high-confidence verdict.</critical>
+
+    <action>Build {{repo_coverage_matrix}} with one row per repo and these columns:
+      - repo
+      - category_A_skills (OK/MISSING)
+      - category_B_understanding (OK/MISSING)
+      - category_C_docs_ticketing (OK/MISSING)
+      - category_D_testability (OK/MISSING)
+      - category_E_operability (OK/MISSING)
+      - key_missing_items
+    </action>
+
+    <action>Compute {{repos_fully_covered}} = count of repos where all five categories are OK.</action>
+    <action>Compute {{repo_coverage_percent}} = (repos_fully_covered / repos_to_analyze.length) * 100.</action>
+
+    <check if="repo_coverage_percent &lt; minimum_repo_coverage_percent">
+      <action>Set {{coverage_gate_failed}} = true.</action>
+      <action>Set {{global_score_cap}} = 59.</action>
+      <action>Add a critical blocker: "Not all repos are fully covered. Confidence cannot be considered meaningful yet."</action>
+    </check>
+
+    <check if="repo_coverage_percent &gt;= minimum_repo_coverage_percent">
+      <action>Set {{coverage_gate_failed}} = false.</action>
+      <action>Set {{global_score_cap}} = 100.</action>
+    </check>
+
+    <output>[CONFIDENCE] Étape 5/10 — Coverage gate ✓
+Coverage gate: {{coverage_gate_failed ? "FAILED" : "PASSED"}} | Repo coverage: {{repo_coverage_percent}}%</output>
+  </step>
+
+  <step n="6" goal="Score confidence dimensions (user outcome focused)">
+    <critical>All scores are 0-100 and must be justified with evidence and repository coverage status.</critical>
+
+    <action>Score `skill_coverage` (0-100): required tech skills vs available agent/automation capabilities.</action>
+    <action>Score `project_understanding` (0-100): how clearly AI can explain what each repo does and how they connect.</action>
+    <action>Score `documentation_ticket_readiness` (0-100): whether docs are sufficient to write high-quality stories/tickets.</action>
+    <action>Score `testability_readiness` (0-100): whether AI can run tests reliably with known commands/prerequisites.</action>
+    <action>Score `operational_readiness` (0-100): whether delivery/deploy/release signals are sufficient for safe assistance.</action>
+
+    <action>Compute weighted global score as:
+      ((skill_coverage * {weight_skill_coverage})
+      + (project_understanding * {weight_project_understanding})
+      + (documentation_ticket_readiness * {weight_documentation_ticket_readiness})
+      + (testability_readiness * {weight_testability_readiness})
+      + (operational_readiness * {weight_operational_readiness})) / 100
+      Save as {{raw_global_confidence_score}}.
+    </action>
+
+    <action>Apply coverage cap:
+      {{global_confidence_score}} = min({{raw_global_confidence_score}}, {{global_score_cap}}).
+    </action>
+
+    <output>[CONFIDENCE] Étape 6/10 — Score confidence ✓
+Score computed: raw={{raw_global_confidence_score}}/100 | final={{global_confidence_score}}/100</output>
+  </step>
+
+  <step n="7" goal="Generate prioritized user actions to make AI highly effective">
+    <action>Build {{critical_gaps}} list (max 10) for blockers that prevent trustworthy AI assistance.</action>
+    <action>Build {{recommended_gaps}} list (max 10) for high-value improvements.</action>
+
+    <action>Generate {{action_backlog}} with actionable items sorted by impact:
+      - priority: P0 / P1 / P2
+      - action_title
+      - why_it_matters
+      - affected_repos
+      - concrete_user_action
+      - verification (command or file to check)
+      - estimated_effort (S/M/L)
+      - expected_score_gain
+    </action>
+
+    <action>Split backlog into:
+      - {{quick_wins}}: actions expected to be done in less than one day
+      - {{structural_actions}}: deeper changes
+    </action>
+
+    <action>Generate {{confidence_boost_plan}}: smallest set of actions likely to increase confidence by +20 points.</action>
+    <output>[CONFIDENCE] Étape 7/10 — Generate action plan ✓
+Prioritized action plan prepared</output>
+  </step>
+
+  <step n="8" goal="Classify assistance readiness">
+    <check if="coverage_gate_failed">
+      <action>Set {{confidence_verdict}} = "INSUFFICIENT".</action>
+      <action>Set {{assistant_mode}} = "Do not rely on AI for full-project decisions yet; complete missing repo coverage first.".</action>
+    </check>
+
+    <check if="not coverage_gate_failed and global_confidence_score &gt;= score_threshold_confident">
+      <action>Set {{confidence_verdict}} = "CONFIDENT".</action>
+      <action>Set {{assistant_mode}} = "AI can assist across the project (ticket elaboration + implementation guidance + test guidance) with normal validation checks.".</action>
+    </check>
+
+    <check if="not coverage_gate_failed and global_confidence_score &lt; score_threshold_confident and global_confidence_score &gt;= score_threshold_partial">
+      <action>Set {{confidence_verdict}} = "PARTIAL".</action>
+      <action>Set {{assistant_mode}} = "AI assistance is useful but must flag uncertainty and request validation on weaker dimensions.".</action>
+    </check>
+
+    <check if="not coverage_gate_failed and global_confidence_score &lt; score_threshold_partial">
+      <action>Set {{confidence_verdict}} = "INSUFFICIENT".</action>
+      <action>Set {{assistant_mode}} = "Focus on documentation/skills/testability gaps before relying on AI for delivery decisions.".</action>
+    </check>
+
+    <output>[CONFIDENCE] Étape 8/10 — Classify readiness ✓
+Verdict: {{confidence_verdict}} | Mode: {{assistant_mode}}</output>
+  </step>
+
+  <step n="9" goal="Write confidence report artifacts">
+    <action>Ensure directories exist: {{confidence_steps_dir}} and {{confidence_workspace_dir}}.</action>
+    <action>Set report paths:
+      - {{confidence_report_md}} = {{confidence_workspace_dir}}/project-understanding-confidence-{{date}}.md
+      - {{confidence_report_json}} = {{confidence_workspace_dir}}/project-understanding-confidence-{{date}}.json
+      - {{workflow_snapshot_md}} = {{confidence_steps_dir}}/project-understanding-confidence-{{date}}.md
+    </action>
+
+    <action>Write Markdown report to {{confidence_report_md}} in {{document_language}}:
+
+      # Project Understanding Confidence Report — {{date}}
+
+      ## Verdict
+      - Coverage gate: {{coverage_gate_failed ? "FAILED" : "PASSED"}}
+      - Repo coverage: {{repo_coverage_percent}}%
+      - Global score: {{global_confidence_score}} / 100 (raw: {{raw_global_confidence_score}})
+      - Confidence level: {{confidence_verdict}}
+      - Assistant mode: {{assistant_mode}}
+
+      ## Repo Coverage Matrix
+      {{repo_coverage_matrix}}
+
+      ## Dimension Scores
+      - skill_coverage: {{skill_coverage}}
+      - project_understanding: {{project_understanding}}
+      - documentation_ticket_readiness: {{documentation_ticket_readiness}}
+      - testability_readiness: {{testability_readiness}}
+      - operational_readiness: {{operational_readiness}}
+
+      ## Critical Gaps
+      {{critical_gaps}}
+
+      ## Recommended Gaps
+      {{recommended_gaps}}
+
+      ## Action Backlog
+      {{action_backlog}}
+
+      ## Confidence Boost Plan
+      {{confidence_boost_plan}}
+    </action>
+
+    <action>Write JSON report to {{confidence_report_json}} with the same underlying data model.</action>
+    <action>Write workflow snapshot to {{workflow_snapshot_md}} summarizing scope, repo coverage, and artifact paths.</action>
+    <output>[CONFIDENCE] Étape 9/10 — Write artifacts ✓
+Artifacts written | Report: {{confidence_report_md}}</output>
+  </step>
+
+  <step n="10" goal="Report final result">
+    <output>[CONFIDENCE] Étape 10/10 — Final report ✓</output>
+    <output>[CONFIDENCE] ✅ COMPLETE
+├─ Verdict: {{confidence_verdict}}
+├─ Score: {{global_confidence_score}} / 100
+├─ Coverage: {{repo_coverage_percent}}%
+├─ Markdown: {{confidence_report_md}}
+├─ JSON: {{confidence_report_json}}
+└─ Snapshot: {{workflow_snapshot_md}}
+    </output>
+  </step>
+</workflow>

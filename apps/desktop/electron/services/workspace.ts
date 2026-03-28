@@ -62,7 +62,7 @@ function migrateIfNeeded(): void {
 export function getAll(): StoredWorkspace[] {
   migrateIfNeeded();
   const rows = getDb().select().from(dbSchema.workspaces).all();
-  return rows.map((r) => JSON.parse(r.data) as StoredWorkspace);
+  return rows.map((row: { data: string }) => JSON.parse(row.data) as StoredWorkspace);
 }
 
 export function save(workspace: StoredWorkspace): void {
@@ -114,4 +114,8 @@ export function resolveWorkspaceSlug(_id: string, name: string): string {
 
 export function ensureNakirosDirs(): void {
   mkdirSync(join(homedir(), '.nakiros', 'workspaces'), { recursive: true });
+}
+
+export function getNakirosWorkspaceDir(workspaceSlug: string): string {
+  return join(homedir(), '.nakiros', 'workspaces', workspaceSlug);
 }

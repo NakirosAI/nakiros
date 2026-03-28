@@ -25,7 +25,7 @@ Dossier caché dans le home de l'utilisateur. Contient tout ce qui est global à
 
   workspaces/
     {workspace-name-slug}/
-      workspace.json                   # Config du workspace (repos, PM tool, Jira, structure)
+      workspace.yaml                   # Source de vérité locale du workspace (repos, PM tool, Jira, structure)
 
       tickets/                         # Tickets synchronisés depuis Jira/Linear/GitHub
         EX-197.json
@@ -40,6 +40,10 @@ Dossier caché dans le home de l'utilisateur. Contient tout ce qui est global à
         global-context.md              # Vue d'ensemble du projet multi-repo
         inter-repo.md                  # Contrats et dépendances entre repos
         product-context.md             # Contexte produit : finalité, workflows, domaines, migrations
+        architecture/
+          index.md                     # Carte simplifiée de l'architecture globale du workspace
+          auth.md                      # Domaine transverse workspace
+          billing.md                   # Domaine transverse workspace
 
       reports/
         daily/                         # Dailies générés automatiquement en fin de journée
@@ -88,6 +92,7 @@ Ce slug est utilisé partout dans le code pour identifier le dossier du workspac
 
 - **Tickets / Epics** : synchronisés depuis Jira/Linear/GitHub, mis à jour par les agents, lus par le MCP server
 - **Contexte global** : généré par l'agent Architect sur l'ensemble du workspace multi-repo
+- **Architecture globale** : carte légère du système complet, des domaines transverses et des relations inter-repos
 - **Reports** : dailies et rétros générés automatiquement, affichés dans le Morning Briefing
 - **Sessions** : historique des conversations IA, persisté par workspace pour continuité
 - **Runs** : traçabilité complète de chaque exécution de workflow (audit trail)
@@ -111,21 +116,63 @@ Dossier visible à la racine de chaque repo Git. Contient uniquement la document
 {repo}/
   _nakiros/
     workspace.yaml   # Pointeur léger vers le workspace global
-    architecture.md  # Vision architecturale du repo (généré par agent Architect)
     stack.md         # Stack technique, versions, dépendances clés
     conventions.md   # Conventions de code, patterns dominants, règles du projet
     llms.txt         # Contexte condensé pour les agents IA (format llms.txt standard)
     api.md           # Documentation des endpoints/interfaces publics (si applicable)
+    architecture/
+      index.md       # Sommaire léger de l'architecture du repo
+      {domain}.md    # Docs ciblées par domaine ou feature technique
+    product/
+      features/
+        {feature}.md # Fiches feature compactes et ciblées
 ```
 
 ### Responsabilités de ce dossier
 
-- **workspace.yaml** : contient `workspace_name` et `workspace_slug`. Il sert de pointeur léger ; la source de vérité complète reste `~/.nakiros/workspaces/{workspace_slug}/workspace.json`.
-- **architecture.md** : généré par l'agent Architect via `Generate Context`. Décrit la structure du repo, les modules principaux, les patterns utilisés, les décisions techniques importantes.
+- **workspace.yaml** : contient `workspace_name` et `workspace_slug`. Il sert de pointeur léger ; la source de vérité complète reste `~/.nakiros/workspaces/{workspace_slug}/workspace.yaml`.
+- **architecture/index.md** : sommaire léger de l'architecture du repo. Sert de point d'entrée pour charger ensuite uniquement la doc ciblée utile.
+- **architecture/{domain}.md** : documentation d'architecture fragmentée par domaine ou feature technique.
 - **stack.md** : liste le stack technique détecté et documenté. Utile pour l'onboarding et pour les agents.
 - **conventions.md** : conventions de nommage, structure des fichiers, patterns à suivre. Les agents Dev s'appuient dessus pour produire du code cohérent.
 - **llms.txt** : fichier de contexte condensé au format standard `llms.txt`. Injecté automatiquement dans le contexte des agents pour chaque session sur ce repo.
 - **api.md** : documentation des contrats d'interface (endpoints REST, events, schemas). Particulièrement utile dans un contexte multi-repo pour les contrats inter-services.
+- **product/features/{feature}.md** : fiche feature compacte, lisible par un agent sans charger tout le contexte produit.
+
+La convention détaillée de structure et de formats pour les artefacts portables est définie dans [nakiros-local-artifact-convention.md](/Users/thomasailleaume/Perso/timetrackerAgent/docs/architecture/nakiros-local-artifact-convention.md).
+
+### Dualité officielle : workspace-global puis repo-local
+
+Pour l'architecture Nakiros, la règle cible est :
+
+1. lire d'abord la vue **workspace-global** dans `~/.nakiros/workspaces/{workspace_slug}/context/architecture/`
+2. puis charger seulement les slices **repo-locales** utiles dans `{repo}/_nakiros/architecture/`
+
+Le dossier global sert à décrire :
+
+- la carte du système complet
+- les domaines transverses
+- les flux majeurs entre repos
+- les contrats et dépendances inter-repos
+
+Le dossier repo-local sert à décrire :
+
+- comment un repo implémente sa part
+- les contraintes propres à ce codebase
+- les détails techniques qui n'ont pas vocation à vivre au niveau workspace
+
+Exemple :
+
+- `~/.nakiros/workspaces/exploitation/context/architecture/index.md`
+- `~/.nakiros/workspaces/exploitation/context/architecture/auth.md`
+- `exploitation-front/_nakiros/architecture/auth.md`
+- `exploitation-back/_nakiros/architecture/auth.md`
+
+Règle d'écriture :
+
+- si la décision ou la doc concerne plusieurs repos, elle doit avoir une forme workspace-globale
+- si elle concerne un repo précis, elle vit dans ce repo
+- si les deux niveaux sont utiles, le global reste léger et renvoie vers les slices repo-locales
 
 ### Ce dossier est
 
@@ -158,17 +205,21 @@ Quand un agent doit écrire un fichier, il suit cette règle :
 | Brainstorming workspace | `~/.nakiros/workspaces/{slug}/context/brainstorming.md` |
 | Contexte global multi-repo | `~/.nakiros/workspaces/{slug}/context/global-context.md` |
 | Contexte produit (finalité, workflows) | `~/.nakiros/workspaces/{slug}/context/product-context.md` |
+| Sommaire architecture global du workspace | `~/.nakiros/workspaces/{slug}/context/architecture/index.md` |
+| Domaine transverse global | `~/.nakiros/workspaces/{slug}/context/architecture/{domain}.md` |
 | Daily généré | `~/.nakiros/workspaces/{slug}/reports/daily/` |
 | Rétrospective générée | `~/.nakiros/workspaces/{slug}/reports/retro/` |
 | Rapport Project Confidence | `~/.nakiros/workspaces/{slug}/reports/confidence/` |
 | Trace d'exécution de workflow | `~/.nakiros/workspaces/{slug}/runs/` |
 | État de run actif | `~/.nakiros/workspaces/{slug}/state/active-run.json` |
 | Pointeur workspace repo-side | `{repo}/_nakiros/workspace.yaml` |
-| Architecture du repo | `{repo}/_nakiros/architecture.md` |
+| Sommaire architecture repo | `{repo}/_nakiros/architecture/index.md` |
+| Détail architecture par domaine/feature | `{repo}/_nakiros/architecture/{domain}.md` |
 | Stack technique du repo | `{repo}/_nakiros/stack.md` |
 | Conventions du repo | `{repo}/_nakiros/conventions.md` |
 | Contexte condensé llms.txt | `{repo}/_nakiros/llms.txt` |
 | Doc API / contrats inter-repo | `{repo}/_nakiros/api.md` |
+| Fiche feature compacte | `{repo}/_nakiros/product/features/{feature}.md` |
 | Notes dev liées à un ticket | `{repo}/_nakiros/dev-notes/{ticketId}.md` |
 | Revue QA | `{repo}/_nakiros/qa-reviews/{ticketId}-{date}.md` |
 | Bug report | `{repo}/_nakiros/bugs/{bugId}.md` |

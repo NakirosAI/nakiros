@@ -76,6 +76,10 @@ export function TicketTabExecution({
             onDone={onDone}
           />
         </div>
+      ) : executionRunning ? (
+        <div className="rounded-[10px] border border-[var(--line)] bg-[var(--bg-card)] p-4 text-[13px] text-[var(--text-muted)]">
+          {t('launchedInChatIA')}
+        </div>
       ) : (
         <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] p-4 text-[13px] leading-[1.5] text-[var(--text-muted)]">
           {t('clickToLaunch')} <strong>{t('launchDevStory')}</strong>.

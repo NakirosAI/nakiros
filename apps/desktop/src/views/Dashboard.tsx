@@ -2,45 +2,65 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import type {
+  ArtifactChangeProposal,
   AuthState,
   LocalTicket,
+  OnboardingChatLaunchRequest,
   StoredWorkspace,
 } from '@nakiros/shared';
-import { Settings2 } from 'lucide-react';
+import { Eye, Settings2 } from 'lucide-react';
 import appIcon from '../assets/icon.svg';
+import DashboardErrorBoundary from '../components/dashboard/DashboardErrorBoundary';
 import { DashboardRouter } from '../components/dashboard/DashboardRouter';
+import ArtifactReviewDock from '../components/review/ArtifactReviewDock';
+import FileChangesReviewDock from '../components/review/FileChangesReviewDock';
 import FeedbackModal from '../components/FeedbackModal';
 import Sidebar, { type SidebarTab } from '../components/Sidebar';
+import StatusBar from '../components/StatusBar';
+import { Button } from '../components/ui';
+import { useArtifactReview } from '../hooks/useArtifactReview';
+import { useFileChangeReview } from '../hooks/useFileChangeReview';
 import { usePreferences } from '../hooks/usePreferences';
 import { useTickets } from '../hooks/useTickets';
 import { useWorkspace } from '../hooks/useWorkspace';
 import type { GlobalSettingsSection } from '../components/GlobalSettings';
 
+export interface WorkspaceSyncState {
+  syncing: boolean;
+  lastSyncAt: Date | null;
+  error: string | null;
+}
+
 interface Props {
   onUpdateWorkspace(workspace: StoredWorkspace): Promise<void>;
   onNewWorkspace(): void;
   onGoHome(): void;
+  onGoGettingStarted(workspaceId: string): void;
   authState: AuthState;
   serverStatus: 'starting' | 'running' | 'stopped';
+  workspaceSyncState: WorkspaceSyncState;
   updateBanner: UpdateCheckResult | null;
   onDismissUpdateBanner(): void;
-  onRestartServer(): void;
   openAgentRunChatTarget?: OpenAgentRunChatPayload | null;
+  launchChatRequest?: OnboardingChatLaunchRequest | null;
 }
 
 export default function Dashboard({
   onUpdateWorkspace,
   onNewWorkspace,
   onGoHome,
+  onGoGettingStarted,
   authState,
   serverStatus,
+  workspaceSyncState,
   updateBanner,
   onDismissUpdateBanner,
-  onRestartServer,
   openAgentRunChatTarget,
+  launchChatRequest,
 }: Props) {
   const { t } = useTranslation('dashboard');
   const { t: tCommon } = useTranslation('common');
+  const { t: tContext } = useTranslation('context');
   const { t: tSidebar } = useTranslation('sidebar');
   const { t: tToast } = useTranslation('toast');
   const { t: tSettings } = useTranslation('settings');
@@ -55,8 +75,6 @@ export default function Dashboard({
     closeWorkspaceTab,
   } = useWorkspace();
 
-  const mcpUrl = preferences.mcpServerUrl || 'http://localhost:3737';
-  const isLocalServer = mcpUrl.includes('localhost') || mcpUrl.includes('127.0.0.1');
   const defaultProvider = preferences.agentProvider ?? 'claude';
   const {
     tickets,
@@ -80,10 +98,42 @@ export default function Dashboard({
   const [lastConversationAt, setLastConversationAt] = useState<string | null>(null);
   const [openPrdAssistantSignal, setOpenPrdAssistantSignal] = useState(0);
   const [chatCompletionNotices, setChatCompletionNotices] = useState<Record<string, number>>({});
+  const [chatPendingPreviews, setChatPendingPreviews] = useState<Record<string, boolean>>({});
+  const [contextLaunchRequest, setContextLaunchRequest] = useState<OnboardingChatLaunchRequest | null>(null);
+  const [reviewOpenChatTarget, setReviewOpenChatTarget] = useState<OpenAgentRunChatPayload | null>(null);
+  // Session-only banner dismissal (not persisted)
+  const [setupBannerDismissed, setSetupBannerDismissed] = useState(false);
+  const [onboardingIncomplete, setOnboardingIncomplete] = useState(false);
   const lastHandledAgentRunChatEventIdRef = useRef<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
   const workspaceMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const {
+    activeSession: activeArtifactReviewSession,
+    isDockOpen: isArtifactReviewDockOpen,
+    canReopenDock: canReopenArtifactReviewDock,
+    isMutating: isArtifactReviewMutating,
+    lastMutation: lastArtifactReviewMutation,
+    openProposal: openArtifactReviewProposal,
+    closeDock: closeArtifactReviewDock,
+    reopenDock: reopenArtifactReviewDock,
+    acceptActive: acceptActiveArtifactReview,
+    rejectActive: rejectActiveArtifactReview,
+  } = useArtifactReview({ onToast: pushToast });
+
+  const {
+    activeSession: activeFileChangesSession,
+    isDockOpen: isFileChangesDockOpen,
+    canReopenDock: canReopenFileChangesDock,
+    isMutating: isFileChangesMutating,
+    openSession: openFileChangesSession,
+    closeDock: closeFileChangesDock,
+    reopenDock: reopenFileChangesDock,
+    acceptAll: acceptAllFileChanges,
+    rejectAll: rejectAllFileChanges,
+    acceptFile: acceptFileChange,
+    rejectFile: rejectFileChange,
+  } = useFileChangeReview({ onToast: pushToast });
 
   useEffect(() => {
     setSelectedTicket(null);
@@ -100,8 +150,29 @@ export default function Dashboard({
   }, [openAgentRunChatTarget, workspace.id]);
 
   useEffect(() => {
+    if (!launchChatRequest) return;
+    setActiveTab('chat');
+  }, [launchChatRequest]);
+
+  useEffect(() => {
+    if (!contextLaunchRequest) return;
+    setActiveTab('chat');
+  }, [contextLaunchRequest]);
+
+  useEffect(() => {
+    if (!reviewOpenChatTarget) return;
+    setActiveTab('chat');
+  }, [reviewOpenChatTarget]);
+
+  useEffect(() => {
     void refreshOverviewData();
     setOverviewDocsCount(0);
+    // Check onboarding completion to decide whether to show the setup banner
+    setSetupBannerDismissed(false); // reset dismissal on workspace switch
+    void window.nakiros.getWorkspaceGettingStartedContext(workspace).then((ctx) => {
+      const allDone = ctx.step1Complete && ctx.step2Complete && ctx.state.step3.completedAt !== null;
+      setOnboardingIncomplete(!allDone);
+    }).catch(() => { /* silent */ });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace.id]);
 
@@ -183,6 +254,59 @@ export default function Dashboard({
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2400);
   }
 
+  function handleArtifactChangeProposal(
+    sourceSurface: 'chat' | 'product' | 'backlog',
+    event: {
+      proposal: ArtifactChangeProposal;
+      conversationId?: string | null;
+      triggerMessageId?: string | null;
+      baselineContentOverride?: string | null;
+      alreadyApplied?: boolean;
+    },
+  ) {
+    void openArtifactReviewProposal({
+      proposal: event.proposal,
+      sourceSurface,
+      conversationId: event.conversationId,
+      triggerMessageId: event.triggerMessageId,
+      baselineContentOverride: event.baselineContentOverride,
+      alreadyApplied: event.alreadyApplied,
+    });
+  }
+
+  function handleAskForArtifactChanges() {
+    if (!activeArtifactReviewSession) return;
+    if (activeArtifactReviewSession.conversationId) {
+      setReviewOpenChatTarget({
+        workspaceId: workspace.id,
+        conversationId: activeArtifactReviewSession.conversationId,
+        eventId: `artifact-review-${Date.now()}`,
+      });
+      return;
+    }
+
+      setContextLaunchRequest({
+        requestId: `artifact-review-${workspace.id}-${Date.now()}`,
+        title: `Revise · ${activeArtifactReviewSession.title}`,
+        agentId: 'cto',
+        command: '/nak-agent-cto',
+        initialMessage: `Please revise the proposed change for "${activeArtifactReviewSession.title}".`,
+        artifactContext: {
+          target: activeArtifactReviewSession.target,
+        mode: activeArtifactReviewSession.mode,
+        sourceSurface: activeArtifactReviewSession.sourceSurface,
+        title: activeArtifactReviewSession.title,
+      },
+    });
+  }
+
+  function handleChatPendingPreviewChange(workspaceId: string, hasPendingPreview: boolean) {
+    setChatPendingPreviews((prev) => {
+      if (prev[workspaceId] === hasPendingPreview) return prev;
+      return { ...prev, [workspaceId]: hasPendingPreview };
+    });
+  }
+
   function handleChatRunCompletionNoticeChange(workspaceId: string, pendingCount: number) {
     setChatCompletionNotices((prev) => {
       const current = prev[workspaceId] ?? 0;
@@ -199,15 +323,11 @@ export default function Dashboard({
   const repoNames = workspace.repos.map((repo) => repo.name);
   const workspaceTopology = workspace.topology ?? (workspace.repos.length > 1 ? 'multi' : 'mono');
   const activeWorkspaceHasChatCompletion = (chatCompletionNotices[workspace.id] ?? 0) > 0;
+  const activeWorkspaceHasPendingPreview = chatPendingPreviews[workspace.id] ?? false;
   const unopenedWorkspaces = allWorkspaces.filter(
     (candidate) => !openWorkspaces.some((openedWorkspace) => openedWorkspace.id === candidate.id),
   );
   const workspaceMenuPositionClass = workspaceMenuSide === 'right' ? 'left-0' : 'right-0';
-  const mcpModeLabel = isLocalServer ? t('mcpLocal') : t('mcpRemote');
-  const accountLabel = authState.isAuthenticated ? t('accountConnected') : t('accountDisconnected');
-  const accountTitle = authState.isAuthenticated
-    ? authState.email ?? t('accountConnected')
-    : t('accountDisconnectedHint');
 
   function toggleWorkspaceMenu() {
     const rect = workspaceMenuButtonRef.current?.getBoundingClientRect();
@@ -339,61 +459,6 @@ export default function Dashboard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="text-xs text-[var(--text-muted)]">{t('repoCount', { count: workspace.repos.length })}</span>
-          <span className="rounded-lg border border-[var(--line)] bg-[var(--bg-muted)] px-2 py-[3px] text-[11px] text-[var(--text-muted)]">
-            {workspaceTopology === 'mono' ? t('topologyMono') : t('topologyMulti')}
-          </span>
-          <button
-            onClick={isLocalServer ? onRestartServer : undefined}
-            disabled={!isLocalServer || serverStatus === 'starting'}
-            title={
-              !isLocalServer
-                ? `MCP ${serverStatus === 'running' ? 'running' : 'stopped'} (remote server)`
-                : serverStatus === 'running'
-                  ? 'MCP running — click to restart'
-                  : serverStatus === 'starting'
-                    ? 'MCP starting…'
-                    : 'MCP stopped — click to restart'
-            }
-            className={clsx(
-              'flex items-center gap-[5px] rounded-lg border border-[var(--line)] bg-[var(--bg-muted)] px-2 py-1 text-[11px]',
-              (!isLocalServer || serverStatus === 'starting') && 'opacity-60',
-            )}
-          >
-            <span
-              className={clsx(
-                'h-[7px] w-[7px] shrink-0 rounded-full',
-                serverStatus === 'running'
-                  ? 'bg-[var(--success)]'
-                  : serverStatus === 'starting'
-                    ? 'bg-[var(--warning)]'
-                    : 'bg-[var(--danger)]',
-              )}
-            />
-            <span className="text-[var(--text-muted)]">
-              {t('mcpBadge', { mode: mcpModeLabel })}
-            </span>
-          </button>
-          <button
-            onClick={() => {
-              setGlobalSettingsSection('general');
-              setShowGlobalSettings(true);
-            }}
-            title={accountTitle}
-            aria-label={t('accountBadgeAriaLabel', { status: accountLabel })}
-            className={clsx(
-              'flex items-center gap-[5px] rounded-lg border border-[var(--line)] bg-[var(--bg-muted)] px-2 py-1 text-[11px]',
-              authState.isAuthenticated ? 'text-[var(--text)]' : 'text-[var(--text-muted)]',
-            )}
-          >
-            <span
-              className={clsx(
-                'h-[7px] w-[7px] shrink-0 rounded-full',
-                authState.isAuthenticated ? 'bg-[var(--success)]' : 'bg-[var(--line-strong)]',
-              )}
-            />
-            <span>{t('accountBadge', { status: accountLabel })}</span>
-          </button>
           <button
             onClick={() => setShowFeedbackModal(true)}
             title={tFeedback('productTitle')}
@@ -424,60 +489,102 @@ export default function Dashboard({
         <Sidebar
           active={activeTab}
           onChange={setActiveTab}
-          chatHasCompletionNotice={activeWorkspaceHasChatCompletion}
+          chatHasCompletionNotice={activeWorkspaceHasChatCompletion && activeTab !== 'chat'}
+          chatHasPendingPreview={activeWorkspaceHasPendingPreview && activeTab !== 'chat'}
           labels={{
             overview: tSidebar('overview'),
             chat: tSidebar('chat'),
             product: tSidebar('product'),
             delivery: tSidebar('delivery'),
+            backlog: tSidebar('backlog'),
             settings: tSidebar('settings'),
           }}
         />
 
-        <div className="flex flex-1 overflow-hidden">
-          <DashboardRouter
-            showGlobalSettings={showGlobalSettings}
-            globalSettingsSection={globalSettingsSection}
-            activeTab={activeTab}
-            workspace={workspace}
-            openWorkspaces={openWorkspaces}
-            openAgentRunChatTarget={openAgentRunChatTarget}
-            tickets={tickets}
-            epics={epics}
-            repoNames={repoNames}
-            serverStatus={serverStatus}
-            overviewDocsCount={overviewDocsCount}
-            overviewConversationCount={overviewConversationCount}
-            lastConversationAt={lastConversationAt}
-            openPrdAssistantSignal={openPrdAssistantSignal}
-            selectedTicket={selectedTicket}
-            copyingId={copyingId}
-            defaultProvider={defaultProvider}
-            onSetActiveTab={setActiveTab}
-            onSetSelectedTicket={setSelectedTicket}
-            onSetOverviewDocsCount={setOverviewDocsCount}
-            onTicketUpdate={handleTicketUpdate}
-            onTicketCreate={handleTicketCreate}
-            onContextCopy={handleContextCopy}
-            onContextCopied={(ticketId) => pushToast(tToast('contextCopied', { ticketId }))}
-            onUpdateWorkspace={onUpdateWorkspace}
-            onRefreshTickets={() => {
-              void refreshTickets();
-            }}
-            onRefreshOverviewData={() => {
-              void refreshOverviewData();
-            }}
-            onGoHome={onGoHome}
-            onOpenPrdAssistant={() => {
-              setActiveTab('product');
-              setOpenPrdAssistantSignal((prev) => prev + 1);
-            }}
-            onCloseGlobalSettings={() => setShowGlobalSettings(false)}
-            onGlobalUpdateApplied={onDismissUpdateBanner}
-            onChatRunCompletionNoticeChange={handleChatRunCompletionNoticeChange}
-          />
-        </div>
+        <DashboardErrorBoundary resetKey={`${workspace.id}:${activeTab}:${showGlobalSettings ? 'settings' : 'main'}`}>
+          <div className="flex flex-1 overflow-hidden">
+            <DashboardRouter
+              showGlobalSettings={showGlobalSettings}
+              globalSettingsSection={globalSettingsSection}
+              activeTab={activeTab}
+              workspace={workspace}
+              openWorkspaces={openWorkspaces}
+              openAgentRunChatTarget={reviewOpenChatTarget ?? openAgentRunChatTarget}
+              tickets={tickets}
+              epics={epics}
+              repoNames={repoNames}
+              serverStatus={serverStatus}
+              workspaceSyncState={workspaceSyncState}
+              overviewDocsCount={overviewDocsCount}
+              overviewConversationCount={overviewConversationCount}
+              lastConversationAt={lastConversationAt}
+              openPrdAssistantSignal={openPrdAssistantSignal}
+              selectedTicket={selectedTicket}
+              copyingId={copyingId}
+              defaultProvider={defaultProvider}
+              onSetActiveTab={setActiveTab}
+              onSetSelectedTicket={setSelectedTicket}
+              onSetOverviewDocsCount={setOverviewDocsCount}
+              onTicketUpdate={handleTicketUpdate}
+              onTicketCreate={handleTicketCreate}
+              onContextCopy={handleContextCopy}
+              onContextCopied={(ticketId) => pushToast(tToast('contextCopied', { ticketId }))}
+              onUpdateWorkspace={onUpdateWorkspace}
+              onRefreshTickets={() => {
+                void refreshTickets();
+              }}
+              onRefreshOverviewData={() => {
+                void refreshOverviewData();
+              }}
+              onGoHome={onGoHome}
+              onOpenPrdAssistant={() => {
+                setActiveTab('product');
+                setOpenPrdAssistantSignal((prev) => prev + 1);
+              }}
+              onCloseGlobalSettings={() => setShowGlobalSettings(false)}
+              onGlobalUpdateApplied={onDismissUpdateBanner}
+              onChatRunCompletionNoticeChange={handleChatRunCompletionNoticeChange}
+              onChatPendingPreviewChange={handleChatPendingPreviewChange}
+              launchChatRequest={contextLaunchRequest ?? launchChatRequest}
+              onLaunchChatRequest={setContextLaunchRequest}
+              onArtifactChangeProposal={handleArtifactChangeProposal}
+              lastArtifactReviewMutation={lastArtifactReviewMutation}
+              onFileChangesDetected={openFileChangesSession}
+              showSetupBanner={onboardingIncomplete && !setupBannerDismissed}
+              onOpenGettingStarted={() => onGoGettingStarted(workspace.id)}
+              onDismissSetupBanner={() => setSetupBannerDismissed(true)}
+            />
+            {activeArtifactReviewSession && isArtifactReviewDockOpen && (
+              <ArtifactReviewDock
+                session={activeArtifactReviewSession}
+                isMutating={isArtifactReviewMutating}
+                onClose={closeArtifactReviewDock}
+                onAccept={() => void acceptActiveArtifactReview()}
+                onReject={() => void rejectActiveArtifactReview()}
+                onAskForChanges={handleAskForArtifactChanges}
+              />
+            )}
+            {activeFileChangesSession && isFileChangesDockOpen && (
+              <FileChangesReviewDock
+                session={activeFileChangesSession}
+                isMutating={isFileChangesMutating}
+                onClose={closeFileChangesDock}
+                onAcceptAll={() => void acceptAllFileChanges()}
+                onRejectAll={() => void rejectAllFileChanges()}
+                onAcceptFile={(path) => void acceptFileChange(path)}
+                onRejectFile={(path) => void rejectFileChange(path)}
+              />
+            )}
+          </div>
+        </DashboardErrorBoundary>
       </div>
+      <StatusBar
+        authState={authState}
+        serverStatus={serverStatus}
+        workspaceSyncState={workspaceSyncState}
+        repoCount={workspace.repos.length}
+        topology={workspaceTopology}
+      />
       {showFeedbackModal && (
         <FeedbackModal
           onClose={() => setShowFeedbackModal(false)}
@@ -488,6 +595,28 @@ export default function Dashboard({
         <div className="fixed bottom-[14px] right-4 z-[1200] rounded-[10px] bg-[#0f172a] px-3 py-[9px] text-xs text-white shadow-[var(--shadow-lg)]">
           {toast}
         </div>
+      )}
+      {canReopenArtifactReviewDock && (
+        <Button
+          type="button"
+          onClick={reopenArtifactReviewDock}
+          variant="outline"
+          className="fixed bottom-[54px] right-4 z-[1190] h-auto max-w-[320px] justify-start gap-2 px-3 py-2 text-left"
+        >
+          <Eye data-icon="inline-start" />
+          <span className="truncate">{tContext('artifactReviewReopenActive', { title: activeArtifactReviewSession?.title ?? '' })}</span>
+        </Button>
+      )}
+      {canReopenFileChangesDock && (
+        <Button
+          type="button"
+          onClick={reopenFileChangesDock}
+          variant="outline"
+          className="fixed bottom-[54px] right-4 z-[1190] h-auto max-w-[320px] justify-start gap-2 px-3 py-2 text-left"
+        >
+          <Eye data-icon="inline-start" />
+          <span className="truncate">{tContext('fileChangesReopenDock', 'Agent file changes — review pending')}</span>
+        </Button>
       )}
     </div>
   );

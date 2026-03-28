@@ -3,6 +3,12 @@ const electron = require("electron");
 const child_process = require("child_process");
 const require$$1$1 = require("util");
 const require$$1$2 = require("fs");
+const node_events = require("node:events");
+const node_fs = require("node:fs");
+const promises = require("node:fs/promises");
+const sp = require("node:path");
+const node_stream = require("node:stream");
+const node_os = require("node:os");
 const os = require("os");
 const require$$0$3 = require("path");
 const require$$0$4 = require("tty");
@@ -17,12 +23,1740 @@ const require$$0$7 = require("url");
 const require$$0$8 = require("http");
 const require$$0$9 = require("crypto");
 const http2 = require("http2");
-const node_fs = require("node:fs");
-const node_path = require("node:path");
-const node_os = require("node:os");
 const Client = require("better-sqlite3");
 const require$$0$a = require("process");
-const promises = require("fs/promises");
+const promises$1 = require("fs/promises");
+const orchestrator = require("@nakiros/orchestrator");
+function _interopNamespaceDefault(e) {
+  const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
+  if (e) {
+    for (const k in e) {
+      if (k !== "default") {
+        const d = Object.getOwnPropertyDescriptor(e, k);
+        Object.defineProperty(n, k, d.get ? d : {
+          enumerable: true,
+          get: () => e[k]
+        });
+      }
+    }
+  }
+  n.default = e;
+  return Object.freeze(n);
+}
+const sp__namespace = /* @__PURE__ */ _interopNamespaceDefault(sp);
+const EntryTypes = {
+  FILE_TYPE: "files",
+  DIR_TYPE: "directories",
+  FILE_DIR_TYPE: "files_directories",
+  EVERYTHING_TYPE: "all"
+};
+const defaultOptions$1 = {
+  root: ".",
+  fileFilter: (_entryInfo) => true,
+  directoryFilter: (_entryInfo) => true,
+  type: EntryTypes.FILE_TYPE,
+  lstat: false,
+  depth: 2147483648,
+  alwaysStat: false,
+  highWaterMark: 4096
+};
+Object.freeze(defaultOptions$1);
+const RECURSIVE_ERROR_CODE = "READDIRP_RECURSIVE_ERROR";
+const NORMAL_FLOW_ERRORS = /* @__PURE__ */ new Set(["ENOENT", "EPERM", "EACCES", "ELOOP", RECURSIVE_ERROR_CODE]);
+const ALL_TYPES = [
+  EntryTypes.DIR_TYPE,
+  EntryTypes.EVERYTHING_TYPE,
+  EntryTypes.FILE_DIR_TYPE,
+  EntryTypes.FILE_TYPE
+];
+const DIR_TYPES = /* @__PURE__ */ new Set([
+  EntryTypes.DIR_TYPE,
+  EntryTypes.EVERYTHING_TYPE,
+  EntryTypes.FILE_DIR_TYPE
+]);
+const FILE_TYPES = /* @__PURE__ */ new Set([
+  EntryTypes.EVERYTHING_TYPE,
+  EntryTypes.FILE_DIR_TYPE,
+  EntryTypes.FILE_TYPE
+]);
+const isNormalFlowError = (error) => NORMAL_FLOW_ERRORS.has(error.code);
+const wantBigintFsStats = process.platform === "win32";
+const emptyFn = (_entryInfo) => true;
+const normalizeFilter = (filter) => {
+  if (filter === void 0)
+    return emptyFn;
+  if (typeof filter === "function")
+    return filter;
+  if (typeof filter === "string") {
+    const fl = filter.trim();
+    return (entry) => entry.basename === fl;
+  }
+  if (Array.isArray(filter)) {
+    const trItems = filter.map((item) => item.trim());
+    return (entry) => trItems.some((f) => entry.basename === f);
+  }
+  return emptyFn;
+};
+class ReaddirpStream extends node_stream.Readable {
+  parents;
+  reading;
+  parent;
+  _stat;
+  _maxDepth;
+  _wantsDir;
+  _wantsFile;
+  _wantsEverything;
+  _root;
+  _isDirent;
+  _statsProp;
+  _rdOptions;
+  _fileFilter;
+  _directoryFilter;
+  constructor(options = {}) {
+    super({
+      objectMode: true,
+      autoDestroy: true,
+      highWaterMark: options.highWaterMark
+    });
+    const opts = { ...defaultOptions$1, ...options };
+    const { root, type: type2 } = opts;
+    this._fileFilter = normalizeFilter(opts.fileFilter);
+    this._directoryFilter = normalizeFilter(opts.directoryFilter);
+    const statMethod = opts.lstat ? promises.lstat : promises.stat;
+    if (wantBigintFsStats) {
+      this._stat = (path) => statMethod(path, { bigint: true });
+    } else {
+      this._stat = statMethod;
+    }
+    this._maxDepth = opts.depth != null && Number.isSafeInteger(opts.depth) ? opts.depth : defaultOptions$1.depth;
+    this._wantsDir = type2 ? DIR_TYPES.has(type2) : false;
+    this._wantsFile = type2 ? FILE_TYPES.has(type2) : false;
+    this._wantsEverything = type2 === EntryTypes.EVERYTHING_TYPE;
+    this._root = sp.resolve(root);
+    this._isDirent = !opts.alwaysStat;
+    this._statsProp = this._isDirent ? "dirent" : "stats";
+    this._rdOptions = { encoding: "utf8", withFileTypes: this._isDirent };
+    this.parents = [this._exploreDir(root, 1)];
+    this.reading = false;
+    this.parent = void 0;
+  }
+  async _read(batch) {
+    if (this.reading)
+      return;
+    this.reading = true;
+    try {
+      while (!this.destroyed && batch > 0) {
+        const par = this.parent;
+        const fil = par && par.files;
+        if (fil && fil.length > 0) {
+          const { path, depth } = par;
+          const slice = fil.splice(0, batch).map((dirent) => this._formatEntry(dirent, path));
+          const awaited = await Promise.all(slice);
+          for (const entry of awaited) {
+            if (!entry)
+              continue;
+            if (this.destroyed)
+              return;
+            const entryType = await this._getEntryType(entry);
+            if (entryType === "directory" && this._directoryFilter(entry)) {
+              if (depth <= this._maxDepth) {
+                this.parents.push(this._exploreDir(entry.fullPath, depth + 1));
+              }
+              if (this._wantsDir) {
+                this.push(entry);
+                batch--;
+              }
+            } else if ((entryType === "file" || this._includeAsFile(entry)) && this._fileFilter(entry)) {
+              if (this._wantsFile) {
+                this.push(entry);
+                batch--;
+              }
+            }
+          }
+        } else {
+          const parent = this.parents.pop();
+          if (!parent) {
+            this.push(null);
+            break;
+          }
+          this.parent = await parent;
+          if (this.destroyed)
+            return;
+        }
+      }
+    } catch (error) {
+      this.destroy(error);
+    } finally {
+      this.reading = false;
+    }
+  }
+  async _exploreDir(path, depth) {
+    let files;
+    try {
+      files = await promises.readdir(path, this._rdOptions);
+    } catch (error) {
+      this._onError(error);
+    }
+    return { files, depth, path };
+  }
+  async _formatEntry(dirent, path) {
+    let entry;
+    const basename = this._isDirent ? dirent.name : dirent;
+    try {
+      const fullPath = sp.resolve(sp.join(path, basename));
+      entry = { path: sp.relative(this._root, fullPath), fullPath, basename };
+      entry[this._statsProp] = this._isDirent ? dirent : await this._stat(fullPath);
+    } catch (err) {
+      this._onError(err);
+      return;
+    }
+    return entry;
+  }
+  _onError(err) {
+    if (isNormalFlowError(err) && !this.destroyed) {
+      this.emit("warn", err);
+    } else {
+      this.destroy(err);
+    }
+  }
+  async _getEntryType(entry) {
+    if (!entry && this._statsProp in entry) {
+      return "";
+    }
+    const stats = entry[this._statsProp];
+    if (stats.isFile())
+      return "file";
+    if (stats.isDirectory())
+      return "directory";
+    if (stats && stats.isSymbolicLink()) {
+      const full = entry.fullPath;
+      try {
+        const entryRealPath = await promises.realpath(full);
+        const entryRealPathStats = await promises.lstat(entryRealPath);
+        if (entryRealPathStats.isFile()) {
+          return "file";
+        }
+        if (entryRealPathStats.isDirectory()) {
+          const len = entryRealPath.length;
+          if (full.startsWith(entryRealPath) && full.substr(len, 1) === sp.sep) {
+            const recursiveError = new Error(`Circular symlink detected: "${full}" points to "${entryRealPath}"`);
+            recursiveError.code = RECURSIVE_ERROR_CODE;
+            return this._onError(recursiveError);
+          }
+          return "directory";
+        }
+      } catch (error) {
+        this._onError(error);
+        return "";
+      }
+    }
+  }
+  _includeAsFile(entry) {
+    const stats = entry && entry[this._statsProp];
+    return stats && this._wantsEverything && !stats.isDirectory();
+  }
+}
+function readdirp(root, options = {}) {
+  let type2 = options.entryType || options.type;
+  if (type2 === "both")
+    type2 = EntryTypes.FILE_DIR_TYPE;
+  if (type2)
+    options.type = type2;
+  if (!root) {
+    throw new Error("readdirp: root argument is required. Usage: readdirp(root, options)");
+  } else if (typeof root !== "string") {
+    throw new TypeError("readdirp: root argument must be a string. Usage: readdirp(root, options)");
+  } else if (type2 && !ALL_TYPES.includes(type2)) {
+    throw new Error(`readdirp: Invalid type passed. Use one of ${ALL_TYPES.join(", ")}`);
+  }
+  options.root = root;
+  return new ReaddirpStream(options);
+}
+const STR_DATA = "data";
+const STR_END = "end";
+const STR_CLOSE = "close";
+const EMPTY_FN = () => {
+};
+const pl = process.platform;
+const isWindows = pl === "win32";
+const isMacos = pl === "darwin";
+const isLinux = pl === "linux";
+const isFreeBSD = pl === "freebsd";
+const isIBMi = node_os.type() === "OS400";
+const EVENTS = {
+  ALL: "all",
+  READY: "ready",
+  ADD: "add",
+  CHANGE: "change",
+  ADD_DIR: "addDir",
+  UNLINK: "unlink",
+  UNLINK_DIR: "unlinkDir",
+  RAW: "raw",
+  ERROR: "error"
+};
+const EV = EVENTS;
+const THROTTLE_MODE_WATCH = "watch";
+const statMethods = { lstat: promises.lstat, stat: promises.stat };
+const KEY_LISTENERS = "listeners";
+const KEY_ERR = "errHandlers";
+const KEY_RAW = "rawEmitters";
+const HANDLER_KEYS = [KEY_LISTENERS, KEY_ERR, KEY_RAW];
+const binaryExtensions = /* @__PURE__ */ new Set([
+  "3dm",
+  "3ds",
+  "3g2",
+  "3gp",
+  "7z",
+  "a",
+  "aac",
+  "adp",
+  "afdesign",
+  "afphoto",
+  "afpub",
+  "ai",
+  "aif",
+  "aiff",
+  "alz",
+  "ape",
+  "apk",
+  "appimage",
+  "ar",
+  "arj",
+  "asf",
+  "au",
+  "avi",
+  "bak",
+  "baml",
+  "bh",
+  "bin",
+  "bk",
+  "bmp",
+  "btif",
+  "bz2",
+  "bzip2",
+  "cab",
+  "caf",
+  "cgm",
+  "class",
+  "cmx",
+  "cpio",
+  "cr2",
+  "cur",
+  "dat",
+  "dcm",
+  "deb",
+  "dex",
+  "djvu",
+  "dll",
+  "dmg",
+  "dng",
+  "doc",
+  "docm",
+  "docx",
+  "dot",
+  "dotm",
+  "dra",
+  "DS_Store",
+  "dsk",
+  "dts",
+  "dtshd",
+  "dvb",
+  "dwg",
+  "dxf",
+  "ecelp4800",
+  "ecelp7470",
+  "ecelp9600",
+  "egg",
+  "eol",
+  "eot",
+  "epub",
+  "exe",
+  "f4v",
+  "fbs",
+  "fh",
+  "fla",
+  "flac",
+  "flatpak",
+  "fli",
+  "flv",
+  "fpx",
+  "fst",
+  "fvt",
+  "g3",
+  "gh",
+  "gif",
+  "graffle",
+  "gz",
+  "gzip",
+  "h261",
+  "h263",
+  "h264",
+  "icns",
+  "ico",
+  "ief",
+  "img",
+  "ipa",
+  "iso",
+  "jar",
+  "jpeg",
+  "jpg",
+  "jpgv",
+  "jpm",
+  "jxr",
+  "key",
+  "ktx",
+  "lha",
+  "lib",
+  "lvp",
+  "lz",
+  "lzh",
+  "lzma",
+  "lzo",
+  "m3u",
+  "m4a",
+  "m4v",
+  "mar",
+  "mdi",
+  "mht",
+  "mid",
+  "midi",
+  "mj2",
+  "mka",
+  "mkv",
+  "mmr",
+  "mng",
+  "mobi",
+  "mov",
+  "movie",
+  "mp3",
+  "mp4",
+  "mp4a",
+  "mpeg",
+  "mpg",
+  "mpga",
+  "mxu",
+  "nef",
+  "npx",
+  "numbers",
+  "nupkg",
+  "o",
+  "odp",
+  "ods",
+  "odt",
+  "oga",
+  "ogg",
+  "ogv",
+  "otf",
+  "ott",
+  "pages",
+  "pbm",
+  "pcx",
+  "pdb",
+  "pdf",
+  "pea",
+  "pgm",
+  "pic",
+  "png",
+  "pnm",
+  "pot",
+  "potm",
+  "potx",
+  "ppa",
+  "ppam",
+  "ppm",
+  "pps",
+  "ppsm",
+  "ppsx",
+  "ppt",
+  "pptm",
+  "pptx",
+  "psd",
+  "pya",
+  "pyc",
+  "pyo",
+  "pyv",
+  "qt",
+  "rar",
+  "ras",
+  "raw",
+  "resources",
+  "rgb",
+  "rip",
+  "rlc",
+  "rmf",
+  "rmvb",
+  "rpm",
+  "rtf",
+  "rz",
+  "s3m",
+  "s7z",
+  "scpt",
+  "sgi",
+  "shar",
+  "snap",
+  "sil",
+  "sketch",
+  "slk",
+  "smv",
+  "snk",
+  "so",
+  "stl",
+  "suo",
+  "sub",
+  "swf",
+  "tar",
+  "tbz",
+  "tbz2",
+  "tga",
+  "tgz",
+  "thmx",
+  "tif",
+  "tiff",
+  "tlz",
+  "ttc",
+  "ttf",
+  "txz",
+  "udf",
+  "uvh",
+  "uvi",
+  "uvm",
+  "uvp",
+  "uvs",
+  "uvu",
+  "viv",
+  "vob",
+  "war",
+  "wav",
+  "wax",
+  "wbmp",
+  "wdp",
+  "weba",
+  "webm",
+  "webp",
+  "whl",
+  "wim",
+  "wm",
+  "wma",
+  "wmv",
+  "wmx",
+  "woff",
+  "woff2",
+  "wrm",
+  "wvx",
+  "xbm",
+  "xif",
+  "xla",
+  "xlam",
+  "xls",
+  "xlsb",
+  "xlsm",
+  "xlsx",
+  "xlt",
+  "xltm",
+  "xltx",
+  "xm",
+  "xmind",
+  "xpi",
+  "xpm",
+  "xwd",
+  "xz",
+  "z",
+  "zip",
+  "zipx"
+]);
+const isBinaryPath = (filePath) => binaryExtensions.has(sp__namespace.extname(filePath).slice(1).toLowerCase());
+const foreach = (val, fn) => {
+  if (val instanceof Set) {
+    val.forEach(fn);
+  } else {
+    fn(val);
+  }
+};
+const addAndConvert = (main, prop, item) => {
+  let container = main[prop];
+  if (!(container instanceof Set)) {
+    main[prop] = container = /* @__PURE__ */ new Set([container]);
+  }
+  container.add(item);
+};
+const clearItem = (cont) => (key) => {
+  const set2 = cont[key];
+  if (set2 instanceof Set) {
+    set2.clear();
+  } else {
+    delete cont[key];
+  }
+};
+const delFromSet = (main, prop, item) => {
+  const container = main[prop];
+  if (container instanceof Set) {
+    container.delete(item);
+  } else if (container === item) {
+    delete main[prop];
+  }
+};
+const isEmptySet = (val) => val instanceof Set ? val.size === 0 : !val;
+const FsWatchInstances = /* @__PURE__ */ new Map();
+function createFsWatchInstance(path, options, listener, errHandler, emitRaw) {
+  const handleEvent = (rawEvent, evPath) => {
+    listener(path);
+    emitRaw(rawEvent, evPath, { watchedPath: path });
+    if (evPath && path !== evPath) {
+      fsWatchBroadcast(sp__namespace.resolve(path, evPath), KEY_LISTENERS, sp__namespace.join(path, evPath));
+    }
+  };
+  try {
+    return node_fs.watch(path, {
+      persistent: options.persistent
+    }, handleEvent);
+  } catch (error) {
+    errHandler(error);
+    return void 0;
+  }
+}
+const fsWatchBroadcast = (fullPath, listenerType, val1, val2, val3) => {
+  const cont = FsWatchInstances.get(fullPath);
+  if (!cont)
+    return;
+  foreach(cont[listenerType], (listener) => {
+    listener(val1, val2, val3);
+  });
+};
+const setFsWatchListener = (path, fullPath, options, handlers) => {
+  const { listener, errHandler, rawEmitter } = handlers;
+  let cont = FsWatchInstances.get(fullPath);
+  let watcher;
+  if (!options.persistent) {
+    watcher = createFsWatchInstance(path, options, listener, errHandler, rawEmitter);
+    if (!watcher)
+      return;
+    return watcher.close.bind(watcher);
+  }
+  if (cont) {
+    addAndConvert(cont, KEY_LISTENERS, listener);
+    addAndConvert(cont, KEY_ERR, errHandler);
+    addAndConvert(cont, KEY_RAW, rawEmitter);
+  } else {
+    watcher = createFsWatchInstance(
+      path,
+      options,
+      fsWatchBroadcast.bind(null, fullPath, KEY_LISTENERS),
+      errHandler,
+      // no need to use broadcast here
+      fsWatchBroadcast.bind(null, fullPath, KEY_RAW)
+    );
+    if (!watcher)
+      return;
+    watcher.on(EV.ERROR, async (error) => {
+      const broadcastErr = fsWatchBroadcast.bind(null, fullPath, KEY_ERR);
+      if (cont)
+        cont.watcherUnusable = true;
+      if (isWindows && error.code === "EPERM") {
+        try {
+          const fd = await promises.open(path, "r");
+          await fd.close();
+          broadcastErr(error);
+        } catch (err) {
+        }
+      } else {
+        broadcastErr(error);
+      }
+    });
+    cont = {
+      listeners: listener,
+      errHandlers: errHandler,
+      rawEmitters: rawEmitter,
+      watcher
+    };
+    FsWatchInstances.set(fullPath, cont);
+  }
+  return () => {
+    delFromSet(cont, KEY_LISTENERS, listener);
+    delFromSet(cont, KEY_ERR, errHandler);
+    delFromSet(cont, KEY_RAW, rawEmitter);
+    if (isEmptySet(cont.listeners)) {
+      cont.watcher.close();
+      FsWatchInstances.delete(fullPath);
+      HANDLER_KEYS.forEach(clearItem(cont));
+      cont.watcher = void 0;
+      Object.freeze(cont);
+    }
+  };
+};
+const FsWatchFileInstances = /* @__PURE__ */ new Map();
+const setFsWatchFileListener = (path, fullPath, options, handlers) => {
+  const { listener, rawEmitter } = handlers;
+  let cont = FsWatchFileInstances.get(fullPath);
+  const copts = cont && cont.options;
+  if (copts && (copts.persistent < options.persistent || copts.interval > options.interval)) {
+    node_fs.unwatchFile(fullPath);
+    cont = void 0;
+  }
+  if (cont) {
+    addAndConvert(cont, KEY_LISTENERS, listener);
+    addAndConvert(cont, KEY_RAW, rawEmitter);
+  } else {
+    cont = {
+      listeners: listener,
+      rawEmitters: rawEmitter,
+      options,
+      watcher: node_fs.watchFile(fullPath, options, (curr, prev) => {
+        foreach(cont.rawEmitters, (rawEmitter2) => {
+          rawEmitter2(EV.CHANGE, fullPath, { curr, prev });
+        });
+        const currmtime = curr.mtimeMs;
+        if (curr.size !== prev.size || currmtime > prev.mtimeMs || currmtime === 0) {
+          foreach(cont.listeners, (listener2) => listener2(path, curr));
+        }
+      })
+    };
+    FsWatchFileInstances.set(fullPath, cont);
+  }
+  return () => {
+    delFromSet(cont, KEY_LISTENERS, listener);
+    delFromSet(cont, KEY_RAW, rawEmitter);
+    if (isEmptySet(cont.listeners)) {
+      FsWatchFileInstances.delete(fullPath);
+      node_fs.unwatchFile(fullPath);
+      cont.options = cont.watcher = void 0;
+      Object.freeze(cont);
+    }
+  };
+};
+class NodeFsHandler {
+  fsw;
+  _boundHandleError;
+  constructor(fsW) {
+    this.fsw = fsW;
+    this._boundHandleError = (error) => fsW._handleError(error);
+  }
+  /**
+   * Watch file for changes with fs_watchFile or fs_watch.
+   * @param path to file or dir
+   * @param listener on fs change
+   * @returns closer for the watcher instance
+   */
+  _watchWithNodeFs(path, listener) {
+    const opts = this.fsw.options;
+    const directory = sp__namespace.dirname(path);
+    const basename = sp__namespace.basename(path);
+    const parent = this.fsw._getWatchedDir(directory);
+    parent.add(basename);
+    const absolutePath = sp__namespace.resolve(path);
+    const options = {
+      persistent: opts.persistent
+    };
+    if (!listener)
+      listener = EMPTY_FN;
+    let closer;
+    if (opts.usePolling) {
+      const enableBin = opts.interval !== opts.binaryInterval;
+      options.interval = enableBin && isBinaryPath(basename) ? opts.binaryInterval : opts.interval;
+      closer = setFsWatchFileListener(path, absolutePath, options, {
+        listener,
+        rawEmitter: this.fsw._emitRaw
+      });
+    } else {
+      closer = setFsWatchListener(path, absolutePath, options, {
+        listener,
+        errHandler: this._boundHandleError,
+        rawEmitter: this.fsw._emitRaw
+      });
+    }
+    return closer;
+  }
+  /**
+   * Watch a file and emit add event if warranted.
+   * @returns closer for the watcher instance
+   */
+  _handleFile(file, stats, initialAdd) {
+    if (this.fsw.closed) {
+      return;
+    }
+    const dirname = sp__namespace.dirname(file);
+    const basename = sp__namespace.basename(file);
+    const parent = this.fsw._getWatchedDir(dirname);
+    let prevStats = stats;
+    if (parent.has(basename))
+      return;
+    const listener = async (path, newStats) => {
+      if (!this.fsw._throttle(THROTTLE_MODE_WATCH, file, 5))
+        return;
+      if (!newStats || newStats.mtimeMs === 0) {
+        try {
+          const newStats2 = await promises.stat(file);
+          if (this.fsw.closed)
+            return;
+          const at = newStats2.atimeMs;
+          const mt = newStats2.mtimeMs;
+          if (!at || at <= mt || mt !== prevStats.mtimeMs) {
+            this.fsw._emit(EV.CHANGE, file, newStats2);
+          }
+          if ((isMacos || isLinux || isFreeBSD) && prevStats.ino !== newStats2.ino) {
+            this.fsw._closeFile(path);
+            prevStats = newStats2;
+            const closer2 = this._watchWithNodeFs(file, listener);
+            if (closer2)
+              this.fsw._addPathCloser(path, closer2);
+          } else {
+            prevStats = newStats2;
+          }
+        } catch (error) {
+          this.fsw._remove(dirname, basename);
+        }
+      } else if (parent.has(basename)) {
+        const at = newStats.atimeMs;
+        const mt = newStats.mtimeMs;
+        if (!at || at <= mt || mt !== prevStats.mtimeMs) {
+          this.fsw._emit(EV.CHANGE, file, newStats);
+        }
+        prevStats = newStats;
+      }
+    };
+    const closer = this._watchWithNodeFs(file, listener);
+    if (!(initialAdd && this.fsw.options.ignoreInitial) && this.fsw._isntIgnored(file)) {
+      if (!this.fsw._throttle(EV.ADD, file, 0))
+        return;
+      this.fsw._emit(EV.ADD, file, stats);
+    }
+    return closer;
+  }
+  /**
+   * Handle symlinks encountered while reading a dir.
+   * @param entry returned by readdirp
+   * @param directory path of dir being read
+   * @param path of this item
+   * @param item basename of this item
+   * @returns true if no more processing is needed for this entry.
+   */
+  async _handleSymlink(entry, directory, path, item) {
+    if (this.fsw.closed) {
+      return;
+    }
+    const full = entry.fullPath;
+    const dir = this.fsw._getWatchedDir(directory);
+    if (!this.fsw.options.followSymlinks) {
+      this.fsw._incrReadyCount();
+      let linkPath;
+      try {
+        linkPath = await promises.realpath(path);
+      } catch (e) {
+        this.fsw._emitReady();
+        return true;
+      }
+      if (this.fsw.closed)
+        return;
+      if (dir.has(item)) {
+        if (this.fsw._symlinkPaths.get(full) !== linkPath) {
+          this.fsw._symlinkPaths.set(full, linkPath);
+          this.fsw._emit(EV.CHANGE, path, entry.stats);
+        }
+      } else {
+        dir.add(item);
+        this.fsw._symlinkPaths.set(full, linkPath);
+        this.fsw._emit(EV.ADD, path, entry.stats);
+      }
+      this.fsw._emitReady();
+      return true;
+    }
+    if (this.fsw._symlinkPaths.has(full)) {
+      return true;
+    }
+    this.fsw._symlinkPaths.set(full, true);
+  }
+  _handleRead(directory, initialAdd, wh, target, dir, depth, throttler) {
+    directory = sp__namespace.join(directory, "");
+    const throttleKey = target ? `${directory}:${target}` : directory;
+    throttler = this.fsw._throttle("readdir", throttleKey, 1e3);
+    if (!throttler)
+      return;
+    const previous = this.fsw._getWatchedDir(wh.path);
+    const current = /* @__PURE__ */ new Set();
+    let stream = this.fsw._readdirp(directory, {
+      fileFilter: (entry) => wh.filterPath(entry),
+      directoryFilter: (entry) => wh.filterDir(entry)
+    });
+    if (!stream)
+      return;
+    stream.on(STR_DATA, async (entry) => {
+      if (this.fsw.closed) {
+        stream = void 0;
+        return;
+      }
+      const item = entry.path;
+      let path = sp__namespace.join(directory, item);
+      current.add(item);
+      if (entry.stats.isSymbolicLink() && await this._handleSymlink(entry, directory, path, item)) {
+        return;
+      }
+      if (this.fsw.closed) {
+        stream = void 0;
+        return;
+      }
+      if (item === target || !target && !previous.has(item)) {
+        this.fsw._incrReadyCount();
+        path = sp__namespace.join(dir, sp__namespace.relative(dir, path));
+        this._addToNodeFs(path, initialAdd, wh, depth + 1);
+      }
+    }).on(EV.ERROR, this._boundHandleError);
+    return new Promise((resolve2, reject) => {
+      if (!stream)
+        return reject();
+      stream.once(STR_END, () => {
+        if (this.fsw.closed) {
+          stream = void 0;
+          return;
+        }
+        const wasThrottled = throttler ? throttler.clear() : false;
+        resolve2(void 0);
+        previous.getChildren().filter((item) => {
+          return item !== directory && !current.has(item);
+        }).forEach((item) => {
+          this.fsw._remove(directory, item);
+        });
+        stream = void 0;
+        if (wasThrottled)
+          this._handleRead(directory, false, wh, target, dir, depth, throttler);
+      });
+    });
+  }
+  /**
+   * Read directory to add / remove files from `@watched` list and re-read it on change.
+   * @param dir fs path
+   * @param stats
+   * @param initialAdd
+   * @param depth relative to user-supplied path
+   * @param target child path targeted for watch
+   * @param wh Common watch helpers for this path
+   * @param realpath
+   * @returns closer for the watcher instance.
+   */
+  async _handleDir(dir, stats, initialAdd, depth, target, wh, realpath) {
+    const parentDir = this.fsw._getWatchedDir(sp__namespace.dirname(dir));
+    const tracked = parentDir.has(sp__namespace.basename(dir));
+    if (!(initialAdd && this.fsw.options.ignoreInitial) && !target && !tracked) {
+      this.fsw._emit(EV.ADD_DIR, dir, stats);
+    }
+    parentDir.add(sp__namespace.basename(dir));
+    this.fsw._getWatchedDir(dir);
+    let throttler;
+    let closer;
+    const oDepth = this.fsw.options.depth;
+    if ((oDepth == null || depth <= oDepth) && !this.fsw._symlinkPaths.has(realpath)) {
+      if (!target) {
+        await this._handleRead(dir, initialAdd, wh, target, dir, depth, throttler);
+        if (this.fsw.closed)
+          return;
+      }
+      closer = this._watchWithNodeFs(dir, (dirPath, stats2) => {
+        if (stats2 && stats2.mtimeMs === 0)
+          return;
+        this._handleRead(dirPath, false, wh, target, dir, depth, throttler);
+      });
+    }
+    return closer;
+  }
+  /**
+   * Handle added file, directory, or glob pattern.
+   * Delegates call to _handleFile / _handleDir after checks.
+   * @param path to file or ir
+   * @param initialAdd was the file added at watch instantiation?
+   * @param priorWh depth relative to user-supplied path
+   * @param depth Child path actually targeted for watch
+   * @param target Child path actually targeted for watch
+   */
+  async _addToNodeFs(path, initialAdd, priorWh, depth, target) {
+    const ready = this.fsw._emitReady;
+    if (this.fsw._isIgnored(path) || this.fsw.closed) {
+      ready();
+      return false;
+    }
+    const wh = this.fsw._getWatchHelpers(path);
+    if (priorWh) {
+      wh.filterPath = (entry) => priorWh.filterPath(entry);
+      wh.filterDir = (entry) => priorWh.filterDir(entry);
+    }
+    try {
+      const stats = await statMethods[wh.statMethod](wh.watchPath);
+      if (this.fsw.closed)
+        return;
+      if (this.fsw._isIgnored(wh.watchPath, stats)) {
+        ready();
+        return false;
+      }
+      const follow = this.fsw.options.followSymlinks;
+      let closer;
+      if (stats.isDirectory()) {
+        const absPath = sp__namespace.resolve(path);
+        const targetPath = follow ? await promises.realpath(path) : path;
+        if (this.fsw.closed)
+          return;
+        closer = await this._handleDir(wh.watchPath, stats, initialAdd, depth, target, wh, targetPath);
+        if (this.fsw.closed)
+          return;
+        if (absPath !== targetPath && targetPath !== void 0) {
+          this.fsw._symlinkPaths.set(absPath, targetPath);
+        }
+      } else if (stats.isSymbolicLink()) {
+        const targetPath = follow ? await promises.realpath(path) : path;
+        if (this.fsw.closed)
+          return;
+        const parent = sp__namespace.dirname(wh.watchPath);
+        this.fsw._getWatchedDir(parent).add(wh.watchPath);
+        this.fsw._emit(EV.ADD, wh.watchPath, stats);
+        closer = await this._handleDir(parent, stats, initialAdd, depth, path, wh, targetPath);
+        if (this.fsw.closed)
+          return;
+        if (targetPath !== void 0) {
+          this.fsw._symlinkPaths.set(sp__namespace.resolve(path), targetPath);
+        }
+      } else {
+        closer = this._handleFile(wh.watchPath, stats, initialAdd);
+      }
+      ready();
+      if (closer)
+        this.fsw._addPathCloser(path, closer);
+      return false;
+    } catch (error) {
+      if (this.fsw._handleError(error)) {
+        ready();
+        return path;
+      }
+    }
+  }
+}
+/*! chokidar - MIT License (c) 2012 Paul Miller (paulmillr.com) */
+const SLASH = "/";
+const SLASH_SLASH = "//";
+const ONE_DOT = ".";
+const TWO_DOTS = "..";
+const STRING_TYPE = "string";
+const BACK_SLASH_RE = /\\/g;
+const DOUBLE_SLASH_RE = /\/\//g;
+const DOT_RE = /\..*\.(sw[px])$|~$|\.subl.*\.tmp/;
+const REPLACER_RE = /^\.[/\\]/;
+function arrify(item) {
+  return Array.isArray(item) ? item : [item];
+}
+const isMatcherObject = (matcher) => typeof matcher === "object" && matcher !== null && !(matcher instanceof RegExp);
+function createPattern(matcher) {
+  if (typeof matcher === "function")
+    return matcher;
+  if (typeof matcher === "string")
+    return (string2) => matcher === string2;
+  if (matcher instanceof RegExp)
+    return (string2) => matcher.test(string2);
+  if (typeof matcher === "object" && matcher !== null) {
+    return (string2) => {
+      if (matcher.path === string2)
+        return true;
+      if (matcher.recursive) {
+        const relative = sp__namespace.relative(matcher.path, string2);
+        if (!relative) {
+          return false;
+        }
+        return !relative.startsWith("..") && !sp__namespace.isAbsolute(relative);
+      }
+      return false;
+    };
+  }
+  return () => false;
+}
+function normalizePath$1(path) {
+  if (typeof path !== "string")
+    throw new Error("string expected");
+  path = sp__namespace.normalize(path);
+  path = path.replace(/\\/g, "/");
+  let prepend = false;
+  if (path.startsWith("//"))
+    prepend = true;
+  path = path.replace(DOUBLE_SLASH_RE, "/");
+  if (prepend)
+    path = "/" + path;
+  return path;
+}
+function matchPatterns(patterns, testString, stats) {
+  const path = normalizePath$1(testString);
+  for (let index = 0; index < patterns.length; index++) {
+    const pattern2 = patterns[index];
+    if (pattern2(path, stats)) {
+      return true;
+    }
+  }
+  return false;
+}
+function anymatch(matchers, testString) {
+  if (matchers == null) {
+    throw new TypeError("anymatch: specify first argument");
+  }
+  const matchersArray = arrify(matchers);
+  const patterns = matchersArray.map((matcher) => createPattern(matcher));
+  {
+    return (testString2, stats) => {
+      return matchPatterns(patterns, testString2, stats);
+    };
+  }
+}
+const unifyPaths = (paths_) => {
+  const paths = arrify(paths_).flat();
+  if (!paths.every((p) => typeof p === STRING_TYPE)) {
+    throw new TypeError(`Non-string provided as watch path: ${paths}`);
+  }
+  return paths.map(normalizePathToUnix);
+};
+const toUnix = (string2) => {
+  let str = string2.replace(BACK_SLASH_RE, SLASH);
+  let prepend = false;
+  if (str.startsWith(SLASH_SLASH)) {
+    prepend = true;
+  }
+  str = str.replace(DOUBLE_SLASH_RE, SLASH);
+  if (prepend) {
+    str = SLASH + str;
+  }
+  return str;
+};
+const normalizePathToUnix = (path) => toUnix(sp__namespace.normalize(toUnix(path)));
+const normalizeIgnored = (cwd = "") => (path) => {
+  if (typeof path === "string") {
+    return normalizePathToUnix(sp__namespace.isAbsolute(path) ? path : sp__namespace.join(cwd, path));
+  } else {
+    return path;
+  }
+};
+const getAbsolutePath = (path, cwd) => {
+  if (sp__namespace.isAbsolute(path)) {
+    return path;
+  }
+  return sp__namespace.join(cwd, path);
+};
+const EMPTY_SET = Object.freeze(/* @__PURE__ */ new Set());
+class DirEntry {
+  path;
+  _removeWatcher;
+  items;
+  constructor(dir, removeWatcher) {
+    this.path = dir;
+    this._removeWatcher = removeWatcher;
+    this.items = /* @__PURE__ */ new Set();
+  }
+  add(item) {
+    const { items: items2 } = this;
+    if (!items2)
+      return;
+    if (item !== ONE_DOT && item !== TWO_DOTS)
+      items2.add(item);
+  }
+  async remove(item) {
+    const { items: items2 } = this;
+    if (!items2)
+      return;
+    items2.delete(item);
+    if (items2.size > 0)
+      return;
+    const dir = this.path;
+    try {
+      await promises.readdir(dir);
+    } catch (err) {
+      if (this._removeWatcher) {
+        this._removeWatcher(sp__namespace.dirname(dir), sp__namespace.basename(dir));
+      }
+    }
+  }
+  has(item) {
+    const { items: items2 } = this;
+    if (!items2)
+      return;
+    return items2.has(item);
+  }
+  getChildren() {
+    const { items: items2 } = this;
+    if (!items2)
+      return [];
+    return [...items2.values()];
+  }
+  dispose() {
+    this.items.clear();
+    this.path = "";
+    this._removeWatcher = EMPTY_FN;
+    this.items = EMPTY_SET;
+    Object.freeze(this);
+  }
+}
+const STAT_METHOD_F = "stat";
+const STAT_METHOD_L = "lstat";
+class WatchHelper {
+  fsw;
+  path;
+  watchPath;
+  fullWatchPath;
+  dirParts;
+  followSymlinks;
+  statMethod;
+  constructor(path, follow, fsw) {
+    this.fsw = fsw;
+    const watchPath = path;
+    this.path = path = path.replace(REPLACER_RE, "");
+    this.watchPath = watchPath;
+    this.fullWatchPath = sp__namespace.resolve(watchPath);
+    this.dirParts = [];
+    this.dirParts.forEach((parts) => {
+      if (parts.length > 1)
+        parts.pop();
+    });
+    this.followSymlinks = follow;
+    this.statMethod = follow ? STAT_METHOD_F : STAT_METHOD_L;
+  }
+  entryPath(entry) {
+    return sp__namespace.join(this.watchPath, sp__namespace.relative(this.watchPath, entry.fullPath));
+  }
+  filterPath(entry) {
+    const { stats } = entry;
+    if (stats && stats.isSymbolicLink())
+      return this.filterDir(entry);
+    const resolvedPath = this.entryPath(entry);
+    return this.fsw._isntIgnored(resolvedPath, stats) && this.fsw._hasReadPermissions(stats);
+  }
+  filterDir(entry) {
+    return this.fsw._isntIgnored(this.entryPath(entry), entry.stats);
+  }
+}
+class FSWatcher extends node_events.EventEmitter {
+  closed;
+  options;
+  _closers;
+  _ignoredPaths;
+  _throttled;
+  _streams;
+  _symlinkPaths;
+  _watched;
+  _pendingWrites;
+  _pendingUnlinks;
+  _readyCount;
+  _emitReady;
+  _closePromise;
+  _userIgnored;
+  _readyEmitted;
+  _emitRaw;
+  _boundRemove;
+  _nodeFsHandler;
+  // Not indenting methods for history sake; for now.
+  constructor(_opts = {}) {
+    super();
+    this.closed = false;
+    this._closers = /* @__PURE__ */ new Map();
+    this._ignoredPaths = /* @__PURE__ */ new Set();
+    this._throttled = /* @__PURE__ */ new Map();
+    this._streams = /* @__PURE__ */ new Set();
+    this._symlinkPaths = /* @__PURE__ */ new Map();
+    this._watched = /* @__PURE__ */ new Map();
+    this._pendingWrites = /* @__PURE__ */ new Map();
+    this._pendingUnlinks = /* @__PURE__ */ new Map();
+    this._readyCount = 0;
+    this._readyEmitted = false;
+    const awf = _opts.awaitWriteFinish;
+    const DEF_AWF = { stabilityThreshold: 2e3, pollInterval: 100 };
+    const opts = {
+      // Defaults
+      persistent: true,
+      ignoreInitial: false,
+      ignorePermissionErrors: false,
+      interval: 100,
+      binaryInterval: 300,
+      followSymlinks: true,
+      usePolling: false,
+      // useAsync: false,
+      atomic: true,
+      // NOTE: overwritten later (depends on usePolling)
+      ..._opts,
+      // Change format
+      ignored: _opts.ignored ? arrify(_opts.ignored) : arrify([]),
+      awaitWriteFinish: awf === true ? DEF_AWF : typeof awf === "object" ? { ...DEF_AWF, ...awf } : false
+    };
+    if (isIBMi)
+      opts.usePolling = true;
+    if (opts.atomic === void 0)
+      opts.atomic = !opts.usePolling;
+    const envPoll = process.env.CHOKIDAR_USEPOLLING;
+    if (envPoll !== void 0) {
+      const envLower = envPoll.toLowerCase();
+      if (envLower === "false" || envLower === "0")
+        opts.usePolling = false;
+      else if (envLower === "true" || envLower === "1")
+        opts.usePolling = true;
+      else
+        opts.usePolling = !!envLower;
+    }
+    const envInterval = process.env.CHOKIDAR_INTERVAL;
+    if (envInterval)
+      opts.interval = Number.parseInt(envInterval, 10);
+    let readyCalls = 0;
+    this._emitReady = () => {
+      readyCalls++;
+      if (readyCalls >= this._readyCount) {
+        this._emitReady = EMPTY_FN;
+        this._readyEmitted = true;
+        process.nextTick(() => this.emit(EVENTS.READY));
+      }
+    };
+    this._emitRaw = (...args) => this.emit(EVENTS.RAW, ...args);
+    this._boundRemove = this._remove.bind(this);
+    this.options = opts;
+    this._nodeFsHandler = new NodeFsHandler(this);
+    Object.freeze(opts);
+  }
+  _addIgnoredPath(matcher) {
+    if (isMatcherObject(matcher)) {
+      for (const ignored of this._ignoredPaths) {
+        if (isMatcherObject(ignored) && ignored.path === matcher.path && ignored.recursive === matcher.recursive) {
+          return;
+        }
+      }
+    }
+    this._ignoredPaths.add(matcher);
+  }
+  _removeIgnoredPath(matcher) {
+    this._ignoredPaths.delete(matcher);
+    if (typeof matcher === "string") {
+      for (const ignored of this._ignoredPaths) {
+        if (isMatcherObject(ignored) && ignored.path === matcher) {
+          this._ignoredPaths.delete(ignored);
+        }
+      }
+    }
+  }
+  // Public methods
+  /**
+   * Adds paths to be watched on an existing FSWatcher instance.
+   * @param paths_ file or file list. Other arguments are unused
+   */
+  add(paths_, _origAdd, _internal) {
+    const { cwd } = this.options;
+    this.closed = false;
+    this._closePromise = void 0;
+    let paths = unifyPaths(paths_);
+    if (cwd) {
+      paths = paths.map((path) => {
+        const absPath = getAbsolutePath(path, cwd);
+        return absPath;
+      });
+    }
+    paths.forEach((path) => {
+      this._removeIgnoredPath(path);
+    });
+    this._userIgnored = void 0;
+    if (!this._readyCount)
+      this._readyCount = 0;
+    this._readyCount += paths.length;
+    Promise.all(paths.map(async (path) => {
+      const res = await this._nodeFsHandler._addToNodeFs(path, !_internal, void 0, 0, _origAdd);
+      if (res)
+        this._emitReady();
+      return res;
+    })).then((results) => {
+      if (this.closed)
+        return;
+      results.forEach((item) => {
+        if (item)
+          this.add(sp__namespace.dirname(item), sp__namespace.basename(_origAdd || item));
+      });
+    });
+    return this;
+  }
+  /**
+   * Close watchers or start ignoring events from specified paths.
+   */
+  unwatch(paths_) {
+    if (this.closed)
+      return this;
+    const paths = unifyPaths(paths_);
+    const { cwd } = this.options;
+    paths.forEach((path) => {
+      if (!sp__namespace.isAbsolute(path) && !this._closers.has(path)) {
+        if (cwd)
+          path = sp__namespace.join(cwd, path);
+        path = sp__namespace.resolve(path);
+      }
+      this._closePath(path);
+      this._addIgnoredPath(path);
+      if (this._watched.has(path)) {
+        this._addIgnoredPath({
+          path,
+          recursive: true
+        });
+      }
+      this._userIgnored = void 0;
+    });
+    return this;
+  }
+  /**
+   * Close watchers and remove all listeners from watched paths.
+   */
+  close() {
+    if (this._closePromise) {
+      return this._closePromise;
+    }
+    this.closed = true;
+    this.removeAllListeners();
+    const closers = [];
+    this._closers.forEach((closerList) => closerList.forEach((closer) => {
+      const promise = closer();
+      if (promise instanceof Promise)
+        closers.push(promise);
+    }));
+    this._streams.forEach((stream) => stream.destroy());
+    this._userIgnored = void 0;
+    this._readyCount = 0;
+    this._readyEmitted = false;
+    this._watched.forEach((dirent) => dirent.dispose());
+    this._closers.clear();
+    this._watched.clear();
+    this._streams.clear();
+    this._symlinkPaths.clear();
+    this._throttled.clear();
+    this._closePromise = closers.length ? Promise.all(closers).then(() => void 0) : Promise.resolve();
+    return this._closePromise;
+  }
+  /**
+   * Expose list of watched paths
+   * @returns for chaining
+   */
+  getWatched() {
+    const watchList = {};
+    this._watched.forEach((entry, dir) => {
+      const key = this.options.cwd ? sp__namespace.relative(this.options.cwd, dir) : dir;
+      const index = key || ONE_DOT;
+      watchList[index] = entry.getChildren().sort();
+    });
+    return watchList;
+  }
+  emitWithAll(event, args) {
+    this.emit(event, ...args);
+    if (event !== EVENTS.ERROR)
+      this.emit(EVENTS.ALL, event, ...args);
+  }
+  // Common helpers
+  // --------------
+  /**
+   * Normalize and emit events.
+   * Calling _emit DOES NOT MEAN emit() would be called!
+   * @param event Type of event
+   * @param path File or directory path
+   * @param stats arguments to be passed with event
+   * @returns the error if defined, otherwise the value of the FSWatcher instance's `closed` flag
+   */
+  async _emit(event, path, stats) {
+    if (this.closed)
+      return;
+    const opts = this.options;
+    if (isWindows)
+      path = sp__namespace.normalize(path);
+    if (opts.cwd)
+      path = sp__namespace.relative(opts.cwd, path);
+    const args = [path];
+    if (stats != null)
+      args.push(stats);
+    const awf = opts.awaitWriteFinish;
+    let pw;
+    if (awf && (pw = this._pendingWrites.get(path))) {
+      pw.lastChange = /* @__PURE__ */ new Date();
+      return this;
+    }
+    if (opts.atomic) {
+      if (event === EVENTS.UNLINK) {
+        this._pendingUnlinks.set(path, [event, ...args]);
+        setTimeout(() => {
+          this._pendingUnlinks.forEach((entry, path2) => {
+            this.emit(...entry);
+            this.emit(EVENTS.ALL, ...entry);
+            this._pendingUnlinks.delete(path2);
+          });
+        }, typeof opts.atomic === "number" ? opts.atomic : 100);
+        return this;
+      }
+      if (event === EVENTS.ADD && this._pendingUnlinks.has(path)) {
+        event = EVENTS.CHANGE;
+        this._pendingUnlinks.delete(path);
+      }
+    }
+    if (awf && (event === EVENTS.ADD || event === EVENTS.CHANGE) && this._readyEmitted) {
+      const awfEmit = (err, stats2) => {
+        if (err) {
+          event = EVENTS.ERROR;
+          args[0] = err;
+          this.emitWithAll(event, args);
+        } else if (stats2) {
+          if (args.length > 1) {
+            args[1] = stats2;
+          } else {
+            args.push(stats2);
+          }
+          this.emitWithAll(event, args);
+        }
+      };
+      this._awaitWriteFinish(path, awf.stabilityThreshold, event, awfEmit);
+      return this;
+    }
+    if (event === EVENTS.CHANGE) {
+      const isThrottled = !this._throttle(EVENTS.CHANGE, path, 50);
+      if (isThrottled)
+        return this;
+    }
+    if (opts.alwaysStat && stats === void 0 && (event === EVENTS.ADD || event === EVENTS.ADD_DIR || event === EVENTS.CHANGE)) {
+      const fullPath = opts.cwd ? sp__namespace.join(opts.cwd, path) : path;
+      let stats2;
+      try {
+        stats2 = await promises.stat(fullPath);
+      } catch (err) {
+      }
+      if (!stats2 || this.closed)
+        return;
+      args.push(stats2);
+    }
+    this.emitWithAll(event, args);
+    return this;
+  }
+  /**
+   * Common handler for errors
+   * @returns The error if defined, otherwise the value of the FSWatcher instance's `closed` flag
+   */
+  _handleError(error) {
+    const code2 = error && error.code;
+    if (error && code2 !== "ENOENT" && code2 !== "ENOTDIR" && (!this.options.ignorePermissionErrors || code2 !== "EPERM" && code2 !== "EACCES")) {
+      this.emit(EVENTS.ERROR, error);
+    }
+    return error || this.closed;
+  }
+  /**
+   * Helper utility for throttling
+   * @param actionType type being throttled
+   * @param path being acted upon
+   * @param timeout duration of time to suppress duplicate actions
+   * @returns tracking object or false if action should be suppressed
+   */
+  _throttle(actionType, path, timeout) {
+    if (!this._throttled.has(actionType)) {
+      this._throttled.set(actionType, /* @__PURE__ */ new Map());
+    }
+    const action = this._throttled.get(actionType);
+    if (!action)
+      throw new Error("invalid throttle");
+    const actionPath = action.get(path);
+    if (actionPath) {
+      actionPath.count++;
+      return false;
+    }
+    let timeoutObject;
+    const clear = () => {
+      const item = action.get(path);
+      const count = item ? item.count : 0;
+      action.delete(path);
+      clearTimeout(timeoutObject);
+      if (item)
+        clearTimeout(item.timeoutObject);
+      return count;
+    };
+    timeoutObject = setTimeout(clear, timeout);
+    const thr = { timeoutObject, clear, count: 0 };
+    action.set(path, thr);
+    return thr;
+  }
+  _incrReadyCount() {
+    return this._readyCount++;
+  }
+  /**
+   * Awaits write operation to finish.
+   * Polls a newly created file for size variations. When files size does not change for 'threshold' milliseconds calls callback.
+   * @param path being acted upon
+   * @param threshold Time in milliseconds a file size must be fixed before acknowledging write OP is finished
+   * @param event
+   * @param awfEmit Callback to be called when ready for event to be emitted.
+   */
+  _awaitWriteFinish(path, threshold, event, awfEmit) {
+    const awf = this.options.awaitWriteFinish;
+    if (typeof awf !== "object")
+      return;
+    const pollInterval = awf.pollInterval;
+    let timeoutHandler;
+    let fullPath = path;
+    if (this.options.cwd && !sp__namespace.isAbsolute(path)) {
+      fullPath = sp__namespace.join(this.options.cwd, path);
+    }
+    const now = /* @__PURE__ */ new Date();
+    const writes = this._pendingWrites;
+    function awaitWriteFinishFn(prevStat) {
+      node_fs.stat(fullPath, (err, curStat) => {
+        if (err || !writes.has(path)) {
+          if (err && err.code !== "ENOENT")
+            awfEmit(err);
+          return;
+        }
+        const now2 = Number(/* @__PURE__ */ new Date());
+        if (prevStat && curStat.size !== prevStat.size) {
+          writes.get(path).lastChange = now2;
+        }
+        const pw = writes.get(path);
+        const df = now2 - pw.lastChange;
+        if (df >= threshold) {
+          writes.delete(path);
+          awfEmit(void 0, curStat);
+        } else {
+          timeoutHandler = setTimeout(awaitWriteFinishFn, pollInterval, curStat);
+        }
+      });
+    }
+    if (!writes.has(path)) {
+      writes.set(path, {
+        lastChange: now,
+        cancelWait: () => {
+          writes.delete(path);
+          clearTimeout(timeoutHandler);
+          return event;
+        }
+      });
+      timeoutHandler = setTimeout(awaitWriteFinishFn, pollInterval);
+    }
+  }
+  /**
+   * Determines whether user has asked to ignore this path.
+   */
+  _isIgnored(path, stats) {
+    if (this.options.atomic && DOT_RE.test(path))
+      return true;
+    if (!this._userIgnored) {
+      const { cwd } = this.options;
+      const ign = this.options.ignored;
+      const ignored = (ign || []).map(normalizeIgnored(cwd));
+      const ignoredPaths = [...this._ignoredPaths];
+      const list = [...ignoredPaths.map(normalizeIgnored(cwd)), ...ignored];
+      this._userIgnored = anymatch(list);
+    }
+    return this._userIgnored(path, stats);
+  }
+  _isntIgnored(path, stat2) {
+    return !this._isIgnored(path, stat2);
+  }
+  /**
+   * Provides a set of common helpers and properties relating to symlink handling.
+   * @param path file or directory pattern being watched
+   */
+  _getWatchHelpers(path) {
+    return new WatchHelper(path, this.options.followSymlinks, this);
+  }
+  // Directory helpers
+  // -----------------
+  /**
+   * Provides directory tracking objects
+   * @param directory path of the directory
+   */
+  _getWatchedDir(directory) {
+    const dir = sp__namespace.resolve(directory);
+    if (!this._watched.has(dir))
+      this._watched.set(dir, new DirEntry(dir, this._boundRemove));
+    return this._watched.get(dir);
+  }
+  // File helpers
+  // ------------
+  /**
+   * Check for read permissions: https://stackoverflow.com/a/11781404/1358405
+   */
+  _hasReadPermissions(stats) {
+    if (this.options.ignorePermissionErrors)
+      return true;
+    return Boolean(Number(stats.mode) & 256);
+  }
+  /**
+   * Handles emitting unlink events for
+   * files and directories, and via recursion, for
+   * files and directories within directories that are unlinked
+   * @param directory within which the following item is located
+   * @param item      base path of item/directory
+   */
+  _remove(directory, item, isDirectory) {
+    const path = sp__namespace.join(directory, item);
+    const fullPath = sp__namespace.resolve(path);
+    isDirectory = isDirectory != null ? isDirectory : this._watched.has(path) || this._watched.has(fullPath);
+    if (!this._throttle("remove", path, 100))
+      return;
+    if (!isDirectory && this._watched.size === 1) {
+      this.add(directory, item, true);
+    }
+    const wp = this._getWatchedDir(path);
+    const nestedDirectoryChildren = wp.getChildren();
+    nestedDirectoryChildren.forEach((nested) => this._remove(path, nested));
+    const parent = this._getWatchedDir(directory);
+    const wasTracked = parent.has(item);
+    parent.remove(item);
+    if (this._symlinkPaths.has(fullPath)) {
+      this._symlinkPaths.delete(fullPath);
+    }
+    let relPath = path;
+    if (this.options.cwd)
+      relPath = sp__namespace.relative(this.options.cwd, path);
+    if (this.options.awaitWriteFinish && this._pendingWrites.has(relPath)) {
+      const event = this._pendingWrites.get(relPath).cancelWait();
+      if (event === EVENTS.ADD)
+        return;
+    }
+    this._watched.delete(path);
+    this._watched.delete(fullPath);
+    const eventName = isDirectory ? EVENTS.UNLINK_DIR : EVENTS.UNLINK;
+    if (wasTracked && !this._isIgnored(path))
+      this._emit(eventName, path);
+    this._closePath(path);
+  }
+  /**
+   * Closes all watchers for a path
+   */
+  _closePath(path) {
+    this._closeFile(path);
+    const dir = sp__namespace.dirname(path);
+    this._getWatchedDir(dir).remove(sp__namespace.basename(path));
+  }
+  /**
+   * Closes only file-specific watchers
+   */
+  _closeFile(path) {
+    const closers = this._closers.get(path);
+    if (!closers)
+      return;
+    closers.forEach((closer) => closer());
+    this._closers.delete(path);
+  }
+  _addPathCloser(path, closer) {
+    if (!closer)
+      return;
+    let list = this._closers.get(path);
+    if (!list) {
+      list = [];
+      this._closers.set(path, list);
+    }
+    list.push(closer);
+  }
+  _readdirp(root, opts) {
+    if (this.closed)
+      return;
+    const options = { type: EVENTS.ALL, alwaysStat: true, lstat: true, ...opts, depth: 0 };
+    let stream = readdirp(root, options);
+    this._streams.add(stream);
+    stream.once(STR_CLOSE, () => {
+      stream = void 0;
+    });
+    stream.once(STR_END, () => {
+      if (stream) {
+        this._streams.delete(stream);
+        stream = void 0;
+      }
+    });
+    return stream;
+  }
+}
+function watch(paths, options = {}) {
+  const watcher = new FSWatcher(options);
+  watcher.add(paths);
+  return watcher;
+}
+const chokidar = { watch, FSWatcher };
 var commonjsGlobal = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : {};
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
@@ -16736,10 +18470,10 @@ function requireAccepts() {
  * Copyright(c) 2014-2015 Douglas Christopher Wilson
  * MIT Licensed
  */
-var request;
+var request$1;
 var hasRequiredRequest;
 function requireRequest() {
-  if (hasRequiredRequest) return request;
+  if (hasRequiredRequest) return request$1;
   hasRequiredRequest = 1;
   var accepts2 = requireAccepts();
   var deprecate = requireDepd()("express");
@@ -16751,7 +18485,7 @@ function requireRequest() {
   var parse2 = requireParseurl();
   var proxyaddr = requireProxyAddr();
   var req = Object.create(http.IncomingMessage.prototype);
-  request = req;
+  request$1 = req;
   req.get = req.header = function header(name) {
     if (!name) {
       throw new TypeError("name argument is required to req.get");
@@ -16898,7 +18632,7 @@ function requireRequest() {
       get: getter
     });
   }
-  return request;
+  return request$1;
 }
 var cookieSignature = {};
 var hasRequiredCookieSignature;
@@ -44337,13 +46071,13 @@ const schema$3 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProp
   workspaces
 }, Symbol.toStringTag, { value: "Module" }));
 function getDataPath() {
-  if (process.platform === "darwin") return node_path.join(node_os.homedir(), "Library", "Application Support", "Nakiros");
-  if (process.platform === "win32") return node_path.join(process.env["APPDATA"] ?? node_os.homedir(), "Nakiros");
-  return node_path.join(node_os.homedir(), ".config", "Nakiros");
+  if (process.platform === "darwin") return sp.join(node_os.homedir(), "Library", "Application Support", "Nakiros");
+  if (process.platform === "win32") return sp.join(process.env["APPDATA"] ?? node_os.homedir(), "Nakiros");
+  return sp.join(node_os.homedir(), ".config", "Nakiros");
 }
 const DATA_PATH = getDataPath();
-const DB_PATH = node_path.join(DATA_PATH, "nakiros.db");
-const LEGACY_JSON_PATH = node_path.join(DATA_PATH, "workspaces.json");
+const DB_PATH = sp.join(DATA_PATH, "nakiros.db");
+const LEGACY_JSON_PATH = sp.join(DATA_PATH, "workspaces.json");
 let _db = null;
 function getDb() {
   if (_db) return _db;
@@ -50263,8 +51997,8 @@ function requireLexer() {
         return "stream";
       }
       if (this.atLineEnd()) {
-        const sp = yield* this.pushSpaces(true);
-        yield* this.pushCount(line.length - sp);
+        const sp2 = yield* this.pushSpaces(true);
+        yield* this.pushCount(line.length - sp2);
         yield* this.pushNewline();
         return "stream";
       }
@@ -50344,18 +52078,18 @@ function requireLexer() {
       }
     }
     *parseFlowCollection() {
-      let nl, sp;
+      let nl, sp2;
       let indent = -1;
       do {
         nl = yield* this.pushNewline();
         if (nl > 0) {
-          sp = yield* this.pushSpaces(false);
-          this.indentValue = indent = sp;
+          sp2 = yield* this.pushSpaces(false);
+          this.indentValue = indent = sp2;
         } else {
-          sp = 0;
+          sp2 = 0;
         }
-        sp += yield* this.pushSpaces(true);
-      } while (nl + sp > 0);
+        sp2 += yield* this.pushSpaces(true);
+      } while (nl + sp2 > 0);
       const line = this.getLine();
       if (line === null)
         return this.setNext("flow");
@@ -51740,7 +53474,7 @@ async function resolveWorkspaceIdFromPointer(pointer, storage) {
 async function resolveWorkspaceId(cwd, storage) {
   let dir = cwd;
   for (let i = 0; i < 5; i++) {
-    const configPath = node_path.join(dir, "_nakiros", "workspace.yaml");
+    const configPath = sp.join(dir, "_nakiros", "workspace.yaml");
     if (node_fs.existsSync(configPath)) {
       try {
         const content = node_fs.readFileSync(configPath, "utf-8");
@@ -51750,7 +53484,7 @@ async function resolveWorkspaceId(cwd, storage) {
         return null;
       }
     }
-    const parent = node_path.dirname(dir);
+    const parent = sp.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -51876,6 +53610,18 @@ function stopServer() {
 }
 const DEFAULT_MCP_SERVER_URL = "http://localhost:3737";
 const IPC_CHANNELS = {
+  "backlog:getStories": "backlog:getStories",
+  "backlog:getEpics": "backlog:getEpics",
+  "backlog:createEpic": "backlog:createEpic",
+  "backlog:updateEpic": "backlog:updateEpic",
+  "backlog:createStory": "backlog:createStory",
+  "backlog:updateStory": "backlog:updateStory",
+  "backlog:getTasks": "backlog:getTasks",
+  "backlog:createTask": "backlog:createTask",
+  "backlog:updateTask": "backlog:updateTask",
+  "backlog:getSprints": "backlog:getSprints",
+  "backlog:createSprint": "backlog:createSprint",
+  "backlog:updateSprint": "backlog:updateSprint",
   "auth:complete": "auth:complete",
   "auth:continue": "auth:continue",
   "auth:error": "auth:error",
@@ -51885,6 +53631,7 @@ const IPC_CHANNELS = {
   "auth:signOut": "auth:signOut",
   "auth:signedOut": "auth:signedOut",
   "auth:submit": "auth:submit",
+  "agent:action-execute": "agent:action-execute",
   "agent:cancel": "agent:cancel",
   "agent:context": "agent:context",
   "agent:done": "agent:done",
@@ -51906,8 +53653,12 @@ const IPC_CHANNELS = {
   "conversation:save": "conversation:save",
   "dialog:openFile": "dialog:openFile",
   "dialog:selectDirectory": "dialog:selectDirectory",
+  "docs:changed": "docs:changed",
   "docs:read": "docs:read",
   "docs:scan": "docs:scan",
+  "docs:unwatch": "docs:unwatch",
+  "docs:watch": "docs:watch",
+  "docs:write": "docs:write",
   "epic:getAll": "epic:getAll",
   "epic:remove": "epic:remove",
   "epic:save": "epic:save",
@@ -51923,7 +53674,6 @@ const IPC_CHANNELS = {
   "jira:getBoardType": "jira:getBoardType",
   "jira:getProjects": "jira:getProjects",
   "jira:getStatus": "jira:getStatus",
-  "jira:getValidToken": "jira:getValidToken",
   "jira:startAuth": "jira:startAuth",
   "jira:syncTickets": "jira:syncTickets",
   "org:create": "org:create",
@@ -51945,6 +53695,15 @@ const IPC_CHANNELS = {
   "preferences:get": "preferences:get",
   "preferences:getSystemLanguage": "preferences:getSystemLanguage",
   "preferences:save": "preferences:save",
+  "providerCredentials:bindWorkspace": "providerCredentials:bindWorkspace",
+  "providerCredentials:create": "providerCredentials:create",
+  "providerCredentials:delete": "providerCredentials:delete",
+  "providerCredentials:getAll": "providerCredentials:getAll",
+  "providerCredentials:getWorkspace": "providerCredentials:getWorkspace",
+  "providerCredentials:revoke": "providerCredentials:revoke",
+  "providerCredentials:setWorkspaceDefault": "providerCredentials:setWorkspaceDefault",
+  "providerCredentials:unbindWorkspace": "providerCredentials:unbindWorkspace",
+  "providerCredentials:update": "providerCredentials:update",
   "repo:copyLocal": "repo:copyLocal",
   "repo:detectProfile": "repo:detectProfile",
   "server:getStatus": "server:getStatus",
@@ -51965,14 +53724,38 @@ const IPC_CHANNELS = {
   "updates:check": "updates:check",
   "updates:getVersionInfo": "updates:getVersionInfo",
   "updates:progress": "updates:progress",
+  "context:push": "context:push",
+  "context:pull": "context:pull",
   "workspace:createRoot": "workspace:createRoot",
   "workspace:delete": "workspace:delete",
   "workspace:getAll": "workspace:getAll",
+  "workspace:listMembers": "workspace:listMembers",
+  "workspace:removeMember": "workspace:removeMember",
   "workspace:reset": "workspace:reset",
   "workspace:save": "workspace:save",
   "workspace:saveCanonical": "workspace:saveCanonical",
   "workspace:sync": "workspace:sync",
-  "workspace:syncYaml": "workspace:syncYaml"
+  "workspace:syncYaml": "workspace:syncYaml",
+  "workspace:getStartedContext": "workspace:getStartedContext",
+  "workspace:saveStartedState": "workspace:saveStartedState",
+  "workspace:upsertMember": "workspace:upsertMember",
+  "artifact:listVersions": "artifact:listVersions",
+  "artifact:saveVersion": "artifact:saveVersion",
+  "artifact:listAll": "artifact:listAll",
+  "artifact:pullAll": "artifact:pullAll",
+  "sync:event": "sync:event",
+  "artifact:listContextFiles": "artifact:listContextFiles",
+  "artifact:readFile": "artifact:readFile",
+  "artifact:getFilePath": "artifact:getFilePath",
+  "snapshot:take": "snapshot:take",
+  "snapshot:diff": "snapshot:diff",
+  "snapshot:revert": "snapshot:revert",
+  "snapshot:resolve": "snapshot:resolve",
+  "snapshot:listPending": "snapshot:listPending",
+  "preview:check": "preview:check",
+  "preview:apply": "preview:apply",
+  "preview:apply-file": "preview:apply-file",
+  "preview:discard": "preview:discard"
 };
 function toWorkspaceSlug$2(name) {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "workspace";
@@ -52009,7 +53792,7 @@ function migrateIfNeeded() {
 function getAll() {
   migrateIfNeeded();
   const rows = getDb().select().from(workspaces).all();
-  return rows.map((r) => JSON.parse(r.data));
+  return rows.map((row) => JSON.parse(row.data));
 }
 function save(workspace) {
   migrateIfNeeded();
@@ -52043,6 +53826,111 @@ function remove(id2) {
 function resolveWorkspaceSlug(_id, name) {
   return toWorkspaceSlug$2(name);
 }
+function getNakirosWorkspaceDir$1(workspaceSlug) {
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug);
+}
+function pathExists(p) {
+  try {
+    require$$1$2.lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function syncWorkspaceSymlinks(workspace) {
+  const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
+  const wsDir = getNakirosWorkspaceDir$1(slug);
+  require$$1$2.mkdirSync(wsDir, { recursive: true });
+  const expectedNames = new Set(workspace.repos.map((r) => r.name));
+  for (const entry of require$$1$2.readdirSync(wsDir)) {
+    if (entry === "workspace.yaml") continue;
+    const entryPath = require$$0$3.join(wsDir, entry);
+    try {
+      if (require$$1$2.lstatSync(entryPath).isSymbolicLink() && !expectedNames.has(entry)) {
+        require$$1$2.unlinkSync(entryPath);
+      }
+    } catch {
+    }
+  }
+  for (const repo of workspace.repos) {
+    const linkPath = require$$0$3.join(wsDir, repo.name);
+    if (pathExists(linkPath)) {
+      require$$1$2.unlinkSync(linkPath);
+    }
+    require$$1$2.symlinkSync(repo.localPath, linkPath);
+  }
+}
+function removeWorkspaceSymlinks(workspaceSlug) {
+  const wsDir = getNakirosWorkspaceDir$1(workspaceSlug);
+  if (!pathExists(wsDir)) return;
+  for (const entry of require$$1$2.readdirSync(wsDir)) {
+    if (entry === "workspace.yaml") continue;
+    const entryPath = require$$0$3.join(wsDir, entry);
+    try {
+      if (require$$1$2.lstatSync(entryPath).isSymbolicLink()) {
+        require$$1$2.unlinkSync(entryPath);
+      }
+    } catch {
+    }
+  }
+}
+function extractErrorCode(value) {
+  if (!value || typeof value !== "object") return void 0;
+  const code2 = "code" in value ? value.code : void 0;
+  return typeof code2 === "string" && code2.trim().length > 0 ? code2 : void 0;
+}
+function extractErrorDetails(value) {
+  if (!value || typeof value !== "object") return [];
+  const details = [];
+  const syscall = "syscall" in value ? value.syscall : void 0;
+  const hostname = "hostname" in value ? value.hostname : void 0;
+  const address = "address" in value ? value.address : void 0;
+  const port = "port" in value ? value.port : void 0;
+  if (typeof syscall === "string" && syscall.trim().length > 0) details.push(`syscall=${syscall}`);
+  if (typeof hostname === "string" && hostname.trim().length > 0) details.push(`host=${hostname}`);
+  if (typeof address === "string" && address.trim().length > 0) details.push(`address=${address}`);
+  if (typeof port === "number" || typeof port === "string") details.push(`port=${port}`);
+  return details;
+}
+function flattenErrorMessages(error, messages, seen) {
+  if (!error || seen.has(error)) return;
+  seen.add(error);
+  if (error instanceof AggregateError) {
+    for (const nested of error.errors) flattenErrorMessages(nested, messages, seen);
+  }
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (message.length > 0 && !messages.includes(message)) messages.push(message);
+    const code22 = extractErrorCode(error);
+    if (code22 && !messages.includes(code22)) messages.push(code22);
+    for (const detail of extractErrorDetails(error)) {
+      if (!messages.includes(detail)) messages.push(detail);
+    }
+    flattenErrorMessages(error.cause, messages, seen);
+    return;
+  }
+  if (typeof error === "string") {
+    const message = error.trim();
+    if (message.length > 0 && !messages.includes(message)) messages.push(message);
+    return;
+  }
+  const code2 = extractErrorCode(error);
+  if (code2 && !messages.includes(code2)) messages.push(code2);
+  for (const detail of extractErrorDetails(error)) {
+    if (!messages.includes(detail)) messages.push(detail);
+  }
+}
+function shouldHideMessage(message) {
+  const normalized = message.trim().toLowerCase();
+  return normalized === "fetch failed" || normalized === "error" || normalized === "typeerror: fetch failed";
+}
+function formatNetworkError(error, fallback) {
+  const messages = [];
+  flattenErrorMessages(error, messages, /* @__PURE__ */ new Set());
+  const usefulMessages = messages.filter((message) => !shouldHideMessage(message));
+  if (usefulMessages.length === 0) return fallback;
+  return `${fallback}: ${usefulMessages.join(" | ")}`;
+}
 const AUTH_SERVER = "https://auth.nakiros.com";
 const CLIENT_ID = "A4ec21b4916aD9b4C5a682C29A6D8747b0966e657704C5bfbd73137Ba8276cDB";
 const REDIRECT_URI = "nakiros://auth/callback";
@@ -52050,6 +53938,7 @@ const AUTH_SESSION_PARTITION = "persist:nakiros-auth";
 const TOKEN_PATH = require$$0$3.join(electron.app.getPath("userData"), "nakiros-auth.bin");
 const AUTH_META_PATH = require$$0$3.join(electron.app.getPath("userData"), "nakiros-auth-meta.json");
 const REFRESH_WINDOW_MS = 5 * 60 * 1e3;
+const CLI_CREDENTIALS_PATH = require$$0$3.join(os.homedir(), ".nakiros", "credentials.json");
 function generateCodeVerifier() {
   return require$$0$9.randomBytes(32).toString("base64url");
 }
@@ -52081,10 +53970,25 @@ function storeAuth(accessToken, meta) {
     require$$1$2.writeFileSync(TOKEN_PATH, electron.safeStorage.encryptString(accessToken));
   }
   writeAuthMeta(meta);
+  writeCliCredentials(accessToken, meta);
+}
+function writeCliCredentials(accessToken, meta) {
+  try {
+    require$$1$2.mkdirSync(require$$0$3.join(os.homedir(), ".nakiros"), { recursive: true });
+    const expiresAt = meta.expiresAt ? Date.parse(meta.expiresAt) : void 0;
+    require$$1$2.writeFileSync(
+      CLI_CREDENTIALS_PATH,
+      JSON.stringify({ accessToken, refreshToken: meta.refreshToken, expiresAt, apiUrl: "https://api.nakiros.com", email: meta.email ?? null }),
+      { encoding: "utf-8", mode: 384 }
+    );
+  } catch (error) {
+    console.warn("[auth] Failed to write CLI credentials:", error);
+  }
 }
 function clearAuthFiles() {
   if (require$$1$2.existsSync(TOKEN_PATH)) require$$1$2.unlinkSync(TOKEN_PATH);
   if (require$$1$2.existsSync(AUTH_META_PATH)) require$$1$2.unlinkSync(AUTH_META_PATH);
+  if (require$$1$2.existsSync(CLI_CREDENTIALS_PATH)) require$$1$2.unlinkSync(CLI_CREDENTIALS_PATH);
 }
 async function clearAuthBrowserSession() {
   const authSession = electron.session.fromPartition(AUTH_SESSION_PARTITION);
@@ -52106,21 +54010,33 @@ function parseJwtClaim(token, claim) {
   }
 }
 async function exchangeCode(code2, verifier) {
-  const response2 = await fetch(`${AUTH_SERVER}/oauth2/v1/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code: code2,
-      code_verifier: verifier,
-      client_id: CLIENT_ID,
-      redirect_uri: REDIRECT_URI
-    }).toString()
-  });
-  if (!response2.ok) throw new Error(`Token exchange failed (${response2.status})`);
+  let response2;
+  try {
+    response2 = await fetch(`${AUTH_SERVER}/oauth2/v1/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: code2,
+        code_verifier: verifier,
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI
+      }).toString()
+    });
+  } catch (error) {
+    throw new Error(formatNetworkError(error, "Authentication request failed"));
+  }
+  if (!response2.ok) {
+    const bodyText = (await response2.text().catch(() => "")).trim();
+    const details = bodyText.length > 0 ? `: ${bodyText}` : "";
+    throw new Error(`Token exchange failed (${response2.status})${details}`);
+  }
   const data = await response2.json();
   const accessToken = data.access_token;
   if (!accessToken) throw new Error("No access token in response");
+  if (!data.refresh_token) {
+    console.warn("[auth] No refresh token returned by auth server. Check offline_access scope and client settings.");
+  }
   const email2 = parseJwtClaim(data.id_token ?? "", "email");
   const expClaim = parseJwtClaim(accessToken, "exp");
   const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1e3).toISOString() : expClaim ? new Date(expClaim * 1e3).toISOString() : void 0;
@@ -52146,26 +54062,90 @@ async function refreshAccessToken$1(token, email2) {
     const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1e3).toISOString() : void 0;
     storeAuth(accessToken, { email: nextEmail, expiresAt, refreshToken: data.refresh_token ?? token });
     return { email: nextEmail, isAuthenticated: true };
-  } catch {
+  } catch (error) {
+    console.warn("[auth] Access token refresh failed:", formatNetworkError(error, "Refresh token request failed"));
     return null;
   }
 }
-async function getAuthState() {
+async function ensureValidAccessToken() {
   const token = getStoredToken();
   const meta = readAuthMeta();
-  if (!token) return { isAuthenticated: false };
+  if (!token) {
+    return {
+      token: null,
+      email: meta.email,
+      refreshed: false,
+      sessionExpired: false
+    };
+  }
   const userId = parseJwtClaim(token, "sub");
-  if (!meta.expiresAt) return { email: meta.email, userId, isAuthenticated: true };
+  if (!meta.expiresAt) {
+    return {
+      token,
+      userId,
+      email: meta.email,
+      refreshed: false,
+      sessionExpired: false
+    };
+  }
   const expiresAtMs = Date.parse(meta.expiresAt);
-  if (Number.isNaN(expiresAtMs) || expiresAtMs - Date.now() > REFRESH_WINDOW_MS) {
-    return { email: meta.email, userId, isAuthenticated: true };
+  const now = Date.now();
+  if (Number.isNaN(expiresAtMs) || expiresAtMs - now > REFRESH_WINDOW_MS) {
+    return {
+      token,
+      userId,
+      email: meta.email,
+      refreshed: false,
+      sessionExpired: false
+    };
   }
   if (meta.refreshToken) {
     const refreshed = await refreshAccessToken$1(meta.refreshToken, meta.email);
-    if (refreshed) return { ...refreshed, userId };
+    if (refreshed) {
+      const refreshedToken = getStoredToken();
+      return {
+        token: refreshedToken,
+        userId: refreshedToken ? parseJwtClaim(refreshedToken, "sub") : userId,
+        email: refreshed.email ?? meta.email,
+        refreshed: true,
+        sessionExpired: false
+      };
+    }
+  }
+  if (expiresAtMs > now) {
+    console.warn("[auth] Token refresh unavailable or failed; continuing with current access token until expiry.");
+    return {
+      token,
+      userId,
+      email: meta.email,
+      refreshed: false,
+      sessionExpired: false
+    };
   }
   clearAuthFiles();
-  return { email: meta.email, userId, isAuthenticated: false, sessionExpired: true };
+  return {
+    token: null,
+    userId,
+    email: meta.email,
+    refreshed: false,
+    sessionExpired: true
+  };
+}
+async function getAuthState() {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) {
+    return {
+      email: resolved.email,
+      userId: resolved.userId,
+      isAuthenticated: false,
+      ...resolved.sessionExpired ? { sessionExpired: true } : {}
+    };
+  }
+  return {
+    email: resolved.email,
+    userId: resolved.userId,
+    isAuthenticated: true
+  };
 }
 async function signIn(parentWindow) {
   const verifier = generateCodeVerifier();
@@ -52177,7 +54157,7 @@ async function signIn(parentWindow) {
     redirect_uri: REDIRECT_URI,
     code_challenge: challenge,
     code_challenge_method: "S256",
-    scope: "openid profile email",
+    scope: "openid profile email offline_access",
     state
   }).toString()}`;
   return new Promise((resolve2, reject) => {
@@ -52231,7 +54211,116 @@ async function signOut() {
   clearAuthFiles();
   await clearAuthBrowserSession();
 }
-const WORKER_API$1 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
+function buildNakirosMcpServerEntry(workspaceId, mcpServerUrl, authToken) {
+  return {
+    type: "http",
+    url: `${mcpServerUrl}/ws/${workspaceId}/mcp`,
+    ...authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}
+  };
+}
+function upsertNakirosMcpConfig(configPath, workspaceId, mcpServerUrl, authToken) {
+  let existing = {};
+  if (require$$1$2.existsSync(configPath)) {
+    try {
+      existing = JSON.parse(require$$1$2.readFileSync(configPath, "utf-8"));
+    } catch {
+      existing = {};
+    }
+  }
+  const nextServers = {
+    ...existing.mcpServers ?? {},
+    nakiros: buildNakirosMcpServerEntry(workspaceId, mcpServerUrl, authToken)
+  };
+  require$$1$2.mkdirSync(require$$0$3.dirname(configPath), { recursive: true });
+  require$$1$2.writeFileSync(
+    configPath,
+    JSON.stringify({ ...existing, mcpServers: nextServers }, null, 2) + "\n",
+    "utf-8"
+  );
+}
+function quoteYaml(value) {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+function toCanonicalWorkspaceYaml(workspace) {
+  const structure = workspace.topology === "mono" ? "mono-repo" : "multi-repo";
+  const repos = workspace.repos.map((repo, index) => ({
+    name: repo.name,
+    role: index === 0 ? "primary" : repo.role || "secondary",
+    localPath: repo.localPath,
+    profile: repo.profile
+  }));
+  return {
+    name: workspace.name,
+    slug: resolveWorkspaceSlug(workspace.id, workspace.name),
+    structure,
+    repos,
+    pmTool: workspace.pmTool,
+    projectKey: workspace.projectKey,
+    documentLanguage: workspace.documentLanguage,
+    branchPattern: workspace.branchPattern,
+    boardType: workspace.boardType,
+    syncFilter: workspace.syncFilter,
+    pmBoardId: workspace.pmBoardId
+  };
+}
+function buildWorkspaceYaml(workspace) {
+  const canonical = toCanonicalWorkspaceYaml(workspace);
+  const lines = [
+    "# Managed by Nakiros",
+    "workspace:",
+    `  name: ${quoteYaml(canonical.name)}`,
+    `  structure: ${quoteYaml(canonical.structure)}`
+  ];
+  if (canonical.pmTool) lines.push(`  pm_tool: ${quoteYaml(canonical.pmTool)}`);
+  if (canonical.documentLanguage) lines.push(`  document_language: ${quoteYaml(canonical.documentLanguage)}`);
+  if (canonical.branchPattern) lines.push(`  branch_pattern: ${quoteYaml(canonical.branchPattern)}`);
+  if (canonical.pmTool === "jira" && canonical.projectKey) {
+    lines.push("  jira:");
+    lines.push(`    project_key: ${quoteYaml(canonical.projectKey)}`);
+    if (canonical.pmBoardId) lines.push(`    board_id: ${quoteYaml(canonical.pmBoardId)}`);
+    if (canonical.boardType) lines.push(`    board_type: ${quoteYaml(canonical.boardType)}`);
+    if (canonical.syncFilter) lines.push(`    sync_filter: ${quoteYaml(canonical.syncFilter)}`);
+  }
+  lines.push("  repos:");
+  for (const repo of canonical.repos) {
+    lines.push(`    - name: ${quoteYaml(repo.name)}`);
+    lines.push(`      role: ${quoteYaml(repo.role)}`);
+    lines.push(`      localPath: ${quoteYaml(repo.localPath)}`);
+    lines.push(`      profile: ${quoteYaml(repo.profile)}`);
+  }
+  return `${lines.join("\n")}
+`;
+}
+function getWorkspaceAppDir(wsId) {
+  const dir = require$$0$3.join(electron.app.getPath("userData"), wsId);
+  require$$1$2.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+async function writeClaudeMcpSettings(repoPath, workspaceId) {
+  const claudeDir = require$$0$3.join(repoPath, ".claude");
+  require$$1$2.mkdirSync(claudeDir, { recursive: true });
+  const apiBase = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
+  const resolved = await ensureValidAccessToken();
+  upsertNakirosMcpConfig(require$$0$3.join(claudeDir, "settings.json"), workspaceId, apiBase, resolved.token);
+}
+function writeAgentWorkspaceYaml(workspace) {
+  const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
+  const wsDir = getNakirosWorkspaceDir$1(slug);
+  require$$1$2.mkdirSync(wsDir, { recursive: true });
+  require$$1$2.writeFileSync(require$$0$3.join(wsDir, "workspace.yaml"), buildWorkspaceYaml(workspace), "utf-8");
+}
+async function syncWorkspaceYaml(workspace) {
+  const yaml = buildWorkspaceYaml(workspace);
+  const appDir = getWorkspaceAppDir(workspace.id);
+  require$$1$2.writeFileSync(require$$0$3.join(appDir, "workspace.yaml"), yaml, "utf-8");
+  writeAgentWorkspaceYaml(workspace);
+  syncWorkspaceSymlinks(workspace);
+  for (const repo of workspace.repos) {
+    await writeClaudeMcpSettings(repo.localPath, workspace.id);
+  }
+  return workspace.workspacePath ?? workspace.repos[0]?.localPath ?? appDir;
+}
+const WORKER_API$6 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
 function isStoredRepo(value) {
   if (!value || typeof value !== "object") return false;
   const candidate = value;
@@ -52250,25 +54339,31 @@ function normalizeWorkspaceList(payload) {
   }
   return [];
 }
-async function parseWorkerError(response2, fallbackMessage) {
+async function parseWorkerError$1(response2, fallbackMessage) {
   const payload = await response2.json().catch(() => null);
   return new Error(payload?.error ?? fallbackMessage);
 }
 async function listRemoteWorkspacesWithToken(token) {
-  const response2 = await fetch(`${WORKER_API$1}/ws`, {
+  const response2 = await fetch(`${WORKER_API$6}/ws`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response2.ok) {
-    throw await parseWorkerError(response2, "Failed to load workspaces from Nakiros Cloud.");
+    throw await parseWorkerError$1(response2, "Failed to load workspaces from Nakiros Cloud.");
   }
   return normalizeWorkspaceList(await response2.json().catch(() => []));
 }
 async function getHydratedWorkspaces() {
-  const token = getStoredToken();
-  if (!token) return getAll();
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return getAll();
   try {
-    const remoteWorkspaces = await listRemoteWorkspacesWithToken(token);
+    const remoteWorkspaces = await listRemoteWorkspacesWithToken(resolved.token);
     replaceAll(remoteWorkspaces);
+    for (const workspace of remoteWorkspaces) {
+      try {
+        writeAgentWorkspaceYaml(workspace);
+      } catch {
+      }
+    }
     return remoteWorkspaces;
   } catch (error) {
     console.warn("[workspace-remote] Falling back to local cache:", error);
@@ -52276,95 +54371,31 @@ async function getHydratedWorkspaces() {
   }
 }
 async function saveCanonicalWorkspace(workspace) {
-  const token = getStoredToken();
-  if (!token) {
-    throw new Error("Sign in to save workspace changes to Nakiros Cloud.");
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) {
+    throw new Error(
+      resolved.sessionExpired ? "Session expired. Sign in again to save workspace changes to Nakiros Cloud." : "Sign in to save workspace changes to Nakiros Cloud."
+    );
   }
-  const response2 = await fetch(`${WORKER_API$1}/ws/${workspace.id}`, {
+  const response2 = await fetch(`${WORKER_API$6}/ws/${workspace.id}`, {
     method: "PUT",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${resolved.token}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify(workspace)
   });
   if (!response2.ok) {
-    throw await parseWorkerError(response2, "Failed to save workspace to Nakiros Cloud.");
+    throw await parseWorkerError$1(response2, "Failed to save workspace to Nakiros Cloud.");
   }
-  const remoteWorkspaces = await listRemoteWorkspacesWithToken(token);
+  const remoteWorkspaces = await listRemoteWorkspacesWithToken(resolved.token);
   replaceAll(remoteWorkspaces);
-}
-function getWorkspaceAppDir(wsId) {
-  const dir = require$$0$3.join(electron.app.getPath("userData"), wsId);
-  require$$1$2.mkdirSync(dir, { recursive: true });
-  return dir;
-}
-function buildWorkspaceYaml(workspace) {
-  const reposYaml = workspace.repos.map((repo, i) => [
-    `    - name: ${repo.name}`,
-    `      role: ${i === 0 ? "primary" : repo.role || "secondary"}`,
-    `      localPath: ${repo.localPath}`,
-    `      profile: ${repo.profile}`
-  ].join("\n")).join("\n");
-  const jiraBlock = workspace.pmTool === "jira" && workspace.projectKey ? [
-    `  jira:`,
-    `    project_key: ${workspace.projectKey}`,
-    workspace.pmBoardId ? `    board_id: '${workspace.pmBoardId}'` : "",
-    workspace.boardType ? `    board_type: ${workspace.boardType}` : "",
-    workspace.syncFilter ? `    sync_filter: ${workspace.syncFilter}` : ""
-  ].filter(Boolean).join("\n") : "";
-  return [
-    `# Géré par Nakiros`,
-    `workspace:`,
-    `  name: ${workspace.name}`,
-    workspace.topology ? `  structure: ${workspace.topology === "mono" ? "mono-repo" : "multi-repo"}` : "",
-    workspace.pmTool ? `  pm_tool: ${workspace.pmTool}` : "",
-    jiraBlock,
-    `  repos:`,
-    reposYaml,
-    workspace.documentLanguage ? `  document_language: ${workspace.documentLanguage}` : ""
-  ].filter(Boolean).join("\n") + "\n";
-}
-function buildWorkspacePointerYaml$1(workspace) {
-  const workspaceSlug = resolveWorkspaceSlug(workspace.id, workspace.name);
-  return [
-    "# Managed by Nakiros",
-    `workspace_name: ${workspace.name}`,
-    `workspace_slug: ${workspaceSlug}`,
-    ""
-  ].join("\n");
-}
-function writeWorkspacePointer(repoPath, pointerYaml) {
-  const nakirosDir = require$$0$3.join(repoPath, "_nakiros");
-  require$$1$2.mkdirSync(nakirosDir, { recursive: true });
-  require$$1$2.writeFileSync(require$$0$3.join(nakirosDir, "workspace.yaml"), pointerYaml, "utf-8");
-}
-function writeClaudeMcpSettings(repoPath, workspaceId) {
-  const claudeDir = require$$0$3.join(repoPath, ".claude");
-  require$$1$2.mkdirSync(claudeDir, { recursive: true });
-  const apiBase = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
-  const token = getStoredToken();
-  const settings = {
-    mcpServers: {
-      nakiros: {
-        type: "http",
-        url: `${apiBase}/ws/${workspaceId}/mcp`,
-        ...token ? { headers: { Authorization: `Bearer ${token}` } } : {}
-      }
+  for (const workspace2 of remoteWorkspaces) {
+    try {
+      writeAgentWorkspaceYaml(workspace2);
+    } catch {
     }
-  };
-  require$$1$2.writeFileSync(require$$0$3.join(claudeDir, "settings.json"), JSON.stringify(settings, null, 2) + "\n", "utf-8");
-}
-function syncWorkspaceYaml(workspace) {
-  const yaml = buildWorkspaceYaml(workspace);
-  const pointerYaml = buildWorkspacePointerYaml$1(workspace);
-  const appDir = getWorkspaceAppDir(workspace.id);
-  require$$1$2.writeFileSync(require$$0$3.join(appDir, "workspace.yaml"), yaml, "utf-8");
-  for (const repo of workspace.repos) {
-    writeWorkspacePointer(repo.localPath, pointerYaml);
-    writeClaudeMcpSettings(repo.localPath, workspace.id);
   }
-  return workspace.workspacePath ?? workspace.repos[0]?.localPath ?? appDir;
 }
 function createAddOrgMemberPayload(email2, role, inviterEmail) {
   return {
@@ -52373,7 +54404,7 @@ function createAddOrgMemberPayload(email2, role, inviterEmail) {
     ...inviterEmail ? { inviterEmail } : {}
   };
 }
-const WORKER_API = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
+const WORKER_API$5 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
 function isOrgRole(value) {
   return value === "admin" || value === "member";
 }
@@ -52408,11 +54439,11 @@ function normalizeOrgMembers(payload) {
   return [];
 }
 async function listMyOrgs() {
-  const token = getStoredToken();
-  if (!token) return [];
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return [];
   try {
-    const res = await fetch(`${WORKER_API}/orgs/mine`, {
-      headers: { Authorization: `Bearer ${token}` }
+    const res = await fetch(`${WORKER_API$5}/orgs/mine`, {
+      headers: { Authorization: `Bearer ${resolved.token}` }
     });
     if (!res.ok) return [];
     return normalizeOrgList(await res.json().catch(() => []));
@@ -52425,11 +54456,11 @@ async function getMyOrg() {
   return orgs[0];
 }
 async function createOrg(name, slug) {
-  const token = getStoredToken();
-  if (!token) throw new Error("Not authenticated");
-  const res = await fetch(`${WORKER_API}/orgs`, {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
+  const res = await fetch(`${WORKER_API$5}/orgs`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${resolved.token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ name, slug })
   });
   const payload = await res.json().catch(() => null);
@@ -52443,11 +54474,11 @@ async function createOrg(name, slug) {
   };
 }
 async function deleteOrg(orgId) {
-  const token = getStoredToken();
-  if (!token) throw new Error("Not authenticated");
-  const res = await fetch(`${WORKER_API}/orgs/${orgId}`, {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
+  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${resolved.token}` }
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
@@ -52455,20 +54486,20 @@ async function deleteOrg(orgId) {
   }
 }
 async function listOrgMembers(orgId) {
-  const token = getStoredToken();
-  if (!token) throw new Error("Not authenticated");
-  const res = await fetch(`${WORKER_API}/orgs/${orgId}/members`, {
-    headers: { Authorization: `Bearer ${token}` }
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
+  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/members`, {
+    headers: { Authorization: `Bearer ${resolved.token}` }
   });
   if (!res.ok) throw new Error(`Failed to list members: ${res.status}`);
   return normalizeOrgMembers(await res.json().catch(() => []));
 }
 async function addOrgMember(orgId, email2, role, inviterEmail) {
-  const token = getStoredToken();
-  if (!token) throw new Error("Not authenticated");
-  const res = await fetch(`${WORKER_API}/orgs/${orgId}/members`, {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
+  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/members`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${resolved.token}`, "Content-Type": "application/json" },
     body: JSON.stringify(createAddOrgMemberPayload(email2, role, inviterEmail))
   });
   const payload = await res.json().catch(() => null);
@@ -52485,11 +54516,11 @@ async function addOrgMember(orgId, email2, role, inviterEmail) {
   };
 }
 async function removeOrgMember(orgId, userId) {
-  const token = getStoredToken();
-  if (!token) throw new Error("Not authenticated");
-  const res = await fetch(`${WORKER_API}/orgs/${orgId}/members/${userId}`, {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
+  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/members/${userId}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${resolved.token}` }
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
@@ -52497,11 +54528,11 @@ async function removeOrgMember(orgId, userId) {
   }
 }
 async function leaveOrg(orgId) {
-  const token = getStoredToken();
-  if (!token) throw new Error("Not authenticated");
-  const res = await fetch(`${WORKER_API}/orgs/${orgId}/members/me`, {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
+  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/members/me`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${resolved.token}` }
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
@@ -52509,11 +54540,11 @@ async function leaveOrg(orgId) {
   }
 }
 async function cancelInvitation(orgId, invitationId) {
-  const token = getStoredToken();
-  if (!token) throw new Error("Not authenticated");
-  const res = await fetch(`${WORKER_API}/orgs/${orgId}/invitations/${invitationId}`, {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
+  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/invitations/${invitationId}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${resolved.token}` }
   });
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
@@ -52521,12 +54552,12 @@ async function cancelInvitation(orgId, invitationId) {
   }
 }
 async function acceptInvitations(email2) {
-  const token = getStoredToken();
-  if (!token) return { joined: 0 };
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return { joined: 0 };
   try {
-    const res = await fetch(`${WORKER_API}/invitations/accept`, {
+    const res = await fetch(`${WORKER_API$5}/invitations/accept`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${resolved.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ email: email2 })
     });
     if (!res.ok) return { joined: 0 };
@@ -52535,21 +54566,150 @@ async function acceptInvitations(email2) {
     return { joined: 0 };
   }
 }
-const NAKIROS_DIRS = ["_nakiros"];
+function toWorkspaceLaunchDeniedCode(reason) {
+  return `workspace_launch_denied:${reason}`;
+}
+function evaluateWorkspaceLaunchAccess(args) {
+  if (!args.enforceRoles) {
+    return { allowed: true, reason: "beta-bypass" };
+  }
+  if (args.subject.scope === "personal" || args.subject.status === "personal") {
+    return { allowed: true, reason: "personal" };
+  }
+  if (args.subject.status !== "active" || args.subject.role === null) {
+    return { allowed: false, reason: "not-added" };
+  }
+  if (args.subject.role === "viewer") {
+    return { allowed: false, reason: "viewer" };
+  }
+  return { allowed: true, reason: "allowed" };
+}
+const WORKER_API$4 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
+function isWorkspaceRole(value) {
+  return value === "owner" || value === "admin" || value === "pm" || value === "dev" || value === "viewer";
+}
+function isWorkspaceMembershipScope(value) {
+  return value === "organization" || value === "personal";
+}
+function isWorkspaceMembershipStatus(value) {
+  return value === "active" || value === "not_added";
+}
+function isWorkspaceMembershipListItem(value) {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value;
+  return typeof candidate.userId === "string" && (candidate.email === null || typeof candidate.email === "string") && (candidate.organizationRole === "admin" || candidate.organizationRole === "member") && (candidate.workspaceRole === null || isWorkspaceRole(candidate.workspaceRole)) && isWorkspaceMembershipStatus(candidate.status) && (candidate.joinedAt === void 0 || typeof candidate.joinedAt === "string") && (candidate.addedAt === void 0 || typeof candidate.addedAt === "string") && (candidate.updatedAt === void 0 || typeof candidate.updatedAt === "string") && typeof candidate.isCurrentUser === "boolean";
+}
+function isWorkspaceMembershipListPayload(value) {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value;
+  return typeof candidate.workspaceId === "string" && isWorkspaceMembershipScope(candidate.scope) && (candidate.currentUserRole === null || isWorkspaceRole(candidate.currentUserRole)) && typeof candidate.canManage === "boolean" && Array.isArray(candidate.members) && candidate.members.every(isWorkspaceMembershipListItem);
+}
+function isWorkspaceMembershipSubject(value) {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value;
+  return typeof candidate.workspaceId === "string" && isWorkspaceMembershipScope(candidate.scope) && (candidate.role === null || isWorkspaceRole(candidate.role)) && (candidate.status === "personal" || isWorkspaceMembershipStatus(candidate.status));
+}
+async function parseWorkerError(response2, fallbackMessage) {
+  const payload = await response2.json().catch(() => null);
+  return new Error(payload?.error ?? fallbackMessage);
+}
+async function requireAccessToken() {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) {
+    throw new Error(
+      resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated"
+    );
+  }
+  return resolved.token;
+}
+async function listWorkspaceMembers(workspaceId) {
+  const token = await requireAccessToken();
+  const response2 = await fetch(`${WORKER_API$4}/ws/${workspaceId}/members`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response2.ok) {
+    throw await parseWorkerError(response2, "Failed to load workspace members.");
+  }
+  const payload = await response2.json().catch(() => null);
+  if (!isWorkspaceMembershipListPayload(payload)) {
+    throw new Error("Invalid workspace members payload.");
+  }
+  return payload;
+}
+async function upsertWorkspaceMember(workspaceId, input) {
+  const token = await requireAccessToken();
+  const response2 = await fetch(`${WORKER_API$4}/ws/${workspaceId}/members/${input.userId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ role: input.role })
+  });
+  if (!response2.ok) {
+    throw await parseWorkerError(response2, "Failed to update workspace member.");
+  }
+  const payload = await response2.json().catch(() => null);
+  if (!isWorkspaceMembershipListPayload(payload)) {
+    throw new Error("Invalid workspace members payload.");
+  }
+  return payload;
+}
+async function removeWorkspaceMember(workspaceId, userId) {
+  const token = await requireAccessToken();
+  const response2 = await fetch(`${WORKER_API$4}/ws/${workspaceId}/members/${userId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response2.ok) {
+    throw await parseWorkerError(response2, "Failed to remove workspace member.");
+  }
+}
+async function getCurrentWorkspaceMembership(workspaceId) {
+  const token = await requireAccessToken();
+  const response2 = await fetch(`${WORKER_API$4}/ws/${workspaceId}/members/me`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response2.ok) {
+    throw await parseWorkerError(response2, "Failed to resolve workspace membership.");
+  }
+  const payload = await response2.json().catch(() => null);
+  if (!isWorkspaceMembershipSubject(payload)) {
+    throw new Error("Invalid workspace membership payload.");
+  }
+  return payload;
+}
+async function assertWorkspaceLaunchAllowed(args) {
+  const subject = await getCurrentWorkspaceMembership(args.workspaceId);
+  const decision = evaluateWorkspaceLaunchAccess({
+    subject,
+    enforceRoles: args.enforceRoles
+  });
+  if (!decision.allowed) {
+    if (decision.reason === "not-added" || decision.reason === "viewer") {
+      throw new Error(toWorkspaceLaunchDeniedCode(decision.reason));
+    }
+    throw new Error("Workspace launch is not allowed.");
+  }
+}
 function resetWorkspace(workspace) {
   const deletedPaths = [];
   const errors2 = [];
+  try {
+    const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
+    removeWorkspaceSymlinks(slug);
+    deletedPaths.push(`~/.nakiros/workspaces/${slug}/ (symlinks)`);
+  } catch (err) {
+    errors2.push({ path: "~/.nakiros/workspaces/", error: err.message });
+  }
   for (const repo of workspace.repos) {
-    const base = repo.localPath;
-    for (const dir of NAKIROS_DIRS) {
-      const fullPath = require$$0$3.join(base, dir);
-      if (!require$$1$2.existsSync(fullPath)) continue;
-      try {
-        require$$1$2.rmSync(fullPath, { recursive: true, force: true });
-        deletedPaths.push(fullPath);
-      } catch (err) {
-        errors2.push({ path: fullPath, error: err.message });
-      }
+    const claudeSettings = require$$0$3.join(repo.localPath, ".claude", "settings.json");
+    if (!require$$1$2.existsSync(claudeSettings)) continue;
+    try {
+      require$$1$2.rmSync(claudeSettings, { force: true });
+      deletedPaths.push(claudeSettings);
+    } catch (err) {
+      errors2.push({ path: claudeSettings, error: err.message });
     }
   }
   return { deletedPaths, errors: errors2 };
@@ -52580,40 +54740,15 @@ function detectProfile(localPath) {
   if (require$$1$2.existsSync(require$$0$3.join(localPath, "go.mod"))) return "backend-go";
   return "generic";
 }
-function buildWorkspacePointerYaml(workspace) {
-  const workspaceSlug = resolveWorkspaceSlug(workspace.id, workspace.name);
-  return [
-    "# Managed by Nakiros",
-    `workspace_name: ${workspace.name}`,
-    `workspace_slug: ${workspaceSlug}`,
-    ""
-  ].join("\n");
-}
 function writeClaudeJson(repoPath, workspaceId, mcpServerUrl) {
   const claudeDir = require$$0$3.join(repoPath, ".claude");
   require$$1$2.mkdirSync(claudeDir, { recursive: true });
   const claudeJsonPath = require$$0$3.join(claudeDir, "claude.json");
-  let existing = {};
-  if (require$$1$2.existsSync(claudeJsonPath)) {
-    try {
-      existing = JSON.parse(require$$1$2.readFileSync(claudeJsonPath, "utf-8"));
-    } catch {
-    }
-  }
-  const mcpServers = existing["mcpServers"] ?? {};
-  mcpServers["nakiros"] = {
-    type: "http",
-    url: `${mcpServerUrl}/ws/${workspaceId}/mcp`
-  };
-  existing["mcpServers"] = mcpServers;
-  require$$1$2.writeFileSync(claudeJsonPath, JSON.stringify(existing, null, 2) + "\n", "utf-8");
+  upsertNakirosMcpConfig(claudeJsonPath, workspaceId, mcpServerUrl);
 }
 function syncToRepos(workspace, mcpServerUrl) {
-  const pointerYaml = buildWorkspacePointerYaml(workspace);
+  syncWorkspaceSymlinks(workspace);
   for (const repo of workspace.repos) {
-    const nakirosDir = require$$0$3.join(repo.localPath, "_nakiros");
-    require$$1$2.mkdirSync(nakirosDir, { recursive: true });
-    require$$1$2.writeFileSync(require$$0$3.join(nakirosDir, "workspace.yaml"), pointerYaml, "utf-8");
     writeClaudeJson(repo.localPath, workspace.id, mcpServerUrl);
   }
 }
@@ -52692,7 +54827,7 @@ async function walkMarkdown(repoPath, llmDocs) {
     const current = stack.pop();
     let entries;
     try {
-      entries = await promises.readdir(current.absPath, { withFileTypes: true });
+      entries = await promises$1.readdir(current.absPath, { withFileTypes: true });
     } catch {
       continue;
     }
@@ -52734,7 +54869,7 @@ async function walkMarkdown(repoPath, llmDocs) {
       }
       let lastModifiedAt;
       try {
-        const filestat = await promises.stat(absolutePath);
+        const filestat = await promises$1.stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
       } catch {
       }
@@ -52780,21 +54915,23 @@ async function scanGlobalSection(workspace) {
   try {
     const metaPath = require$$0$3.join(contextDir, "meta.json");
     if (require$$1$2.existsSync(metaPath)) {
-      const raw = await promises.readFile(metaPath, "utf-8");
+      const raw = await promises$1.readFile(metaPath, "utf-8");
       meta = JSON.parse(raw);
     }
   } catch {
   }
+  const resolvedExpectedFilenames = /* @__PURE__ */ new Set();
   for (const filename of GLOBAL_EXPECTED_FILES) {
     const candidates = [filename, ...GLOBAL_FILE_ALIASES[filename] ?? []];
     const resolvedFilename = candidates.find((candidate) => require$$1$2.existsSync(require$$0$3.join(contextDir, candidate)));
     if (resolvedFilename) {
+      resolvedExpectedFilenames.add(resolvedFilename);
       const absolutePath = require$$0$3.join(contextDir, resolvedFilename);
       let lastModifiedAt;
       try {
         lastModifiedAt = meta[resolvedFilename]?.generatedAt ?? meta[filename]?.generatedAt;
         if (!lastModifiedAt) {
-          const filestat = await promises.stat(absolutePath);
+          const filestat = await promises$1.stat(absolutePath);
           lastModifiedAt = filestat.mtimeMs;
         }
       } catch {
@@ -52811,14 +54948,37 @@ async function scanGlobalSection(workspace) {
     }
   }
   try {
-    const entries = await promises.readdir(decisionsDir, { withFileTypes: true });
+    const contextEntries = await promises$1.readdir(contextDir, { withFileTypes: true });
+    for (const entry of contextEntries) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.toLowerCase().endsWith(".md")) continue;
+      if (resolvedExpectedFilenames.has(entry.name)) continue;
+      const absolutePath = require$$0$3.join(contextDir, entry.name);
+      let lastModifiedAt;
+      try {
+        const filestat = await promises$1.stat(absolutePath);
+        lastModifiedAt = filestat.mtimeMs;
+      } catch {
+      }
+      docs.push({
+        name: entry.name.replace(/\.md$/i, ""),
+        relativePath: `context/${entry.name}`,
+        absolutePath,
+        isGenerated: true,
+        lastModifiedAt
+      });
+    }
+  } catch {
+  }
+  try {
+    const entries = await promises$1.readdir(decisionsDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isFile()) continue;
       if (!entry.name.toLowerCase().endsWith(".md")) continue;
       const absolutePath = require$$0$3.join(decisionsDir, entry.name);
       let lastModifiedAt;
       try {
-        const filestat = await promises.stat(absolutePath);
+        const filestat = await promises$1.stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
       } catch {
       }
@@ -52840,9 +55000,58 @@ async function scanGlobalSection(workspace) {
   });
   return { docs, decisionDocs, missingNames };
 }
+async function scanRemoteRepos(workspace, localRepoNames) {
+  const workspaceSlug = resolveWorkspaceSlug(workspace.id, workspace.name);
+  const remoteReposDir = require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, "context", "repos");
+  if (!require$$1$2.existsSync(remoteReposDir)) return [];
+  let entries;
+  try {
+    entries = await promises$1.readdir(remoteReposDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const results = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (localRepoNames.has(entry.name)) continue;
+    const repoDir = require$$0$3.join(remoteReposDir, entry.name);
+    let files;
+    try {
+      files = await promises$1.readdir(repoDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    const docs = [];
+    for (const file of files) {
+      if (!file.isFile()) continue;
+      const lowerName = file.name.toLowerCase();
+      if (!lowerName.endsWith(".md") && lowerName !== "llms.txt") continue;
+      const absolutePath = require$$0$3.join(repoDir, file.name);
+      let lastModifiedAt;
+      try {
+        const filestat = await promises$1.stat(absolutePath);
+        lastModifiedAt = filestat.mtimeMs;
+      } catch {
+      }
+      docs.push({
+        name: file.name.replace(/\.md$/i, ""),
+        relativePath: `_nakiros/${file.name}`,
+        absolutePath,
+        isGenerated: true,
+        isRemote: true,
+        lastModifiedAt
+      });
+    }
+    if (docs.length > 0) {
+      results.push({ repoName: entry.name, repoPath: repoDir, docs });
+    }
+  }
+  return results;
+}
 async function scanWorkspaceDocs(workspace) {
   const primaryRepoPath = getPrimaryRepoPath(workspace);
-  const [repoResults, globalSection] = await Promise.all([
+  const localRepoNames = new Set(workspace.repos.map((r) => r.name));
+  const [repoResults, globalSection, remoteRepos] = await Promise.all([
     Promise.all(
       workspace.repos.filter((repo) => require$$1$2.existsSync(repo.localPath)).map(async (repo) => ({
         repoName: repo.name,
@@ -52850,7 +55059,8 @@ async function scanWorkspaceDocs(workspace) {
         docs: await walkMarkdown(repo.localPath, repo.llmDocs)
       }))
     ),
-    scanGlobalSection(workspace)
+    scanGlobalSection(workspace),
+    scanRemoteRepos(workspace, localRepoNames)
   ]);
   const repos = repoResults.filter((r) => r.docs.length > 0);
   const workspaceRootPath = workspace.workspacePath?.trim();
@@ -52874,6 +55084,9 @@ async function scanWorkspaceDocs(workspace) {
         docs: scratchDocs
       });
     }
+  }
+  for (const remoteRepo of remoteRepos) {
+    repos.push(remoteRepo);
   }
   return { repos, globalSection, primaryRepoPath };
 }
@@ -52934,185 +55147,87 @@ function savePreferences(prefs) {
   };
   require$$1$2.writeFileSync(getStoragePath(), JSON.stringify(next, null, 2), "utf-8");
 }
-const GLOBAL_RUNTIME_DIR = require$$0$3.resolve(os.homedir(), ".nakiros");
-const ENVIRONMENTS = {
-  cursor: {
-    label: "Cursor",
-    markerRelativePath: ".cursor",
-    targetRelativePath: ".cursor/commands"
-  },
-  codex: {
-    label: "Codex",
-    markerRelativePath: ".codex",
-    targetRelativePath: ".codex/prompts"
-  },
-  claude: {
-    label: "Claude Code",
-    markerRelativePath: ".claude",
-    targetRelativePath: ".claude/commands"
+const WORKER_API$3 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
+async function parseJson(response2) {
+  return response2.json().catch(() => null);
+}
+async function getAuthToken() {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) {
+    throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
   }
-};
-function readCommandTemplates() {
-  const dir = require$$0$3.resolve(GLOBAL_RUNTIME_DIR, "commands");
-  if (!require$$1$2.existsSync(dir)) return {};
-  return Object.fromEntries(
-    require$$1$2.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md")).map((e) => [e.name, require$$1$2.readFileSync(require$$0$3.resolve(dir, e.name), "utf8")])
-  );
+  return resolved.token;
 }
-function parseInstalledCommand(fileName) {
-  if (!fileName.endsWith(".md")) return null;
-  const commandName = fileName.replace(/\.md$/i, "");
-  if (!/^nak-(?:agent|workflow)-[a-z0-9-]+$/.test(commandName)) return null;
-  const kind = commandName.startsWith("nak-workflow-") ? "workflow" : "agent";
-  const id2 = commandName.replace(/^nak-(?:agent|workflow)-/, "");
-  return {
-    id: id2,
-    command: `/${commandName}`,
-    kind,
-    fileName
-  };
-}
-function getInstalledCommands() {
-  const dir = require$$0$3.resolve(GLOBAL_RUNTIME_DIR, "commands");
-  if (!require$$1$2.existsSync(dir)) return [];
-  return require$$1$2.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => parseInstalledCommand(entry.name)).filter((entry) => entry != null).sort((a, b) => a.command.localeCompare(b.command));
-}
-function getGlobalInstallStatus() {
-  const home = os.homedir();
-  const ids = ["claude", "codex", "cursor"];
-  const environments = ids.map((id2) => {
-    const env2 = ENVIRONMENTS[id2];
-    const targetDir = require$$0$3.resolve(home, env2.targetRelativePath);
-    const commandFiles = Object.keys(readCommandTemplates());
-    const installed = commandFiles.filter((file) => require$$1$2.existsSync(require$$0$3.resolve(targetDir, file))).length;
-    return {
-      id: id2,
-      label: env2.label,
-      targetDir,
-      installed,
-      total: commandFiles.length
-    };
+async function request(path, init2) {
+  const token = await getAuthToken();
+  const response2 = await fetch(`${WORKER_API$3}${path}`, {
+    ...init2,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...init2?.body ? { "Content-Type": "application/json" } : {},
+      ...init2?.headers ?? {}
+    }
   });
-  return {
-    environments,
-    totalInstalled: environments.reduce((acc, item) => acc + item.installed, 0),
-    totalExpected: environments.reduce((acc, item) => acc + item.total, 0)
-  };
-}
-function installAgentsGlobally() {
-  const home = os.homedir();
-  const ids = ["claude", "codex", "cursor"];
-  const environments = [];
-  let commandFilesCopied = 0;
-  let commandFilesOverwritten = 0;
-  for (const id2 of ids) {
-    const env2 = ENVIRONMENTS[id2];
-    const targetDir = require$$0$3.resolve(home, env2.targetRelativePath);
-    require$$1$2.mkdirSync(targetDir, { recursive: true });
-    let copiedForEnv = 0;
-    let overwrittenForEnv = 0;
-    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
-      const targetPath = require$$0$3.resolve(targetDir, fileName);
-      const targetExists = require$$1$2.existsSync(targetPath);
-      require$$1$2.writeFileSync(targetPath, content, "utf8");
-      if (targetExists) {
-        overwrittenForEnv += 1;
-        commandFilesOverwritten += 1;
-      } else {
-        copiedForEnv += 1;
-        commandFilesCopied += 1;
-      }
+  if (!response2.ok) {
+    const payload = await parseJson(response2);
+    if (response2.status === 409 && payload?.impactedWorkspaces) {
+      const error = new Error(payload.error ?? "Credential is still in use");
+      Object.assign(error, { impactedWorkspaces: payload.impactedWorkspaces });
+      throw error;
     }
-    environments.push({
-      id: id2,
-      label: env2.label,
-      targetDir,
-      commandFilesCopied: copiedForEnv,
-      commandFilesOverwritten: overwrittenForEnv
-    });
+    throw new Error(payload?.error ?? "Provider credentials request failed");
   }
-  return { environments, commandFilesCopied, commandFilesOverwritten };
+  return response2.json();
 }
-function getEnvironmentStatus(repoPath, id2) {
-  const env2 = ENVIRONMENTS[id2];
-  const markerExists = require$$1$2.existsSync(require$$0$3.resolve(repoPath, env2.markerRelativePath));
-  const targetPath = require$$0$3.resolve(repoPath, env2.targetRelativePath);
-  const commandFiles = Object.keys(readCommandTemplates());
-  const installedCount = commandFiles.filter((file) => require$$1$2.existsSync(require$$0$3.resolve(targetPath, file))).length;
-  return {
-    id: id2,
-    label: env2.label,
-    targetPath,
-    markerExists,
-    installedCount,
-    totalExpected: commandFiles.length
-  };
+function listProviderCredentials() {
+  return request("/provider-credentials");
 }
-function getAgentInstallStatus(repoPath) {
-  const resolvedRepoPath = require$$0$3.resolve(repoPath);
-  const environments = [
-    getEnvironmentStatus(resolvedRepoPath, "cursor"),
-    getEnvironmentStatus(resolvedRepoPath, "codex"),
-    getEnvironmentStatus(resolvedRepoPath, "claude")
-  ];
-  return {
-    repoPath: resolvedRepoPath,
-    hasWorkspacePointer: require$$1$2.existsSync(require$$0$3.resolve(resolvedRepoPath, "_nakiros", "workspace.yaml")),
-    environments
-  };
+function createProviderCredential(input) {
+  return request("/provider-credentials", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
-function installAgents(request2) {
-  const repoPath = require$$0$3.resolve(request2.repoPath);
-  if (!require$$1$2.existsSync(repoPath) || !require$$1$2.lstatSync(repoPath).isDirectory()) {
-    throw new Error(`Répertoire invalide: ${repoPath}`);
-  }
-  if (!request2.targets.length) {
-    throw new Error("Sélectionne au moins un environnement cible.");
-  }
-  const force = request2.force ?? true;
-  let commandFilesCopied = 0;
-  let commandFilesOverwritten = 0;
-  for (const target of request2.targets) {
-    const env2 = ENVIRONMENTS[target];
-    const envTargetPath = require$$0$3.resolve(repoPath, env2.targetRelativePath);
-    require$$1$2.mkdirSync(envTargetPath, { recursive: true });
-    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
-      const targetPath = require$$0$3.resolve(envTargetPath, fileName);
-      const targetExists = require$$1$2.existsSync(targetPath);
-      if (targetExists && !force) continue;
-      require$$1$2.writeFileSync(targetPath, content, "utf8");
-      if (targetExists) commandFilesOverwritten += 1;
-      else commandFilesCopied += 1;
-    }
-  }
-  return {
-    repoPath,
-    targets: request2.targets,
-    commandFilesCopied,
-    commandFilesOverwritten,
-    runtimeFilesCopied: 0,
-    runtimeFilesOverwritten: 0,
-    workspaceDirsCreated: 0,
-    gitignorePatched: false
-  };
+function updateProviderCredential(credentialId, input) {
+  return request(`/provider-credentials/${credentialId}`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
 }
-function ensureCommandsInRepo(repoPath, provider) {
-  const resolvedRepoPath = require$$0$3.resolve(repoPath);
-  if (!require$$1$2.existsSync(resolvedRepoPath) || !require$$1$2.lstatSync(resolvedRepoPath).isDirectory()) {
-    throw new Error(`Répertoire invalide: ${resolvedRepoPath}`);
-  }
-  const env2 = ENVIRONMENTS[provider];
-  const targetDir = require$$0$3.resolve(resolvedRepoPath, env2.targetRelativePath);
-  require$$1$2.mkdirSync(targetDir, { recursive: true });
-  for (const [fileName, content] of Object.entries(readCommandTemplates())) {
-    const targetPath = require$$0$3.resolve(targetDir, fileName);
-    if (require$$1$2.existsSync(targetPath)) continue;
-    require$$1$2.writeFileSync(targetPath, content, "utf8");
-  }
+function revokeProviderCredential(credentialId) {
+  return request(`/provider-credentials/${credentialId}/revoke`, {
+    method: "POST"
+  });
+}
+async function deleteProviderCredential(credentialId, force = false) {
+  return request(`/provider-credentials/${credentialId}${force ? "?force=true" : ""}`, {
+    method: "DELETE"
+  });
+}
+function getWorkspaceProviderCredentials(workspaceId) {
+  return request(`/ws/${workspaceId}/provider-credentials`);
+}
+function bindWorkspaceProviderCredential(workspaceId, input) {
+  return request(`/ws/${workspaceId}/provider-credentials/bind`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+function unbindWorkspaceProviderCredential(workspaceId, credentialId) {
+  return request(`/ws/${workspaceId}/provider-credentials/${credentialId}`, {
+    method: "DELETE"
+  });
+}
+function setWorkspaceProviderDefault(workspaceId, input) {
+  return request(`/ws/${workspaceId}/provider-credentials/default`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
 }
 const BASE_URL$1 = "https://updates.nakiros.com";
 const GLOBAL_DIR$2 = require$$0$3.join(os.homedir(), ".nakiros");
 const VERSION_FILE = require$$0$3.join(GLOBAL_DIR$2, "version.json");
+const COMMANDS_META_FILE = require$$0$3.join(GLOBAL_DIR$2, "commands-meta.json");
 const APP_SUPPORTED_FEATURES = [];
 const API_KEYS = {
   stable: "019cbafa-2570-7216-8639-1a4aaab35d20",
@@ -53132,6 +55247,14 @@ function getVersionInfo() {
 function writeVersionInfo(info) {
   require$$1$2.mkdirSync(GLOBAL_DIR$2, { recursive: true });
   require$$1$2.writeFileSync(VERSION_FILE, JSON.stringify(info, null, 2) + "\n", "utf-8");
+}
+function saveCommandsMeta(files) {
+  const meta = {};
+  for (const f of files) {
+    if (f.type === "command" && f.meta) meta[f.name] = f.meta;
+  }
+  require$$1$2.mkdirSync(GLOBAL_DIR$2, { recursive: true });
+  require$$1$2.writeFileSync(COMMANDS_META_FILE, JSON.stringify(meta, null, 2) + "\n", "utf-8");
 }
 function shouldCheck(local) {
   if (!local) return true;
@@ -53173,6 +55296,10 @@ async function checkForUpdates(force = false, channel = "stable") {
     }
     manifest = await res.json();
     console.log(`[update-checker] Manifest OK — version=${manifest.version} channel=${manifest.channel} compatible=${manifest.compatible ?? "(not set)"} files=${manifest.files?.length ?? "n/a"}`);
+    try {
+      saveCommandsMeta(manifest.files ?? []);
+    } catch {
+    }
   } catch (err) {
     console.warn("[update-checker] Manifest fetch failed:", err.message);
     return { ...noUpdate, networkError: true };
@@ -53259,6 +55386,197 @@ async function applyUpdate(files, bundleVersion, win, onFileProgress) {
       installed_at: now,
       files: { ...local?.files ?? {}, ...updatedHashes }
     });
+  }
+}
+const GLOBAL_RUNTIME_DIR = require$$0$3.resolve(os.homedir(), ".nakiros");
+const ENVIRONMENTS = {
+  cursor: {
+    label: "Cursor",
+    markerRelativePath: ".cursor",
+    targetRelativePath: ".cursor/commands"
+  },
+  codex: {
+    label: "Codex",
+    markerRelativePath: ".codex",
+    targetRelativePath: ".codex/prompts"
+  },
+  claude: {
+    label: "Claude Code",
+    markerRelativePath: ".claude",
+    targetRelativePath: ".claude/commands"
+  }
+};
+function readCommandTemplates() {
+  const dir = require$$0$3.resolve(GLOBAL_RUNTIME_DIR, "commands");
+  if (!require$$1$2.existsSync(dir)) return {};
+  return Object.fromEntries(
+    require$$1$2.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith(".md")).map((e) => [e.name, require$$1$2.readFileSync(require$$0$3.resolve(dir, e.name), "utf8")])
+  );
+}
+function parseInstalledCommand(fileName) {
+  if (!fileName.endsWith(".md")) return null;
+  const commandName = fileName.replace(/\.md$/i, "");
+  if (!/^nak-(?:agent|workflow)-[a-z0-9-]+$/.test(commandName)) return null;
+  const kind = commandName.startsWith("nak-workflow-") ? "workflow" : "agent";
+  const id2 = commandName.replace(/^nak-(?:agent|workflow)-/, "");
+  return {
+    id: id2,
+    command: `/${commandName}`,
+    kind,
+    fileName
+  };
+}
+function readCommandsMeta() {
+  try {
+    if (require$$1$2.existsSync(COMMANDS_META_FILE)) {
+      return JSON.parse(require$$1$2.readFileSync(COMMANDS_META_FILE, "utf-8"));
+    }
+  } catch {
+  }
+  return {};
+}
+function getInstalledCommands() {
+  const dir = require$$0$3.resolve(GLOBAL_RUNTIME_DIR, "commands");
+  if (!require$$1$2.existsSync(dir)) return [];
+  const metaMap = readCommandsMeta();
+  return require$$1$2.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => {
+    const cmd = parseInstalledCommand(entry.name);
+    if (!cmd) return null;
+    const commandName = entry.name.replace(/\.md$/i, "");
+    const meta = metaMap[`nak-${cmd.kind}-${cmd.id}`] ?? metaMap[commandName];
+    return meta ? { ...cmd, meta } : cmd;
+  }).filter((entry) => entry != null).sort((a, b) => a.command.localeCompare(b.command));
+}
+function getGlobalInstallStatus() {
+  const home = os.homedir();
+  const ids = ["claude", "codex", "cursor"];
+  const environments = ids.map((id2) => {
+    const env2 = ENVIRONMENTS[id2];
+    const targetDir = require$$0$3.resolve(home, env2.targetRelativePath);
+    const commandFiles = Object.keys(readCommandTemplates());
+    const installed = commandFiles.filter((file) => require$$1$2.existsSync(require$$0$3.resolve(targetDir, file))).length;
+    return {
+      id: id2,
+      label: env2.label,
+      targetDir,
+      installed,
+      total: commandFiles.length
+    };
+  });
+  return {
+    environments,
+    totalInstalled: environments.reduce((acc, item) => acc + item.installed, 0),
+    totalExpected: environments.reduce((acc, item) => acc + item.total, 0)
+  };
+}
+function installAgentsGlobally() {
+  const home = os.homedir();
+  const ids = ["claude", "codex", "cursor"];
+  const environments = [];
+  let commandFilesCopied = 0;
+  let commandFilesOverwritten = 0;
+  for (const id2 of ids) {
+    const env2 = ENVIRONMENTS[id2];
+    const targetDir = require$$0$3.resolve(home, env2.targetRelativePath);
+    require$$1$2.mkdirSync(targetDir, { recursive: true });
+    let copiedForEnv = 0;
+    let overwrittenForEnv = 0;
+    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
+      const targetPath = require$$0$3.resolve(targetDir, fileName);
+      const targetExists = require$$1$2.existsSync(targetPath);
+      require$$1$2.writeFileSync(targetPath, content, "utf8");
+      if (targetExists) {
+        overwrittenForEnv += 1;
+        commandFilesOverwritten += 1;
+      } else {
+        copiedForEnv += 1;
+        commandFilesCopied += 1;
+      }
+    }
+    environments.push({
+      id: id2,
+      label: env2.label,
+      targetDir,
+      commandFilesCopied: copiedForEnv,
+      commandFilesOverwritten: overwrittenForEnv
+    });
+  }
+  return { environments, commandFilesCopied, commandFilesOverwritten };
+}
+function getEnvironmentStatus(repoPath, id2) {
+  const env2 = ENVIRONMENTS[id2];
+  const markerExists = require$$1$2.existsSync(require$$0$3.resolve(repoPath, env2.markerRelativePath));
+  const targetPath = require$$0$3.resolve(repoPath, env2.targetRelativePath);
+  const commandFiles = Object.keys(readCommandTemplates());
+  const installedCount = commandFiles.filter((file) => require$$1$2.existsSync(require$$0$3.resolve(targetPath, file))).length;
+  return {
+    id: id2,
+    label: env2.label,
+    targetPath,
+    markerExists,
+    installedCount,
+    totalExpected: commandFiles.length
+  };
+}
+function getAgentInstallStatus(repoPath) {
+  const resolvedRepoPath = require$$0$3.resolve(repoPath);
+  const environments = [
+    getEnvironmentStatus(resolvedRepoPath, "cursor"),
+    getEnvironmentStatus(resolvedRepoPath, "codex"),
+    getEnvironmentStatus(resolvedRepoPath, "claude")
+  ];
+  return {
+    repoPath: resolvedRepoPath,
+    environments
+  };
+}
+function installAgents(request2) {
+  const repoPath = require$$0$3.resolve(request2.repoPath);
+  if (!require$$1$2.existsSync(repoPath) || !require$$1$2.lstatSync(repoPath).isDirectory()) {
+    throw new Error(`Répertoire invalide: ${repoPath}`);
+  }
+  if (!request2.targets.length) {
+    throw new Error("Sélectionne au moins un environnement cible.");
+  }
+  const force = request2.force ?? true;
+  let commandFilesCopied = 0;
+  let commandFilesOverwritten = 0;
+  for (const target of request2.targets) {
+    const env2 = ENVIRONMENTS[target];
+    const envTargetPath = require$$0$3.resolve(repoPath, env2.targetRelativePath);
+    require$$1$2.mkdirSync(envTargetPath, { recursive: true });
+    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
+      const targetPath = require$$0$3.resolve(envTargetPath, fileName);
+      const targetExists = require$$1$2.existsSync(targetPath);
+      if (targetExists && !force) continue;
+      require$$1$2.writeFileSync(targetPath, content, "utf8");
+      if (targetExists) commandFilesOverwritten += 1;
+      else commandFilesCopied += 1;
+    }
+  }
+  return {
+    repoPath,
+    targets: request2.targets,
+    commandFilesCopied,
+    commandFilesOverwritten,
+    runtimeFilesCopied: 0,
+    runtimeFilesOverwritten: 0,
+    workspaceDirsCreated: 0,
+    gitignorePatched: false
+  };
+}
+function ensureCommandsInRepo(repoPath, provider) {
+  const resolvedRepoPath = require$$0$3.resolve(repoPath);
+  if (!require$$1$2.existsSync(resolvedRepoPath) || !require$$1$2.lstatSync(resolvedRepoPath).isDirectory()) {
+    throw new Error(`Répertoire invalide: ${resolvedRepoPath}`);
+  }
+  const env2 = ENVIRONMENTS[provider];
+  const targetDir = require$$0$3.resolve(resolvedRepoPath, env2.targetRelativePath);
+  require$$1$2.mkdirSync(targetDir, { recursive: true });
+  for (const [fileName, content] of Object.entries(readCommandTemplates())) {
+    const targetPath = require$$0$3.resolve(targetDir, fileName);
+    if (require$$1$2.existsSync(targetPath)) continue;
+    require$$1$2.writeFileSync(targetPath, content, "utf8");
   }
 }
 const GLOBAL_DIR$1 = require$$0$3.join(os.homedir(), ".nakiros");
@@ -53426,7 +55744,7 @@ const PROVIDERS = [
   { provider: "codex", label: "Codex", command: "codex", versionArgs: ["--version"] },
   { provider: "cursor", label: "Cursor Agent", command: "cursor-agent", versionArgs: ["--version"] }
 ];
-function collectManagerPaths$1() {
+function collectManagerPaths() {
   const home = os.homedir();
   const paths = [
     require$$0$3.resolve(home, ".volta/bin"),
@@ -53450,40 +55768,40 @@ function collectManagerPaths$1() {
   }
   return paths.filter((p, i, arr) => require$$1$2.existsSync(p) && arr.indexOf(p) === i);
 }
-const extraPaths$1 = [
+const extraPaths = [
   `${os.homedir()}/.bun/bin`,
   `${os.homedir()}/.local/bin`,
   `${os.homedir()}/.npm-global/bin`,
-  ...collectManagerPaths$1(),
+  ...collectManagerPaths(),
   "/opt/homebrew/bin",
   "/usr/local/bin",
   "/usr/bin",
   "/bin"
 ].join(":");
-function buildEnv$1() {
+function buildEnv() {
   const base = process.env;
   const current = base["PATH"] ?? "";
   return {
     ...base,
-    PATH: current ? `${current}:${extraPaths$1}` : extraPaths$1
+    PATH: current ? `${current}:${extraPaths}` : extraPaths
   };
 }
-function resolveShell$2() {
+function resolveShell$1() {
   if (os.platform() === "win32") return "powershell.exe";
   const candidates = [process.env["SHELL"], "/bin/zsh", "/bin/bash", "/bin/sh"];
   return candidates.find((s) => s && require$$1$2.existsSync(s)) ?? "/bin/sh";
 }
-function shellEscape$1(value) {
+function shellEscape(value) {
   return value.replace(/'/g, "'\\''");
 }
 function runShellCommand(commandLine, timeout) {
   const currentPlatform = os.platform();
-  const shell2 = resolveShell$2();
+  const shell2 = resolveShell$1();
   const args = currentPlatform === "win32" ? ["-NoProfile", "-Command", commandLine] : ["-l", "-c", commandLine];
   return child_process.spawnSync(shell2, args, {
     encoding: "utf8",
     timeout,
-    env: buildEnv$1()
+    env: buildEnv()
   });
 }
 function firstNonEmptyLine(value) {
@@ -53494,14 +55812,14 @@ function firstNonEmptyLine(value) {
   return void 0;
 }
 function resolveCommandPath(command) {
-  const result = os.platform() === "win32" ? runShellCommand(`(Get-Command ${command} -ErrorAction SilentlyContinue).Source`, 5e3) : runShellCommand(`command -v '${shellEscape$1(command)}'`, 5e3);
+  const result = os.platform() === "win32" ? runShellCommand(`(Get-Command ${command} -ErrorAction SilentlyContinue).Source`, 5e3) : runShellCommand(`command -v '${shellEscape(command)}'`, 5e3);
   if (result.status !== 0) return void 0;
   return firstNonEmptyLine(result.stdout ?? "");
 }
 function detectVersion(command, args) {
   const currentPlatform = os.platform();
-  const quotedArgs = currentPlatform === "win32" ? args.join(" ") : args.map((arg) => `'${shellEscape$1(arg)}'`).join(" ");
-  const commandLine = currentPlatform === "win32" ? `${command} ${quotedArgs}`.trim() : `'${shellEscape$1(command)}' ${quotedArgs}`.trim();
+  const quotedArgs = currentPlatform === "win32" ? args.join(" ") : args.map((arg) => `'${shellEscape(arg)}'`).join(" ");
+  const commandLine = currentPlatform === "win32" ? `${command} ${quotedArgs}`.trim() : `'${shellEscape(command)}' ${quotedArgs}`.trim();
   const result = runShellCommand(commandLine, 7e3);
   if (result.error) {
     const err = result.error;
@@ -53619,6 +55937,225 @@ function bulkSaveEpics(workspaceSlug, epics) {
   }
   return { created, updated };
 }
+function getWorkspaceRuntimeDir(workspaceName) {
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", toWorkspaceSlug$1(workspaceName));
+}
+function getStatePath(workspaceName) {
+  return require$$0$3.join(getWorkspaceRuntimeDir(workspaceName), "state", "getting-started.json");
+}
+function getContextDir$2(workspaceName) {
+  return require$$0$3.join(getWorkspaceRuntimeDir(workspaceName), "context");
+}
+function getConfidenceDir(workspaceName) {
+  return require$$0$3.join(getWorkspaceRuntimeDir(workspaceName), "reports", "confidence");
+}
+function emptyStep() {
+  return { completedAt: null, launchedConversationId: null };
+}
+function defaultState() {
+  return {
+    step1: emptyStep(),
+    step2: emptyStep(),
+    step3: emptyStep(),
+    brownfieldMode: false
+  };
+}
+function getGettingStartedState(workspaceName) {
+  const statePath = getStatePath(workspaceName);
+  if (!require$$1$2.existsSync(statePath)) return defaultState();
+  try {
+    return JSON.parse(require$$1$2.readFileSync(statePath, "utf-8"));
+  } catch {
+    return defaultState();
+  }
+}
+function saveGettingStartedState(workspaceName, state) {
+  const stateDir = require$$0$3.join(getWorkspaceRuntimeDir(workspaceName), "state");
+  if (!require$$1$2.existsSync(stateDir)) require$$1$2.mkdirSync(stateDir, { recursive: true });
+  require$$1$2.writeFileSync(getStatePath(workspaceName), JSON.stringify(state, null, 2), "utf-8");
+}
+function detectBrownfield(repoPaths) {
+  return repoPaths.some((repoPath) => require$$1$2.existsSync(require$$0$3.join(repoPath, "_nakiros", "architecture.md")));
+}
+function checkStep1Complete(workspaceName) {
+  const contextDir = getContextDir$2(workspaceName);
+  if (!require$$1$2.existsSync(contextDir)) return false;
+  const CONTEXT_FILES = ["global-context.md", "inter-repo.md", "product-context.md"];
+  return CONTEXT_FILES.some((filename) => require$$1$2.existsSync(require$$0$3.join(contextDir, filename)));
+}
+function checkStep2Complete(workspaceName) {
+  const confidenceDir = getConfidenceDir(workspaceName);
+  if (!require$$1$2.existsSync(confidenceDir)) return false;
+  try {
+    return require$$1$2.readdirSync(confidenceDir).some((file) => file.endsWith(".json"));
+  } catch {
+    return false;
+  }
+}
+function getGettingStartedContext(workspaceName, repoPaths) {
+  const state = getGettingStartedState(workspaceName);
+  const brownfieldMode = detectBrownfield(repoPaths);
+  const step1Complete = checkStep1Complete(workspaceName) || state.step1.completedAt !== null;
+  const step2Complete = checkStep2Complete(workspaceName) || state.step2.completedAt !== null;
+  if (state.brownfieldMode !== brownfieldMode) {
+    saveGettingStartedState(workspaceName, { ...state, brownfieldMode });
+  }
+  return { state, brownfieldMode, step1Complete, step2Complete };
+}
+const WORKER_API$2 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
+async function getBacklogStories(workspaceId) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return [];
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories`, {
+    headers: { Authorization: `Bearer ${resolved.token}` }
+  });
+  if (!response2.ok) return [];
+  return await response2.json().catch(() => []);
+}
+async function createBacklogEpic(workspaceId, body) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error("Not authenticated");
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/epics`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resolved.token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response2.ok) throw new Error(`Failed to create epic: ${response2.status}`);
+  return await response2.json();
+}
+async function updateBacklogEpic(workspaceId, epicId, body) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error("Not authenticated");
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/epics/${epicId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${resolved.token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response2.ok) throw new Error(`Failed to update epic: ${response2.status}`);
+  return await response2.json();
+}
+async function createBacklogStory(workspaceId, body) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error("Not authenticated");
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resolved.token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response2.ok) throw new Error(`Failed to create story: ${response2.status}`);
+  return await response2.json();
+}
+async function updateBacklogStory(workspaceId, storyId, body) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error("Not authenticated");
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories/${storyId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${resolved.token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response2.ok) throw new Error(`Failed to update story: ${response2.status}`);
+  return await response2.json();
+}
+async function getBacklogEpics(workspaceId) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return [];
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/epics`, {
+    headers: { Authorization: `Bearer ${resolved.token}` }
+  });
+  if (!response2.ok) return [];
+  return await response2.json().catch(() => []);
+}
+async function getBacklogTasks(workspaceId, storyId) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return [];
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories/${storyId}/tasks`, {
+    headers: { Authorization: `Bearer ${resolved.token}` }
+  });
+  if (!response2.ok) return [];
+  return await response2.json().catch(() => []);
+}
+async function createBacklogTask(workspaceId, storyId, body) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error("Not authenticated");
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories/${storyId}/tasks`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resolved.token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response2.ok) throw new Error(`Failed to create task: ${response2.status}`);
+  return await response2.json();
+}
+async function updateBacklogTask(workspaceId, storyId, taskId, body) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error("Not authenticated");
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories/${storyId}/tasks/${taskId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${resolved.token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response2.ok) throw new Error(`Failed to update task: ${response2.status}`);
+  return await response2.json();
+}
+async function getBacklogSprints(workspaceId) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return [];
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/sprints`, {
+    headers: { Authorization: `Bearer ${resolved.token}` }
+  });
+  if (!response2.ok) return [];
+  return await response2.json().catch(() => []);
+}
+async function createBacklogSprint(workspaceId, body) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error("Not authenticated");
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/sprints`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resolved.token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response2.ok) throw new Error(`Failed to create sprint: ${response2.status}`);
+  return await response2.json();
+}
+async function updateBacklogSprint(workspaceId, sprintId, body) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) throw new Error("Not authenticated");
+  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/sprints/${sprintId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${resolved.token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response2.ok) {
+    const errorBody = await response2.json().catch(() => ({}));
+    const err = new Error(errorBody.error ?? `Failed to update sprint: ${response2.status}`);
+    err.code = errorBody.code;
+    throw err;
+  }
+  return await response2.json();
+}
 function generateContext(workspaceId, ticketId, workspace) {
   const allTickets = getTickets(workspaceId);
   const epics = getEpics(workspaceId);
@@ -53699,7 +56236,7 @@ function resolveNodePtySpawn() {
   }
   throw new Error("node-pty introuvable dans l’application packagée.");
 }
-function resolveShell$1() {
+function resolveShell() {
   if (os.platform() === "win32") return "powershell.exe";
   const candidates = [
     process.env["SHELL"],
@@ -53726,8 +56263,8 @@ function resolveEnv() {
     TERM: "xterm-256color"
   };
 }
-const shell = resolveShell$1();
-const env$1 = resolveEnv();
+const shell = resolveShell();
+const env = resolveEnv();
 const terminals = /* @__PURE__ */ new Map();
 let terminalCounter = 0;
 function createTerminal(repoPath, onData, onExit) {
@@ -53739,7 +56276,7 @@ function createTerminal(repoPath, onData, onExit) {
     cols: 80,
     rows: 24,
     cwd,
-    env: env$1
+    env
   });
   pty.onData(onData);
   pty.onExit(({ exitCode }) => {
@@ -53762,287 +56299,64 @@ function destroyTerminal(terminalId) {
     terminals.delete(terminalId);
   }
 }
-function collectManagerPaths() {
-  const home = os.homedir();
-  const paths = [
-    require$$0$3.resolve(home, ".volta/bin"),
-    require$$0$3.resolve(home, ".asdf/shims"),
-    require$$0$3.resolve(home, ".nvm/current/bin"),
-    require$$0$3.resolve(home, ".fnm")
-  ];
-  const nvmVersionsDir = require$$0$3.resolve(home, ".nvm/versions/node");
-  if (require$$1$2.existsSync(nvmVersionsDir)) {
-    for (const entry of require$$1$2.readdirSync(nvmVersionsDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      paths.push(require$$0$3.resolve(nvmVersionsDir, entry.name, "bin"));
-    }
+function resolveNakirosBin$1() {
+  if (electron.app.isPackaged) {
+    return require$$0$3.join(process.resourcesPath, "nakiros");
   }
-  const fnmVersionsDir = require$$0$3.resolve(home, ".local/share/fnm/node-versions");
-  if (require$$1$2.existsSync(fnmVersionsDir)) {
-    for (const entry of require$$1$2.readdirSync(fnmVersionsDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      paths.push(require$$0$3.resolve(fnmVersionsDir, entry.name, "installation/bin"));
-    }
-  }
-  return paths.filter((p, i, arr) => require$$1$2.existsSync(p) && arr.indexOf(p) === i);
-}
-const extraPaths = [
-  `${os.homedir()}/.bun/bin`,
-  `${os.homedir()}/.local/bin`,
-  `${os.homedir()}/.npm-global/bin`,
-  ...collectManagerPaths(),
-  "/opt/homebrew/bin",
-  "/usr/local/bin",
-  "/usr/bin",
-  "/bin"
-].join(":");
-function buildEnv() {
-  const base = process.env;
-  const current = base["PATH"] ?? "";
-  return {
-    ...base,
-    PATH: current ? `${current}:${extraPaths}` : extraPaths
-  };
-}
-function resolveShell() {
-  if (os.platform() === "win32") return "powershell.exe";
-  const candidates = [process.env["SHELL"], "/bin/zsh", "/bin/bash", "/bin/sh"];
-  return candidates.find((s) => s && require$$1$2.existsSync(s)) ?? "/bin/sh";
-}
-const env = buildEnv();
-const userShell = resolveShell();
-function formatTool(name, input) {
-  const s = (v) => String(v ?? "");
-  const truncate = (str, max2 = 72) => str.length > max2 ? str.slice(0, max2) + "…" : str;
-  switch (name) {
-    case "Read":
-      return `Reading ${s(input["file_path"])}`;
-    case "Write":
-      return `Writing ${s(input["file_path"])}`;
-    case "Edit":
-    case "MultiEdit":
-      return `Editing ${s(input["file_path"])}`;
-    case "Bash":
-      return `$ ${truncate(s(input["command"]))}`;
-    case "Glob":
-      return `Glob: ${s(input["pattern"])}`;
-    case "Grep":
-      return `Grep: ${s(input["pattern"])} in ${s(input["path"] ?? ".")}`;
-    case "TodoWrite":
-      return "Updating tasks";
-    case "WebFetch":
-      return `Fetch: ${truncate(s(input["url"]), 60)}`;
-    case "WebSearch":
-      return `Search: ${s(input["query"])}`;
-    case "Task":
-      return `Sub-agent: ${truncate(s(input["description"]), 60)}`;
-    default:
-      return name;
-  }
-}
-function shellEscape(value) {
-  return value.replace(/'/g, "'\\''");
-}
-function formatProviderName(provider) {
-  if (provider === "claude") return "Claude";
-  if (provider === "codex") return "Codex";
-  return "Cursor";
-}
-function normalizeCodexSlashCommand(message, cwd) {
-  const leadingWhitespaceLength = message.length - message.trimStart().length;
-  const leadingWhitespace = message.slice(0, leadingWhitespaceLength);
-  const trimmed = message.trimStart();
-  const commandMatch = trimmed.match(/^\/(nak-(?:agent|workflow)-[^\s]+)/);
-  if (!commandMatch) return message;
-  const commandName = commandMatch[1];
-  if (!commandName) return message;
-  const promptPath = require$$0$3.resolve(cwd, ".codex", "prompts", `${commandName}.md`);
-  if (!require$$1$2.existsSync(promptPath)) return message;
-  return `${leadingWhitespace}/prompts:${commandName}${trimmed.slice(commandMatch[0].length)}`;
-}
-function expandCodexPromptCommand(message, cwd) {
-  const leadingWhitespaceLength = message.length - message.trimStart().length;
-  const leadingWhitespace = message.slice(0, leadingWhitespaceLength);
-  const trimmed = message.trimStart();
-  const commandMatch = trimmed.match(/^\/(nak-(?:agent|workflow)-[^\s]+)/);
-  if (!commandMatch) return normalizeCodexSlashCommand(message, cwd);
-  const commandName = commandMatch[1];
-  if (!commandName) return normalizeCodexSlashCommand(message, cwd);
-  const promptPath = require$$0$3.resolve(cwd, ".codex", "prompts", `${commandName}.md`);
-  if (!require$$1$2.existsSync(promptPath)) return normalizeCodexSlashCommand(message, cwd);
-  let promptContent = "";
-  try {
-    promptContent = require$$1$2.readFileSync(promptPath, "utf8").trim();
-  } catch {
-    return normalizeCodexSlashCommand(message, cwd);
-  }
-  const trailingInput = trimmed.slice(commandMatch[0].length).trim();
-  const sections = [
-    `Command Trigger: \`/${commandName}\``,
-    `Prompt Source: ${promptPath}`,
-    "The full prompt content is provided below. Apply it directly without scanning the filesystem to locate prompt files.",
-    promptContent
-  ];
-  if (trailingInput) {
-    sections.push(`User Input:
-${trailingInput}`);
-  }
-  return `${leadingWhitespace}${sections.join("\n\n")}`;
-}
-function buildRunnerCommand(args) {
-  const addDirFlags = args.additionalDirs.filter((d) => d && d !== args.cwd && require$$1$2.existsSync(d)).map((d) => `--add-dir '${shellEscape(d)}'`);
-  const addDirCount = addDirFlags.length;
-  const addDirPart = addDirCount > 0 ? `${addDirFlags.join(" ")} ` : "";
-  if (args.provider === "codex") {
-    const effectiveMessage = expandCodexPromptCommand(args.message, args.cwd);
-    const escapedMessage2 = shellEscape(effectiveMessage);
-    const topLevelFlags = `--dangerously-bypass-approvals-and-sandbox${addDirCount > 0 ? ` ${addDirFlags.join(" ")}` : ""}`;
-    const resumePart = args.sessionId ? `exec resume --json --skip-git-repo-check '${shellEscape(args.sessionId)}' '${escapedMessage2}'` : `exec --json --skip-git-repo-check '${escapedMessage2}'`;
-    const shellCommand2 = `codex ${topLevelFlags} ${resumePart}`;
-    const displayCommand2 = `codex ${args.sessionId ? "resume " : ""}${addDirCount > 0 ? `(+${addDirCount} dirs) ` : ""}'${args.message.slice(0, 80)}${args.message.length > 80 ? "…" : ""}'`;
-    return { shellCommand: shellCommand2, displayCommand: displayCommand2, addDirCount };
-  }
-  if (args.provider === "cursor") {
-    const escapedMessage2 = shellEscape(args.message);
-    const resumePart = args.sessionId ? `--resume '${shellEscape(args.sessionId)}' ` : "";
-    const workspacePart = `--workspace '${shellEscape(args.cwd)}' `;
-    const shellCommand2 = `cursor-agent --print --output-format stream-json --stream-partial-output --force --trust ${workspacePart}${resumePart}'${escapedMessage2}'`;
-    const displayCommand2 = `cursor-agent ${args.sessionId ? "resume " : ""}--print '${args.message.slice(0, 80)}${args.message.length > 80 ? "…" : ""}'`;
-    return { shellCommand: shellCommand2, displayCommand: displayCommand2, addDirCount };
-  }
-  const escapedMessage = shellEscape(args.message);
-  const resumeFlag = args.sessionId ? `--resume '${shellEscape(args.sessionId)}' ` : "";
-  const shellCommand = `claude --output-format stream-json --verbose --dangerously-skip-permissions ${addDirPart}${resumeFlag}--print '${escapedMessage}'`;
-  const displayCommand = `claude ${addDirCount > 0 ? `(+${addDirCount} repos) ` : ""}${resumeFlag}--print '${args.message.slice(0, 80)}${args.message.length > 80 ? "…" : ""}'`;
-  return { shellCommand, displayCommand, addDirCount };
-}
-function installHint(provider) {
-  if (provider === "codex") {
-    return "`codex` CLI not found.\nInstall Codex CLI and ensure it is on PATH.";
-  }
-  if (provider === "cursor") {
-    return "`cursor-agent` CLI not found.\nInstall Cursor Agent CLI and ensure it is on PATH.";
-  }
-  return "`claude` CLI not found.\nMake sure Claude Code is installed: https://claude.ai/code";
-}
-function handleClaudeLikeEvent(event, onEvent, state) {
-  switch (event.type) {
-    case "system": {
-      const sys = event;
-      if (sys.session_id) {
-        onEvent({ type: "session", id: sys.session_id });
-      }
-      return;
-    }
-    case "assistant": {
-      const ast = event;
-      if (ast.session_id) onEvent({ type: "session", id: ast.session_id });
-      for (const block of ast.message.content ?? []) {
-        if (block.type === "text" && block.text) {
-          state.hasEmittedText = true;
-          onEvent({ type: "text", text: block.text });
-        } else if (block.type === "tool_use") {
-          const display = formatTool(block.name, block.input ?? {});
-          onEvent({ type: "tool", name: block.name, display });
-        }
-      }
-      return;
-    }
-    case "result": {
-      const res = event;
-      if (res.session_id) onEvent({ type: "session", id: res.session_id });
-      if (!state.hasEmittedText && res.result) {
-        onEvent({ type: "text", text: res.result });
-      }
-      return;
-    }
-    default:
-      return;
-  }
-}
-function handleCodexEvent(event, onEvent, state) {
-  if (event.type === "thread.started" && typeof event.thread_id === "string") {
-    onEvent({ type: "session", id: event.thread_id });
-    return;
-  }
-  if (!event.item) return;
-  if (event.type === "item.started" && event.item.type === "command_execution" && event.item.command) {
-    onEvent({ type: "tool", name: "Bash", display: `$ ${event.item.command}` });
-    return;
-  }
-  if (event.type === "item.completed") {
-    if (event.item.type === "agent_message" && event.item.text) {
-      state.hasEmittedText = true;
-      onEvent({ type: "text", text: event.item.text });
-      return;
-    }
-    if (event.item.type === "command_execution" && event.item.command) {
-      onEvent({ type: "tool", name: "Bash", display: `$ ${event.item.command}` });
-    }
-  }
+  const workspaceRoot = require$$0$3.join(__dirname, "../../../../..");
+  const devBin = require$$0$3.join(workspaceRoot, "node_modules", ".bin", "nakiros");
+  if (require$$1$2.existsSync(devBin)) return devBin;
+  return "nakiros";
 }
 const runs = /* @__PURE__ */ new Map();
 let runCounter = 0;
-function hasProjectMarkers(candidate) {
-  return require$$1$2.existsSync(require$$0$3.resolve(candidate, "_nakiros", "workspace.yaml"));
-}
-function resolveAgentCwd(repoPath, additionalDirs) {
-  const normalizedCandidates = Array.from(/* @__PURE__ */ new Set([
-    ...repoPath ? [require$$0$3.resolve(repoPath)] : [],
-    ...(additionalDirs ?? []).filter((d) => d.trim().length > 0).map((d) => require$$0$3.resolve(d))
-  ])).filter((candidate) => require$$1$2.existsSync(candidate));
-  const projectScopedCwd = normalizedCandidates.find((candidate) => hasProjectMarkers(candidate));
-  if (projectScopedCwd) return projectScopedCwd;
-  if (normalizedCandidates.length > 0) return normalizedCandidates[0];
-  const fallbackCwd = require$$0$3.resolve(os.homedir(), ".nakiros");
-  require$$1$2.mkdirSync(fallbackCwd, { recursive: true });
-  return fallbackCwd;
-}
-function runAgentCommand(provider, request2, onStart, onEvent, onDone, onRawLine) {
-  const runId = `run-${++runCounter}`;
-  const repoPath = request2.anchorRepoPath;
-  const message = request2.message;
-  const sessionId = request2.sessionId ?? null;
-  const participantId = request2.participantId ?? null;
-  const additionalDirs = request2.additionalDirs ?? request2.activeRepoPaths;
-  const cwd = resolveAgentCwd(repoPath, additionalDirs);
-  const mergedAdditionalDirs = Array.from(/* @__PURE__ */ new Set([
-    ...repoPath ? [require$$0$3.resolve(repoPath)] : [],
-    ...(additionalDirs ?? []).filter((d) => d.trim().length > 0).map((d) => require$$0$3.resolve(d))
-  ])).filter((d) => d !== cwd && require$$1$2.existsSync(d));
-  const { shellCommand, displayCommand, addDirCount } = buildRunnerCommand({
+function runAgentCommand(provider, request2, onStart, onEvent, onDone, _onRawLine) {
+  const bridgeRunId = `run-${++runCounter}`;
+  const nakirosBin = resolveNakirosBin$1();
+  const additionalDirs = request2.additionalDirs ?? request2.activeRepoPaths ?? [];
+  const agentId = request2.agentId ?? "default";
+  const legacyProviderSessionId = request2.providerSessionId ?? request2.sessionId;
+  const args = [
+    "run",
+    "--agent",
     provider,
-    message,
-    sessionId,
-    additionalDirs: mergedAdditionalDirs,
-    cwd
-  });
-  console.log(`[agent-runner] Starting run ${runId} (${formatProviderName(provider)}) (session: ${sessionId ?? "new"})`);
-  if (participantId) {
-    console.log(`[agent-runner] Participant: ${participantId}`);
-  }
-  console.log(`[agent-runner] Shell: ${userShell}`);
-  console.log(`[agent-runner] CWD: ${cwd}`);
-  console.log(`[agent-runner] Add-dirs: ${addDirCount > 0 ? addDirCount : "(none)"}`);
-  console.log(`[agent-runner] Command: ${displayCommand}`);
-  onStart({ runId, command: displayCommand, cwd });
+    "--agent-id",
+    agentId,
+    "--workspace",
+    request2.workspaceSlug ?? "",
+    "--message",
+    request2.message,
+    // Conversation ID is canonical. Legacy provider session IDs remain supported during migration.
+    ...request2.conversationId ? ["--conversation", request2.conversationId] : [],
+    ...!request2.conversationId && legacyProviderSessionId ? ["--session", legacyProviderSessionId] : [],
+    ...request2.anchorRepoPath ? ["--add-dir", request2.anchorRepoPath] : [],
+    ...additionalDirs.flatMap((d) => ["--add-dir", d])
+  ];
+  console.log(`[bridge] Spawning nakiros (bridge run: ${bridgeRunId}, agent: ${agentId})`);
+  console.log(`[bridge] Binary: ${nakirosBin}`);
+  console.log(`[bridge] Args: ${args.join(" ")}`);
+  const env2 = orchestrator.buildEnv();
   let child;
   try {
-    child = child_process.spawn(userShell, ["-l", "-c", shellCommand], {
-      cwd,
-      env,
+    child = child_process.spawn(nakirosBin, args, {
+      env: env2,
       stdio: ["ignore", "pipe", "pipe"]
     });
   } catch (err) {
     const msg = err.message ?? String(err);
-    console.error(`[agent-runner] Spawn error: ${msg}`);
+    console.error(`[bridge] Spawn error: ${msg}`);
     onDone(1, msg);
-    return runId;
+    return bridgeRunId;
   }
   let ndjsonBuffer = "";
-  const streamState = { hasEmittedText: false };
   let stderrBuffer = "";
-  const collectedRawLines = [];
+  let doneCalled = false;
+  let startCalled = false;
+  function callDoneOnce(exitCode, error) {
+    if (doneCalled) return;
+    doneCalled = true;
+    onDone(exitCode, error);
+  }
   child.stdout?.on("data", (chunk) => {
     ndjsonBuffer += chunk.toString("utf8");
     const lines = ndjsonBuffer.split("\n");
@@ -54050,18 +56364,36 @@ function runAgentCommand(provider, request2, onStart, onEvent, onDone, onRawLine
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-      process.stdout.write(`[agent-runner][${runId}] ${trimmed}
-`);
       try {
-        const parsed = JSON.parse(trimmed);
-        collectedRawLines.push(parsed);
-        onRawLine?.(parsed);
-        if (provider === "codex") {
-          handleCodexEvent(parsed, onEvent, streamState);
-        } else {
-          handleClaudeLikeEvent(parsed, onEvent, streamState);
+        const event = JSON.parse(trimmed);
+        switch (event["type"]) {
+          case "start":
+            if (!startCalled) {
+              startCalled = true;
+              onStart({
+                runId: bridgeRunId,
+                conversationId: String(event["conversationId"] ?? bridgeRunId),
+                agentId: String(event["agentId"] ?? agentId),
+                command: String(event["command"] ?? ""),
+                cwd: String(event["cwd"] ?? "")
+              });
+            }
+            break;
+          case "text":
+          case "tool":
+          case "session":
+            onEvent(event);
+            break;
+          case "done":
+            break;
+          case "error":
+            callDoneOnce(Number(event["exitCode"] ?? 1), String(event["message"] ?? "Unknown error"));
+            break;
+          default:
         }
       } catch {
+        process.stderr.write(`[orchestrator] ${trimmed}
+`);
       }
     }
   });
@@ -54070,45 +56402,752 @@ function runAgentCommand(provider, request2, onStart, onEvent, onDone, onRawLine
     if (text2.trim()) {
       stderrBuffer = `${stderrBuffer}
 ${text2}`.trim().slice(-4e3);
-      process.stderr.write(`[agent-runner][${runId}][stderr] ${text2}`);
+      process.stderr.write(`[bridge][stderr] ${text2}`);
     }
   });
   child.on("close", (code2) => {
-    if (ndjsonBuffer.trim()) {
+    runs.delete(bridgeRunId);
+    const exitCode = code2 ?? 0;
+    console.log(`[bridge] Process closed with code ${exitCode} (run: ${bridgeRunId})`);
+    if (!startCalled) {
+      onStart({ runId: bridgeRunId, conversationId: bridgeRunId, agentId, command: "", cwd: "" });
+    }
+    if (exitCode !== 0 && stderrBuffer) {
+      callDoneOnce(exitCode, stderrBuffer);
+    } else {
+      callDoneOnce(exitCode);
+    }
+  });
+  child.on("error", (err) => {
+    console.error(`[bridge] Process error: ${err.message}`);
+    runs.delete(bridgeRunId);
+    if (!startCalled) {
+      onStart({ runId: bridgeRunId, conversationId: bridgeRunId, agentId, command: "", cwd: "" });
+    }
+    const hint = err.message.includes("ENOENT") || err.message.includes("not found") ? "nakiros CLI not found. Run `pnpm build` in the monorepo root." : err.message;
+    callDoneOnce(1, hint);
+  });
+  runs.set(bridgeRunId, { kill: () => child.kill("SIGTERM") });
+  return bridgeRunId;
+}
+function cancelAgentRun(runId) {
+  console.log(`[bridge] Cancelling run ${runId}`);
+  runs.get(runId)?.kill();
+  runs.delete(runId);
+}
+function resolveNakirosBin() {
+  if (electron.app.isPackaged) {
+    return require$$0$3.join(process.resourcesPath, "nakiros");
+  }
+  const workspaceRoot = require$$0$3.join(__dirname, "../../../../..");
+  const devBin = require$$0$3.join(workspaceRoot, "node_modules", ".bin", "nakiros");
+  if (require$$1$2.existsSync(devBin)) return devBin;
+  return "nakiros";
+}
+const syncProcesses = /* @__PURE__ */ new Map();
+function startWorkspaceSyncBridge(workspace, onEvent) {
+  if (syncProcesses.has(workspace.id)) {
+    console.log(`[sync-bridge] Watcher already running for workspace "${workspace.name}"`);
+    return;
+  }
+  const nakirosBin = resolveNakirosBin();
+  const args = [
+    "sync",
+    "start",
+    "--workspace-id",
+    workspace.id,
+    "--workspace-name",
+    workspace.name
+  ];
+  console.log(`[sync-bridge] Spawning watcher for "${workspace.name}" — ${nakirosBin} ${args.join(" ")}`);
+  let child;
+  try {
+    child = child_process.spawn(nakirosBin, args, {
+      env: orchestrator.buildEnv(),
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  } catch (err) {
+    console.error(`[sync-bridge] Spawn error for "${workspace.name}": ${String(err)}`);
+    onEvent({ type: "sync:error", message: String(err) });
+    return;
+  }
+  let buffer = "";
+  child.stdout?.on("data", (chunk) => {
+    buffer += chunk.toString("utf8");
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
       try {
-        const parsed = JSON.parse(ndjsonBuffer.trim());
-        collectedRawLines.push(parsed);
-        onRawLine?.(parsed);
-        if (provider === "codex") {
-          handleCodexEvent(parsed, onEvent, streamState);
-        } else {
-          handleClaudeLikeEvent(parsed, onEvent, streamState);
-        }
+        const event = JSON.parse(trimmed);
+        console.log(`[sync-bridge] Event from "${workspace.name}":`, event.type);
+        onEvent(event);
       } catch {
       }
     }
-    console.log(`[agent-runner] Run ${runId} exited with code ${String(code2)}`);
-    runs.delete(runId);
-    const exitCode = code2 ?? 0;
-    const error = exitCode !== 0 && stderrBuffer ? stderrBuffer : void 0;
-    onDone(exitCode, error, collectedRawLines);
+  });
+  child.stderr?.on("data", (chunk) => {
+    const text2 = chunk.toString("utf8").trim();
+    if (text2) process.stderr.write(`[sync-bridge][${workspace.name}] ${text2}
+`);
+  });
+  child.on("close", (code2) => {
+    syncProcesses.delete(workspace.id);
+    console.log(`[sync-bridge] Watcher closed for "${workspace.name}" (code: ${code2 ?? 0})`);
   });
   child.on("error", (err) => {
-    console.error(`[agent-runner] Process error: ${err.message}`);
-    runs.delete(runId);
-    if (err.message.includes("ENOENT") || err.message.includes("not found")) {
-      onDone(1, installHint(provider));
-    } else {
-      onDone(1, err.message);
-    }
+    syncProcesses.delete(workspace.id);
+    console.error(`[sync-bridge] Process error for "${workspace.name}": ${err.message}`);
+    const hint = err.message.includes("ENOENT") || err.message.includes("not found") ? "nakiros CLI not found. Run `pnpm build` in the monorepo root." : err.message;
+    onEvent({ type: "sync:error", message: hint });
   });
-  runs.set(runId, { kill: () => child.kill("SIGTERM") });
-  return runId;
+  syncProcesses.set(workspace.id, child);
 }
-function cancelAgentRun(runId) {
-  console.log(`[agent-runner] Cancelling run ${runId}`);
-  runs.get(runId)?.kill();
-  runs.delete(runId);
+function triggerSyncPush(workspaceId) {
+  const child = syncProcesses.get(workspaceId);
+  if (!child || child.pid == null) return;
+  try {
+    process.kill(child.pid, "SIGUSR1");
+  } catch {
+  }
+}
+function stopWorkspaceSyncBridge(workspaceId) {
+  const child = syncProcesses.get(workspaceId);
+  if (child) {
+    child.kill("SIGTERM");
+    syncProcesses.delete(workspaceId);
+    console.log(`[sync-bridge] Stopped watcher for workspace ${workspaceId}`);
+  }
+}
+function stopAllSyncBridges() {
+  for (const [workspaceId] of syncProcesses) {
+    stopWorkspaceSyncBridge(workspaceId);
+  }
+}
+const NAKIROS_API_URL = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
+async function executeAction(workspaceId, block) {
+  const { token } = await ensureValidAccessToken();
+  if (!token) {
+    throw new Error("Not authenticated — cannot execute action");
+  }
+  let response2;
+  try {
+    response2 = await fetch(`${NAKIROS_API_URL}/ws/${workspaceId}/actions/${block.tool}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(block.args)
+    });
+  } catch (error) {
+    throw new Error(formatNetworkError(error, `Action ${block.tool} request failed`));
+  }
+  if (!response2.ok) {
+    const bodyText = (await response2.text().catch(() => "")).trim();
+    const details = bodyText.length > 0 ? `: ${bodyText}` : "";
+    throw new Error(`Action ${block.tool} failed (${response2.status})${details}`);
+  }
+  const result = await response2.json().catch(() => ({}));
+  return `[ACTION RESULT: ${block.tool}]
+${JSON.stringify(result, null, 2)}
+[END ACTION RESULT]`;
+}
+function conversationDir(workspaceSlug, conversationId) {
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, "conversations", conversationId);
+}
+function conversationStreamToRaw(workspaceSlug, conversationId) {
+  const path = require$$0$3.join(conversationDir(workspaceSlug, conversationId), "stream.ndjson");
+  if (!require$$1$2.existsSync(path)) return [];
+  const lines = require$$1$2.readFileSync(path, "utf8").split("\n").filter((l) => l.trim());
+  const raw = [];
+  let pendingTextParts = [];
+  const flushPending = () => {
+    if (pendingTextParts.length === 0) return;
+    const groups = [];
+    for (const part of pendingTextParts) {
+      const last = groups[groups.length - 1];
+      if (last && last.agentId === part.agentId) {
+        last.chunks.push(part.text);
+      } else {
+        groups.push({ agentId: part.agentId, chunks: [part.text] });
+      }
+    }
+    for (const g of groups) {
+      const combined = g.chunks.join("");
+      const trimmed = combined.trim();
+      if (trimmed) {
+        raw.push({
+          type: "assistant",
+          agentId: g.agentId,
+          message: {
+            content: [{ type: "text", text: trimmed }]
+          }
+        });
+      }
+    }
+    pendingTextParts = [];
+  };
+  for (const line of lines) {
+    try {
+      const evt = JSON.parse(line);
+      if (evt.type === "user_message") {
+        flushPending();
+        raw.push({ type: "user", content: evt.text });
+      } else if (evt.type === "text") {
+        pendingTextParts.push({ agentId: evt.agentId, text: evt.text });
+      }
+    } catch {
+    }
+  }
+  flushPending();
+  return raw;
+}
+function toStoredConversation(meta, workspaceId) {
+  return {
+    id: meta.id,
+    sessionId: meta.id,
+    // conv_xxx used as the resume identifier
+    workspaceId,
+    // real workspace UUID for frontend filtering
+    workspaceSlug: meta.workspaceSlug,
+    workspaceName: meta.workspaceSlug,
+    mode: "global",
+    anchorRepoPath: meta.anchorRepoPath ?? "",
+    activeRepoPaths: meta.additionalDirs,
+    lastResolvedRepoMentions: [],
+    repoPath: meta.anchorRepoPath ?? "",
+    repoName: "",
+    provider: "claude",
+    // default, actual per-runner provider stored in RunnerMeta
+    participants: [],
+    title: meta.title,
+    agents: [],
+    createdAt: meta.createdAt,
+    lastUsedAt: meta.updatedAt,
+    messages: conversationStreamToRaw(meta.workspaceSlug, meta.id)
+  };
+}
+function getConversations(workspaceSlug, workspaceId) {
+  return orchestrator.listConversations(workspaceSlug).map((meta) => toStoredConversation(meta, workspaceId));
+}
+function deleteConversationEntry(conversationId, workspaceSlug) {
+  orchestrator.deleteConversation(workspaceSlug, conversationId);
+}
+const WORKER_API$1 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
+function globalContextDir(workspace) {
+  const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", slug, "context");
+}
+async function readFileOrNull(filePath) {
+  try {
+    if (!require$$1$2.existsSync(filePath)) return null;
+    return await promises$1.readFile(filePath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+async function buildGlobalContext(workspace) {
+  const contextDir = globalContextDir(workspace);
+  const [global2, productA, productB, interRepo] = await Promise.all([
+    readFileOrNull(require$$0$3.join(contextDir, "global-context.md")),
+    readFileOrNull(require$$0$3.join(contextDir, "product-context.md")),
+    readFileOrNull(require$$0$3.join(contextDir, "pm-context.md")),
+    readFileOrNull(require$$0$3.join(contextDir, "inter-repo.md"))
+  ]);
+  return {
+    global: global2 ?? void 0,
+    product: productA ?? productB ?? void 0,
+    interRepo: interRepo ?? void 0,
+    generatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function buildRepoContext(repoLocalPath) {
+  const nakDir = require$$0$3.join(repoLocalPath, "_nakiros");
+  if (!require$$1$2.existsSync(nakDir)) return null;
+  const [architecture, stack, conventions, api, llms] = await Promise.all([
+    readFileOrNull(require$$0$3.join(nakDir, "architecture.md")),
+    readFileOrNull(require$$0$3.join(nakDir, "stack.md")),
+    readFileOrNull(require$$0$3.join(nakDir, "conventions.md")),
+    readFileOrNull(require$$0$3.join(nakDir, "api.md")),
+    readFileOrNull(require$$0$3.join(nakDir, "llms.txt"))
+  ]);
+  if (!architecture && !stack && !conventions && !api && !llms) return null;
+  return {
+    architecture: architecture ?? void 0,
+    stack: stack ?? void 0,
+    conventions: conventions ?? void 0,
+    api: api ?? void 0,
+    llms: llms ?? void 0,
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function pushWorkspaceContext(workspace, force = false) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return { status: "unauthenticated" };
+  try {
+    const globalCtx = await buildGlobalContext(workspace);
+    const globalResponse = await fetch(`${WORKER_API$1}/ws/${workspace.id}/context`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${resolved.token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ ...globalCtx, force })
+    });
+    if (globalResponse.status === 409) {
+      const payload = await globalResponse.json().catch(() => ({}));
+      return {
+        status: "conflict",
+        conflict: { type: "global", updatedBy: payload.updatedBy, remoteUpdatedAt: payload.remoteUpdatedAt }
+      };
+    }
+    if (!globalResponse.ok) {
+      console.warn("[context-sync] Push global failed:", globalResponse.status);
+      return { status: "offline" };
+    }
+    for (const repo of workspace.repos) {
+      if (!require$$1$2.existsSync(repo.localPath)) continue;
+      const repoCtx = await buildRepoContext(repo.localPath);
+      if (!repoCtx) continue;
+      const repoResponse = await fetch(
+        `${WORKER_API$1}/ws/${workspace.id}/repos/${encodeURIComponent(repo.name)}/context`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${resolved.token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ ...repoCtx, force })
+        }
+      );
+      if (repoResponse.status === 409) {
+        const payload = await repoResponse.json().catch(() => ({}));
+        return {
+          status: "conflict",
+          conflict: { type: "repo", repoName: repo.name, updatedBy: payload.updatedBy, remoteUpdatedAt: payload.remoteUpdatedAt }
+        };
+      }
+      if (!repoResponse.ok) {
+        console.warn(`[context-sync] Push repo context failed for ${repo.name}:`, repoResponse.status);
+      }
+    }
+    return { status: "ok" };
+  } catch (err) {
+    console.warn("[context-sync] Network error during push:", err);
+    return { status: "offline" };
+  }
+}
+async function pullRemoteContext(workspace) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return { status: "unauthenticated", reposPulled: [] };
+  try {
+    const contextDir = globalContextDir(workspace);
+    await promises$1.mkdir(contextDir, { recursive: true });
+    const globalFiles = [
+      { endpoint: "global-context", outputName: "global-context.md" },
+      { endpoint: "product-context", outputName: "product-context.md" },
+      { endpoint: "inter-repo", outputName: "inter-repo.md" }
+    ];
+    for (const { endpoint, outputName } of globalFiles) {
+      const response2 = await fetch(
+        `${WORKER_API$1}/ws/${workspace.id}/context/_global/${endpoint}`,
+        { headers: { Authorization: `Bearer ${resolved.token}` } }
+      );
+      if (response2.ok) {
+        const content = await response2.text();
+        await promises$1.writeFile(require$$0$3.join(contextDir, outputName), content, "utf-8");
+      }
+    }
+    const reposPulled = [];
+    const manifestResponse = await fetch(`${WORKER_API$1}/ws/${workspace.id}/context`, {
+      headers: { Authorization: `Bearer ${resolved.token}` }
+    });
+    if (manifestResponse.ok) {
+      const manifest = await manifestResponse.json();
+      const localRepoNames = new Set(workspace.repos.map((r) => r.name));
+      for (const repoName of Object.keys(manifest.repos ?? {})) {
+        if (localRepoNames.has(repoName)) continue;
+        const repoCtxResponse = await fetch(
+          `${WORKER_API$1}/ws/${workspace.id}/repos/${encodeURIComponent(repoName)}/context`,
+          { headers: { Authorization: `Bearer ${resolved.token}` } }
+        );
+        if (!repoCtxResponse.ok) continue;
+        const repoCtx = await repoCtxResponse.json();
+        const repoDir = require$$0$3.join(contextDir, "repos", repoName);
+        await promises$1.mkdir(repoDir, { recursive: true });
+        const writes = [];
+        if (repoCtx.architecture) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "architecture.md"), repoCtx.architecture, "utf-8"));
+        if (repoCtx.stack) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "stack.md"), repoCtx.stack, "utf-8"));
+        if (repoCtx.conventions) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "conventions.md"), repoCtx.conventions, "utf-8"));
+        if (repoCtx.api) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "api.md"), repoCtx.api, "utf-8"));
+        if (repoCtx.llms) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "llms.txt"), repoCtx.llms, "utf-8"));
+        await Promise.all(writes);
+        reposPulled.push(repoName);
+      }
+    }
+    return { status: "ok", reposPulled };
+  } catch (err) {
+    console.warn("[context-sync] Network error during pull:", err);
+    return { status: "offline", reposPulled: [] };
+  }
+}
+const WORKER_API = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
+function getArtifactContextDir(workspace) {
+  const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", slug, "context");
+}
+function getArtifactFilePath(workspace, artifactPath) {
+  return require$$0$3.join(getArtifactContextDir(workspace), `${artifactPath}.md`);
+}
+async function readArtifactFile(workspace, artifactPath) {
+  const filePath = getArtifactFilePath(workspace, artifactPath);
+  if (!require$$1$2.existsSync(filePath)) return null;
+  return promises$1.readFile(filePath, "utf-8");
+}
+async function collectMarkdownArtifactPaths(rootDir, currentDir) {
+  const entries = await promises$1.readdir(currentDir, { withFileTypes: true }).catch(() => []);
+  const collected = [];
+  for (const entry of entries) {
+    const absolutePath = require$$0$3.join(currentDir, entry.name);
+    if (entry.isDirectory()) {
+      collected.push(...await collectMarkdownArtifactPaths(rootDir, absolutePath));
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    const normalizedPath = require$$0$3.relative(rootDir, absolutePath).replace(/\\/g, "/").replace(/\.md$/i, "");
+    if (normalizedPath) collected.push(normalizedPath);
+  }
+  return collected;
+}
+async function listContextArtifactFiles(workspace) {
+  const contextDir = getArtifactContextDir(workspace);
+  if (!require$$1$2.existsSync(contextDir)) return [];
+  const files = await collectMarkdownArtifactPaths(contextDir, contextDir);
+  return files.sort((left, right) => left.localeCompare(right));
+}
+async function writeArtifactFile(workspace, artifactPath, content) {
+  const filePath = getArtifactFilePath(workspace, artifactPath);
+  require$$1$2.mkdirSync(require$$0$3.dirname(filePath), { recursive: true });
+  await promises$1.writeFile(filePath, content, "utf-8");
+}
+async function listArtifactVersions(workspaceId, artifactPath) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return [];
+  const response2 = await fetch(
+    `${WORKER_API}/ws/${workspaceId}/artifacts/${encodeURIComponent(artifactPath)}/versions`,
+    { headers: { Authorization: `Bearer ${resolved.token}` } }
+  );
+  if (!response2.ok) return [];
+  return await response2.json().catch(() => []);
+}
+async function saveArtifactVersion(workspaceId, workspace, input) {
+  await writeArtifactFile(workspace, input.artifactPath, input.content);
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return null;
+  const response2 = await fetch(
+    `${WORKER_API}/ws/${workspaceId}/artifacts/${encodeURIComponent(input.artifactPath)}/versions`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resolved.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        artifactPath: input.artifactPath,
+        artifactType: input.artifactType,
+        epicId: input.epicId ?? null,
+        content: input.content,
+        author: resolved.email ?? null
+      })
+    }
+  );
+  if (!response2.ok) return null;
+  return await response2.json();
+}
+async function listAllArtifacts(workspaceId) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return [];
+  const response2 = await fetch(`${WORKER_API}/ws/${workspaceId}/artifacts`, {
+    headers: { Authorization: `Bearer ${resolved.token}` }
+  });
+  if (!response2.ok) return [];
+  return await response2.json().catch(() => []);
+}
+async function pullAllArtifacts(workspaceId, workspace) {
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) return { pulled: 0, failed: 0 };
+  const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
+  const headers = { Authorization: `Bearer ${resolved.token}` };
+  const listRes = await fetch(`${WORKER_API}/ws/${workspaceId}/artifacts`, { headers });
+  if (!listRes.ok) return { pulled: 0, failed: 0 };
+  const metaList = await listRes.json().catch(() => []);
+  if (metaList.length === 0) return { pulled: 0, failed: 0 };
+  let pulled = 0;
+  let failed = 0;
+  const chunks = [];
+  for (let i = 0; i < metaList.length; i += 5) chunks.push(metaList.slice(i, i + 5));
+  for (const chunk of chunks) {
+    await Promise.all(chunk.map(async (meta) => {
+      try {
+        const contentRes = await fetch(
+          `${WORKER_API}/ws/${workspaceId}/artifacts/${encodeURIComponent(meta.artifactPath)}/versions/${meta.version}`,
+          { headers }
+        );
+        if (!contentRes.ok) {
+          failed++;
+          return;
+        }
+        const row = await contentRes.json();
+        if (!row.content) {
+          failed++;
+          return;
+        }
+        await writeArtifactFile(workspace, meta.artifactPath, row.content);
+        orchestrator.markArtifactSynced(slug, meta.artifactPath, row.content, meta.version);
+        pulled++;
+      } catch {
+        failed++;
+      }
+    }));
+  }
+  return { pulled, failed };
+}
+function getContextDir$1(workspaceSlug) {
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, "context");
+}
+function getSnapshotDir(workspaceSlug, runId) {
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, ".snapshots", runId);
+}
+function getSnapshotMetaPath(workspaceSlug, runId) {
+  return require$$0$3.join(getSnapshotDir(workspaceSlug, runId), "meta.json");
+}
+async function collectMarkdownFiles(dir) {
+  const result = /* @__PURE__ */ new Map();
+  if (!require$$1$2.existsSync(dir)) return result;
+  async function walk(current) {
+    const entries = await promises$1.readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const abs2 = require$$0$3.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(abs2);
+      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+        const rel = require$$0$3.relative(dir, abs2).replace(/\\/g, "/");
+        const content = await promises$1.readFile(abs2, "utf-8").catch(() => "");
+        result.set(rel, content);
+      }
+    }
+  }
+  await walk(dir);
+  return result;
+}
+async function takeSnapshot(workspaceSlug, runId) {
+  const contextDir = getContextDir$1(workspaceSlug);
+  const snapshotDir = getSnapshotDir(workspaceSlug, runId);
+  require$$1$2.mkdirSync(snapshotDir, { recursive: true });
+  const files = await collectMarkdownFiles(contextDir);
+  for (const [rel, content] of files) {
+    const dest = require$$0$3.join(snapshotDir, "context", rel);
+    require$$1$2.mkdirSync(require$$0$3.dirname(dest), { recursive: true });
+    await promises$1.writeFile(dest, content, "utf-8");
+  }
+  const meta = {
+    runId,
+    workspaceSlug,
+    takenAt: (/* @__PURE__ */ new Date()).toISOString(),
+    status: "pending"
+  };
+  await promises$1.writeFile(getSnapshotMetaPath(workspaceSlug, runId), JSON.stringify(meta, null, 2), "utf-8");
+}
+async function diffSnapshot(workspaceSlug, runId) {
+  const snapshotDir = getSnapshotDir(workspaceSlug, runId);
+  if (!require$$1$2.existsSync(snapshotDir)) return null;
+  const contextDir = getContextDir$1(workspaceSlug);
+  const snapshotContextDir = require$$0$3.join(snapshotDir, "context");
+  const [before, after] = await Promise.all([
+    collectMarkdownFiles(snapshotContextDir),
+    collectMarkdownFiles(contextDir)
+  ]);
+  const changes = [];
+  const allPaths = /* @__PURE__ */ new Set([...before.keys(), ...after.keys()]);
+  for (const rel of allPaths) {
+    const beforeContent = before.get(rel) ?? null;
+    const afterContent = after.get(rel) ?? null;
+    if (beforeContent === null && afterContent !== null) {
+      changes.push({ relativePath: rel, absolutePath: require$$0$3.join(contextDir, rel), status: "created", before: null, after: afterContent });
+    } else if (beforeContent !== null && afterContent === null) {
+      changes.push({ relativePath: rel, absolutePath: require$$0$3.join(contextDir, rel), status: "deleted", before: beforeContent, after: null });
+    } else if (beforeContent !== afterContent) {
+      changes.push({ relativePath: rel, absolutePath: require$$0$3.join(contextDir, rel), status: "modified", before: beforeContent, after: afterContent });
+    }
+  }
+  if (changes.length === 0) return null;
+  return { runId, workspaceSlug, changes };
+}
+async function revertSnapshot(workspaceSlug, runId, relativePaths) {
+  const snapshotDir = getSnapshotDir(workspaceSlug, runId);
+  if (!require$$1$2.existsSync(snapshotDir)) return;
+  const contextDir = getContextDir$1(workspaceSlug);
+  const snapshotContextDir = require$$0$3.join(snapshotDir, "context");
+  const [before, after] = await Promise.all([
+    collectMarkdownFiles(snapshotContextDir),
+    collectMarkdownFiles(contextDir)
+  ]);
+  const pathsToRevert = relativePaths ?? [.../* @__PURE__ */ new Set([...before.keys(), ...after.keys()])];
+  for (const rel of pathsToRevert) {
+    const dest = require$$0$3.join(contextDir, rel);
+    const beforeContent = before.get(rel);
+    if (beforeContent === void 0) {
+      require$$1$2.rmSync(dest, { force: true });
+    } else {
+      require$$1$2.mkdirSync(require$$0$3.dirname(dest), { recursive: true });
+      await promises$1.writeFile(dest, beforeContent, "utf-8");
+    }
+  }
+}
+async function resolveSnapshot(workspaceSlug, runId) {
+  const metaPath = getSnapshotMetaPath(workspaceSlug, runId);
+  if (!require$$1$2.existsSync(metaPath)) return;
+  const meta = JSON.parse(await promises$1.readFile(metaPath, "utf-8"));
+  await promises$1.writeFile(metaPath, JSON.stringify({ ...meta, status: "resolved" }, null, 2), "utf-8");
+}
+async function listPendingSnapshots(workspaceSlug) {
+  const snapshotsRoot = require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, ".snapshots");
+  if (!require$$1$2.existsSync(snapshotsRoot)) return [];
+  const entries = await promises$1.readdir(snapshotsRoot, { withFileTypes: true }).catch(() => []);
+  const metas = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const metaPath = require$$0$3.join(snapshotsRoot, entry.name, "meta.json");
+    if (!require$$1$2.existsSync(metaPath)) continue;
+    try {
+      const meta = JSON.parse(await promises$1.readFile(metaPath, "utf-8"));
+      if (meta.status === "pending") metas.push(meta);
+    } catch {
+    }
+  }
+  return metas.sort((a, b) => a.takenAt.localeCompare(b.takenAt));
+}
+function getNakirosWorkspaceDir(workspaceSlug) {
+  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug);
+}
+function getPreviewBase(workspaceSlug) {
+  return require$$0$3.join(getNakirosWorkspaceDir(workspaceSlug), ".preview");
+}
+function getContextDir(workspaceSlug) {
+  return require$$0$3.join(getNakirosWorkspaceDir(workspaceSlug), "context");
+}
+async function checkPendingPreview(workspaceSlug) {
+  const previewBase = getPreviewBase(workspaceSlug);
+  if (!require$$1$2.existsSync(previewBase)) {
+    return { exists: false, previewRoot: previewBase, files: [], conversationId: null };
+  }
+  let entries;
+  try {
+    entries = await promises$1.readdir(previewBase, { withFileTypes: true });
+  } catch {
+    return { exists: false, previewRoot: previewBase, files: [], conversationId: null };
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = require$$0$3.join(previewBase, entry.name);
+    const files = await collectFiles(dir);
+    if (files.length > 0) {
+      return { exists: true, previewRoot: dir, files, conversationId: entry.name };
+    }
+  }
+  return { exists: false, previewRoot: previewBase, files: [], conversationId: null };
+}
+async function applyPreview(previewRoot, workspaceSlug) {
+  if (!require$$1$2.existsSync(previewRoot)) throw new Error("No pending preview found");
+  const contextRoot = getContextDir(workspaceSlug);
+  const files = await collectFiles(previewRoot);
+  for (const absolutePath of files) {
+    const rel = require$$0$3.relative(previewRoot, absolutePath);
+    const dest = require$$0$3.join(contextRoot, rel);
+    const destDir = require$$0$3.join(dest, "..");
+    require$$1$2.mkdirSync(destDir, { recursive: true });
+    if (rel.match(/^features\/[^/]+\/feature\.md$/)) {
+      const existing = require$$1$2.existsSync(dest) ? await promises$1.readFile(dest, "utf8") : null;
+      const incoming = await promises$1.readFile(absolutePath, "utf8");
+      if (existing) {
+        const merged = mergeFeatureFile(existing, incoming);
+        await promises$1.writeFile(dest, merged, "utf8");
+        continue;
+      }
+    }
+    if (rel.match(/^features\/[^/]+\/ux\.md$/)) {
+      if (require$$1$2.existsSync(dest)) {
+        const existing = await promises$1.readFile(dest, "utf8");
+        if (isFullUxSpec(existing)) continue;
+      }
+    }
+    await promises$1.cp(absolutePath, dest, { force: true });
+  }
+  require$$1$2.rmSync(previewRoot, { recursive: true, force: true });
+}
+async function applyPreviewFile(previewRoot, filePath, workspaceSlug) {
+  if (!require$$1$2.existsSync(previewRoot)) throw new Error("No pending preview found");
+  const contextRoot = getContextDir(workspaceSlug);
+  const rel = require$$0$3.relative(previewRoot, filePath);
+  const dest = require$$0$3.join(contextRoot, rel);
+  const destDir = require$$0$3.join(dest, "..");
+  require$$1$2.mkdirSync(destDir, { recursive: true });
+  if (rel.match(/^features\/[^/]+\/feature\.md$/)) {
+    const existing = require$$1$2.existsSync(dest) ? await promises$1.readFile(dest, "utf8") : null;
+    const incoming = await promises$1.readFile(filePath, "utf8");
+    if (existing) {
+      await promises$1.writeFile(dest, mergeFeatureFile(existing, incoming), "utf8");
+    } else {
+      await promises$1.cp(filePath, dest, { force: true });
+    }
+  } else if (rel.match(/^features\/[^/]+\/ux\.md$/) && require$$1$2.existsSync(dest)) {
+    const existing = await promises$1.readFile(dest, "utf8");
+    if (!isFullUxSpec(existing)) await promises$1.cp(filePath, dest, { force: true });
+  } else {
+    await promises$1.cp(filePath, dest, { force: true });
+  }
+  require$$1$2.rmSync(filePath, { force: true });
+  let dir = require$$0$3.join(filePath, "..");
+  while (dir !== previewRoot) {
+    try {
+      const remaining = await promises$1.readdir(dir);
+      if (remaining.length > 0) break;
+      require$$1$2.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      break;
+    }
+    dir = require$$0$3.join(dir, "..");
+  }
+}
+function discardPreview(previewRoot) {
+  if (require$$1$2.existsSync(previewRoot)) {
+    require$$1$2.rmSync(previewRoot, { recursive: true, force: true });
+  }
+}
+async function collectFiles(dir) {
+  const results = [];
+  const entries = await promises$1.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = require$$0$3.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...await collectFiles(fullPath));
+    } else {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+function mergeFeatureFile(existing, incoming) {
+  const storiesMatch = existing.match(/## Stories\n([\s\S]*?)(?=\n##|$)/);
+  if (!storiesMatch) return incoming;
+  const storiesBlock = storiesMatch[0];
+  const hasRealStories = /\|\s*[A-Z0-9]+-\d+\s*\|/.test(storiesBlock);
+  if (!hasRealStories) return incoming;
+  return incoming.replace(/## Stories\n[\s\S]*?(?=\n##|$)/, storiesBlock);
+}
+function isFullUxSpec(content) {
+  const designerSections = ["## User Flows", "## Wireframes", "## Components", "## Interactions"];
+  const found = designerSections.filter((s) => content.includes(s));
+  return found.length >= 2;
 }
 function normalizeProvider(value) {
   if (value === "codex" || value === "cursor" || value === "claude") return value;
@@ -54127,7 +57166,8 @@ function normalizeParticipants(raw, fallbackRepoPath) {
       participantId: item["participantId"],
       agentId: item["agentId"],
       provider: normalizeProvider(item["provider"]),
-      sessionId: typeof item["sessionId"] === "string" ? item["sessionId"] : null,
+      providerSessionId: typeof item["providerSessionId"] === "string" ? item["providerSessionId"] : typeof item["sessionId"] === "string" ? item["sessionId"] : null,
+      sessionId: typeof item["providerSessionId"] === "string" ? item["providerSessionId"] : typeof item["sessionId"] === "string" ? item["sessionId"] : null,
       conversationId: typeof item["conversationId"] === "string" ? item["conversationId"] : null,
       anchorRepoPath: typeof item["anchorRepoPath"] === "string" ? item["anchorRepoPath"] : fallbackRepoPath,
       activeRepoPaths: Array.isArray(item["activeRepoPaths"]) ? item["activeRepoPaths"].filter((path) => typeof path === "string" && path.trim().length > 0) : fallbackRepoPath ? [fallbackRepoPath] : [],
@@ -54138,98 +57178,48 @@ function normalizeParticipants(raw, fallbackRepoPath) {
     }];
   });
 }
-const NAKIROS_DIR$1 = require$$0$3.join(os.homedir(), ".nakiros");
-function workspaceSessionsDir(workspaceId) {
-  return require$$0$3.join(NAKIROS_DIR$1, "workspaces", workspaceId, "sessions");
-}
-function sessionPath(workspaceId, id2) {
-  return require$$0$3.join(workspaceSessionsDir(workspaceId), `${id2}.json`);
-}
-function ensureSessionsDir(workspaceId) {
-  const dir = workspaceSessionsDir(workspaceId);
-  if (!require$$1$2.existsSync(dir)) require$$1$2.mkdirSync(dir, { recursive: true });
-}
-function normalizeConversation(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const item = raw;
-  if (typeof item["id"] !== "string" || typeof item["sessionId"] !== "string" || typeof item["workspaceId"] !== "string" || typeof item["title"] !== "string" || typeof item["createdAt"] !== "string" || typeof item["lastUsedAt"] !== "string") return null;
-  const workspaceId = item["workspaceId"];
-  const repoPath = typeof item["repoPath"] === "string" ? item["repoPath"] : "";
-  const workspaceName = typeof item["workspaceName"] === "string" ? item["workspaceName"] : typeof workspaceId === "string" ? workspaceId : "";
-  const workspaceSlug = typeof item["workspaceSlug"] === "string" ? item["workspaceSlug"] : toWorkspaceSlug(workspaceName || (typeof workspaceId === "string" ? workspaceId : "workspace"));
-  const mode = item["mode"] === "repo" ? "repo" : "global";
-  const anchorRepoPath = typeof item["anchorRepoPath"] === "string" ? item["anchorRepoPath"] : repoPath;
-  const activeRepoPaths = Array.isArray(item["activeRepoPaths"]) ? item["activeRepoPaths"].filter((path) => typeof path === "string" && path.trim().length > 0) : repoPath ? [repoPath] : [];
-  const lastResolvedRepoMentions = Array.isArray(item["lastResolvedRepoMentions"]) ? item["lastResolvedRepoMentions"].filter((token) => typeof token === "string" && token.trim().length > 0) : [];
-  const participants = normalizeParticipants(item["participants"], repoPath);
-  return {
-    id: item["id"],
-    sessionId: item["sessionId"],
-    workspaceId: item["workspaceId"],
-    workspaceSlug,
-    workspaceName,
-    mode,
-    anchorRepoPath,
-    activeRepoPaths,
-    lastResolvedRepoMentions,
-    repoPath,
-    repoName: typeof item["repoName"] === "string" ? item["repoName"] : "",
-    provider: normalizeProvider(item["provider"]),
-    participants,
-    title: item["title"],
-    agents: Array.isArray(item["agents"]) ? item["agents"].filter((a) => typeof a === "string") : [],
-    createdAt: item["createdAt"],
-    lastUsedAt: item["lastUsedAt"],
-    messages: Array.isArray(item["messages"]) ? item["messages"] : []
-  };
-}
-function readSession(workspaceId, id2) {
-  try {
-    const path = sessionPath(workspaceId, id2);
-    if (!require$$1$2.existsSync(path)) return null;
-    const parsed = JSON.parse(require$$1$2.readFileSync(path, "utf8"));
-    return normalizeConversation(parsed);
-  } catch {
-    return null;
-  }
-}
-function getConversations(workspaceId) {
-  const dir = workspaceSessionsDir(workspaceId);
-  if (!require$$1$2.existsSync(dir)) return [];
-  const sessions = [];
-  try {
-    for (const file of require$$1$2.readdirSync(dir)) {
-      if (!file.endsWith(".json")) continue;
-      const id2 = file.slice(0, -5);
-      const conv = readSession(workspaceId, id2);
-      if (conv) sessions.push(conv);
-    }
-  } catch {
-    return [];
-  }
-  return sessions.sort(
-    (a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime()
-  );
-}
-function saveConversation(conv, storageKey) {
-  const key = storageKey ?? conv.workspaceId;
-  ensureSessionsDir(key);
-  const path = sessionPath(key, conv.id);
-  require$$1$2.writeFileSync(path, JSON.stringify(conv, null, 2), "utf8");
-}
-function deleteConversation(id2, workspaceId) {
-  const path = sessionPath(workspaceId, id2);
-  if (require$$1$2.existsSync(path)) {
-    try {
-      require$$1$2.unlinkSync(path);
-    } catch {
-    }
-  }
-}
 const NAKIROS_DIR = require$$0$3.join(os.homedir(), ".nakiros");
 const STORE_PATH = require$$0$3.join(NAKIROS_DIR, "agent-tabs.json");
 function ensureDir() {
   if (!require$$1$2.existsSync(NAKIROS_DIR)) require$$1$2.mkdirSync(NAKIROS_DIR, { recursive: true });
+}
+function normalizeArtifactContext(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw;
+  const mode = item["mode"];
+  const sourceSurface = item["sourceSurface"];
+  const target = item["target"];
+  const title2 = item["title"];
+  if (mode !== "diff" && mode !== "yolo" || !target || typeof target !== "object") {
+    return null;
+  }
+  const normalizedSourceSurface = sourceSurface === "product" || sourceSurface === "backlog" ? sourceSurface : "chat";
+  const targetItem = target;
+  const kind = targetItem["kind"];
+  if (kind === "workspace_doc" && typeof targetItem["absolutePath"] === "string") {
+    return {
+      target: {
+        kind,
+        absolutePath: targetItem["absolutePath"]
+      },
+      mode,
+      sourceSurface: normalizedSourceSurface,
+      title: typeof title2 === "string" ? title2 : void 0
+    };
+  }
+  if ((kind === "backlog_epic" || kind === "backlog_story" || kind === "backlog_task" || kind === "backlog_sprint") && typeof targetItem["workspaceId"] === "string" && typeof targetItem["id"] === "string") {
+    return {
+      target: {
+        kind,
+        workspaceId: targetItem["workspaceId"],
+        id: targetItem["id"]
+      },
+      mode,
+      sourceSurface: normalizedSourceSurface,
+      title: typeof title2 === "string" ? title2 : void 0
+    };
+  }
+  return null;
 }
 function normalizeTab(raw, workspaceId) {
   if (!raw || typeof raw !== "object") return null;
@@ -54246,6 +57236,7 @@ function normalizeTab(raw, workspaceId) {
   return {
     tabId: item["tabId"],
     conversationId: typeof item["conversationId"] === "string" ? item["conversationId"] : void 0,
+    nakirosConversationId: typeof item["nakirosConversationId"] === "string" ? item["nakirosConversationId"] : void 0,
     workspaceId,
     workspaceSlug,
     workspaceName,
@@ -54258,7 +57249,9 @@ function normalizeTab(raw, workspaceId) {
     participants,
     activeParticipantId: typeof item["activeParticipantId"] === "string" ? item["activeParticipantId"] : void 0,
     title: typeof item["title"] === "string" ? item["title"] : "Nouvelle conversation",
-    sessionId: typeof item["sessionId"] === "string" ? item["sessionId"] : void 0
+    providerSessionId: typeof item["providerSessionId"] === "string" ? item["providerSessionId"] : typeof item["sessionId"] === "string" ? item["sessionId"] : void 0,
+    sessionId: typeof item["providerSessionId"] === "string" ? item["providerSessionId"] : typeof item["sessionId"] === "string" ? item["sessionId"] : void 0,
+    artifactContext: normalizeArtifactContext(item["artifactContext"])
   };
 }
 function normalizeState(raw, workspaceId) {
@@ -54398,83 +57391,6 @@ async function getJiraUserInfo(accessToken, cloudId) {
     throw new Error(`Failed to get user info (${response2.status})`);
   }
   return response2.json();
-}
-function getStorePath() {
-  return require$$0$3.join(electron.app.getPath("userData"), "jira-tokens.json");
-}
-function readStore() {
-  const path = getStorePath();
-  if (!require$$1$2.existsSync(path)) return {};
-  try {
-    return JSON.parse(require$$1$2.readFileSync(path, "utf-8"));
-  } catch {
-    return {};
-  }
-}
-function writeStore(store) {
-  require$$1$2.writeFileSync(getStorePath(), JSON.stringify(store, null, 2), "utf-8");
-}
-function encrypt(text2) {
-  if (electron.safeStorage.isEncryptionAvailable()) {
-    return electron.safeStorage.encryptString(text2).toString("base64");
-  }
-  return text2;
-}
-function decrypt(stored) {
-  if (electron.safeStorage.isEncryptionAvailable()) {
-    try {
-      return electron.safeStorage.decryptString(Buffer.from(stored, "base64"));
-    } catch {
-      return stored;
-    }
-  }
-  return stored;
-}
-function saveTokens(wsId, tokens) {
-  const store = readStore();
-  store[wsId] = {
-    accessToken: encrypt(tokens.accessToken),
-    refreshToken: encrypt(tokens.refreshToken),
-    cloudId: tokens.cloudId,
-    cloudUrl: tokens.cloudUrl,
-    displayName: tokens.displayName,
-    expiresAt: Date.now() + tokens.expiresIn * 1e3
-  };
-  writeStore(store);
-}
-function loadTokens(wsId) {
-  const store = readStore();
-  return store[wsId] ?? null;
-}
-function clearTokens(wsId) {
-  const store = readStore();
-  delete store[wsId];
-  writeStore(store);
-}
-function getTokenMeta(wsId) {
-  const entry = loadTokens(wsId);
-  if (!entry) return { connected: false };
-  return { connected: true, cloudUrl: entry.cloudUrl, displayName: entry.displayName };
-}
-async function getValidAccessToken(wsId) {
-  const entry = loadTokens(wsId);
-  if (!entry) throw new Error("Not connected to Jira. Please reconnect.");
-  const accessToken = decrypt(entry.accessToken);
-  if (Date.now() < entry.expiresAt - 5 * 60 * 1e3) {
-    return accessToken;
-  }
-  const refreshToken = decrypt(entry.refreshToken);
-  const refreshed = await refreshAccessToken(refreshToken);
-  const store = readStore();
-  if (store[wsId]) {
-    store[wsId].accessToken = encrypt(refreshed.access_token);
-    if (refreshed.refresh_token) {
-      store[wsId].refreshToken = encrypt(refreshed.refresh_token);
-    }
-    store[wsId].expiresAt = Date.now() + refreshed.expires_in * 1e3;
-    writeStore(store);
-  }
-  return refreshed.access_token;
 }
 function adfToPlainText(adf) {
   if (!adf) return "";
@@ -54644,26 +57560,34 @@ function separateIssues(issues) {
     tickets: issues.filter((i) => i.fields.issuetype.name !== "Epic")
   };
 }
-async function syncJiraTickets(wsId, workspace) {
+function normalizeJiraSiteUrl(value) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\/+$/, "").toLowerCase();
+}
+function selectAccessibleResource(resources, configuredUrl) {
+  if (resources.length === 0) return null;
+  const normalizedConfigured = normalizeJiraSiteUrl(configuredUrl);
+  if (!normalizedConfigured) return resources[0] ?? null;
+  return resources.find((resource) => normalizeJiraSiteUrl(resource.url) === normalizedConfigured) ?? resources[0] ?? null;
+}
+function isSecureStorageBackendSupported(options) {
+  if (!options.encryptionAvailable) return false;
+  if (!options.selectedBackend) return true;
+  return options.selectedBackend !== "basic_text";
+}
+async function syncJiraTickets(args) {
+  const { workspace, accessToken, cloudId } = args;
   const { projectKey } = workspace;
-  const jiraCloudId = workspace.jiraCloudId ?? loadTokens(wsId)?.cloudId;
   if (!projectKey) {
     return { imported: 0, updated: 0, epicsImported: 0, error: "No project key configured" };
-  }
-  if (!jiraCloudId) {
-    return { imported: 0, updated: 0, epicsImported: 0, error: "Not connected to Jira" };
-  }
-  let accessToken;
-  try {
-    accessToken = await getValidAccessToken(wsId);
-  } catch (err) {
-    return { imported: 0, updated: 0, epicsImported: 0, error: String(err) };
   }
   let allIssues;
   try {
     allIssues = await fetchAllIssues(
       accessToken,
-      jiraCloudId,
+      cloudId,
       projectKey,
       workspace.syncFilter ?? "all",
       workspace.boardType ?? "unknown"
@@ -54682,6 +57606,184 @@ async function syncJiraTickets(wsId, workspace) {
     updated: ticketResult.updated,
     epicsImported: epicResult.created + epicResult.updated
   };
+}
+const TOKEN_STORE_PATH = require$$0$3.join(electron.app.getPath("userData"), "jira-tokens.json");
+const TOKEN_REFRESH_SAFETY_WINDOW_MS = 5 * 60 * 1e3;
+function getSecureStorageBackend() {
+  if (!("getSelectedStorageBackend" in electron.safeStorage)) return void 0;
+  const getter = electron.safeStorage.getSelectedStorageBackend;
+  if (typeof getter !== "function") return void 0;
+  return getter.call(electron.safeStorage);
+}
+function assertSecureStorageAvailable() {
+  const encryptionAvailable = electron.safeStorage.isEncryptionAvailable();
+  const selectedBackend = getSecureStorageBackend();
+  if (isSecureStorageBackendSupported({ encryptionAvailable, selectedBackend })) {
+    return;
+  }
+  throw new Error("Secure storage is unavailable on this device. Jira requires OS-backed encryption.");
+}
+function readTokenStore() {
+  if (!require$$1$2.existsSync(TOKEN_STORE_PATH)) return {};
+  try {
+    return JSON.parse(require$$1$2.readFileSync(TOKEN_STORE_PATH, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+function writeTokenStore(store) {
+  require$$1$2.writeFileSync(TOKEN_STORE_PATH, JSON.stringify(store, null, 2), "utf-8");
+}
+function encryptSecret(value) {
+  assertSecureStorageAvailable();
+  return electron.safeStorage.encryptString(value).toString("base64");
+}
+function decryptSecret(value) {
+  assertSecureStorageAvailable();
+  try {
+    return electron.safeStorage.decryptString(Buffer.from(value, "base64"));
+  } catch {
+    throw new Error("Stored Jira credentials are no longer readable. Please reconnect Jira.");
+  }
+}
+function findWorkspace(wsId) {
+  return getAll().find((workspace) => workspace.id === wsId);
+}
+async function persistWorkspaceMetadata(workspace) {
+  try {
+    await saveCanonicalWorkspace(workspace);
+    return;
+  } catch (error) {
+    console.warn("[jira-auth] Falling back to local workspace cache:", error);
+  }
+  save(workspace);
+}
+function storeTokens(wsId, tokens) {
+  const store = readTokenStore();
+  store[wsId] = {
+    accessToken: encryptSecret(tokens.accessToken),
+    refreshToken: encryptSecret(tokens.refreshToken),
+    cloudId: tokens.cloudId,
+    cloudUrl: tokens.cloudUrl,
+    displayName: tokens.displayName,
+    expiresAt: Date.now() + tokens.expiresIn * 1e3
+  };
+  writeTokenStore(store);
+}
+function getStoredTokenEntry(wsId) {
+  return readTokenStore()[wsId] ?? null;
+}
+function clearJiraTokens(wsId) {
+  const store = readTokenStore();
+  delete store[wsId];
+  writeTokenStore(store);
+}
+function getJiraStatus(wsId) {
+  const entry = getStoredTokenEntry(wsId);
+  if (!entry) return { connected: false };
+  return {
+    connected: true,
+    cloudId: entry.cloudId,
+    cloudUrl: entry.cloudUrl,
+    displayName: entry.displayName
+  };
+}
+function resolveCloudId(wsId, workspace) {
+  const resolvedWorkspace = workspace ?? findWorkspace(wsId);
+  const cloudId = resolvedWorkspace?.jiraCloudId ?? getStoredTokenEntry(wsId)?.cloudId;
+  if (!cloudId) {
+    throw new Error("Jira is not connected for this workspace. Reconnect and try again.");
+  }
+  return cloudId;
+}
+async function getValidJiraAccessToken(wsId) {
+  const entry = getStoredTokenEntry(wsId);
+  if (!entry) {
+    throw new Error("Jira is not connected for this workspace. Reconnect and try again.");
+  }
+  if (Date.now() < entry.expiresAt - TOKEN_REFRESH_SAFETY_WINDOW_MS) {
+    return decryptSecret(entry.accessToken);
+  }
+  const refreshed = await refreshAccessToken(decryptSecret(entry.refreshToken));
+  const nextStore = readTokenStore();
+  const currentEntry = nextStore[wsId];
+  if (currentEntry) {
+    currentEntry.accessToken = encryptSecret(refreshed.access_token);
+    if (refreshed.refresh_token) {
+      currentEntry.refreshToken = encryptSecret(refreshed.refresh_token);
+    }
+    currentEntry.expiresAt = Date.now() + refreshed.expires_in * 1e3;
+    writeTokenStore(nextStore);
+  }
+  return refreshed.access_token;
+}
+async function completeJiraOAuth(wsId, code2, codeVerifier, configuredJiraUrl) {
+  const tokens = await exchangeCodeForTokens(code2, codeVerifier);
+  const resources = await getAccessibleResources(tokens.access_token);
+  const workspace = findWorkspace(wsId);
+  const resource = selectAccessibleResource(resources, workspace?.jiraUrl ?? configuredJiraUrl);
+  if (!resource) {
+    throw new Error("No accessible Jira sites were found for this account.");
+  }
+  const { displayName } = await getJiraUserInfo(tokens.access_token, resource.id);
+  storeTokens(wsId, {
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+    expiresIn: tokens.expires_in,
+    cloudId: resource.id,
+    cloudUrl: resource.url,
+    displayName
+  });
+  if (!workspace) {
+    return { wsId, cloudUrl: resource.url, displayName };
+  }
+  const updatedWorkspace = {
+    ...workspace,
+    jiraConnected: true,
+    jiraCloudId: resource.id,
+    jiraCloudUrl: resource.url,
+    jiraUrl: workspace.jiraUrl ?? configuredJiraUrl ?? resource.url
+  };
+  await persistWorkspaceMetadata(updatedWorkspace);
+  return {
+    wsId,
+    cloudUrl: resource.url,
+    displayName,
+    workspace: updatedWorkspace
+  };
+}
+async function disconnectJira(wsId) {
+  clearJiraTokens(wsId);
+  const workspace = findWorkspace(wsId);
+  if (!workspace) return null;
+  const updatedWorkspace = {
+    ...workspace,
+    jiraConnected: false,
+    jiraCloudId: void 0,
+    jiraCloudUrl: void 0
+  };
+  await persistWorkspaceMetadata(updatedWorkspace);
+  return updatedWorkspace;
+}
+async function getJiraProjects(wsId) {
+  const accessToken = await getValidJiraAccessToken(wsId);
+  return fetchProjects(accessToken, resolveCloudId(wsId));
+}
+async function countJiraTickets(wsId, projectKey, syncFilter, boardType) {
+  const accessToken = await getValidJiraAccessToken(wsId);
+  return countIssues(accessToken, resolveCloudId(wsId), projectKey, syncFilter, boardType);
+}
+async function getJiraBoardSelection(wsId, projectKey) {
+  const accessToken = await getValidJiraAccessToken(wsId);
+  return fetchProjectBoardType(accessToken, resolveCloudId(wsId), projectKey);
+}
+async function syncWorkspaceJiraTickets(wsId, workspace) {
+  const accessToken = await getValidJiraAccessToken(wsId);
+  return syncJiraTickets({
+    workspace,
+    accessToken,
+    cloudId: resolveCloudId(wsId, workspace)
+  });
 }
 const BASE_URL = "https://feedback.nakiros.com";
 const GLOBAL_DIR = require$$0$3.join(os.homedir(), ".nakiros");
@@ -54819,48 +57921,13 @@ async function handleOAuthCallback(url) {
   pendingOAuth.delete(state);
   const { codeVerifier, wsId } = pending;
   try {
-    const tokens = await exchangeCodeForTokens(code2, codeVerifier);
-    const resources = await getAccessibleResources(tokens.access_token);
-    if (resources.length === 0) {
-      throw new Error("No accessible Jira sites found. Make sure you have access to at least one Jira Cloud instance.");
-    }
-    const workspaces2 = getAll();
-    const workspace = workspaces2.find((w) => w.id === wsId);
-    let resource = resources[0];
-    if (workspace?.jiraUrl && resources.length > 1) {
-      const normalizedConfigured = workspace.jiraUrl.replace(/\/$/, "").toLowerCase();
-      const match = resources.find((r) => r.url.replace(/\/$/, "").toLowerCase() === normalizedConfigured);
-      if (match) resource = match;
-    }
-    const { displayName } = await getJiraUserInfo(tokens.access_token, resource.id);
-    saveTokens(wsId, {
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresIn: tokens.expires_in,
-      cloudId: resource.id,
-      cloudUrl: resource.url,
-      displayName
-    });
-    if (workspace) {
-      const updated = {
-        ...workspace,
-        jiraConnected: true,
-        jiraCloudId: resource.id,
-        jiraCloudUrl: resource.url,
-        jiraUrl: workspace.jiraUrl ?? resource.url
-      };
-      save(updated);
-      win.webContents.send(IPC_CHANNELS["jira:auth-complete"], {
-        wsId,
-        cloudUrl: resource.url,
-        displayName,
-        workspace: updated
-      });
-    } else {
-      win.webContents.send(IPC_CHANNELS["jira:auth-complete"], { wsId, cloudUrl: resource.url, displayName });
-    }
+    const payload = await completeJiraOAuth(wsId, code2, codeVerifier, pending.jiraUrl);
+    win.webContents.send(IPC_CHANNELS["jira:auth-complete"], payload);
   } catch (err) {
-    win.webContents.send(IPC_CHANNELS["jira:auth-error"], { wsId, error: String(err) });
+    win.webContents.send(IPC_CHANNELS["jira:auth-error"], {
+      wsId,
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 }
 function loadAppIcon() {
@@ -54957,7 +58024,23 @@ electron.ipcMain.handle(IPC_CHANNELS["dialog:openFile"], async () => {
   const result = await electron.dialog.showOpenDialog({ properties: ["openFile"] });
   return result.canceled ? null : result.filePaths[0] ?? null;
 });
-electron.ipcMain.handle(IPC_CHANNELS["workspace:getAll"], () => getHydratedWorkspaces());
+electron.ipcMain.handle(IPC_CHANNELS["workspace:getAll"], async (event) => {
+  const workspaces2 = await getHydratedWorkspaces();
+  for (const ws of workspaces2) {
+    startWorkspaceSyncBridge(ws, (syncEvent) => {
+      electron.BrowserWindow.getAllWindows().forEach((win) => {
+        win.webContents.send(IPC_CHANNELS["sync:event"], syncEvent);
+      });
+    });
+  }
+  return workspaces2;
+});
+electron.ipcMain.handle(IPC_CHANNELS["workspace:listMembers"], (_, workspaceId) => listWorkspaceMembers(workspaceId));
+electron.ipcMain.handle(
+  IPC_CHANNELS["workspace:upsertMember"],
+  (_, workspaceId, input) => upsertWorkspaceMember(workspaceId, input)
+);
+electron.ipcMain.handle(IPC_CHANNELS["workspace:removeMember"], (_, workspaceId, userId) => removeWorkspaceMember(workspaceId, userId));
 electron.ipcMain.handle(IPC_CHANNELS["workspace:save"], (_, w) => save(w));
 electron.ipcMain.handle(IPC_CHANNELS["workspace:saveCanonical"], (_, w) => saveCanonicalWorkspace(w));
 electron.ipcMain.handle(IPC_CHANNELS["workspace:delete"], (_, id2) => remove(id2));
@@ -54965,13 +58048,91 @@ electron.ipcMain.handle(IPC_CHANNELS["workspace:createRoot"], (_, parentDir, wor
 electron.ipcMain.handle(IPC_CHANNELS["repo:detectProfile"], (_, path) => detectProfile(path));
 electron.ipcMain.handle(IPC_CHANNELS["repo:copyLocal"], (_, sourcePath, targetParentDir) => copyRepoToDirectory(sourcePath, targetParentDir));
 electron.ipcMain.handle(IPC_CHANNELS["workspace:syncYaml"], (_, w) => syncWorkspaceYaml(w));
+electron.ipcMain.handle(IPC_CHANNELS["workspace:getStartedContext"], (_, w) => getGettingStartedContext(w.name, w.repos.map((r) => r.localPath)));
+electron.ipcMain.handle(IPC_CHANNELS["workspace:saveStartedState"], (_, workspaceName, state) => saveGettingStartedState(workspaceName, state));
 electron.ipcMain.handle(IPC_CHANNELS["workspace:reset"], (_, w) => resetWorkspace(w));
 electron.ipcMain.handle(IPC_CHANNELS["workspace:sync"], (_, w) => {
   const prefs = getPreferences();
   syncToRepos(w, prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL);
 });
+electron.ipcMain.handle(IPC_CHANNELS["context:push"], (_, w, force) => pushWorkspaceContext(w, force));
+electron.ipcMain.handle(IPC_CHANNELS["context:pull"], (_, w) => pullRemoteContext(w));
+electron.ipcMain.handle(IPC_CHANNELS["artifact:listVersions"], async (_event, workspaceId, artifactPath) => {
+  return listArtifactVersions(workspaceId, artifactPath);
+});
+electron.ipcMain.handle(IPC_CHANNELS["artifact:saveVersion"], async (_event, workspaceId, workspace, input) => {
+  return saveArtifactVersion(workspaceId, workspace, input);
+});
+electron.ipcMain.handle(IPC_CHANNELS["artifact:listAll"], async (_event, workspaceId) => {
+  return listAllArtifacts(workspaceId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["artifact:pullAll"], async (_event, workspaceId, workspace) => {
+  return pullAllArtifacts(workspaceId, workspace);
+});
+electron.ipcMain.handle(IPC_CHANNELS["artifact:listContextFiles"], async (_event, workspace) => {
+  return listContextArtifactFiles(workspace);
+});
+electron.ipcMain.handle(IPC_CHANNELS["artifact:readFile"], async (_event, workspace, artifactPath) => {
+  return readArtifactFile(workspace, artifactPath);
+});
+electron.ipcMain.handle(IPC_CHANNELS["artifact:getFilePath"], (_event, workspace, artifactPath) => {
+  return getArtifactFilePath(workspace, artifactPath);
+});
+electron.ipcMain.handle(IPC_CHANNELS["snapshot:take"], (_event, workspaceSlug, runId) => {
+  return takeSnapshot(workspaceSlug, runId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["snapshot:diff"], (_event, workspaceSlug, runId) => {
+  return diffSnapshot(workspaceSlug, runId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["snapshot:revert"], (_event, workspaceSlug, runId, relativePaths) => {
+  return revertSnapshot(workspaceSlug, runId, relativePaths);
+});
+electron.ipcMain.handle(IPC_CHANNELS["snapshot:resolve"], (_event, workspaceSlug, runId) => {
+  return resolveSnapshot(workspaceSlug, runId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["snapshot:listPending"], (_event, workspaceSlug) => {
+  return listPendingSnapshots(workspaceSlug);
+});
+electron.ipcMain.handle(IPC_CHANNELS["preview:check"], (_event, workspaceSlug) => {
+  return checkPendingPreview(workspaceSlug);
+});
+electron.ipcMain.handle(IPC_CHANNELS["preview:apply"], async (_event, previewRoot, workspaceSlug) => {
+  const result = await applyPreview(previewRoot, workspaceSlug);
+  const ws = getAll().find((w) => resolveWorkspaceSlug(w.id, w.name) === workspaceSlug);
+  if (ws) triggerSyncPush(ws.id);
+  return result;
+});
+electron.ipcMain.handle(IPC_CHANNELS["preview:apply-file"], async (_event, previewRoot, filePath, workspaceSlug) => {
+  const result = await applyPreviewFile(previewRoot, filePath, workspaceSlug);
+  const ws = getAll().find((w) => resolveWorkspaceSlug(w.id, w.name) === workspaceSlug);
+  if (ws) triggerSyncPush(ws.id);
+  return result;
+});
+electron.ipcMain.handle(IPC_CHANNELS["preview:discard"], (_event, previewRoot) => {
+  discardPreview(previewRoot);
+});
 electron.ipcMain.handle(IPC_CHANNELS["docs:scan"], (_, w) => scanWorkspaceDocs(w));
 electron.ipcMain.handle(IPC_CHANNELS["docs:read"], (_, absolutePath) => require$$1$2.readFileSync(absolutePath, "utf-8"));
+electron.ipcMain.handle(IPC_CHANNELS["docs:write"], (_, absolutePath, content) => {
+  require$$1$2.writeFileSync(absolutePath, content, "utf-8");
+});
+const docWatchers = /* @__PURE__ */ new Map();
+electron.ipcMain.handle(IPC_CHANNELS["docs:watch"], (event, absolutePath) => {
+  if (docWatchers.has(absolutePath)) return;
+  const watcher = chokidar.watch(absolutePath, { ignoreInitial: true });
+  watcher.on("change", () => {
+    const win = electron.BrowserWindow.fromWebContents(event.sender);
+    win?.webContents.send(IPC_CHANNELS["docs:changed"], absolutePath);
+  });
+  docWatchers.set(absolutePath, watcher);
+});
+electron.ipcMain.handle(IPC_CHANNELS["docs:unwatch"], async (_, absolutePath) => {
+  const watcher = docWatchers.get(absolutePath);
+  if (watcher) {
+    await watcher.close();
+    docWatchers.delete(absolutePath);
+  }
+});
 electron.ipcMain.handle(IPC_CHANNELS["shell:openPath"], (_, path) => electron.shell.openPath(path));
 electron.ipcMain.handle(IPC_CHANNELS["git:remoteUrl"], async (_, repoPath) => {
   try {
@@ -55007,6 +58168,33 @@ electron.ipcMain.handle(IPC_CHANNELS["preferences:getSystemLanguage"], () => {
   return locale.toLowerCase().startsWith("fr") ? "fr" : "en";
 });
 electron.ipcMain.handle(IPC_CHANNELS["preferences:save"], (_, prefs) => savePreferences(prefs));
+electron.ipcMain.handle(IPC_CHANNELS["providerCredentials:getAll"], () => listProviderCredentials());
+electron.ipcMain.handle(IPC_CHANNELS["providerCredentials:create"], (_, input) => createProviderCredential(input));
+electron.ipcMain.handle(
+  IPC_CHANNELS["providerCredentials:update"],
+  (_, credentialId, input) => updateProviderCredential(credentialId, input)
+);
+electron.ipcMain.handle(IPC_CHANNELS["providerCredentials:revoke"], (_, credentialId) => revokeProviderCredential(credentialId));
+electron.ipcMain.handle(
+  IPC_CHANNELS["providerCredentials:delete"],
+  (_, credentialId, force) => deleteProviderCredential(credentialId, force)
+);
+electron.ipcMain.handle(
+  IPC_CHANNELS["providerCredentials:getWorkspace"],
+  (_, workspaceId) => getWorkspaceProviderCredentials(workspaceId)
+);
+electron.ipcMain.handle(
+  IPC_CHANNELS["providerCredentials:bindWorkspace"],
+  (_, workspaceId, input) => bindWorkspaceProviderCredential(workspaceId, input)
+);
+electron.ipcMain.handle(
+  IPC_CHANNELS["providerCredentials:unbindWorkspace"],
+  (_, workspaceId, credentialId) => unbindWorkspaceProviderCredential(workspaceId, credentialId)
+);
+electron.ipcMain.handle(
+  IPC_CHANNELS["providerCredentials:setWorkspaceDefault"],
+  (_, workspaceId, input) => setWorkspaceProviderDefault(workspaceId, input)
+);
 electron.ipcMain.handle(IPC_CHANNELS["agents:status"], (_, repoPath) => getAgentInstallStatus(repoPath));
 electron.ipcMain.handle(IPC_CHANNELS["agents:install"], (_, request2) => installAgents(request2));
 electron.ipcMain.handle(IPC_CHANNELS["agents:global-status"], () => getGlobalInstallStatus());
@@ -55043,16 +58231,18 @@ electron.ipcMain.handle(IPC_CHANNELS["org:cancelInvitation"], (_event, orgId, in
 electron.ipcMain.handle(IPC_CHANNELS["org:acceptInvitations"], (_event, email2) => acceptInvitations(email2));
 electron.ipcMain.handle(IPC_CHANNELS["auth:signIn"], async (event) => {
   const win = electron.BrowserWindow.fromWebContents(event.sender);
-  signIn(win ?? void 0).then((result) => {
+  signIn(win ?? void 0).then(async (result) => {
     win?.webContents.send(IPC_CHANNELS["auth:complete"], { email: result.email });
     for (const ws of getAll()) {
       try {
-        syncWorkspaceYaml(ws);
+        await syncWorkspaceYaml(ws);
       } catch (error) {
         console.error(`[auth] Failed to sync workspace "${ws.name}" after sign-in:`, error);
       }
+      triggerSyncPush(ws.id);
     }
   }).catch((error) => {
+    console.error("[auth] Sign-in failed:", error);
     const message = error instanceof Error ? error.message : "Authentication failed";
     if (message !== "Cancelled") {
       win?.webContents.send(IPC_CHANNELS["auth:error"], { message });
@@ -55063,7 +58253,7 @@ electron.ipcMain.handle(IPC_CHANNELS["auth:signOut"], async () => {
   await signOut();
   for (const ws of getAll()) {
     try {
-      syncWorkspaceYaml(ws);
+      await syncWorkspaceYaml(ws);
     } catch (error) {
       console.error(`[auth] Failed to sync workspace "${ws.name}" after sign-out:`, error);
     }
@@ -55072,6 +58262,18 @@ electron.ipcMain.handle(IPC_CHANNELS["auth:signOut"], async () => {
     win.webContents.send(IPC_CHANNELS["auth:signedOut"], {});
   }
 });
+electron.ipcMain.handle(IPC_CHANNELS["backlog:getStories"], (_, workspaceId) => getBacklogStories(workspaceId));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:getEpics"], (_, workspaceId) => getBacklogEpics(workspaceId));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:createEpic"], (_, workspaceId, body) => createBacklogEpic(workspaceId, body));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:updateEpic"], (_, workspaceId, epicId, body) => updateBacklogEpic(workspaceId, epicId, body));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:createStory"], (_, workspaceId, body) => createBacklogStory(workspaceId, body));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:updateStory"], (_, workspaceId, storyId, body) => updateBacklogStory(workspaceId, storyId, body));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:getTasks"], (_, workspaceId, storyId) => getBacklogTasks(workspaceId, storyId));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:createTask"], (_, workspaceId, storyId, body) => createBacklogTask(workspaceId, storyId, body));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:updateTask"], (_, workspaceId, storyId, taskId, body) => updateBacklogTask(workspaceId, storyId, taskId, body));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:getSprints"], (_, workspaceId) => getBacklogSprints(workspaceId));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:createSprint"], (_, workspaceId, body) => createBacklogSprint(workspaceId, body));
+electron.ipcMain.handle(IPC_CHANNELS["backlog:updateSprint"], (_, workspaceId, sprintId, body) => updateBacklogSprint(workspaceId, sprintId, body));
 function resolveSlug(wsId) {
   const ws = getAll().find((w) => w.id === wsId);
   return ws ? toWorkspaceSlug$1(ws.name) : wsId;
@@ -55130,26 +58332,41 @@ electron.ipcMain.handle(IPC_CHANNELS["terminal:destroy"], (_, terminalId) => {
 });
 electron.ipcMain.handle(
   IPC_CHANNELS["agent:run"],
-  (event, request2) => {
+  async (event, request2) => {
     const win = electron.BrowserWindow.fromWebContents(event.sender);
     const prefs = getPreferences();
     const repoPath = request2.anchorRepoPath;
     const additionalDirs = request2.additionalDirs ?? request2.activeRepoPaths;
     const requestedProvider = request2.provider;
     const provider = requestedProvider === "claude" || requestedProvider === "codex" || requestedProvider === "cursor" ? requestedProvider : prefs.agentProvider ?? "claude";
-    const agentWorkspacePath = require$$0$3.resolve(os.homedir(), ".nakiros");
-    const effectiveAgentCwd = resolveAgentCwd(repoPath, additionalDirs);
-    try {
-      ensureCommandsInRepo(agentWorkspacePath, provider);
-    } catch (err) {
-      console.warn(`[agent:run] Unable to ensure command templates in agent workspace: ${String(err)}`);
+    await assertWorkspaceLaunchAllowed({
+      workspaceId: request2.workspaceId,
+      enforceRoles: (prefs.agentChannel ?? "stable") !== "beta"
+    });
+    const allWorkspaces = getAll();
+    const workspace = allWorkspaces.find((w) => w.id === request2.workspaceId);
+    const workspaceSlug = workspace ? resolveWorkspaceSlug(workspace.id, workspace.name) : "";
+    if (workspace) {
+      try {
+        syncWorkspaceSymlinks(workspace);
+      } catch (err) {
+        console.warn(`[agent:run] Unable to sync workspace symlinks: ${String(err)}`);
+      }
     }
+    const nakirosWorkspaceDir = workspaceSlug ? getNakirosWorkspaceDir$1(workspaceSlug) : require$$0$3.resolve(os.homedir(), ".nakiros");
+    const effectiveAgentCwd = orchestrator.resolveAgentCwd(repoPath, additionalDirs, nakirosWorkspaceDir);
     try {
-      ensureCommandsInRepo(effectiveAgentCwd, provider);
+      ensureCommandsInRepo(nakirosWorkspaceDir, provider);
     } catch (err) {
-      console.warn(`[agent:run] Unable to ensure command templates in effective cwd ${effectiveAgentCwd}: ${String(err)}`);
+      console.warn(`[agent:run] Unable to ensure command templates in workspace dir: ${String(err)}`);
     }
-    const rawLines = [];
+    if (effectiveAgentCwd !== nakirosWorkspaceDir) {
+      try {
+        ensureCommandsInRepo(effectiveAgentCwd, provider);
+      } catch (err) {
+        console.warn(`[agent:run] Unable to ensure command templates in effective cwd ${effectiveAgentCwd}: ${String(err)}`);
+      }
+    }
     let runId = "";
     runId = runAgentCommand(
       provider,
@@ -55159,8 +58376,7 @@ electron.ipcMain.handle(
         win?.webContents.send(IPC_CHANNELS["agent:start"], info);
       },
       (evt) => win?.webContents.send(IPC_CHANNELS["agent:event"], { runId, event: evt }),
-      (exitCode, error, lines) => win?.webContents.send(IPC_CHANNELS["agent:done"], { runId, exitCode, error, rawLines: lines ?? [] }),
-      (raw) => rawLines.push(raw)
+      (exitCode, error, lines) => win?.webContents.send(IPC_CHANNELS["agent:done"], { runId, exitCode, error, rawLines: lines ?? [] })
     );
     return runId;
   }
@@ -55168,63 +58384,32 @@ electron.ipcMain.handle(
 electron.ipcMain.handle(IPC_CHANNELS["agent:cancel"], (_, runId) => {
   cancelAgentRun(runId);
 });
-electron.ipcMain.handle(IPC_CHANNELS["conversation:getAll"], (_, workspaceId) => getConversations(resolveSlug(workspaceId)));
-electron.ipcMain.handle(IPC_CHANNELS["conversation:save"], (_, conv) => {
-  saveConversation(conv, resolveSlug(conv.workspaceId));
+electron.ipcMain.handle(
+  IPC_CHANNELS["agent:action-execute"],
+  (_, workspaceId, block) => executeAction(workspaceId, block)
+);
+electron.ipcMain.handle(IPC_CHANNELS["conversation:getAll"], (_, workspaceId) => getConversations(resolveSlug(workspaceId), workspaceId));
+electron.ipcMain.handle(IPC_CHANNELS["conversation:save"], () => {
 });
-electron.ipcMain.handle(IPC_CHANNELS["conversation:delete"], (_, id2, workspaceId) => deleteConversation(id2, resolveSlug(workspaceId)));
+electron.ipcMain.handle(IPC_CHANNELS["conversation:delete"], (_, id2, workspaceId) => deleteConversationEntry(id2, resolveSlug(workspaceId)));
 electron.ipcMain.handle(IPC_CHANNELS["agentTabs:get"], (_, workspaceId) => getAgentTabsState(resolveSlug(workspaceId)));
 electron.ipcMain.handle(IPC_CHANNELS["agentTabs:save"], (_, workspaceId, state) => saveAgentTabsState(resolveSlug(workspaceId), state));
 electron.ipcMain.handle(IPC_CHANNELS["agentTabs:clear"], (_, workspaceId) => clearAgentTabsState(resolveSlug(workspaceId)));
-electron.ipcMain.handle(IPC_CHANNELS["jira:startAuth"], (_, wsId) => {
+electron.ipcMain.handle(IPC_CHANNELS["jira:startAuth"], (_, wsId, jiraUrl) => {
   const state = generateState();
   const { codeVerifier, codeChallenge } = generatePKCE();
-  pendingOAuth.set(state, { codeVerifier, wsId });
+  pendingOAuth.set(state, { codeVerifier, wsId, jiraUrl: jiraUrl?.trim() || void 0 });
   openAuthUrl(state, codeChallenge);
 });
-electron.ipcMain.handle(IPC_CHANNELS["jira:disconnect"], (_, wsId) => {
-  clearTokens(wsId);
-  const workspaces2 = getAll();
-  const workspace = workspaces2.find((w) => w.id === wsId);
-  if (workspace) {
-    const updated = {
-      ...workspace,
-      jiraConnected: false,
-      jiraCloudId: void 0,
-      jiraCloudUrl: void 0
-    };
-    save(updated);
-    return updated;
-  }
-  return null;
-});
-electron.ipcMain.handle(IPC_CHANNELS["jira:getStatus"], (_, wsId) => getTokenMeta(wsId));
+electron.ipcMain.handle(IPC_CHANNELS["jira:disconnect"], (_, wsId) => disconnectJira(wsId));
+electron.ipcMain.handle(IPC_CHANNELS["jira:getStatus"], (_, wsId) => getJiraStatus(wsId));
 electron.ipcMain.handle(IPC_CHANNELS["jira:syncTickets"], async (_, wsId, workspace) => {
   const persisted = getAll().find((w) => w.id === wsId) ?? workspace;
-  return syncJiraTickets(wsId, persisted);
+  return syncWorkspaceJiraTickets(wsId, persisted);
 });
-electron.ipcMain.handle(IPC_CHANNELS["jira:getValidToken"], (_, wsId) => getValidAccessToken(wsId));
-electron.ipcMain.handle(IPC_CHANNELS["jira:getProjects"], async (_, wsId) => {
-  const token = await getValidAccessToken(wsId);
-  const workspace = getAll().find((w) => w.id === wsId);
-  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
-  if (!cloudId) throw new Error("Not connected to Jira");
-  return fetchProjects(token, cloudId);
-});
-electron.ipcMain.handle(IPC_CHANNELS["jira:countTickets"], async (_, wsId, projectKey, syncFilter, boardType) => {
-  const token = await getValidAccessToken(wsId);
-  const workspace = getAll().find((w) => w.id === wsId);
-  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
-  if (!cloudId) throw new Error("Not connected to Jira");
-  return countIssues(token, cloudId, projectKey, syncFilter, boardType);
-});
-electron.ipcMain.handle(IPC_CHANNELS["jira:getBoardType"], async (_, wsId, projectKey) => {
-  const token = await getValidAccessToken(wsId);
-  const workspace = getAll().find((w) => w.id === wsId);
-  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
-  if (!cloudId) return { boardType: "unknown", boardId: null };
-  return fetchProjectBoardType(token, cloudId, projectKey);
-});
+electron.ipcMain.handle(IPC_CHANNELS["jira:getProjects"], async (_, wsId) => getJiraProjects(wsId));
+electron.ipcMain.handle(IPC_CHANNELS["jira:countTickets"], async (_, wsId, projectKey, syncFilter, boardType) => countJiraTickets(wsId, projectKey, syncFilter, boardType));
+electron.ipcMain.handle(IPC_CHANNELS["jira:getBoardType"], async (_, wsId, projectKey) => getJiraBoardSelection(wsId, projectKey));
 function broadcastServerStatus(status) {
   for (const win of electron.BrowserWindow.getAllWindows()) {
     win.webContents.send(IPC_CHANNELS["server:status-change"], status);
@@ -55310,6 +58495,7 @@ electron.app.on("before-quit", () => {
   isQuitting = true;
   broadcastServerStatus("stopped");
   stopServer();
+  stopAllSyncBridges();
 });
 electron.app.on("window-all-closed", () => {
   if (process.platform !== "darwin") electron.app.quit();

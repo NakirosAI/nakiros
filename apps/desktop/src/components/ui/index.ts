@@ -7,3 +7,6 @@ export * from './Input';
 export * from './Modal';
 export * from './Select';
 export * from './Textarea';
+export * from './alert';
+export * from './separator';
+export * from './MarkdownViewer';

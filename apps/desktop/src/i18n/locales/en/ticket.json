@@ -41,5 +41,6 @@
   "commandTicketLabel": "Ticket",
   "commandTitleLabel": "Title",
   "commandPriorityLabel": "Priority",
-  "toComplete": "(to complete)"
+  "toComplete": "(to complete)",
+  "launchedInChatIA": "Session launched in Chat IA →"
 }

@@ -1,0 +1,35 @@
+{
+  "eyebrow": "Démarrage",
+  "title": "Configurer {{name}}",
+  "description": "Complète ces 3 étapes pour rendre tes agents pleinement opérationnels. Chaque étape lance une session IA guidée directement dans Chat IA.",
+
+  "stepLabel": "Étape {{number}}",
+  "launch": "Lancer",
+  "launching": "Lancement…",
+  "stepComplete": "Étape {{number}} terminée",
+  "prerequisiteMessage": "Complète d'abord l'étape {{number}}",
+
+  "step1TitleNew": "Générer le contexte partagé du projet",
+  "step1TitleBrownfield": "Générer le contexte inter-repo global",
+  "step1DescriptionNew": "Analyse les repos sélectionnés et produit les docs de référence dont tes agents auront besoin.",
+  "step1DescriptionBrownfield": "Le contexte repo existe déjà. Génère le contexte workspace partagé qui relie tous les repos entre eux.",
+  "step1ChatTitle": "Generate Context · {{workspace}}",
+
+  "step2Title": "Évaluer la compréhension du projet",
+  "step2Description": "Mesure ce que le système comprend de la base de code et identifie les angles morts restants.",
+  "step2ChatTitle": "Project Confidence · {{workspace}}",
+
+  "step3Title": "Challenger les tickets synchronisés",
+  "step3Description": "Passe en revue le périmètre de livraison avant de démarrer le développement pour que le workspace soit opérationnel de bout en bout.",
+  "step3ChatTitle": "PM Challenge · {{workspace}}",
+  "step3NoPmTitle": "Connexion PM requise",
+  "step3NoPmDescription": "Connecte un outil PM (Jira) et synchronise les tickets d'abord pour lancer le PM Challenge.",
+
+  "readyTitle": "Ton workspace est prêt",
+  "readyDescription": "Les 3 étapes d'onboarding sont terminées. Tes agents ont maintenant tout le contexte nécessaire.",
+  "readyCtaOverview": "Aller à l'Overview",
+
+  "skipButton": "Passer — configurer manuellement",
+  "backHome": "Retour à l'accueil",
+  "continueButton": "Ouvrir le workspace"
+}

@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nakiros — Layout Final Proposal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0e1117;
+      --bg-soft: #131720;
+      --bg-card: #1a2030;
+      --bg-muted: #1e2535;
+      --line: #2a3347;
+      --line-strong: #3a4560;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --text-faint: #2a3a52;
+      --primary: #6366f1;
+      --primary-soft: rgba(99,102,241,0.12);
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --teal: #14b8a6;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #070b12;
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 24px 64px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 48px;
+    }
+
+    .page-title { text-align: center; }
+    .page-title h1 { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+    .page-title p  { font-size: 12px; color: var(--text-muted); }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ═══ RESPONSIBILITY MAP ═══ */
+    .resp-map {
+      width: 920px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .resp-card {
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .resp-card h3 {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .resp-card ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+    .resp-card li { font-size: 11px; color: var(--text-muted); padding-left: 14px; position: relative; }
+    .resp-card li::before { content: '·'; position: absolute; left: 4px; }
+    .resp-card li strong { color: var(--text); }
+
+    .zone-top    { border-top: 2px solid #818cf8; }
+    .zone-side   { border-top: 2px solid #34d399; }
+    .zone-bottom { border-top: 2px solid var(--teal); }
+
+    .h-top    { color: #818cf8; }
+    .h-side   { color: #34d399; }
+    .h-bottom { color: var(--teal); }
+
+    /* ═══ SYNC STATES ═══ */
+    .sync-states {
+      width: 920px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .sync-row {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .sync-state-card {
+      flex: 1;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .sync-state-title {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* bottom bar mockup inside state card */
+    .bottombar-preview {
+      height: 26px;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      font-size: 10px;
+    }
+
+    .bb-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .bb-item svg {
+      width: 11px;
+      height: 11px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex-shrink: 0;
+    }
+
+    .bb-sep { width: 1px; height: 12px; background: var(--line); flex-shrink: 0; }
+    .bb-fill { flex: 1; }
+
+    .bb-item.synced   { color: var(--success); }
+    .bb-item.syncing  { color: var(--teal); }
+    .bb-item.offline  { color: var(--text-muted); }
+    .bb-item.error    { color: var(--danger); }
+    .bb-item.collab   { color: #a78bfa; }
+    .bb-item.muted    { color: var(--text-faint); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1.2s linear infinite; display: inline-block; transform-origin: center; }
+
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+    .pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+    /* ═══ FULL APP MOCK ═══ */
+    .full-app {
+      width: 920px;
+      height: 560px;
+      background: var(--bg);
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 12px 60px rgba(0,0,0,0.6);
+    }
+
+    /* TOPBAR */
+    .topbar {
+      height: 52px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-soft);
+    }
+
+    .logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--primary);
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 900;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .ws-tabs { display: flex; align-items: center; gap: 6px; flex: 1; overflow: hidden; }
+
+    .ws-tab {
+      display: flex;
+      align-items: center;
+      height: 30px;
+      border-radius: 8px;
+      border: 1px solid var(--line-strong);
+      background: var(--bg-card);
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .ws-tab.inactive {
+      border-color: var(--line);
+      background: transparent;
+      color: var(--text-muted);
+    }
+
+    .ws-tab-x { font-size: 12px; color: var(--text-faint); }
+
+    .ws-add {
+      width: 28px; height: 28px;
+      border-radius: 8px; border: 1px solid var(--line);
+      background: transparent;
+      display: grid; place-items: center;
+      font-size: 15px; color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .topbar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+    .tb-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      height: 28px;
+      padding: 0 9px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: transparent;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .tb-btn svg {
+      width: 12px; height: 12px;
+      stroke: currentColor; fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+
+    .tb-btn.account { gap: 5px; }
+
+    /* BODY */
+    .app-body { flex: 1; display: flex; overflow: hidden; }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 64px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border-right: 1px solid var(--line);
+      background: var(--bg-soft);
+      padding: 10px 0;
+    }
+
+    .nav-top { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+    .nav-bot { display: flex; flex-direction: column; align-items: center; gap: 2px; border-top: 1px solid var(--line); padding-top: 8px; width: 100%; }
+
+    .nb {
+      width: 54px; height: 50px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 3px; position: relative; cursor: pointer;
+    }
+
+    .nb.active { border-color: var(--primary); background: var(--primary-soft); }
+    .nb.ws     { border-color: rgba(52,211,153,0.25); background: rgba(52,211,153,0.06); }
+
+    .nb svg {
+      width: 16px; height: 16px;
+      stroke: var(--text-muted); fill: none;
+      stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    }
+
+    .nb.active svg { stroke: var(--primary); }
+    .nb.ws svg { stroke: #34d399; }
+
+    .nb .lbl { font-size: 8.5px; font-weight: 700; color: var(--text-muted); }
+    .nb.active .lbl { color: var(--primary); }
+    .nb.ws .lbl { color: #34d399; }
+
+    .notif-dot {
+      position: absolute; top: 9px; right: 9px;
+      width: 7px; height: 7px;
+      border-radius: 50%; background: var(--teal);
+      border: 1.5px solid var(--bg-soft);
+    }
+
+    /* MAIN */
+    .main {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-faint); font-size: 13px;
+      flex-direction: column; gap: 8px;
+    }
+
+    .main svg {
+      width: 28px; height: 28px;
+      stroke: var(--text-faint); fill: none;
+      stroke-width: 1.5; stroke-linecap: round;
+    }
+
+    /* BOTTOM BAR — the hero */
+    .bottombar {
+      height: 28px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      border-top: 1px solid var(--line);
+      background: var(--bg-soft);
+      padding: 0 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+      overflow: hidden;
+    }
+
+    .bb {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 10px;
+      height: 100%;
+      border-right: 1px solid var(--line);
+      white-space: nowrap;
+      cursor: default;
+    }
+
+    .bb:first-child { padding-left: 0; }
+    .bb:last-child { border-right: none; }
+
+    .bb svg {
+      width: 12px; height: 12px;
+      stroke: currentColor; fill: none;
+      stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+      flex-shrink: 0;
+    }
+
+    .bb.synced  { color: var(--success); }
+    .bb.syncing { color: var(--teal); }
+    .bb.collab  { color: #a78bfa; }
+    .bb.neutral { color: var(--text-muted); }
+    .bb.faint   { color: var(--text-faint); }
+
+    .bb-spacer { flex: 1; }
+
+    /* ═══ ANNOTATIONS ═══ */
+    .anno-grid {
+      width: 920px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .anno-card {
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .anno-card h4 { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+    .anno-card ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+    .anno-card li { font-size: 11px; color: var(--text-muted); padding-left: 12px; position: relative; line-height: 1.4; }
+    .anno-card li::before { content: '→'; position: absolute; left: 0; color: var(--text-faint); font-size: 9px; top: 1px; }
+    .anno-card li strong { color: var(--text); }
+  </style>
+</head>
+<body>
+
+  <div class="page-title">
+    <h1>Nakiros — Layout final : Topbar · Sidebar · Bottom bar</h1>
+    <p>Topbar droite : <strong style="color:var(--text)">Feedback · ⚙</strong> — c'est tout. Le reste appartient à la bottom bar.</p>
+  </div>
+
+  <!-- ═══ RESPONSIBILITY MAP ═══ -->
+  <div class="section-label">Responsabilité de chaque zone</div>
+
+  <div class="resp-map">
+    <div class="resp-card zone-top">
+      <h3 class="h-top">Topbar — navigation & contrôles globaux</h3>
+      <ul>
+        <li><strong>Workspace tabs</strong> — switcher entre projets ouverts</li>
+        <li><strong>Feedback</strong> — bouton texte discret</li>
+        <li><strong>⚙</strong> — icône seule, ouvre Global Settings (compte, agent, langue, org)</li>
+        <li>MCP badge → <strong>supprimé</strong></li>
+        <li>Account badge (dot + prénom) → <strong>supprimé</strong>, nom visible dans Settings</li>
+        <li>Repo count / topology → <strong>supprimés</strong>, en bottom bar</li>
+      </ul>
+    </div>
+    <div class="resp-card zone-side">
+      <h3 class="h-side">Sidebar — navigation workspace</h3>
+      <ul>
+        <li><strong>Overview · Chat · Product · Delivery · Backlog</strong></li>
+        <li>Tab <strong>"Workspace"</strong> (ex-Settings) en bas — repos, git, PM, danger</li>
+        <li>Icône cube / package pour différencier de l'engrenage Global</li>
+        <li>Notification dots sur Chat si run terminé ou preview pending</li>
+      </ul>
+    </div>
+    <div class="resp-card zone-bottom">
+      <h3 class="h-bottom">Bottom bar — status ambiant système</h3>
+      <ul>
+        <li><strong>Connexion cloud</strong> — online / offline / reconnecting</li>
+        <li><strong>Sync workspace</strong> — synced / syncing… / error</li>
+        <li><strong>Activité collègue</strong> — "Updated by Sophie" avec avatar</li>
+        <li><strong>Repo count + topology</strong> — info workspace passive</li>
+        <li>Jamais actionnable sauf click → detail panel optionnel</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══ SYNC STATES ═══ -->
+  <div class="section-label">États de la bottom bar — sync silencieux</div>
+
+  <div class="sync-states">
+    <div class="sync-row">
+      <!-- STATE 1: synced -->
+      <div class="sync-state-card">
+        <div class="sync-state-title" style="color:var(--success);">Idle — tout est synced</div>
+        <div class="bottombar-preview">
+          <div class="bb-item synced">
+            <svg viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            Connected
+          </div>
+          <div class="bb-sep"></div>
+          <div class="bb-item synced">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            Synced
+          </div>
+          <div class="bb-fill"></div>
+          <div class="bb-item muted">3 repos · multi</div>
+        </div>
+      </div>
+
+      <!-- STATE 2: syncing outbound -->
+      <div class="sync-state-card">
+        <div class="sync-state-title" style="color:var(--teal);">Upload — envoi vers le backend</div>
+        <div class="bottombar-preview">
+          <div class="bb-item synced">
+            <svg viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            Connected
+          </div>
+          <div class="bb-sep"></div>
+          <div class="bb-item syncing">
+            <svg viewBox="0 0 24 24" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+            Syncing…
+          </div>
+          <div class="bb-fill"></div>
+          <div class="bb-item muted">3 repos · multi</div>
+        </div>
+      </div>
+
+      <!-- STATE 3: colleague update -->
+      <div class="sync-state-card">
+        <div class="sync-state-title" style="color:#a78bfa;">Collègue — mise à jour reçue</div>
+        <div class="bottombar-preview">
+          <div class="bb-item synced">
+            <svg viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            Connected
+          </div>
+          <div class="bb-sep"></div>
+          <div class="bb-item syncing pulse">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg>
+            Updating…
+          </div>
+          <div class="bb-sep"></div>
+          <div class="bb-item" style="color:#a78bfa;">
+            <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Sophie updated product.md
+          </div>
+          <div class="bb-fill"></div>
+          <div class="bb-item muted">3 repos · multi</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sync-row">
+      <!-- STATE 4: offline -->
+      <div class="sync-state-card">
+        <div class="sync-state-title" style="color:var(--text-muted);">Offline — pas de réseau</div>
+        <div class="bottombar-preview">
+          <div class="bb-item offline">
+            <svg viewBox="0 0 24 24"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            Offline
+          </div>
+          <div class="bb-sep"></div>
+          <div class="bb-item" style="color:var(--text-faint);">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Changes queued locally
+          </div>
+          <div class="bb-fill"></div>
+          <div class="bb-item muted">3 repos · multi</div>
+        </div>
+      </div>
+
+      <!-- STATE 5: sync error -->
+      <div class="sync-state-card">
+        <div class="sync-state-title" style="color:var(--danger);">Erreur de sync</div>
+        <div class="bottombar-preview">
+          <div class="bb-item synced">
+            <svg viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            Connected
+          </div>
+          <div class="bb-sep"></div>
+          <div class="bb-item error">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Sync error — click to retry
+          </div>
+          <div class="bb-fill"></div>
+          <div class="bb-item muted">3 repos · multi</div>
+        </div>
+      </div>
+
+      <!-- STATE 6: reconnecting -->
+      <div class="sync-state-card">
+        <div class="sync-state-title" style="color:var(--warning);">Reconnexion en cours</div>
+        <div class="bottombar-preview">
+          <div class="bb-item" style="color:var(--warning);">
+            <svg viewBox="0 0 24 24" class="pulse"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            Reconnecting…
+          </div>
+          <div class="bb-sep"></div>
+          <div class="bb-item" style="color:var(--text-faint);">Changes queued</div>
+          <div class="bb-fill"></div>
+          <div class="bb-item muted">3 repos · multi</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ FULL APP MOCK ═══ -->
+  <div class="section-label">Vue complète — layout final (état : collègue en train de syncer)</div>
+
+  <div class="full-app">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div class="logo">N</div>
+      <div class="ws-tabs">
+        <div class="ws-tab">Nakiros App <span class="ws-tab-x">×</span></div>
+        <div class="ws-tab inactive">Backend API <span class="ws-tab-x">×</span></div>
+        <div class="ws-add">+</div>
+      </div>
+      <div class="topbar-right">
+        <div class="tb-btn">
+          <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14l4-4h14a2 2 0 0 0 2-2v-5"/><path d="M18 2l4 4-8 8H10v-4z"/></svg>
+          Feedback
+        </div>
+        <div class="tb-btn" style="border-color:var(--line-strong);width:28px;padding:0;justify-content:center;" title="Global Settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- BODY -->
+    <div class="app-body">
+
+      <!-- SIDEBAR -->
+      <div class="sidebar">
+        <div class="nav-top">
+          <div class="nb active">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            <span class="lbl">Overview</span>
+          </div>
+          <div class="nb" style="position:relative;">
+            <div class="notif-dot"></div>
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span class="lbl">Chat</span>
+          </div>
+          <div class="nb">
+            <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span class="lbl">Product</span>
+          </div>
+          <div class="nb">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg>
+            <span class="lbl">Delivery</span>
+          </div>
+          <div class="nb">
+            <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1.5" style="fill:var(--text-muted);stroke:none"/><circle cx="3" cy="12" r="1.5" style="fill:var(--text-muted);stroke:none"/><circle cx="3" cy="18" r="1.5" style="fill:var(--text-muted);stroke:none"/></svg>
+            <span class="lbl">Backlog</span>
+          </div>
+        </div>
+        <div class="nav-bot">
+          <div class="nb ws">
+            <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            <span class="lbl">Workspace</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MAIN -->
+      <div class="main">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        Overview content
+      </div>
+
+    </div>
+
+    <!-- BOTTOM BAR -->
+    <div class="bottombar">
+      <!-- Connection -->
+      <div class="bb synced">
+        <svg viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+        Connected
+      </div>
+      <!-- Sync state: colleague updating -->
+      <div class="bb syncing pulse">
+        <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg>
+        Updating…
+      </div>
+      <!-- Colleague info -->
+      <div class="bb collab">
+        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Sophie updated features/auth.md
+      </div>
+
+      <div class="bb-spacer"></div>
+
+      <!-- Workspace info — passive -->
+      <div class="bb faint">3 repos</div>
+      <div class="bb faint" style="border-right:none;">multi</div>
+    </div>
+
+  </div>
+
+  <!-- ═══ ANNOTATIONS ═══ -->
+  <div class="anno-grid">
+    <div class="anno-card" style="border-top:2px solid var(--teal)">
+      <h4 style="color:var(--teal)">Bottom bar — règles UX</h4>
+      <ul>
+        <li><strong>Jamais critique</strong> — l'user peut ignorer, le flux n'est pas bloqué</li>
+        <li><strong>Silencieuse par défaut</strong> — s'anime seulement quand quelque chose change</li>
+        <li><strong>Clic optionnel</strong> — ouvre un detail panel (historique sync, conflits éventuels)</li>
+        <li><strong>Hauteur fixe 28px</strong> — comme VS Code, ne vole pas d'espace content</li>
+      </ul>
+    </div>
+    <div class="anno-card" style="border-top:2px solid #a78bfa">
+      <h4 style="color:#a78bfa">Activité collègue — comportement</h4>
+      <ul>
+        <li>Apparaît <strong>4–5 secondes</strong> puis disparaît silencieusement</li>
+        <li>Format : <strong>"[Prénom] updated [fichier court]"</strong></li>
+        <li>Si plusieurs collègues en même temps → "Sophie +2 updated files"</li>
+        <li>Pas de toast intrusif, pas de modal — bottom bar suffit</li>
+      </ul>
+    </div>
+    <div class="anno-card" style="border-top:2px solid #818cf8">
+      <h4 style="color:#818cf8">Topbar — ce qu'on enlève définitivement</h4>
+      <ul>
+        <li><strong class="removed" style="text-decoration:line-through;opacity:.5">MCP badge</strong> — supprimé</li>
+        <li><strong class="removed" style="text-decoration:line-through;opacity:.5">3 repos / topology</strong> — déplacé en bottom bar (faint)</li>
+        <li><strong class="removed" style="text-decoration:line-through;opacity:.5">Account badge "Connected"</strong> — supprimé, connexion dans la bottom bar</li>
+        <li>Résultat : topbar droite = <strong>2 éléments</strong> (Feedback · ⚙)</li>
+      </ul>
+    </div>
+  </div>
+
+</body>
+</html>

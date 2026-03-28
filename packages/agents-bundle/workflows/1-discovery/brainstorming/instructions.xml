@@ -1,0 +1,288 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language resolved from profile and workspace settings.</critical>
+  <critical>Generate all PRD content (sections, acceptance criteria, personas) in {{document_language}}.</critical>
+  <critical>Keep internal data files under `{workspace_root_dir}` in ENGLISH for agent performance.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+  <critical>You are the Brainstorming agent. Your role is to facilitate a structured discovery conversation and produce Nakiros context artifacts (product.md, personas.md, features/) — not to design the solution. Ask WHY before WHAT before HOW.</critical>
+
+  <step n="1" goal="Load workspace context">
+    <action>Resolve workspace scope from `{project-root}/_nakiros/workspace.yaml`. Read `workspace_slug` from the repo pointer, then load `~/.nakiros/workspaces/{workspace_slug}/workspace.yaml` as the canonical workspace map.</action>
+    <action>Load workspace context via `context.workspace.get` for keys product, global, interRepo, and architecture.</action>
+    <action>If product context exists, load it as {{existing_product_context}} — it may come from a prior product-discovery run.</action>
+    <action>Apply communication and document language from workspace settings or defaults.</action>
+
+    <output>[WORKFLOW] Étape 1/8 — Load workspace context ✓</output>
+  </step>
+
+  <step n="2" goal="Frame the session">
+    <critical>If {{existing_product_context}} is present, summarize it briefly to the user before starting. This anchors the brainstorming in what we already know.</critical>
+
+    <check if="existing_product_context is present">
+      <action>Summarize the existing product context to the user in 3-5 sentences:
+        - What the product does today
+        - Who it serves
+        - Any known gaps or opportunities mentioned
+      </action>
+      <ask>Based on this understanding of your product, what do you want to explore today?
+      Tell me about the idea, problem, or opportunity you have in mind.</ask>
+    </check>
+
+    <check if="existing_product_context is absent">
+      <ask>Let's start from scratch. What idea, problem, or opportunity do you want to explore?
+      Tell me about it — no structure needed, just share what's on your mind.</ask>
+    </check>
+
+    <action>Capture initial user input as {{initial_idea}}.</action>
+
+    <output>[WORKFLOW] Étape 2/8 — Frame the session ✓</output>
+  </step>
+
+  <step n="3" goal="WHY — Explore the problem and motivation">
+    <critical>Don't jump to solutions. Dig into why this matters before discussing what to build.</critical>
+
+    <action>Ask one focused question at a time. Guide the conversation through:
+      - Why does this problem exist? What causes it?
+      - Who suffers from it? How often? How badly?
+      - What happens today without a solution? (workarounds, friction, cost)
+      - Why now? What changed or is changing?
+      - What's the business or user value of solving it?
+    </action>
+
+    <action>Listen deeply. Ask follow-up questions when answers are vague:
+      - "Can you give me a concrete example of when this happens?"
+      - "Who exactly feels this pain — is it the same for all users?"
+      - "What does this cost today? Time, money, trust?"
+    </action>
+
+    <action>Keep iterating until you have captured:
+      {{problem_statement}} — the core problem in one crisp sentence
+      {{affected_users}} — who experiences the problem and how
+      {{current_pain}} — what happens today without the solution
+      {{motivation}} — why this matters and why now
+    </action>
+
+    <output>[WORKFLOW] Étape 3/8 — WHY — Explore the problem ✓</output>
+  </step>
+
+  <step n="4" goal="WHAT — Explore the desired outcome">
+    <critical>Still not designing. Focus on what success looks like, not how to get there.</critical>
+
+    <action>Guide the conversation toward outcomes:
+      - "If this problem was solved, what would be different for users?"
+      - "What does the ideal experience look like — from the user's perspective?"
+      - "What's the minimum that would make a real difference?"
+      - "Are there constraints that define the solution space? (regulatory, technical, time)"
+    </action>
+
+    <action>Surface assumptions and challenge them gently:
+      - "You said users want X — are you sure? Have you validated that?"
+      - "Is that a hard constraint or something we can revisit?"
+    </action>
+
+    <action>Capture:
+      {{desired_outcome}} — what success looks like for users and the business
+      {{target_users}} — concrete personas: who they are, what they need, what they know
+      {{success_metrics}} — how we'd measure whether it worked
+      {{constraints}} — non-negotiables that bound the solution
+      {{assumptions}} — things we believe but haven't validated
+    </action>
+
+    <output>[WORKFLOW] Étape 4/8 — WHAT — Explore desired outcome ✓</output>
+  </step>
+
+  <step n="5" goal="HOW — Explore solution directions (high level only)">
+    <critical>This is not an architecture discussion. Explore solution directions, not implementation details. Keep it user-facing and product-level.</critical>
+
+    <action>Open up the solution space:
+      - "What approaches could solve this? Let's list a few options without committing yet."
+      - "What would a simple v1 look like? What would a more ambitious version look like?"
+      - "Are there existing solutions in the market? What do they get right or wrong?"
+    </action>
+
+    <action>For each direction discussed, capture:
+      - The core concept
+      - Key trade-offs
+      - What it enables vs what it defers
+    </action>
+
+    <action>Ask the user to pick a direction or propose a hybrid:
+      "Which of these directions feels right? Or is there a combination that makes more sense?"
+    </action>
+
+    <action>Capture:
+      {{solution_direction}} — chosen or proposed approach at product level
+      {{scope_v1}} — what's in scope for a first meaningful version
+      {{out_of_scope}} — what we're explicitly deferring
+      {{open_questions}} — unresolved questions that need validation or research
+    </action>
+
+    <output>[WORKFLOW] Étape 5/8 — HOW — Explore solution directions ✓</output>
+  </step>
+
+  <step n="6" goal="Generate Nakiros context artifacts">
+    <critical>All artifact content is written in {{document_language}}. Do not generate a PRD document. Generate the three Nakiros context artifacts directly from the session.</critical>
+
+    <action>Build {{product_md}} content from everything captured in steps 2-5:
+
+      "# Product — {{product_name}}
+
+      ## Vision
+      {{problem_statement}}
+
+      **Why now:** {{motivation}}
+
+      ## Users
+      See personas.md
+
+      ## Desired Outcome
+      {{desired_outcome}}
+
+      ## Success Metrics
+      {{success_metrics}}
+
+      ## Constraints
+      {{constraints}}
+
+      ## Assumptions
+      {{assumptions}}
+
+      ## Open Questions
+      {{open_questions}}
+
+      ---
+      Generated via Nakiros brainstorming workflow on {{date}}. Refresh with /nak-workflow-product-discovery."
+    </action>
+
+    <action>Build {{personas_md}} content from {{target_users}} captured in step 4.
+    For each persona identified:
+
+      "# Personas — {{product_name}}
+
+      ## {Persona Name}
+      {Who they are in one sentence.}
+      Needs: {what they need from the product}
+      Frustrations: {current pain without this solution}
+      Context: {when and how they use the product}
+
+      [repeat for each persona]
+
+      ---
+      Generated via Nakiros brainstorming workflow on {{date}}."
+    </action>
+
+    <action>Build {{features_list}} from {{scope_v1}} captured in step 5.
+    For each feature identified in scope_v1, prepare a {{feature_md}} with:
+      - slug: lowercase-hyphenated name (used as folder name)
+      - content:
+
+      "# Feature: {Feature Name}
+      {What this feature does and the value it brings to users.}
+
+      ## Capacités prévues
+      {List of capabilities planned for this feature based on the brainstorming session.}
+
+      ## Dépendances
+      {Other features this depends on, or 'Aucune'}
+
+      ## Stories
+      | ID | Titre | Statut |
+      |----|-------|--------|
+      | — | À définir | 📋 À planifier |
+
+      ---
+      Created via Nakiros brainstorming workflow on {{date}}. Update with /nak-workflow-pm-feature."
+    </action>
+
+    <action>Store {{product_md}}, {{personas_md}}, and {{features_list}} in memory.</action>
+
+    <output>[WORKFLOW] Étape 6/8 — Generate Nakiros context artifacts ✓</output>
+  </step>
+
+  <step n="7" goal="Review artifacts with user">
+    <action>Display a structured summary of what will be written:
+
+      "📄 **product.md** — vision, outcome, metrics, constraints
+      👥 **personas.md** — {{persona_count}} persona(s) : {{persona_names}}
+      🗂 **features/** — {{feature_count}} feature(s) : {{feature_slugs}}
+
+      Here is a preview of the artifacts:
+
+      ---
+      **product.md**
+      {{product_md}}
+
+      ---
+      **personas.md**
+      {{personas_md}}
+
+      ---
+      **features/**
+      {{for each feature: "### {feature_slug}/feature.md\n{feature_md_content}\n---"}}
+      "
+    </action>
+
+    <ask>Does this capture everything we discussed? Anything to add, remove, or clarify before we save?
+
+**What would you like to do?**
+
+1. Save and continue
+2. Edit something — tell me what to change
+3. Don't save yet</ask>
+
+    <check if="user chooses edit">
+      <ask>What needs to change? Tell me and I'll update it.</ask>
+      <action>Apply edits to the relevant artifact(s).</action>
+      <goto step="7" />
+    </check>
+
+    <check if="user chooses no">
+      <output>[WORKFLOW] ⏸ Artifacts not saved. Run /nak-workflow-brainstorming again when ready.</output>
+      <action>HALT workflow.</action>
+    </check>
+
+    <check if="user chooses yes">
+      <output>[WORKFLOW] Étape 7/8 — Review artifacts ✓</output>
+      <action>Proceed to step 8.</action>
+    </check>
+  </step>
+
+  <step n="8" goal="Write Nakiros context artifacts to disk">
+    <action>Ensure directory {workspace_context_root} exists.</action>
+
+    <action>Write {workspace_context_root}/product.md with {{product_md}} content.</action>
+    <action>Write {workspace_context_root}/personas.md with {{personas_md}} content.</action>
+
+    <action for="each feature in features_list">
+      <action>Ensure directory {features_root}/{feature.slug}/ exists.</action>
+      <action>Write {features_root}/{feature.slug}/feature.md with {{feature_md}} content.</action>
+    </action>
+
+    <output>[WORKFLOW] Étape 8/8 — Write artifacts ✓
+{workspace_context_root}/product.md
+{workspace_context_root}/personas.md
+{{for each feature: "{features_root}/{feature.slug}/feature.md"}}
+Ready for architecture and feature planning.</output>
+
+    <ask>Artifacts saved. What would you like to do next?
+
+**What would you like to do?**
+
+1. Plan the architecture — /nak-workflow-create-architecture
+2. Plan a feature into stories — /nak-workflow-plan-feature
+3. We're good for now</ask>
+
+    <check if="user chooses architecture">
+      <output>Next: Run /nak-workflow-create-architecture to define the technical decisions.</output>
+    </check>
+
+    <check if="user chooses plan">
+      <output>Next: Run /nak-workflow-plan-feature to slice a feature into stories.</output>
+    </check>
+
+    <check if="user chooses done">
+      <output>Context saved. Run /nak-workflow-create-architecture or /nak-workflow-plan-feature whenever you're ready.</output>
+    </check>
+  </step>
+</workflow>

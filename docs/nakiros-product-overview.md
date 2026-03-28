@@ -69,7 +69,7 @@ Nakiros orchestre des **workflows en plusieurs étapes** activés par des comman
 ```
 1. /nak-workflow-dev-story (commande dans Claude Code ou Codex)
          ↓
-2. Chargement du contexte runtime (profil global ~/.nakiros/config.yaml + pointeur repo `_nakiros/workspace.yaml` + workspace.json)
+2. Chargement du contexte runtime (profil global ~/.nakiros/config.yaml + pointeur repo `_nakiros/workspace.yaml` + workspace.yaml canonique)
          ↓
 3. Fetch du ticket Jira via MCP → passage en "In Progress"
    Démarrage du worklog
@@ -188,8 +188,8 @@ L'extension VS Code est **architecturée mais non fonctionnelle aujourd'hui**. L
                        │ IPC
 ┌──────────────────────▼──────────────────────────────┐
 │              Electron Main Process                   │
-│  workspace-yaml, agent-runner, jira-oauth,           │
-│  doc-scanner, terminal, conversation-store           │
+│  workspace-yaml, agent-runner-bridge, jira-oauth,    │
+│  doc-scanner, terminal, conversation-reader          │
 └──────────┬───────────────────────┬──────────────────┘
            │                       │
     ┌──────▼──────┐       ┌────────▼────────┐
@@ -223,7 +223,7 @@ L'extension VS Code est **architecturée mais non fonctionnelle aujourd'hui**. L
     ↓ combiné avec
 {repo}/_nakiros/workspace.yaml            (pointeur léger: workspace_name + workspace_slug)
     ↓ résout vers
-~/.nakiros/workspaces/{workspace_slug}/workspace.json   (source de vérité workspace)
+~/.nakiros/workspaces/{workspace_slug}/workspace.yaml   (source de vérité workspace)
     ↓
 Contexte effectif au runtime
 ```

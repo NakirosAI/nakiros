@@ -11,7 +11,6 @@ export interface AgentEnvironmentStatus {
 
 export interface AgentInstallStatus {
   repoPath: string;
-  hasWorkspacePointer: boolean;
   environments: AgentEnvironmentStatus[];
 }
 

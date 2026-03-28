@@ -28,5 +28,11 @@
   "lastActivity": "Last activity: {{time}}",
   "noRecentActivity": "No recent AI activity.",
   "noTicket": "No ticket created yet.",
-  "ticketSummary": "{{inProgress}} in progress · {{blocked}} blocked · {{done}} done"
+  "ticketSummary": "{{inProgress}} in progress · {{blocked}} blocked · {{done}} done",
+  "setupBannerMessage": "Your workspace is not yet configured — Complete setup →",
+  "setupBannerDismiss": "Dismiss",
+  "syncSyncing": "Syncing…",
+  "syncSynced": "Synced",
+  "syncError": "Sync error",
+  "syncNever": "Not synced"
 }

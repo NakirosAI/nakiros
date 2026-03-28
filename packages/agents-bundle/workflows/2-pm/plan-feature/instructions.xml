@@ -1,0 +1,248 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language resolved from profile and workspace settings.</critical>
+  <critical>Generate all backlog-facing content (epic, stories, tasks, summaries) in {{document_language}}.</critical>
+  <critical>Keep internal artifact keys in ENGLISH for machine-readability and future automation.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+  <critical>This workflow plans backlog structure only. Do not claim that backlog entities were created unless a later action step really does it.</critical>
+
+  <step n="1" goal="Load configuration and workspace context">
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Apply defaults when missing: user_name={default_user_name}, communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Resolve workspace scope from {workspace_config}. If the repo pointer exists, read `workspace_slug` from `{project-root}/_nakiros/workspace.yaml`, then load `~/.nakiros/workspaces/{workspace_slug}/workspace.yaml` as the canonical workspace map. If the pointer is missing, continue in single-repo mode rooted at {project-root}.</action>
+    <action>Set {{workspace_name}} from canonical workspace yaml when available, fallback to "current workspace".</action>
+    <action>Set {{workspace_topology}} from canonical workspace yaml `workspace.structure` (`mono-repo` or `multi-repo`), fallback to "single-repo".</action>
+    <action>Set {{workspace_repo_list}} from canonical workspace yaml `repos`. In single-repo fallback mode, set it to the current repo only.</action>
+    <action>Set {{pm_tool}} from canonical workspace yaml `workspace.pm_tool` when present, otherwise keep profile/default behavior.</action>
+    <action if="canonical workspace yaml document_language exists">Override {{document_language}} with `workspace.document_language`.</action>
+    <action>Load workspace-global context from files:
+      - Read {workspace_context_root}/product.md when present.
+      - Read {workspace_context_root}/personas.md when present.
+      - Read {workspace_context_root}/architecture/index.md when present.
+      - List folders under {features_root}/ as {{existing_features}}.
+    </action>
+    <action>If the user has already run pm-feature for this feature, read {features_root}/{{feature_slug}}/feature.md as {{existing_feature_md}} — use it as the starting point for discovery instead of asking from scratch.</action>
+    <output>[PLAN-FEATURE] Étape 1/8 — Load configuration ✓
+Config loaded | Workspace: {{workspace_name}} | Topology: {{workspace_topology}}</output>
+  </step>
+
+  <step n="2" goal="Run PM discovery for the feature">
+    <critical>Load PM persona from ~/.nakiros/agents/pm.md for this discovery and slicing phase.</critical>
+    <critical>This is a collaborative product conversation, not a form dump. Ask one focused question at a time when clarification is needed.</critical>
+    <critical>When the feature is cross-repo or platform-wide, anchor the conversation in the workspace-global product and architecture context instead of drifting into one repo too early.</critical>
+
+    <ask>What feature do you want to plan? Describe the outcome you want, who it helps, and any hard constraints already known.</ask>
+    <action>Capture the initial request as {{feature_intent}}.</action>
+
+    <action>Through natural PM-style conversation, refine and capture:
+      - {{problem_statement}}
+      - {{target_users}}
+      - {{expected_outcome}}
+      - {{business_value}}
+      - {{constraints}}
+      - {{scope_in}}
+      - {{scope_out}}
+      - {{success_signals}}
+    </action>
+
+    <action>When the problem is still vague, ask clarifying questions such as:
+      - What changes for the user when this feature ships?
+      - What is explicitly out of scope for this first cut?
+      - Are there deadlines, integrations, or legacy constraints?
+      - What would make this feature a failure even if it ships?
+    </action>
+
+    <output>[PLAN-FEATURE] Étape 2/8 — PM discovery ✓
+PM framing complete | Problem, scope, and expected outcome are clear enough to slice</output>
+  </step>
+
+  <step n="3" goal="Define the epic and slice the feature into stories">
+    <critical>Stay in PM persona. Optimize for a backlog structure that is understandable, reviewable, and implementable.</critical>
+    <critical>Create one epic and a small set of delivery-sized stories. Prefer 3 to 7 stories unless the user explicitly wants a broader plan.</critical>
+
+    <action>Generate {{feature_title}} and {{feature_slug}} from the clarified feature intent. Keep the title short and searchable.</action>
+
+    <action>Define a single epic with:
+      - {{epic_name}}
+      - {{epic_summary}}
+      - {{epic_goal}}
+      - {{epic_priority}}
+      - {{epic_success_metrics}}
+    </action>
+
+    <action>Slice the feature into {{stories}} where each story includes:
+      - id (STORY-1, STORY-2, ...)
+      - title
+      - user outcome / description
+      - acceptance criteria (3-5 measurable bullets)
+      - priority (critical / high / medium / low)
+      - story_points (estimate only if confidence is reasonable; otherwise null)
+      - dependencies
+      - out_of_scope_notes if needed
+    </action>
+
+    <action>Challenge the slicing before moving on:
+      - Merge stories that are artificially split.
+      - Split stories that are too large or mix multiple outcomes.
+      - Flag any story that is actually a technical task and move it out of story scope.
+    </action>
+
+    <output>[PLAN-FEATURE] Étape 3/8 — Define epic and stories ✓
+Epic and story slicing complete | Ready for technical decomposition</output>
+  </step>
+
+  <step n="4" goal="Run Architect review to create technical tasks">
+    <critical>Load Architect persona from ~/.nakiros/agents/architect.md for this decomposition phase.</critical>
+    <critical>Architect reviews the PM slicing against technical reality, then adds tasks. Architect does not rewrite the product problem unless the slice is technically invalid.</critical>
+
+    <action>Use context-first behavior:
+      - Call context.workspace.get for keys global, product, interRepo, and architecture when available.
+      - For relevant repos, call context.repo.get({repo.name}) before proposing technical work.
+      - Only ask for extra clarification when code reality or architecture constraints materially change the task plan.
+    </action>
+
+    <action>For each story in {{stories}}, produce:
+      - technical_summary
+      - architecture_notes
+      - risks
+      - suggested_repo_scope
+      - tasks
+    </action>
+
+    <action>Each task must be delivery-oriented and technically actionable, not a vague reminder. Every task includes:
+      - title
+      - description
+      - kind (frontend / backend / infra / data / qa / design-system / integration)
+      - depends_on (optional list)
+      - technical_notes (optional)
+    </action>
+
+    <action>When architect review exposes a wrong story cut, adjust the story boundaries before finalizing tasks and record the reason in {{architect_adjustments}}.</action>
+
+    <action>Capture workspace-level technical outputs:
+      - {{cross_story_dependencies}}
+      - {{technical_risks}}
+      - {{open_questions}}
+      - {{recommended_implementation_order}}
+    </action>
+
+    <output>[PLAN-FEATURE] Étape 4/8 — Architect review ✓
+Architect decomposition complete | Stories now have technically grounded tasks</output>
+  </step>
+
+  <step n="5" goal="Build backlog-ready planning artifacts">
+    <action>For each story in {{stories}}, prepare {{story_md_content}} with this structure:
+
+# Story: {{story.title}}
+> Feature: {{feature_title}} | ID: {{story.id}} | Priorité: {{story.priority}}
+
+## Contexte
+{{story.user_outcome}}
+
+## Acceptance Criteria
+{{story.acceptance_criteria as numbered list}}
+
+## Contraintes applicables
+- DoD : context/dod.md
+- NFR : {relevant NFR constraints for this story, extracted from context/nfr.md}
+
+## Tasks
+{{for each task in story.tasks:
+  "- [ ] [{{task.kind}}] {{task.title}}
+        {{task.description}}
+        {{if task.technical_notes: '      Note: ' + task.technical_notes}}
+        {{if task.depends_on: '      Dépend de: ' + task.depends_on | join(', ')}}"
+}}
+
+## Notes architecturales
+{{story.architecture_notes or "Aucune"}}
+
+## Risques
+{{story.risks or "Aucun identifié"}}
+
+---
+Created via Nakiros plan-feature on {date}. Execute with /nak-workflow-dev-story.
+    </action>
+
+    <action>Prepare {{stories_table_rows}} for the feature.md stories table update:
+      For each story: "| {{story.id}} | {{story.title}} | 📋 À implémenter |"
+    </action>
+
+    <output>[PLAN-FEATURE] Étape 5/8 — Build story artifacts ✓
+{{stories | count}} story file(s) prêts | Table des stories prête pour feature.md</output>
+  </step>
+
+  <step n="6" goal="Review the plan with the user">
+    <action>Display {{feature_plan_report}} to the user for review.</action>
+
+    <ask>Here is the proposed feature plan.
+
+---
+{{feature_plan_report}}
+---
+
+What do you want to do?
+
+---
+
+**What do you want to do?**
+
+1. Save this feature plan
+2. Adjust the epic / stories / tasks
+3. Cancel</ask>
+
+    <check if="user chooses edit">
+      <ask>What needs to change? Be explicit about the epic, specific stories, or specific tasks.</ask>
+      <action>Apply the requested edits to {{feature_plan_report}} and {{feature_plan_json}} while preserving the PM then Architect logic.</action>
+      <goto step="6" />
+    </check>
+
+    <check if="user chooses no">
+      <output>[PLAN-FEATURE] ⏸ Feature planning cancelled</output>
+      <action>HALT workflow.</action>
+    </check>
+
+    <check if="user chooses yes">
+      <output>[PLAN-FEATURE] Étape 6/8 — Review plan ✓</output>
+    </check>
+  </step>
+
+  <step n="7" goal="Write story files and update feature.md">
+    <action>Ensure directory {stories_dir}/ exists.</action>
+
+    <action for="each story in stories">
+      <action>Write {stories_dir}/{{story.id}}.md with {{story_md_content}}.</action>
+    </action>
+
+    <action>Update {feature_dir}/feature.md — replace the Stories table with the new rows:
+      - If the file exists, replace the existing Stories section content with {{stories_table_rows}}.
+      - If the file does not exist yet, create it with the standard feature.md template populated from {{feature_title}}, {{epic_summary}}, and {{stories_table_rows}}.
+    </action>
+
+    <output>[PLAN-FEATURE] Étape 7/8 — Write artifacts ✓
+Stories :
+{{for each story: "  {stories_dir}/{{story.id}}.md"}}
+Feature mise à jour :
+  {feature_dir}/feature.md
+    </output>
+  </step>
+
+  <step n="8" goal="Offer the next step">
+    <output>[PLAN-FEATURE] ✅ TERMINÉ
+Feature : {{feature_title}}
+Stories : {{stories | count}}
+{{for each story: "  - {{story.id}} — {{story.title}}"}}
+
+Prochaine étape : /nak-workflow-dev-story pour implémenter une story.</output>
+
+    <ask>**Et maintenant ?**
+
+1. Implémenter une story — /nak-workflow-dev-story
+2. C'est bon pour l'instant</ask>
+
+    <check if="user chooses dev">
+      <output>Lancez /nak-workflow-dev-story en précisant la story à implémenter.</output>
+    </check>
+  </step>
+</workflow>

@@ -75,8 +75,9 @@ Nouveau type UI `WorkflowCapability`:
 3. Champs ticket optionnels pour backward compatibility
 
 ## Politique workflows
-1. Stable: `dev-story`, `generate-context`
-2. Beta: `create-ticket`, `create-story`, `fetch-project-context`, `qa-review`
+1. Stable: `dev-story`, `product-discovery`
+2. Support/refresh: `generate-context`
+3. Beta: `create-ticket`, `create-story`, `qa-review`
 
 ## PRD Assistant
 1. Trigger standard: `/nak-agent-brainstorming`

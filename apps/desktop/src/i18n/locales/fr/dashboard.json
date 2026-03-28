@@ -18,5 +18,8 @@
   "accountDisconnected": "Déconnecté",
   "accountBadge": "Compte {{status}}",
   "accountBadgeAriaLabel": "Statut du compte : {{status}}",
-  "accountDisconnectedHint": "Aucun compte connecté. Ouvre les paramètres pour te connecter."
+  "accountDisconnectedHint": "Aucun compte connecté. Ouvre les paramètres pour te connecter.",
+  "renderErrorTitle": "Le dashboard n'a pas pu s'afficher",
+  "renderErrorBody": "Une erreur runtime a interrompu cet écran workspace. Le message ci-dessous doit aider à identifier le module en faute.",
+  "renderErrorRetry": "Réessayer"
 }

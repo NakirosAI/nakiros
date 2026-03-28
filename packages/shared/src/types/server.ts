@@ -5,6 +5,7 @@ export interface RepoContext {
   api?: string;
   llms?: string;
   updatedAt?: string;
+  updatedBy?: string;
 }
 
 export interface WorkspaceContext {
@@ -13,6 +14,7 @@ export interface WorkspaceContext {
   entryPoints?: Record<string, string>;
   openQuestions?: string[];
   generatedAt?: string;
+  updatedBy?: string;
   global?: string;
   product?: string;
   interRepo?: string;

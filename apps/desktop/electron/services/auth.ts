@@ -1,8 +1,10 @@
 import { app, BrowserWindow, safeStorage, session } from 'electron';
 import { createHash, randomBytes } from 'crypto';
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
+import { homedir } from 'os';
 import { join } from 'path';
 import type { AuthState } from '@nakiros/shared';
+import { formatNetworkError } from './network-error.js';
 
 const AUTH_SERVER = 'https://auth.nakiros.com';
 const CLIENT_ID = 'A4ec21b4916aD9b4C5a682C29A6D8747b0966e657704C5bfbd73137Ba8276cDB';
@@ -13,10 +15,20 @@ const TOKEN_PATH = join(app.getPath('userData'), 'nakiros-auth.bin');
 const AUTH_META_PATH = join(app.getPath('userData'), 'nakiros-auth-meta.json');
 const REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
+const CLI_CREDENTIALS_PATH = join(homedir(), '.nakiros', 'credentials.json');
+
 interface AuthMeta {
   email?: string;
   expiresAt?: string;
   refreshToken?: string;
+}
+
+interface AccessTokenResolution {
+  token: string | null;
+  userId?: string;
+  email?: string;
+  refreshed: boolean;
+  sessionExpired: boolean;
 }
 
 // ─── PKCE helpers ─────────────────────────────────────────────────────────────
@@ -59,11 +71,27 @@ function storeAuth(accessToken: string, meta: AuthMeta): void {
     writeFileSync(TOKEN_PATH, safeStorage.encryptString(accessToken));
   }
   writeAuthMeta(meta);
+  writeCliCredentials(accessToken, meta);
+}
+
+function writeCliCredentials(accessToken: string, meta: AuthMeta): void {
+  try {
+    mkdirSync(join(homedir(), '.nakiros'), { recursive: true });
+    const expiresAt = meta.expiresAt ? Date.parse(meta.expiresAt) : undefined;
+    writeFileSync(
+      CLI_CREDENTIALS_PATH,
+      JSON.stringify({ accessToken, refreshToken: meta.refreshToken, expiresAt, apiUrl: 'https://api.nakiros.com', email: meta.email ?? null }),
+      { encoding: 'utf-8', mode: 0o600 },
+    );
+  } catch (error) {
+    console.warn('[auth] Failed to write CLI credentials:', error);
+  }
 }
 
 function clearAuthFiles(): void {
   if (existsSync(TOKEN_PATH)) unlinkSync(TOKEN_PATH);
   if (existsSync(AUTH_META_PATH)) unlinkSync(AUTH_META_PATH);
+  if (existsSync(CLI_CREDENTIALS_PATH)) unlinkSync(CLI_CREDENTIALS_PATH);
 }
 
 async function clearAuthBrowserSession(): Promise<void> {
@@ -92,19 +120,28 @@ function parseJwtClaim<T>(token: string, claim: string): T | undefined {
 // ─── Token exchange ───────────────────────────────────────────────────────────
 
 async function exchangeCode(code: string, verifier: string): Promise<{ email?: string }> {
-  const response = await fetch(`${AUTH_SERVER}/oauth2/v1/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      code_verifier: verifier,
-      client_id: CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
-    }).toString(),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${AUTH_SERVER}/oauth2/v1/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+      }).toString(),
+    });
+  } catch (error) {
+    throw new Error(formatNetworkError(error, 'Authentication request failed'));
+  }
 
-  if (!response.ok) throw new Error(`Token exchange failed (${response.status})`);
+  if (!response.ok) {
+    const bodyText = (await response.text().catch(() => '')).trim();
+    const details = bodyText.length > 0 ? `: ${bodyText}` : '';
+    throw new Error(`Token exchange failed (${response.status})${details}`);
+  }
 
   const data = (await response.json()) as {
     access_token?: string;
@@ -115,6 +152,10 @@ async function exchangeCode(code: string, verifier: string): Promise<{ email?: s
 
   const accessToken = data.access_token;
   if (!accessToken) throw new Error('No access token in response');
+
+  if (!data.refresh_token) {
+    console.warn('[auth] No refresh token returned by auth server. Check offline_access scope and client settings.');
+  }
 
   const email = parseJwtClaim<string>(data.id_token ?? '', 'email');
   const expClaim = parseJwtClaim<number>(accessToken, 'exp');
@@ -161,35 +202,103 @@ async function refreshAccessToken(token: string, email?: string): Promise<AuthSt
 
     storeAuth(accessToken, { email: nextEmail, expiresAt, refreshToken: data.refresh_token ?? token });
     return { email: nextEmail, isAuthenticated: true };
-  } catch {
+  } catch (error) {
+    console.warn('[auth] Access token refresh failed:', formatNetworkError(error, 'Refresh token request failed'));
     return null;
   }
+}
+
+export async function ensureValidAccessToken(): Promise<AccessTokenResolution> {
+  const token = getStoredToken();
+  const meta = readAuthMeta();
+
+  if (!token) {
+    return {
+      token: null,
+      email: meta.email,
+      refreshed: false,
+      sessionExpired: false,
+    };
+  }
+
+  const userId = parseJwtClaim<string>(token, 'sub');
+
+  if (!meta.expiresAt) {
+    return {
+      token,
+      userId,
+      email: meta.email,
+      refreshed: false,
+      sessionExpired: false,
+    };
+  }
+
+  const expiresAtMs = Date.parse(meta.expiresAt);
+  const now = Date.now();
+
+  if (Number.isNaN(expiresAtMs) || expiresAtMs - now > REFRESH_WINDOW_MS) {
+    return {
+      token,
+      userId,
+      email: meta.email,
+      refreshed: false,
+      sessionExpired: false,
+    };
+  }
+
+  if (meta.refreshToken) {
+    const refreshed = await refreshAccessToken(meta.refreshToken, meta.email);
+    if (refreshed) {
+      const refreshedToken = getStoredToken();
+      return {
+        token: refreshedToken,
+        userId: refreshedToken ? parseJwtClaim<string>(refreshedToken, 'sub') : userId,
+        email: refreshed.email ?? meta.email,
+        refreshed: true,
+        sessionExpired: false,
+      };
+    }
+  }
+
+  if (expiresAtMs > now) {
+    console.warn('[auth] Token refresh unavailable or failed; continuing with current access token until expiry.');
+    return {
+      token,
+      userId,
+      email: meta.email,
+      refreshed: false,
+      sessionExpired: false,
+    };
+  }
+
+  clearAuthFiles();
+  return {
+    token: null,
+    userId,
+    email: meta.email,
+    refreshed: false,
+    sessionExpired: true,
+  };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function getAuthState(): Promise<AuthState> {
-  const token = getStoredToken();
-  const meta = readAuthMeta();
-
-  if (!token) return { isAuthenticated: false };
-
-  const userId = parseJwtClaim<string>(token, 'sub');
-
-  if (!meta.expiresAt) return { email: meta.email, userId, isAuthenticated: true };
-
-  const expiresAtMs = Date.parse(meta.expiresAt);
-  if (Number.isNaN(expiresAtMs) || expiresAtMs - Date.now() > REFRESH_WINDOW_MS) {
-    return { email: meta.email, userId, isAuthenticated: true };
+  const resolved = await ensureValidAccessToken();
+  if (!resolved.token) {
+    return {
+      email: resolved.email,
+      userId: resolved.userId,
+      isAuthenticated: false,
+      ...(resolved.sessionExpired ? { sessionExpired: true } : {}),
+    };
   }
 
-  if (meta.refreshToken) {
-    const refreshed = await refreshAccessToken(meta.refreshToken, meta.email);
-    if (refreshed) return { ...refreshed, userId };
-  }
-
-  clearAuthFiles();
-  return { email: meta.email, userId, isAuthenticated: false, sessionExpired: true };
+  return {
+    email: resolved.email,
+    userId: resolved.userId,
+    isAuthenticated: true,
+  };
 }
 
 export async function signIn(parentWindow?: BrowserWindow): Promise<{ email?: string }> {
@@ -203,7 +312,7 @@ export async function signIn(parentWindow?: BrowserWindow): Promise<{ email?: st
     redirect_uri: REDIRECT_URI,
     code_challenge: challenge,
     code_challenge_method: 'S256',
-    scope: 'openid profile email',
+    scope: 'openid profile email offline_access',
     state,
   }).toString()}`;
 

@@ -1,0 +1,18 @@
+name: create-architecture
+description: "Create architecture decisions using the BMAD workflow adapted to Nakiros repo-local artifacts and workspace-global architecture conventions"
+author: "Nakiros"
+
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+installed_path: "~/.nakiros/workflows/2-design/create-architecture"
+instructions: "{installed_path}/workflow.md"
+
+workspace_root: "{project-root}/_nakiros"
+planning_artifacts: "{workspace_root}"
+output_folder: "{workspace_root}"
+product_knowledge: "{project-root}/docs"
+user_name: "Developer"
+communication_language: "Français"
+document_output_language: "English"
+user_skill_level: "advanced"

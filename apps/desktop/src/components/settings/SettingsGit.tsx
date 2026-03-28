@@ -55,18 +55,18 @@ export function SettingsGit({ workspace, onUpdate }: SettingsBaseProps) {
         <p className="m-0 text-[13px] text-[var(--text-muted)]">{t('gitSubtitle')}</p>
       </div>
 
-      <Card padding="md" className="rounded-[10px] bg-[var(--bg-soft)]">
+      <Card className="rounded-[16px] border-[var(--line)] bg-[var(--bg-soft)] p-5 shadow-none">
         <Input
           value={branch}
           onChange={(e) => setBranch(e.target.value)}
           onBlur={() => void handleBranchBlur()}
           label={t('branchPatternLabel')}
           placeholder={t('branchPatternPlaceholder')}
-          className="rounded-[10px] border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-2 text-[13px]"
+          className="rounded-[12px] border-[var(--line)] bg-[var(--bg-card)] px-3 py-2.5 text-[13px]"
         />
       </Card>
 
-      <Card padding="md" className="rounded-[10px] bg-[var(--bg-soft)]">
+      <Card className="rounded-[16px] border-[var(--line)] bg-[var(--bg-soft)] p-5 shadow-none">
         <div className="mb-2.5 flex items-center justify-between">
           <h3 className="m-0 text-[13px] font-bold">{t('reposTitle')}</h3>
           <div className="flex gap-1.5">
@@ -78,7 +78,7 @@ export function SettingsGit({ workspace, onUpdate }: SettingsBaseProps) {
               variant="secondary"
               size="sm"
               onClick={() => setShowCloneForm((value) => !value)}
-              className={showCloneForm ? 'border-[var(--primary)] text-[var(--primary)]' : undefined}
+              className={showCloneForm ? 'border-[var(--line-strong)] bg-[var(--bg-card)] text-[var(--text)]' : undefined}
             >
               ↓ {t('reposClone')}
             </Button>
@@ -99,7 +99,7 @@ export function SettingsGit({ workspace, onUpdate }: SettingsBaseProps) {
             {workspace.repos.map((repo) => (
               <div
                 key={repo.localPath}
-                className="flex items-start gap-2.5 rounded-[10px] border border-[var(--line)] p-[10px_12px]"
+                className="flex items-start gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--bg-card)] p-4"
               >
                 <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
                   <div className="text-[13px] font-bold">{repo.name}</div>
@@ -161,17 +161,14 @@ function CloneForm({
   }
 
   return (
-    <Card
-      padding="md"
-      className="mb-3 flex flex-col gap-2.5 rounded-[10px] border-[var(--primary)] bg-[var(--bg-muted)]"
-    >
+    <Card className="mb-3 flex flex-col gap-3 rounded-[16px] border-[var(--line)] bg-[var(--bg-card)] p-5 shadow-none">
       <div>
         <Input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           label="URL"
           placeholder={t('cloneUrlPlaceholder')}
-          className="rounded-[10px] border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-2 text-[13px]"
+          className="rounded-[12px] border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2.5 text-[13px]"
           autoFocus
           disabled={status === 'cloning'}
         />
@@ -240,4 +237,3 @@ function RemoteIcon({ url, size }: { url: string; size: number }) {
   }
   return <Link2 size={size} className="block shrink-0" />;
 }
-

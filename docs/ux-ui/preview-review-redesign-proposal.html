@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preview Review — Proposal v3</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #161b22;
+      --surface-hover: #1e2530;
+      --line: #21262d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #484f58;
+      --primary: #2ea043;
+      --primary-dim: rgba(46,160,67,0.12);
+      --primary-hover: rgba(46,160,67,0.22);
+      --danger: #f85149;
+      --danger-dim: rgba(248,81,73,0.10);
+      --danger-hover: rgba(248,81,73,0.20);
+      --orange: #e3b341;
+      --orange-dim: rgba(227,179,65,0.12);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+      font-size: 13px;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       SIDEBAR
+    ══════════════════════════════════════════════════════════ */
+    .sidebar {
+      width: 52px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0;
+      gap: 2px;
+      z-index: 10;
+    }
+
+    .sidebar-logo {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #2ea043, #1a7f37);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      margin-bottom: 10px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      width: 100%;
+    }
+
+    .nav-item {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      color: var(--text-muted);
+      font-size: 10px;
+      transition: background 0.12s, color 0.12s;
+      position: relative;
+    }
+    .nav-item:hover { background: var(--surface-hover); color: var(--text-secondary); }
+    .nav-item.active { background: var(--primary-dim); color: var(--primary); }
+
+    /* badge de notification sur l'icone sidebar */
+    .nav-badge {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--orange);
+      border: 1.5px solid var(--surface);
+    }
+
+    .nav-icon { font-size: 16px; line-height: 1; }
+    .nav-label { font-size: 8.5px; font-weight: 500; letter-spacing: 0.02em; }
+
+    .sidebar-bottom {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding-bottom: 4px;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       MAIN
+    ══════════════════════════════════════════════════════════ */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* TOP BAR */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 44px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      flex-shrink: 0;
+      gap: 12px;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .topbar-badge {
+      background: var(--primary-dim);
+      border: 1px solid rgba(46,160,67,0.3);
+      color: var(--primary);
+      border-radius: 20px;
+      padding: 2px 9px;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      flex-shrink: 0;
+    }
+
+    .topbar-workflow {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    .topbar-dot { color: var(--text-muted); font-size: 10px; }
+
+    .topbar-info {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: none;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.12s;
+      font-family: var(--font);
+      white-space: nowrap;
+    }
+    .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--line); }
+    .btn-ghost:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .btn-danger { background: var(--danger-dim); color: var(--danger); border: 1px solid rgba(248,81,73,0.25); }
+    .btn-danger:hover { background: var(--danger-hover); }
+    .btn-primary { background: var(--primary-dim); color: var(--primary); border: 1px solid rgba(46,160,67,0.35); }
+    .btn-primary:hover { background: var(--primary-hover); }
+
+    /* BODY */
+    .body {
+      display: flex;
+      min-height: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       CHAT PANEL — avec liste conversations + contexte preview
+    ══════════════════════════════════════════════════════════ */
+    .chat-panel {
+      width: 260px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--line);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Tabs conversations ──────────────────────────────────── */
+    .conv-tabs {
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+      flex-shrink: 0;
+      scrollbar-width: none;
+    }
+    .conv-tabs::-webkit-scrollbar { display: none; }
+
+    .conv-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      height: 36px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 11.5px;
+      font-family: var(--font);
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: color 0.12s;
+      position: relative;
+    }
+    .conv-tab:hover { color: var(--text-secondary); background: var(--surface-hover); }
+
+    /* tab actif = conversation liée à la preview */
+    .conv-tab.active {
+      color: var(--text-primary);
+      border-bottom-color: var(--primary);
+      background: var(--primary-dim);
+    }
+
+    /* tab avec preview en attente */
+    .conv-tab .tab-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .conv-tab.active .tab-dot { background: var(--primary); }
+    .conv-tab.running .tab-dot { background: var(--orange); animation: pulse 1.5s infinite; }
+    .conv-tab.idle .tab-dot { background: var(--text-muted); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .conv-tab .tab-name {
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .conv-tab .tab-close {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1;
+      margin-left: 2px;
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+    .conv-tab:hover .tab-close { opacity: 1; }
+
+    .conv-new-btn {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-left: 1px solid var(--line);
+    }
+    .conv-new-btn:hover { background: var(--surface-hover); color: var(--text-secondary); }
+
+    /* ── Contexte de la conversation active ──────────────────── */
+    .conv-context {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* banner "preview liée à cette conversation" */
+    .preview-link-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--primary-dim);
+      border-bottom: 1px solid rgba(46,160,67,0.2);
+      flex-shrink: 0;
+    }
+
+    .preview-link-icon { font-size: 13px; }
+
+    .preview-link-text {
+      flex: 1;
+      font-size: 11px;
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    /* liste des messages résumés */
+    .conv-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .msg-row {
+      display: flex;
+      gap: 6px;
+    }
+    .msg-row.user { justify-content: flex-end; }
+    .msg-row.ai { justify-content: flex-start; }
+
+    .msg-bubble {
+      max-width: 88%;
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+
+    .msg-row.user .msg-bubble {
+      background: rgba(46,160,67,0.10);
+      color: var(--text-secondary);
+      border-radius: 8px 8px 2px 8px;
+    }
+
+    .msg-row.ai .msg-bubble {
+      background: var(--surface-hover);
+      color: var(--text-secondary);
+      border-radius: 8px 8px 8px 2px;
+    }
+
+    .msg-bubble strong { color: var(--text-primary); font-weight: 600; }
+
+    .msg-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .stat-pill {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* séparateur "Résultat" */
+    .msg-divider {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+    }
+    .msg-divider-line { flex: 1; height: 1px; background: var(--line); }
+    .msg-divider-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* ── Input ──────────────────────────────────────────────── */
+    .chat-input-area {
+      padding: 8px 10px;
+      border-top: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+
+    .chat-input-row {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+    }
+
+    .chat-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-family: var(--font);
+      resize: none;
+      outline: none;
+      line-height: 1.4;
+    }
+    .chat-input::placeholder { color: var(--text-muted); font-size: 11px; }
+    .chat-input:focus { border-color: var(--primary); color: var(--text-primary); }
+
+    .chat-send-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: var(--primary-dim);
+      border: 1px solid rgba(46,160,67,0.3);
+      color: var(--primary);
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       PREVIEW AREA
+    ══════════════════════════════════════════════════════════ */
+    .preview-area {
+      display: flex;
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* FILE TREE */
+    .file-tree {
+      width: 210px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--line);
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+
+    .tree-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 12px 8px;
+    }
+    .tree-header-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
+    .tree-count { font-size: 10px; background: var(--surface-hover); border: 1px solid var(--line); border-radius: 10px; padding: 1px 6px; color: var(--text-muted); }
+
+    .tree-dir-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      width: 100%;
+      padding: 3.5px 12px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-family: var(--font);
+      text-align: left;
+    }
+    .tree-dir-btn:hover { background: var(--surface-hover); }
+
+    .tree-chevron { font-size: 9px; color: var(--text-muted); transition: transform 0.12s; flex-shrink: 0; }
+    .tree-chevron.open { transform: rotate(90deg); }
+    .tree-dir-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+    .tree-children { padding-left: 14px; }
+
+    .tree-file {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      padding: 3px 12px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-family: var(--mono);
+      text-align: left;
+    }
+    .tree-file:hover { background: var(--surface-hover); color: var(--text-secondary); }
+    .tree-file.active { background: var(--primary-dim); color: var(--primary); }
+
+    .file-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+    .tree-file.active .file-dot { background: var(--primary); }
+
+    /* CONTENT VIEWER */
+    .content-viewer {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .content-breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 20px;
+      height: 36px;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+      background: var(--surface);
+      font-size: 11px;
+    }
+    .crumb { color: var(--text-muted); }
+    .crumb-sep { color: var(--text-muted); opacity: 0.35; }
+    .crumb-active { color: var(--text-secondary); font-weight: 500; font-family: var(--mono); }
+
+    .content-scroll { flex: 1; overflow-y: auto; padding: 32px 48px; }
+
+    .md h1 { font-size: 21px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; font-family: var(--mono); }
+    .md .subtitle { font-size: 11.5px; color: var(--text-muted); margin-bottom: 28px; font-style: italic; }
+    .md h2 { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-top: 28px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+    .md p { font-size: 13px; line-height: 1.72; color: var(--text-secondary); margin-bottom: 10px; }
+    .md ul { padding-left: 20px; margin-bottom: 12px; }
+    .md li { font-size: 13px; line-height: 1.65; color: var(--text-secondary); margin-bottom: 5px; }
+    .md code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: #a5d6ff; }
+    .md .warning-box { background: rgba(248,81,73,0.07); border: 1px solid rgba(248,81,73,0.2); border-radius: 8px; padding: 12px 16px; margin-top: 14px; }
+    .md .warning-box p { color: #ff9492; margin: 0; }
+
+    /* STATUS BAR */
+    .status-bar {
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: var(--surface);
+      border-top: 1px solid var(--line);
+      font-size: 10.5px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .status-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--primary); margin-right: 5px; vertical-align: middle; }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-logo">✦</div>
+    <nav class="sidebar-nav">
+      <button class="nav-item">
+        <span class="nav-icon">⊞</span>
+        <span class="nav-label">Overview</span>
+      </button>
+      <button class="nav-item active">
+        <span class="nav-icon">◎</span>
+        <span class="nav-label">Chat IA</span>
+        <!-- pastille orange = il y a une preview en attente sur cet onglet -->
+        <span class="nav-badge"></span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">◈</span>
+        <span class="nav-label">Product</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">⋮⋮</span>
+        <span class="nav-label">Delivery</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">≡</span>
+        <span class="nav-label">Backlog</span>
+      </button>
+    </nav>
+    <div class="sidebar-bottom">
+      <button class="nav-item">
+        <span class="nav-icon">⚙</span>
+        <span class="nav-label">Réglages</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-badge">Preview</span>
+        <span class="topbar-workflow">/nak-workflow-product-discovery</span>
+        <span class="topbar-dot">·</span>
+        <span class="topbar-info">29 fichiers · il y a 39min</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-danger">🗑 Supprimer</button>
+        <button class="btn btn-primary">✓ Valider les 29 fichiers</button>
+      </div>
+    </div>
+
+    <div class="body">
+
+      <!-- CHAT PANEL -->
+      <div class="chat-panel">
+
+        <!--
+          TABS CONVERSATIONS — accès à toutes les conversations simultanées.
+          La tab active est celle qui a généré la preview (mise en avant en vert).
+          Les autres tabs restent accessibles : cliquer dessus affiche cette
+          conversation normalement (et sort du mode preview si elle n'a pas de preview).
+        -->
+        <div class="conv-tabs">
+          <!-- Conversation active = celle liée à la preview -->
+          <button class="conv-tab active">
+            <span class="tab-dot"></span>
+            <span class="tab-name">product-discovery</span>
+            <span class="tab-close">×</span>
+          </button>
+          <!-- Autre conversation en cours (running) -->
+          <button class="conv-tab running">
+            <span class="tab-dot"></span>
+            <span class="tab-name">dev-story</span>
+            <span class="tab-close">×</span>
+          </button>
+          <!-- Conversation terminée idle -->
+          <button class="conv-tab idle">
+            <span class="tab-dot"></span>
+            <span class="tab-name">sprint-review</span>
+            <span class="tab-close">×</span>
+          </button>
+          <!-- Nouveau chat -->
+          <button class="conv-new-btn" title="Nouveau chat">+</button>
+        </div>
+
+        <!-- CONTEXTE DE LA CONVERSATION ACTIVE -->
+        <div class="conv-context">
+
+          <!-- Banner reliant cette conversation à la preview affichée -->
+          <div class="preview-link-banner">
+            <span class="preview-link-icon">🔗</span>
+            <span class="preview-link-text">Preview générée par cette conversation</span>
+          </div>
+
+          <!-- Messages résumés (scrollable) -->
+          <div class="conv-messages">
+            <div class="msg-row user">
+              <div class="msg-bubble">Lance le workflow product-discovery sur le workspace Exploitation</div>
+            </div>
+            <div class="msg-row ai">
+              <div class="msg-bubble">Je commence l'analyse. Je vais scanner les 3 repos du workspace...</div>
+            </div>
+            <div class="msg-row user">
+              <div class="msg-bubble">Ok continue</div>
+            </div>
+
+            <div class="msg-divider">
+              <div class="msg-divider-line"></div>
+              <div class="msg-divider-label">Résultat</div>
+              <div class="msg-divider-line"></div>
+            </div>
+
+            <div class="msg-row ai">
+              <div class="msg-bubble">
+                <strong>Product Discovery terminé.</strong> 29 fichiers générés en preview — validez ou modifiez avant d'appliquer.
+                <div class="msg-stats">
+                  <span class="stat-pill">29 fichiers</span>
+                  <span class="stat-pill">12 features</span>
+                  <span class="stat-pill">3 repos</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Input pour modifier un fichier via l'IA -->
+          <div class="chat-input-area">
+            <div class="chat-input-row">
+              <textarea class="chat-input" rows="2" placeholder="Ex: reformule la section UX de events-ledger..."></textarea>
+              <button class="chat-send-btn">↑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PREVIEW AREA -->
+      <div class="preview-area">
+
+        <!-- FILE TREE -->
+        <div class="file-tree">
+          <div class="tree-header">
+            <span class="tree-header-label">Fichiers</span>
+            <span class="tree-count">29</span>
+          </div>
+
+          <button class="tree-file"><span class="file-dot"></span>product.md</button>
+          <button class="tree-file"><span class="file-dot"></span>workspace.yaml</button>
+
+          <div class="tree-dir">
+            <button class="tree-dir-btn"><span class="tree-chevron open">▶</span><span class="tree-dir-name">architecture</span></button>
+            <div class="tree-children">
+              <button class="tree-file"><span class="file-dot"></span>overview.md</button>
+            </div>
+          </div>
+
+          <div class="tree-dir">
+            <button class="tree-dir-btn"><span class="tree-chevron open">▶</span><span class="tree-dir-name">features</span></button>
+            <div class="tree-children">
+
+              <div class="tree-dir">
+                <button class="tree-dir-btn"><span class="tree-chevron open">▶</span><span class="tree-dir-name">events-ledger-tracabilite</span></button>
+                <div class="tree-children">
+                  <button class="tree-file"><span class="file-dot"></span>feature.md</button>
+                  <button class="tree-file active"><span class="file-dot"></span>ux.md</button>
+                </div>
+              </div>
+
+              <div class="tree-dir">
+                <button class="tree-dir-btn"><span class="tree-chevron open">▶</span><span class="tree-dir-name">administration-feature-flags</span></button>
+                <div class="tree-children">
+                  <button class="tree-file"><span class="file-dot"></span>feature.md</button>
+                  <button class="tree-file"><span class="file-dot"></span>ux.md</button>
+                </div>
+              </div>
+
+              <div class="tree-dir">
+                <button class="tree-dir-btn"><span class="tree-chevron open">▶</span><span class="tree-dir-name">assemblage-fabrication</span></button>
+                <div class="tree-children">
+                  <button class="tree-file"><span class="file-dot"></span>feature.md</button>
+                  <button class="tree-file"><span class="file-dot"></span>ux.md</button>
+                </div>
+              </div>
+
+              <div class="tree-dir">
+                <button class="tree-dir-btn"><span class="tree-chevron open">▶</span><span class="tree-dir-name">finances-facturation</span></button>
+                <div class="tree-children">
+                  <button class="tree-file"><span class="file-dot"></span>feature.md</button>
+                  <button class="tree-file"><span class="file-dot"></span>ux.md</button>
+                </div>
+              </div>
+
+              <div class="tree-dir">
+                <button class="tree-dir-btn"><span class="tree-chevron">▶</span><span class="tree-dir-name">gestion-des-appareils</span></button>
+              </div>
+              <div class="tree-dir">
+                <button class="tree-dir-btn"><span class="tree-chevron">▶</span><span class="tree-dir-name">gestion-des-commandes</span></button>
+              </div>
+              <div class="tree-dir">
+                <button class="tree-dir-btn"><span class="tree-chevron">▶</span><span class="tree-dir-name">gestion-des-stocks-composants</span></button>
+              </div>
+              <div class="tree-dir">
+                <button class="tree-dir-btn"><span class="tree-chevron">▶</span><span class="tree-dir-name">gestion-des-tenants</span></button>
+              </div>
+              <div class="tree-dir">
+                <button class="tree-dir-btn"><span class="tree-chevron">▶</span><span class="tree-dir-name">fiches-de-non-conformite</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CONTENT VIEWER -->
+        <div class="content-viewer">
+          <div class="content-breadcrumb">
+            <span class="crumb">features</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb">events-ledger-tracabilite</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb-active">ux.md</span>
+          </div>
+          <div class="content-scroll">
+            <div class="md">
+              <h1>UX — Events Ledger &amp; Traçabilité</h1>
+              <p class="subtitle">Generated by Nakiros on 2026-03-27.</p>
+
+              <h2>Layout</h2>
+              <p>Header + <code>TabView</code> (ACK Events / Failed Transactions) + <code>Sidebar</code> drawer de détail d'une transaction.</p>
+
+              <h2>Composants principaux</h2>
+              <ul>
+                <li><code>TabView</code> : onglets ACK Events / Failed Transactions</li>
+                <li><code>Sidebar</code> PrimeVue : drawer de détail latéral (<code>LedgerTransactionDrawer</code>)</li>
+                <li><code>ConfirmDialog</code> : confirmation avant replay réel (après dry-run)</li>
+              </ul>
+
+              <h2>Interactions</h2>
+              <ul>
+                <li>Clic sur une transaction → ouverture du drawer de détail</li>
+                <li>Bouton Dry-run → prévisualisation de l'événement à rejouer</li>
+                <li>Bouton Exécuter → <code>ConfirmDialog</code> + replay réel</li>
+              </ul>
+
+              <h2>Incohérences UX identifiées</h2>
+              <div class="warning-box">
+                <p><code>LedgerTransactionDrawer.vue</code> : palette Tailwind codée en dur (<code>#dcfce7</code>, <code>#fef3c7</code>, <code>#fee2e2</code>) pour les statuts — ne respecte pas le thème light/dark ni la palette Keyprod.</p>
+              </div>
+
+              <h2>États vides</h2>
+              <ul>
+                <li>Aucun événement : illustration + "Aucun événement ACK pour ce filtre"</li>
+                <li>Aucune transaction échouée : "Tout est OK ✓"</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div class="status-bar">
+      <span><span class="status-dot"></span>Preview active — non appliquée</span>
+      <span>features / events-ledger-tracabilite / ux.md</span>
+    </div>
+  </div>
+
+</body>
+</html>

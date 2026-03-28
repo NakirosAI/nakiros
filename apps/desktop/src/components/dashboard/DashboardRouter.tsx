@@ -1,17 +1,22 @@
 import type {
+  ArtifactChangeProposal,
   AgentProvider,
+  FileChangesReviewSession,
   LocalEpic,
   LocalTicket,
+  OnboardingChatLaunchRequest,
   StoredWorkspace,
 } from '@nakiros/shared';
-import ContextPanel from '../ContextPanel';
+import type { WorkspaceSyncState } from '../../views/Dashboard';
 import GlobalSettings, { type GlobalSettingsSection } from '../GlobalSettings';
-import KanbanBoard from '../KanbanBoard';
+import ProductView from '../../views/ProductView';
 import ProjectSettings from '../ProjectSettings';
-import TicketDetail from '../TicketDetail';
 import WorkspaceOverview from '../WorkspaceOverview';
 import type { SidebarTab } from '../Sidebar';
 import ChatView from '../../views/ChatView';
+import BacklogView from '../../views/BacklogView';
+import DeliveryView from '../../views/DeliveryView';
+import type { ArtifactReviewMutation } from '../../hooks/useArtifactReview';
 
 interface DashboardRouterProps {
   showGlobalSettings: boolean;
@@ -20,10 +25,12 @@ interface DashboardRouterProps {
   workspace: StoredWorkspace;
   openWorkspaces: StoredWorkspace[];
   openAgentRunChatTarget?: OpenAgentRunChatPayload | null;
+  launchChatRequest?: OnboardingChatLaunchRequest | null;
   tickets: LocalTicket[];
   epics: LocalEpic[];
   repoNames: string[];
   serverStatus: 'starting' | 'running' | 'stopped';
+  workspaceSyncState: WorkspaceSyncState;
   overviewDocsCount: number;
   overviewConversationCount: number;
   lastConversationAt: string | null;
@@ -46,6 +53,23 @@ interface DashboardRouterProps {
   onCloseGlobalSettings(): void;
   onGlobalUpdateApplied(): void;
   onChatRunCompletionNoticeChange(workspaceId: string, pendingCount: number): void;
+  onChatPendingPreviewChange?(workspaceId: string, hasPendingPreview: boolean): void;
+  onArtifactChangeProposal(
+    sourceSurface: 'chat' | 'product' | 'backlog',
+    event: {
+      proposal: ArtifactChangeProposal;
+      conversationId?: string | null;
+      triggerMessageId?: string | null;
+      baselineContentOverride?: string | null;
+      alreadyApplied?: boolean;
+    },
+  ): void;
+  lastArtifactReviewMutation: ArtifactReviewMutation | null;
+  onFileChangesDetected?: (session: FileChangesReviewSession) => void;
+  showSetupBanner?: boolean;
+  onOpenGettingStarted?(): void;
+  onDismissSetupBanner?(): void;
+  onLaunchChatRequest?(request: OnboardingChatLaunchRequest): void;
 }
 
 export function DashboardRouter({
@@ -56,23 +80,24 @@ export function DashboardRouter({
   openWorkspaces,
   openAgentRunChatTarget,
   tickets,
-  epics,
-  repoNames,
+  epics: _epics,
+  repoNames: _repoNames,
   serverStatus,
+  workspaceSyncState,
   overviewDocsCount,
   overviewConversationCount,
   lastConversationAt,
   openPrdAssistantSignal,
-  selectedTicket,
-  copyingId,
-  defaultProvider,
+  selectedTicket: _selectedTicket,
+  copyingId: _copyingId,
+  defaultProvider: _defaultProvider,
   onSetActiveTab,
-  onSetSelectedTicket,
+  onSetSelectedTicket: _onSetSelectedTicket,
   onSetOverviewDocsCount,
-  onTicketUpdate,
-  onTicketCreate,
-  onContextCopy,
-  onContextCopied,
+  onTicketUpdate: _onTicketUpdate,
+  onTicketCreate: _onTicketCreate,
+  onContextCopy: _onContextCopy,
+  onContextCopied: _onContextCopied,
   onUpdateWorkspace,
   onRefreshTickets,
   onRefreshOverviewData,
@@ -81,11 +106,21 @@ export function DashboardRouter({
   onCloseGlobalSettings,
   onGlobalUpdateApplied,
   onChatRunCompletionNoticeChange,
+  onChatPendingPreviewChange,
+  onArtifactChangeProposal,
+  lastArtifactReviewMutation,
+  onFileChangesDetected,
+  launchChatRequest,
+  showSetupBanner,
+  onOpenGettingStarted,
+  onDismissSetupBanner,
+  onLaunchChatRequest,
 }: DashboardRouterProps) {
   const chatSelected = activeTab === 'chat';
   const overviewSelected = activeTab === 'overview';
   const productSelected = activeTab === 'product';
   const deliverySelected = activeTab === 'delivery';
+  const backlogSelected = activeTab === 'backlog';
   const settingsSelected = activeTab === 'settings';
 
   return (
@@ -99,7 +134,11 @@ export function DashboardRouter({
             workspace={openedWorkspace}
             isVisible={chatSelected && !showGlobalSettings && openedWorkspace.id === workspace.id}
             onRunCompletionNoticeChange={onChatRunCompletionNoticeChange}
+            onPendingPreviewChange={onChatPendingPreviewChange}
             openChatTarget={openAgentRunChatTarget}
+            launchChatRequest={openedWorkspace.id === workspace.id ? launchChatRequest : null}
+            onArtifactChangeProposal={(event) => onArtifactChangeProposal('chat', event)}
+            onFileChangesDetected={onFileChangesDetected}
           />
         </div>
       ))}
@@ -120,56 +159,43 @@ export function DashboardRouter({
           conversationCount={overviewConversationCount}
           lastConversationAt={lastConversationAt}
           serverStatus={serverStatus}
+          workspaceSyncState={workspaceSyncState}
+          showSetupBanner={showSetupBanner}
           onGoProduct={() => onSetActiveTab('product')}
           onGoDelivery={() => onSetActiveTab('delivery')}
           onOpenChat={() => onSetActiveTab('chat')}
           onCreateTicket={() => onSetActiveTab('delivery')}
           onCreatePrd={onOpenPrdAssistant}
+          onOpenGettingStarted={onOpenGettingStarted}
+          onDismissSetupBanner={onDismissSetupBanner}
         />
       )}
 
       {!showGlobalSettings && productSelected && (
         <div className="flex min-w-0 flex-1 overflow-hidden">
-          <ContextPanel
+          <ProductView
             workspace={workspace}
-            onDocumentsChanged={onSetOverviewDocsCount}
-            openPrdAssistantSignal={openPrdAssistantSignal}
-            onOpenChat={() => onSetActiveTab('chat')}
+            onLaunchChat={onLaunchChatRequest}
+            onArtifactChangeProposal={(event) => onArtifactChangeProposal('product', event)}
+            lastArtifactReviewMutation={lastArtifactReviewMutation}
           />
         </div>
       )}
 
       {!showGlobalSettings && deliverySelected && (
-        <>
-          <div className="flex-1 overflow-hidden">
-            <KanbanBoard
-              workspace={workspace}
-              tickets={tickets}
-              epics={epics}
-              onTicketUpdate={onTicketUpdate}
-              onTicketCreate={onTicketCreate}
-              onSelectTicket={onSetSelectedTicket}
-              selectedTicketId={selectedTicket?.id}
-              onContextCopied={onContextCopied}
-            />
-          </div>
-          {selectedTicket && (
-            <TicketDetail
-              ticket={selectedTicket}
-              allTickets={tickets}
-              epics={epics}
-              repos={repoNames}
-              storedRepos={workspace.repos}
-              workspaceId={workspace.id}
-              workspace={workspace}
-              onUpdate={onTicketUpdate}
-              onClose={() => onSetSelectedTicket(null)}
-              onContextCopy={onContextCopy}
-              copying={copyingId === selectedTicket.id}
-              defaultProvider={defaultProvider}
-            />
-          )}
-        </>
+        <div className="flex min-w-0 flex-1 overflow-hidden">
+          <DeliveryView workspace={workspace} onLaunchChat={onLaunchChatRequest ?? (() => {})} />
+        </div>
+      )}
+
+      {!showGlobalSettings && backlogSelected && (
+        <div className="flex min-w-0 flex-1 overflow-hidden">
+          <BacklogView
+            workspace={workspace}
+            onArtifactChangeProposal={(event) => onArtifactChangeProposal('backlog', event)}
+            lastArtifactReviewMutation={lastArtifactReviewMutation}
+          />
+        </div>
       )}
 
       {!showGlobalSettings && settingsSelected && (

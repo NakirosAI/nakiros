@@ -1,0 +1,23 @@
+name: brainstorming
+description: "Guided discovery session that explores a product idea and produces Nakiros context artifacts: product.md, personas.md, and initial features/{name}/feature.md files"
+author: "Nakiros"
+
+# Workflow engine bootstrap
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+# Workflow components
+installed_path: "~/.nakiros/workflows/1-discovery/brainstorming"
+instructions: "{installed_path}/instructions.xml"
+validation: "{installed_path}/checklist.md"
+
+# Runtime paths
+profile_config: "~/.nakiros/config.yaml"
+workspace_config: "workspace.yaml"
+workspace_root_dir: "~/.nakiros/workspaces/{workspace_slug}"
+workspace_context_root: "{workspace_root_dir}/context"
+features_root: "{workspace_context_root}/features"
+
+# Defaults
+default_communication_language: "Français"
+default_document_language: "English"

@@ -18,5 +18,8 @@
   "accountDisconnected": "Disconnected",
   "accountBadge": "Account {{status}}",
   "accountBadgeAriaLabel": "Account status: {{status}}",
-  "accountDisconnectedHint": "No account connected. Open settings to sign in."
+  "accountDisconnectedHint": "No account connected. Open settings to sign in.",
+  "renderErrorTitle": "Dashboard failed to render",
+  "renderErrorBody": "A runtime error interrupted this workspace screen. The message below should help identify the failing module.",
+  "renderErrorRetry": "Retry"
 }

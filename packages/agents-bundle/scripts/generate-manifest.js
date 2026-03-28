@@ -48,6 +48,14 @@ function scanDir(dirPath, type, recursive) {
 }
 
 const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
+
+// Preserve existing meta fields — meta is set manually and must survive rehash
+const existingMetaByName = new Map(
+  (manifest.files ?? [])
+    .filter((f) => f.meta)
+    .map((f) => [f.name, f.meta]),
+);
+
 const files = [];
 
 for (const { dir, type, recursive } of SCAN_DIRS) {
@@ -61,7 +69,13 @@ for (const { dir, type, recursive } of SCAN_DIRS) {
   files.push(...scanDir(dirPath, type, recursive));
 }
 
+// Merge preserved meta back into the fresh entries
+for (const file of files) {
+  const meta = existingMetaByName.get(file.name);
+  if (meta) file.meta = meta;
+}
+
 manifest.files = files.sort((a, b) => a.path.localeCompare(b.path));
 writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 console.log(`manifest.json updated — ${files.length} file(s) indexed.`);
-files.forEach((f) => console.log(`  ${f.type.padEnd(9)} ${f.path}`));
+files.forEach((f) => console.log(`  ${f.type.padEnd(9)} ${f.path}${f.meta ? ` (meta: ${Object.keys(f.meta).join(', ')})` : ''}`));

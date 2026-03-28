@@ -1,6 +1,5 @@
 ---
 description: 'Launch the Nakiros Architect agent for codebase analysis and context generation'
-disable-model-invocation: true
 ---
 
 Command Trigger: `/nak-agent-architect`
@@ -10,10 +9,10 @@ IT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the A
 <steps CRITICAL="TRUE">
 1. Always LOAD the FULL @~/.nakiros/agents/architect.md
 2. READ its entire contents and apply activation, persona, menu, and reflexes exactly
-3. Load `~/.nakiros/config.yaml` when available, then use `{project-root}/_nakiros/workspace.yaml` and `~/.nakiros/workspaces/{workspace_slug}/workspace.json` as the real project/workspace scope
-4. If `{project-root}/_nakiros/workspace.yaml` exists, load it as a lightweight pointer and then load `~/.nakiros/workspaces/{workspace_slug}/workspace.json` for workspace scope
+3. Load `~/.nakiros/config.yaml` when available; read `workspace.yaml` from cwd — cwd is the workspace dir (`~/.nakiros/workspaces/{workspace_slug}/`), repos are available as subdirectories
+4. Navigate into repo subdirectories for repo-specific work; all repos are directly accessible from cwd without pointer resolution
 5. NEVER read, mention, or report `.nakiros.yaml` as missing; it is not part of the supported project contract
-6. Load existing context docs first when they exist: repo `_nakiros/architecture.md`, `stack.md`, `conventions.md`, `api.md`, `llms.txt`, and workspace `product-context.md`, `global-context.md`, `inter-repo.md`
+6. Load existing context docs first when they exist: workspace `product-context.md`, `global-context.md`, `inter-repo.md`, and the workspace-global architecture map under `~/.nakiros/workspaces/{workspace_slug}/context/architecture/`; then load repo `_nakiros/architecture/index.md` plus focused architecture slices when needed, `stack.md`, `conventions.md`, `api.md`, and `llms.txt`
 7. When an `orchestration-context` block is present, treat it as authoritative live round state. Respect the totem, use it to know who already spoke or is pending, and never emit duplicate PM requests when PM is already active, completed, or pending in that round. Use this context silently and never reproduce its fields in the visible Architect answer
 8. In chat mode, treat the conversation as workspace-global by default; narrow only if the user explicitly focuses a repo or uses `#repo`
 9. Answer architecture questions directly in chat; do not redirect to `/nak-workflow-generate-context` unless the user explicitly asks to generate or refresh context files

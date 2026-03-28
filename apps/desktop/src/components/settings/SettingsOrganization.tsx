@@ -281,7 +281,7 @@ export function SettingsOrganization() {
       </div>
 
       {authLoading && (
-        <Card className="border-border/80 shadow-none">
+        <Card className="rounded-[16px] border-[var(--line)] bg-[var(--bg-soft)] shadow-none">
           <CardContent className="p-5 sm:p-6">
             <p className="m-0 text-sm text-muted-foreground">…</p>
           </CardContent>
@@ -289,7 +289,7 @@ export function SettingsOrganization() {
       )}
 
       {!authLoading && !authState?.isAuthenticated && (
-        <Card className="border-border/80 shadow-none">
+        <Card className="rounded-[16px] border-[var(--line)] bg-[var(--bg-soft)] shadow-none">
           <CardContent className="flex flex-col items-start gap-3 p-5 sm:p-6">
             <p className="m-0 text-sm text-muted-foreground">{t('orgNotConnectedHint')}</p>
             <Button
@@ -306,7 +306,7 @@ export function SettingsOrganization() {
       )}
 
       {shouldShowCreateOrgForm && (
-        <Card className="border-border/80 shadow-none">
+        <Card className="rounded-[16px] border-[var(--line)] bg-[var(--bg-soft)] shadow-none">
           <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
             <p className="m-0 text-sm text-muted-foreground">
               {hasOrganizations ? t('orgCreateAnotherHint') : t('orgNoneHint')}
@@ -384,7 +384,7 @@ export function SettingsOrganization() {
         const deleteOrgError = deleteOrgErrors[org.id];
         const leaveOrgError = leaveOrgErrors[org.id];
         return (
-          <Card key={org.id} className="border-border/80 shadow-none">
+          <Card key={org.id} className="rounded-[16px] border-[var(--line)] bg-[var(--bg-soft)] shadow-none">
             <CardContent className="flex flex-col gap-5 p-5 sm:p-6">
               <div className="flex items-center justify-between gap-3">
                 <span className="min-w-0 truncate text-sm font-semibold text-foreground">{org.name}</span>

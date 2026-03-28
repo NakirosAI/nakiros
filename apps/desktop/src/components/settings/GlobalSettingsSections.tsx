@@ -9,6 +9,8 @@ import type {
 import { getAgentDefinitionLabel, type AgentDefinition } from '../../constants/agents';
 import { formatLastCheck } from '../../utils/dates';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '../ui';
+
+export { GlobalSettingsProviderCredentialsSection } from './ProviderCredentialsSettings';
 export type GlobalSettingsStatus = 'idle' | 'saving' | 'saved' | 'error';
 export type GlobalSettingsUpdateStatus = 'idle' | 'checking' | 'updating' | 'success' | 'error';
 export type AgentCliStatus = {
@@ -39,14 +41,6 @@ interface GlobalSettingsAgentAISectionProps {
   onUpdate(partial: Partial<AppPreferences>): Promise<void>;
 }
 
-interface GlobalSettingsMcpNakirosSectionProps {
-  status: GlobalSettingsStatus;
-  statusText: string;
-  mcpServerInput: string;
-  onMcpServerInputChange(value: string): void;
-  onMcpServerBlur(): Promise<void>;
-}
-
 interface GlobalSettingsAgentNakirosSectionProps {
   versionInfo: BundleVersionInfo | null;
   agentDefinitions: AgentDefinition[];
@@ -61,6 +55,12 @@ interface GlobalSettingsAgentNakirosSectionProps {
 
 const inputClass =
   'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 disabled:opacity-50';
+const settingsCardClass = 'rounded-[16px] border-[var(--line)] bg-[var(--bg-soft)] shadow-none';
+const settingsCardHeaderClass = 'p-5 pb-3 sm:p-6 sm:pb-3';
+const settingsCardTitleClass = 'text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]';
+const settingsCardContentClass = 'px-5 pb-5 pt-0 sm:px-6 sm:pb-6';
+const settingsInsetCardClass = 'rounded-[14px] border-[var(--line)] bg-[var(--bg-card)] shadow-none';
+const selectedButtonClass = 'border-[var(--line-strong)] bg-[var(--bg-card)] text-[var(--text)] hover:bg-[var(--bg-card)] hover:text-[var(--text)]';
 
 function FieldGroup({
   label,
@@ -140,13 +140,13 @@ export function GlobalSettingsGeneralSection({
       </div>
 
       {/* Account */}
-      <Card className="border-border/80 shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+      <Card className={settingsCardClass}>
+        <CardHeader className={settingsCardHeaderClass}>
+          <CardTitle className={settingsCardTitleClass}>
             {t('accountTitle')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className={settingsCardContentClass}>
           {authState?.isAuthenticated ? (
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-foreground">{authState.email ?? t('accountConnected')}</span>
@@ -187,13 +187,13 @@ export function GlobalSettingsGeneralSection({
       </Card>
 
       {/* Language */}
-      <Card className="border-border/80 shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+      <Card className={settingsCardClass}>
+        <CardHeader className={settingsCardHeaderClass}>
+          <CardTitle className={settingsCardTitleClass}>
             {t('languageTitle')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className={settingsCardContentClass}>
           <div className="flex flex-wrap gap-1.5">
             {([
               ['system', t('languageSystem')],
@@ -208,7 +208,7 @@ export function GlobalSettingsGeneralSection({
                 onClick={() => void onUpdate({ language: value })}
                 className={clsx(
                   preferences.language === value &&
-                    'border-primary bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary',
+                    selectedButtonClass,
                 )}
               >
                 {label}
@@ -219,37 +219,37 @@ export function GlobalSettingsGeneralSection({
       </Card>
 
       {/* Desktop notifications */}
-      <Card className="border-border/80 shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+      <Card className={settingsCardClass}>
+        <CardHeader className={settingsCardHeaderClass}>
+          <CardTitle className={settingsCardTitleClass}>
             {t('desktopNotificationsTitle')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 pt-0">
+        <CardContent className={clsx(settingsCardContentClass, 'flex flex-col gap-3')}>
           <p className="m-0 text-xs text-muted-foreground">{t('desktopNotificationsHint')}</p>
           <div className="flex flex-wrap gap-1.5">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void onUpdate({ desktopNotificationsEnabled: true })}
-              className={clsx(
-                desktopNotificationsEnabled &&
-                  'border-primary bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary',
-              )}
-            >
+                onClick={() => void onUpdate({ desktopNotificationsEnabled: true })}
+                className={clsx(
+                  desktopNotificationsEnabled &&
+                    selectedButtonClass,
+                )}
+              >
               {t('desktopNotificationsOn')}
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void onUpdate({ desktopNotificationsEnabled: false })}
-              className={clsx(
-                !desktopNotificationsEnabled &&
-                  'border-primary bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary',
-              )}
-            >
+                onClick={() => void onUpdate({ desktopNotificationsEnabled: false })}
+                className={clsx(
+                  !desktopNotificationsEnabled &&
+                    selectedButtonClass,
+                )}
+              >
               {t('desktopNotificationsOff')}
             </Button>
           </div>
@@ -298,13 +298,13 @@ export function GlobalSettingsAgentAISection({
         )}
       </div>
 
-      <Card className="border-border/80 shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+      <Card className={settingsCardClass}>
+        <CardHeader className={settingsCardHeaderClass}>
+          <CardTitle className={settingsCardTitleClass}>
             {t('agentProviderTitle')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 pt-0">
+        <CardContent className={clsx(settingsCardContentClass, 'flex flex-col gap-4')}>
           <div className="flex flex-wrap gap-1.5">
             {([
               ['claude', t('agentProviderClaude')],
@@ -320,7 +320,7 @@ export function GlobalSettingsAgentAISection({
                 disabled={cliInfo != null && providerAvailability.get(value) === false}
                 className={clsx(
                   (preferences.agentProvider ?? 'claude') === value &&
-                    'border-primary bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary',
+                    selectedButtonClass,
                   cliInfo != null && providerAvailability.get(value) === false && 'opacity-45',
                 )}
               >
@@ -343,8 +343,8 @@ export function GlobalSettingsAgentAISection({
             {!cliLoading && cliInfo && (
               <div className="flex flex-col gap-2">
                 {cliInfo.map((entry) => (
-                  <Card key={entry.provider} className="border-border/60 bg-muted/40 shadow-none">
-                    <CardContent className="py-2.5">
+                  <Card key={entry.provider} className={settingsInsetCardClass}>
+                    <CardContent className="p-4">
                       <div className="mb-1 flex items-center justify-between gap-2">
                         <strong className="text-sm text-foreground">{entry.label}</strong>
                         <span
@@ -365,47 +365,6 @@ export function GlobalSettingsAgentAISection({
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// ─── MCP Nakiros section ──────────────────────────────────────────────────────
-
-export function GlobalSettingsMcpNakirosSection({
-  status,
-  statusText,
-  mcpServerInput,
-  onMcpServerInputChange,
-  onMcpServerBlur,
-}: GlobalSettingsMcpNakirosSectionProps) {
-  const { t } = useTranslation('settings');
-
-  return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h2 className="mb-1 mt-0 text-xl font-bold text-foreground">{t('navMcpNakiros')}</h2>
-        <p className="m-0 text-sm text-muted-foreground">{t('mcpNakirosSubtitle')}</p>
-        {statusText && (
-          <p className={clsx('mb-0 mt-2 text-xs', status === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
-            {statusText}
-          </p>
-        )}
-      </div>
-
-      <Card className="border-border/80 shadow-none">
-        <CardContent className="flex flex-col gap-1.5 pt-6">
-          <label className="text-xs font-medium text-foreground">{t('mcpServerLabel')}</label>
-          <input
-            type="text"
-            placeholder={t('mcpServerPlaceholder')}
-            value={mcpServerInput}
-            onChange={(event) => onMcpServerInputChange(event.target.value)}
-            onBlur={() => void onMcpServerBlur()}
-            className={inputClass}
-          />
-          <p className="m-0 text-xs text-muted-foreground">{t('mcpServerHint')}</p>
         </CardContent>
       </Card>
     </div>
@@ -433,13 +392,13 @@ export function GlobalSettingsAgentNakirosSection({
         <p className="m-0 text-sm text-muted-foreground">{t('agentNakirosSubtitle')}</p>
       </div>
 
-      <Card className="border-border/80 shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+      <Card className={settingsCardClass}>
+        <CardHeader className={settingsCardHeaderClass}>
+          <CardTitle className={settingsCardTitleClass}>
             {t('agentsWorkflowsTitle')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 pt-0">
+        <CardContent className={clsx(settingsCardContentClass, 'flex flex-col gap-3')}>
           {versionInfo && (
             <p className="m-0 text-xs text-muted-foreground">
               {t('installedVersion')}{' '}
@@ -450,7 +409,7 @@ export function GlobalSettingsAgentNakirosSection({
           )}
 
           {updateResult?.compatible === false && (
-            <div className="rounded-md border border-border bg-muted/50 px-3.5 py-3">
+            <div className="rounded-[14px] border border-[var(--line)] bg-[var(--bg-card)] px-4 py-3.5">
               <p className="mb-1 mt-0 text-sm font-bold text-foreground">{t('incompatibleUpdate')}</p>
               <p className="m-0 text-xs text-muted-foreground">
                 {updateResult.incompatibleMessage ??
@@ -460,8 +419,8 @@ export function GlobalSettingsAgentNakirosSection({
           )}
 
           {updateResult?.hasUpdate && (
-            <div className="rounded-md border border-primary bg-primary/10 px-3.5 py-3">
-              <p className="mb-1 mt-0 text-sm font-bold text-primary">
+            <div className="rounded-[14px] border border-[var(--line-strong)] bg-[var(--bg-card)] px-4 py-3.5">
+              <p className="mb-1 mt-0 text-sm font-bold text-foreground">
                 {t('updateVersionAvailable', { version: updateResult.latestVersion })}
               </p>
               {updateResult.changelog && (
@@ -503,18 +462,18 @@ export function GlobalSettingsAgentNakirosSection({
         </CardContent>
       </Card>
 
-      <Card className="border-border/80 shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+      <Card className={settingsCardClass}>
+        <CardHeader className={settingsCardHeaderClass}>
+          <CardTitle className={settingsCardTitleClass}>
             {t('catalog')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 pt-0">
+        <CardContent className={clsx(settingsCardContentClass, 'flex flex-col gap-3')}>
           <p className="m-0 text-xs text-muted-foreground">{t('catalogSubtitle')}</p>
           <div className="flex flex-col gap-2">
             {agentDefinitions.map((capability) => (
-              <Card key={capability.id} className="border-border/60 bg-muted/40 shadow-none">
-                <CardContent className="py-2.5">
+              <Card key={capability.id} className={settingsInsetCardClass}>
+                <CardContent className="p-4">
                   <div className="flex items-center justify-between gap-2.5">
                     <div className="flex min-w-0 flex-col gap-1">
                       <strong className="text-sm text-foreground">
@@ -526,8 +485,8 @@ export function GlobalSettingsAgentNakirosSection({
                       className={clsx(
                         'inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.04em]',
                         capability.kind === 'agent'
-                          ? 'border-primary/30 bg-primary/10 text-primary'
-                          : 'border-border bg-muted text-muted-foreground',
+                          ? 'border-[var(--line-strong)] bg-[var(--bg-soft)] text-[var(--text)]'
+                          : 'border-[var(--line)] bg-[var(--bg-soft)] text-[var(--text-muted)]',
                       )}
                     >
                       {capability.kind === 'agent' ? t('agentKindLabel') : t('workflowKindLabel')}

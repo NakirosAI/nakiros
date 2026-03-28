@@ -13,15 +13,17 @@ export function SectionHeader({ label }: { label: string }) {
 
 export function DocRow({
   doc,
+  repoName,
   isSelected,
   onSelect,
   onRegenerate,
   indent,
 }: {
   doc: ScannedDoc;
+  repoName?: string;
   isSelected: boolean;
   onSelect(): void;
-  onRegenerate?(): void;
+  onRegenerate?(repoName: string): void;
   indent?: boolean;
 }) {
   const { t } = useTranslation('context');
@@ -40,14 +42,21 @@ export function DocRow({
         onClick={onSelect}
         className="flex min-w-0 flex-1 flex-col items-start gap-px border-none bg-transparent px-0 py-px text-left text-[var(--text)]"
       >
-        <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs">{doc.name}</span>
+        <span className="flex max-w-full items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs">
+          {doc.name}
+          {doc.isRemote && (
+            <span title={t('remoteDocBadgeTooltip')} className="text-[9px] text-[var(--text-muted)]">
+              ☁
+            </span>
+          )}
+        </span>
         {label && days !== null && <span className={clsx('text-[10px]', freshnessTextClass(days))}>{label}</span>}
       </button>
       {doc.isGenerated && onRegenerate && (
         <button
           onClick={(event) => {
             event.stopPropagation();
-            onRegenerate();
+            onRegenerate(repoName ?? '');
           }}
           title={t('regenerate')}
           className="shrink-0 border-none bg-transparent px-[3px] py-0.5 text-[13px] leading-none text-[var(--text-muted)]"
@@ -109,10 +118,12 @@ export function EmptyGlobalSection({ onGenerate }: { onGenerate(): void }) {
 
 export function FreshnessBanner({
   doc,
+  repoName,
   onRegenerate,
 }: {
   doc: ScannedDoc;
-  onRegenerate(): void;
+  repoName?: string;
+  onRegenerate(repoName: string): void;
 }) {
   const { t } = useTranslation('context');
   const days = getDaysAgo(doc.lastModifiedAt);
@@ -135,7 +146,7 @@ export function FreshnessBanner({
     >
       <span>{label}</span>
       <button
-        onClick={onRegenerate}
+        onClick={() => onRegenerate(repoName ?? '')}
         className="shrink-0 border-none bg-transparent p-0 text-[11px] font-semibold text-[var(--primary)]"
       >
         {t('regenerateArrow')}

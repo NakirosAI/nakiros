@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { StoredAgentTab, StoredAgentTabsState } from '@nakiros/shared';
+import type { ArtifactContext, StoredAgentTab, StoredAgentTabsState } from '@nakiros/shared';
 import { normalizeParticipants, normalizeProvider, toWorkspaceSlug } from './store-utils.js';
 
 type AgentTabsByWorkspace = Record<string, StoredAgentTabsState>;
@@ -11,6 +11,56 @@ const STORE_PATH = join(NAKIROS_DIR, 'agent-tabs.json');
 
 function ensureDir() {
   if (!existsSync(NAKIROS_DIR)) mkdirSync(NAKIROS_DIR, { recursive: true });
+}
+
+function normalizeArtifactContext(raw: unknown): ArtifactContext | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const item = raw as Record<string, unknown>;
+  const mode = item['mode'];
+  const sourceSurface = item['sourceSurface'];
+  const target = item['target'];
+  const title = item['title'];
+
+  if ((mode !== 'diff' && mode !== 'yolo') || !target || typeof target !== 'object') {
+    return null;
+  }
+
+  const normalizedSourceSurface = sourceSurface === 'product' || sourceSurface === 'backlog'
+    ? sourceSurface
+    : 'chat';
+  const targetItem = target as Record<string, unknown>;
+  const kind = targetItem['kind'];
+
+  if (kind === 'workspace_doc' && typeof targetItem['absolutePath'] === 'string') {
+    return {
+      target: {
+        kind,
+        absolutePath: targetItem['absolutePath'],
+      },
+      mode,
+      sourceSurface: normalizedSourceSurface,
+      title: typeof title === 'string' ? title : undefined,
+    };
+  }
+
+  if (
+    (kind === 'backlog_epic' || kind === 'backlog_story' || kind === 'backlog_task' || kind === 'backlog_sprint')
+    && typeof targetItem['workspaceId'] === 'string'
+    && typeof targetItem['id'] === 'string'
+  ) {
+    return {
+      target: {
+        kind,
+        workspaceId: targetItem['workspaceId'],
+        id: targetItem['id'],
+      },
+      mode,
+      sourceSurface: normalizedSourceSurface,
+      title: typeof title === 'string' ? title : undefined,
+    };
+  }
+
+  return null;
 }
 
 function normalizeTab(raw: unknown, workspaceId: string): StoredAgentTab | null {
@@ -40,6 +90,9 @@ function normalizeTab(raw: unknown, workspaceId: string): StoredAgentTab | null 
   return {
     tabId: item['tabId'],
     conversationId: typeof item['conversationId'] === 'string' ? item['conversationId'] : undefined,
+    nakirosConversationId: typeof item['nakirosConversationId'] === 'string'
+      ? item['nakirosConversationId']
+      : undefined,
     workspaceId,
     workspaceSlug,
     workspaceName,
@@ -52,7 +105,13 @@ function normalizeTab(raw: unknown, workspaceId: string): StoredAgentTab | null 
     participants,
     activeParticipantId: typeof item['activeParticipantId'] === 'string' ? item['activeParticipantId'] : undefined,
     title: typeof item['title'] === 'string' ? item['title'] : 'Nouvelle conversation',
-    sessionId: typeof item['sessionId'] === 'string' ? item['sessionId'] : undefined,
+    providerSessionId: typeof item['providerSessionId'] === 'string'
+      ? item['providerSessionId']
+      : (typeof item['sessionId'] === 'string' ? item['sessionId'] : undefined),
+    sessionId: typeof item['providerSessionId'] === 'string'
+      ? item['providerSessionId']
+      : (typeof item['sessionId'] === 'string' ? item['sessionId'] : undefined),
+    artifactContext: normalizeArtifactContext(item['artifactContext']),
   };
 }
 

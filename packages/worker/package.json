@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit false --declaration false --skipLibCheck --module es2022 --target es2022 --moduleResolution bundler --outDir src",
+    "deploy": "pnpm build && wrangler deploy",
     "deploy:dry": "wrangler deploy --dry-run",
     "type-check": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply nakiros-api --local",

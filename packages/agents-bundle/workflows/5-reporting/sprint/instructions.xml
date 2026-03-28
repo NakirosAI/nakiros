@@ -7,16 +7,26 @@
   <step n="1" goal="Load configuration">
     <action>Load profile config from {profile_config} when available (optional).</action>
     <action>Apply defaults when missing: communication_language={default_communication_language}, document_language={default_document_language}.</action>
-    <action>Call Nakiros MCP tool workspace_info to get workspace metadata (pmTool, topology). Call workspace_repos to get all repos as {{workspace_repos}}. Set {{is_multi_repo}} accordingly.</action>
+    <action>Resolve workspace scope from {workspace_config}. If the repo pointer exists, read `workspace_slug` from `{project-root}/_nakiros/workspace.yaml`, then load `~/.nakiros/workspaces/{workspace_slug}/workspace.yaml` as the canonical workspace map. If the pointer is missing, continue in single-repo mode rooted at {project-root}.</action>
+    <action>Set {{workspace_repo_list}} from canonical workspace yaml `repos`. In single-repo fallback mode, set it to the current repo only.</action>
+    <action>Set {{pm_tool}} from canonical workspace yaml `workspace.pm_tool`, defaulting to "none" when absent.</action>
+    <action>Set {{is_multi_repo}} = true when canonical workspace yaml `workspace.structure` is `multi-repo` or more than one repo is listed; otherwise false.</action>
+    <action>Load workspace-global context first by calling context.workspace.get for keys product, global, interRepo, and architecture when available. Use this as the frame for sprint goals, sequencing, and cross-repo risks.</action>
     <action>Ensure directories exist: {sprints_dir}, {reports_dir}.</action>
-    <output>[SPRINT] ✓ Config loaded | PM: {{pm_tool or "standalone"}} | Workspace: {{is_multi_repo ? "multi-repo" : "single-repo"}}</output>
+    <output>[SPRINT] Étape 1/5 — Load configuration ✓
+Config loaded | PM: {{pm_tool or "standalone"}} | Workspace: {{is_multi_repo ? "multi-repo" : "single-repo"}}</output>
   </step>
 
   <step n="2" goal="Identify sprint context">
     <ask>What are we doing?
-      1. Retrospective — review the sprint that just ended
-      2. Planning — plan the next sprint
-      3. Both — retro then plan
+
+---
+
+**What would you like to do?**
+
+1. Retrospective — review the sprint that just ended
+2. Planning — plan the next sprint
+3. Both — retro then plan
     </ask>
     <action>Capture as {{sprint_mode}}: "retro" / "planning" / "both".</action>
 
@@ -24,7 +34,7 @@
     <action>Capture as {{sprint_name}}.</action>
 
     <check if="pm_tool is configured">
-      <action>Fetch current sprint board state via PM MCP:
+      <action>Fetch current sprint board state via the configured Nakiros PM integration:
         - All tickets in sprint {{sprint_name}} with status
         - Assignees, story points if available
       </action>
@@ -36,14 +46,15 @@
       <action>Parse and capture as {{sprint_tickets}}.</action>
     </check>
 
-    <output>[SPRINT] ✓ Sprint context loaded: {{sprint_name}} | {{done_count}} done / {{in_progress_count}} in progress / {{todo_count}} to do</output>
+    <output>[SPRINT] Étape 2/5 — Sprint context ✓
+Sprint context loaded: {{sprint_name}} | {{done_count}} done / {{in_progress_count}} in progress / {{todo_count}} to do</output>
   </step>
 
   <step n="3" goal="Retrospective (if sprint_mode is 'retro' or 'both')" condition="sprint_mode != 'planning'">
     <action>Analyze {{sprint_tickets}} for completion rate: {{done_count}} / {{total_count}} = {{completion_pct}}%.</action>
 
     <check if="workspace_config is loaded (multi-repo)">
-      <action>For each repo in {{workspace_repos}}, run: git log --oneline --since={{sprint_start_date}} --until={{sprint_end_date}} to gather commit activity.</action>
+      <action>For each repo in {{workspace_repo_list}}, run: git log --oneline --since={{sprint_start_date}} --until={{sprint_end_date}} to gather commit activity.</action>
       <action>Correlate commits to ticket IDs found in commit messages.</action>
     </check>
 
@@ -82,11 +93,12 @@
     </action>
 
     <check if="pm_tool is configured">
-      <action>Post retro summary as a comment on the sprint or team channel via PM MCP (if supported).</action>
+      <action>Post retro summary as a comment on the sprint or team channel via the configured Nakiros PM integration (if supported).</action>
       <action>Transition leftover in-progress tickets to {pm_todo_status} for backlog review (ask confirmation first).</action>
     </check>
 
-    <output>[SPRINT] ✓ Retrospective complete — {{completion_pct}}% completion | Artifact: {reports_dir}/retro-{{sprint_name | slugify}}.md</output>
+    <output>[SPRINT] Étape 3/5 — Retrospective ✓
+Retrospective complete — {{completion_pct}}% completion | Artifact: {reports_dir}/retro-{{sprint_name | slugify}}.md</output>
   </step>
 
   <step n="4" goal="Sprint planning (if sprint_mode is 'planning' or 'both')" condition="sprint_mode != 'retro'">
@@ -94,7 +106,7 @@
     <action>Capture as {{next_sprint_name}}.</action>
 
     <check if="pm_tool is configured">
-      <action>Fetch backlog tickets (status = {pm_todo_status}, not in any sprint) via PM MCP.</action>
+      <action>Fetch backlog tickets (status = {pm_todo_status}, not in any sprint) via the configured Nakiros PM integration.</action>
       <action>Capture as {{backlog_tickets}} with priority, story points, labels, assignee.</action>
     </check>
 
@@ -119,7 +131,7 @@
     <action>Capture final scope as {{confirmed_sprint_scope}}.</action>
 
     <check if="pm_tool is configured">
-      <action>For each ticket in {{confirmed_sprint_scope}}: assign to sprint {{next_sprint_name}} via PM MCP.</action>
+      <action>For each ticket in {{confirmed_sprint_scope}}: assign to sprint {{next_sprint_name}} via the configured Nakiros PM integration.</action>
       <action>If assignees are specified, assign tickets.</action>
       <action>Confirm each update.</action>
     </check>
@@ -141,12 +153,14 @@
       {{3 bullet goals for the sprint — derived from the ticket themes}}
     </action>
 
-    <output>[SPRINT] ✓ Planning complete — {{confirmed_sprint_scope | count}} tickets in {{next_sprint_name}} | Artifact: {sprints_dir}/plan-{{next_sprint_name | slugify}}.md</output>
+    <output>[SPRINT] Étape 4/5 — Sprint planning ✓
+Planning complete — {{confirmed_sprint_scope | count}} tickets in {{next_sprint_name}} | Artifact: {sprints_dir}/plan-{{next_sprint_name | slugify}}.md</output>
   </step>
 
   <step n="5" goal="Final summary">
     <action>Collect all artifact paths produced in this session.</action>
 
+    <output>[SPRINT] Étape 5/5 — Final summary ✓</output>
     <output>[SPRINT] ✅ COMPLETE
 {{if retro: "├─ Retro: {reports_dir}/retro-{{sprint_name | slugify}}.md"}}
 {{if planning: "├─ Plan: {sprints_dir}/plan-{{next_sprint_name | slugify}}.md"}}

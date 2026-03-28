@@ -1,0 +1,310 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language resolved from profile and workspace settings.</critical>
+  <critical>Generate all PM-facing content (ticket title, descriptions, comments) in {{document_language}}.</critical>
+  <critical>Keep internal data files under `{workspace_root_dir}` (runs, JSON artifacts, field keys) in ENGLISH for agent performance.</critical>
+  <critical>Commits are ALWAYS in ENGLISH (dev standard). This is non-negotiable.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+
+  <step n="1" goal="Load configuration">
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Apply defaults when missing: user_name={default_user_name}, communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Resolve workspace scope from {workspace_config}. If the repo pointer exists, read `workspace_slug` from `{project-root}/_nakiros/workspace.yaml`, then load `~/.nakiros/workspaces/{workspace_slug}/workspace.yaml` as the canonical workspace map. If the pointer is missing, continue in single-repo mode rooted at {project-root}.</action>
+    <action>Load workspace-global context first by calling context.workspace.get for keys product, global, interRepo, and architecture when available. Use repo-local `_nakiros/` detail only after the workspace-level map is understood.</action>
+    <action>Set {{workspace_repo_list}} from canonical workspace yaml `repos`. In single-repo fallback mode, set it to the current repo only.</action>
+    <action>Set {{pm_tool}} from canonical workspace yaml `workspace.pm_tool`, defaulting to "none" when absent.</action>
+    <action if="canonical workspace yaml document_language exists">Override {{document_language}} with `workspace.document_language`.</action>
+    <action>Set {{branch_pattern}} from canonical workspace yaml `workspace.branch_pattern` when present, fallback to {profile_config} branch_pattern. This is advisory only for downstream delivery planning, not a blocker for story creation.</action>
+
+    <output>[WORKFLOW] Étape 1/8 — Load configuration ✓
+Config loaded and ready to discuss</output>
+  </step>
+
+  <step n="2" goal="Start conversational discussion about the story">
+    <critical>This is a natural conversation, not interrogation. Listen more than ask. Build on what the user says.</critical>
+    <critical>If the story already belongs to a workspace-level feature plan, epic, or cross-repo initiative, preserve that framing instead of narrowing to one repo too early.</critical>
+
+    <action>Start by asking the user to describe what they want to build/fix:
+      "What do you want to work on? Tell me about it."
+    </action>
+
+    <action>Listen to their initial description and capture the core idea as {{initial_intent}}.</action>
+
+    <ask>[Start the conversation]
+Tell me about what you want to build or fix. What's the idea?</ask>
+
+    <action>Based on their response, engage in natural back-and-forth. Ask clarifying questions when needed:
+      - If unclear: "Help me understand the problem better..."
+      - If scope seems big: "Is this everything, or are there phases?"
+      - If impact is unclear: "Who would benefit from this?"
+      - If success criteria missing: "How would we know this worked?"
+    </action>
+
+    <action>Keep iterating until {{problem_statement}}, {{expected_outcome}}, {{user_role}}, {{priority}}, {{scope_boundaries}} are captured naturally in the conversation.</action>
+
+    <output>[WORKFLOW] Étape 2/8 — Start conversation ✓
+Initial understanding captured | Ready to refine</output>
+  </step>
+
+  <step n="3" goal="Refine acceptance criteria together">
+    <critical>Don't impose format. Guide naturally toward measurable outcomes.</critical>
+
+    <action>Ask the user how they'd know when this is done:
+      "What needs to be true for this to be 'done'?"
+      "How do we test/verify this works?"
+    </action>
+
+    <action>As they describe acceptance criteria, help clarify and structure them naturally. Examples:
+      - "So when a user [does X], they should [see Y]?"
+      - "Let's make sure this is testable: how would we verify that?"
+    </action>
+
+    <action>Capture {{acceptance_criteria}} through conversation (don't need Given/When/Then if they describe it differently).</action>
+
+    <action>Iterate until you have 3-5 clear, measurable outcomes that the user agrees on.</action>
+
+    <output>[WORKFLOW] Étape 3/8 — Refine acceptance criteria ✓
+Acceptance criteria refined and agreed</output>
+  </step>
+
+  <step n="4" goal="Identify dependencies, risks, and gotchas (conversational)">
+    <critical>Ask about blockers and complications naturally. Some stories don't have many.</critical>
+
+    <action>Engage in natural conversation about potential blockers:
+      "Are there any blockers or dependencies we should know about?"
+      "Does this depend on other work being done first?"
+      "Any tricky parts or things that could go wrong?"
+      "Any performance, security, or infrastructure concerns?"
+    </action>
+
+    <action>Capture {{dependencies}}, {{risks}}, {{constraints}} from user responses. If none, that's fine too.</action>
+
+    <output>[WORKFLOW] Étape 4/8 — Dependencies and risks ✓
+Dependencies and risks discussed</output>
+  </step>
+
+  <step n="5" goal="Generate story document from our discussion">
+    <critical>This is a summary of what we discussed. It should be clear enough for dev to challenge and implement.</critical>
+
+    <action>Generate {{story_title}} from {{problem_statement}}:
+      - Format: "[FEATURE] Brief description" or "[BUG] Brief description"
+      - Max 80 characters
+      - Make it clear and searchable
+    </action>
+
+    <action>Generate {{story_slug}} from {{story_title}} as a filesystem-safe slug:
+      - lowercase
+      - words separated by hyphens
+      - remove brackets and punctuation
+      - stable enough to keep the same local artifact file before and after PM sync
+    </action>
+
+    <action>Generate story description in {{document_language}} as a clean summary of our conversation:
+      "## Problem Statement
+
+      {{problem_statement}}
+
+      ## Expected Outcome
+
+      {{expected_outcome}}
+
+      ## User / Stakeholder
+
+      {{user_role}}
+
+      ## Priority
+
+      {{priority}}
+
+      ## Acceptance Criteria
+
+      [List the outcomes we discussed - can be natural language, not forced format]
+
+      ## Scope
+
+      In Scope:
+      - [What we agreed is included]
+
+      Out of Scope:
+      - [What we explicitly said is NOT included]
+
+      ## Repo Scope
+
+      - [Repos or domains likely impacted, if known]
+
+      ## Dependencies & Gotchas
+
+      {{dependencies}}
+      {{risks}}
+
+      ## Notes
+
+      Created via Nakiros create-story workflow (conversational elicitation).
+      Ready for dev challenge and implementation."
+    </action>
+
+    <action>Store complete story as {{story_document}}.</action>
+
+    <output>[WORKFLOW] Étape 5/8 — Generate story document ✓
+Story document created from our discussion</output>
+  </step>
+
+  <step n="6" goal="Review story together and get approval">
+    <critical>This is our chance to refine before creating. Make sure the story matches your intent.</critical>
+
+    <action>Display {{story_document}} to user for review.</action>
+
+    <ask>Here's what we discussed, structured as a story:
+
+---
+{{story_document}}
+---
+
+Does this look right? Anything you want to change before we create it?
+
+---
+
+**Does this look right?**
+
+1. Good, create it in {{pm_tool}}
+2. Let me tweak a section
+3. Actually, let's not do this</ask>
+
+    <check if="user chooses edit">
+      <ask>What needs to change? (You can describe what you want, I'll update it)</ask>
+      <action>Listen to user's suggested edits and apply them to {{story_document}}.</action>
+      <goto step="6" />
+    </check>
+
+    <check if="user chooses no">
+      <output>[WORKFLOW] ⏸ Story creation cancelled</output>
+      <action>HALT workflow.</action>
+    </check>
+
+    <check if="user chooses yes">
+      <output>[WORKFLOW] Étape 6/8 — Review and approve ✓</output>
+      <action>Proceed to step 7 (create in PM tool).</action>
+    </check>
+  </step>
+
+  <step n="7" goal="Create story in PM tool">
+    <critical>Use the Nakiros PM action layer to create the story in the configured PM tool. Do not hardcode Jira-specific behavior when the workspace may be connected to another PM tool.</critical>
+
+    <check if="pm_tool is none">
+      <action>Skip MCP creation (pm_tool is "none").</action>
+      <action>Ensure directory exists: {story_artifact_dir}.</action>
+      <action>Persist story artifact locally to {created_story_file} (JSON) with all the details from our conversation.</action>
+      <output>[WORKFLOW] ⚠ Story saved locally (no PM tool configured)
+      Artifact: {created_story_file}
+      </output>
+      <action>GOTO step 8</action>
+    </check>
+
+    <action if="pm_tool is not none">
+      Create the ticket via the configured PM integration using Nakiros PM actions:
+      - action: pm.create_ticket
+      - issue_type: "story"
+      - title: {{story_title}}
+      - description: {{story_document}} — CRITICAL: use the EXACT text from {{story_document}} as-is, which is already written in {{document_language}}. Do NOT translate or rewrite.
+      - priority: {{priority}}
+      - metadata: repo scope, dependencies, constraints, labels if available
+    </action>
+
+    <check if="PM ticket creation succeeds">
+      <action>Capture returned issue key/ID as {{ticketId}} (e.g., "EX-123").</action>
+      <action>Ensure directory exists: {story_artifact_dir}.</action>
+      <action>Persist story artifact to {created_story_file} (JSON) with:
+        - All conversation details
+        - {{story_slug}} (stable local artifact slug)
+        - {{ticketId}} (reference to created PM ticket)
+        - ticket_url (link to the issue in the configured PM tool when available)
+        - created_at timestamp
+        - status: "created_in_pm_tool"
+      </action>
+      <action if="pm_tool is not none">Post creation comment to the PM ticket in {{document_language}}:
+        "✓ Story created via Nakiros create-story workflow
+
+        Ready for:
+        1. PM challenge gate (run /nak:workflow:dev-story {{ticketId}})
+        2. Dev implementation (challenge + code)
+
+        Artifact: {created_story_file}"
+      </action>
+      <output>[WORKFLOW] Étape 7/8 — Create in PM tool ✓
+      Key: {{ticketId}}
+      Artifact: {created_story_file}
+      </output>
+    </check>
+
+    <check if="PM ticket creation fails">
+      <ask>Couldn't create the story in {{pm_tool}}. Want to:
+
+---
+
+**What would you like to do?**
+
+1. Try again
+2. Save locally and queue for retry
+3. Just keep it locally for now</ask>
+
+      <check if="user chooses queue">
+        <action>Persist story locally with status = "pending_sync".</action>
+        <action>Queue retry in {sync_queue_file} with:
+          - story data: title, description, priority
+          - action: "pm.create_ticket"
+          - retry_count: 0
+        </action>
+        <action>Ensure directory exists: {story_artifact_dir}.</action>
+        <action>Persist story artifact to {created_story_file} with status = "pending_sync".</action>
+        <output>⚠ Story saved locally, will try to create in {{pm_tool}} later via sync queue.</output>
+      </check>
+
+      <check if="user chooses retry">
+        <goto step="7" />
+      </check>
+
+      <check if="user chooses skip">
+        <action>Ensure directory exists: {story_artifact_dir}.</action>
+        <action>Persist story locally (not created in PM tool yet) to {created_story_file} with status = "draft".</action>
+        <output>⚠ Story saved locally. Run a future Nakiros sync later to create it in {{pm_tool}}, or create it manually.</output>
+      </check>
+    </check>
+  </step>
+
+  <step n="8" goal="Done — offer next steps">
+    <output>[WORKFLOW] Étape 8/8 — Done ✓</output>
+    <output>[WORKFLOW] ✅ STORY CREATED
+    ID: {{ticketId or "local-only"}}
+    Title: {{story_title}}
+    Artifact: {created_story_file}
+    </output>
+
+    <ask>What would you like to do next?
+
+---
+
+**What would you like to do next?**
+
+1. Start dev-story with {{ticketId}} (challenge + implementation)
+2. Show me the full story again
+3. We're good for now</ask>
+
+    <check if="user chooses dev">
+      <check if="ticketId exists">
+        <output>Great! Next: Run /nak:workflow:dev-story {{ticketId}} to start the challenge and implementation flow.</output>
+      </check>
+      <check if="ticketId does not exist">
+        <output>Story is saved locally only for now. Create or sync it to your PM tool first if you want to launch dev-story from a tracked ticket.</output>
+      </check>
+    </check>
+
+    <check if="user chooses view">
+      <action>Display {{story_document}}.</action>
+    </check>
+
+    <check if="user chooses done">
+      <output>Story is ready whenever you want to start dev-story.</output>
+    </check>
+  </step>
+</workflow>

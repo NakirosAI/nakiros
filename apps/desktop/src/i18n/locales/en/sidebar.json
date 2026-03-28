@@ -3,5 +3,6 @@
   "chat": "AI Chat",
   "product": "Product",
   "delivery": "Delivery",
-  "settings": "Settings"
+  "backlog": "Backlog",
+  "settings": "Workspace"
 }

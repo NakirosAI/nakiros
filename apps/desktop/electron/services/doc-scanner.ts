@@ -11,6 +11,7 @@ export interface ScannedDoc {
   relativePath: string;
   absolutePath: string;
   isGenerated: boolean;
+  isRemote?: boolean;
   lastModifiedAt?: number;
 }
 
@@ -181,11 +182,14 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
     // ignore
   }
 
+  const resolvedExpectedFilenames = new Set<string>();
+
   for (const filename of GLOBAL_EXPECTED_FILES) {
     const candidates = [filename, ...(GLOBAL_FILE_ALIASES[filename] ?? [])];
     const resolvedFilename = candidates.find((candidate) => existsSync(join(contextDir, candidate)));
 
     if (resolvedFilename) {
+      resolvedExpectedFilenames.add(resolvedFilename);
       const absolutePath = join(contextDir, resolvedFilename);
       let lastModifiedAt: number | undefined;
       try {
@@ -207,6 +211,34 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
     } else {
       missingNames.push(filename.replace(/\.md$/i, ''));
     }
+  }
+
+  // Also include any other .md files in context/ not covered by GLOBAL_EXPECTED_FILES
+  try {
+    const contextEntries = await readdir(contextDir, { withFileTypes: true });
+    for (const entry of contextEntries) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.toLowerCase().endsWith('.md')) continue;
+      if (resolvedExpectedFilenames.has(entry.name)) continue;
+
+      const absolutePath = join(contextDir, entry.name);
+      let lastModifiedAt: number | undefined;
+      try {
+        const filestat = await stat(absolutePath);
+        lastModifiedAt = filestat.mtimeMs;
+      } catch {
+        // ignore
+      }
+      docs.push({
+        name: entry.name.replace(/\.md$/i, ''),
+        relativePath: `context/${entry.name}`,
+        absolutePath,
+        isGenerated: true,
+        lastModifiedAt,
+      });
+    }
+  } catch {
+    // context dir may not exist yet
   }
 
   try {
@@ -246,10 +278,69 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
   return { docs, decisionDocs, missingNames };
 }
 
+async function scanRemoteRepos(workspace: StoredWorkspace, localRepoNames: Set<string>): Promise<ScannedRepo[]> {
+  const workspaceSlug = resolveWorkspaceSlug(workspace.id, workspace.name);
+  const remoteReposDir = join(homedir(), '.nakiros', 'workspaces', workspaceSlug, 'context', 'repos');
+  if (!existsSync(remoteReposDir)) return [];
+
+  let entries: import('fs').Dirent[];
+  try {
+    entries = await readdir(remoteReposDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const results: ScannedRepo[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (localRepoNames.has(entry.name)) continue;
+
+    const repoDir = join(remoteReposDir, entry.name);
+    let files: import('fs').Dirent[];
+    try {
+      files = await readdir(repoDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    const docs: ScannedDoc[] = [];
+    for (const file of files) {
+      if (!file.isFile()) continue;
+      const lowerName = file.name.toLowerCase();
+      if (!lowerName.endsWith('.md') && lowerName !== 'llms.txt') continue;
+
+      const absolutePath = join(repoDir, file.name);
+      let lastModifiedAt: number | undefined;
+      try {
+        const filestat = await stat(absolutePath);
+        lastModifiedAt = filestat.mtimeMs;
+      } catch {
+        // ignore
+      }
+
+      docs.push({
+        name: file.name.replace(/\.md$/i, ''),
+        relativePath: `_nakiros/${file.name}`,
+        absolutePath,
+        isGenerated: true,
+        isRemote: true,
+        lastModifiedAt,
+      });
+    }
+
+    if (docs.length > 0) {
+      results.push({ repoName: entry.name, repoPath: repoDir, docs });
+    }
+  }
+
+  return results;
+}
+
 export async function scanWorkspaceDocs(workspace: StoredWorkspace): Promise<ScanResult> {
   const primaryRepoPath = getPrimaryRepoPath(workspace);
+  const localRepoNames = new Set(workspace.repos.map((r) => r.name));
 
-  const [repoResults, globalSection] = await Promise.all([
+  const [repoResults, globalSection, remoteRepos] = await Promise.all([
     Promise.all(
       workspace.repos
         .filter((repo) => existsSync(repo.localPath))
@@ -260,6 +351,7 @@ export async function scanWorkspaceDocs(workspace: StoredWorkspace): Promise<Sca
         })),
     ),
     scanGlobalSection(workspace),
+    scanRemoteRepos(workspace, localRepoNames),
   ]);
 
   const repos = repoResults.filter((r) => r.docs.length > 0);
@@ -291,6 +383,11 @@ export async function scanWorkspaceDocs(workspace: StoredWorkspace): Promise<Sca
         docs: scratchDocs,
       });
     }
+  }
+
+  // Append remote-only repos (not cloned locally but pulled from SaaS)
+  for (const remoteRepo of remoteRepos) {
+    repos.push(remoteRepo);
   }
 
   return { repos, globalSection, primaryRepoPath };

@@ -1,6 +1,5 @@
 ---
 description: 'Launch the Nakiros QA agent for test strategy, coverage analysis, and quality gates'
-disable-model-invocation: true
 ---
 
 Command Trigger: `/nak-agent-qa`
@@ -10,8 +9,8 @@ IT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the Q
 <steps CRITICAL="TRUE">
 1. Always LOAD the FULL @~/.nakiros/agents/qa.md
 2. READ its entire contents and apply activation, persona, menu, and reflexes exactly
-3. Load `~/.nakiros/config.yaml` when available; use `{project-root}/_nakiros/workspace.yaml` and `~/.nakiros/workspaces/{workspace_slug}/workspace.json` for project scope
-4. If `{project-root}/_nakiros/workspace.yaml` exists, load it as a lightweight pointer and then load `~/.nakiros/workspaces/{workspace_slug}/workspace.json` for cross-repo test scope
+3. Load `~/.nakiros/config.yaml` when available; read `workspace.yaml` from cwd — cwd is the workspace dir (`~/.nakiros/workspaces/{workspace_slug}/`), repos are available as subdirectories
+4. Navigate into repo subdirectories for repo-specific work; all repos are directly accessible from cwd without pointer resolution
 5. YOU MUST ALWAYS SPEAK OUTPUT in the effective `communication_language`
 6. Apply the ac-validation reflex BEFORE any test work: verify acceptance criteria are explicit and testable
 7. Apply the coverage-scan reflex to enumerate existing test files and identify gaps

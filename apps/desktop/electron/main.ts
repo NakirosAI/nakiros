@@ -1,24 +1,38 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeImage, Notification } from 'electron';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import chokidar, { type FSWatcher } from 'chokidar';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 
 const execFileAsync = promisify(execFile);
 import { startServer, stopServer } from '@nakiros/server';
 import { DEFAULT_MCP_SERVER_URL, IPC_CHANNELS } from '@nakiros/shared';
-import { getAll, save, remove } from './services/workspace.js';
+import { getAll, save, remove, getNakirosWorkspaceDir, resolveWorkspaceSlug } from './services/workspace.js';
+import { syncWorkspaceSymlinks } from './services/workspace-symlinks.js';
 import { getHydratedWorkspaces, saveCanonicalWorkspace } from './services/workspace-remote.js';
 import { syncWorkspaceYaml } from './services/workspace-yaml.js';
 import { getAuthState, signIn, signOut } from './services/auth.js';
 import { getMyOrg, listMyOrgs, createOrg, deleteOrg, listOrgMembers, addOrgMember, leaveOrg, removeOrgMember, cancelInvitation, acceptInvitations } from './services/org.js';
+import { assertWorkspaceLaunchAllowed, listWorkspaceMembers, removeWorkspaceMember, upsertWorkspaceMember } from './services/workspace-members.js';
 import { resetWorkspace } from './services/workspace-reset.js';
 import { detectProfile } from './services/profile-detector.js';
 import { syncToRepos } from './services/workspace-sync.js';
 import { createWorkspaceRoot, copyRepoToDirectory, initGitRepo } from './services/workspace-bootstrap.js';
 import { scanWorkspaceDocs } from './services/doc-scanner.js';
 import { getPreferences, savePreferences } from './services/preferences.js';
+import {
+  bindWorkspaceProviderCredential,
+  createProviderCredential,
+  deleteProviderCredential,
+  getWorkspaceProviderCredentials,
+  listProviderCredentials,
+  revokeProviderCredential,
+  setWorkspaceProviderDefault,
+  unbindWorkspaceProviderCredential,
+  updateProviderCredential,
+} from './services/provider-credentials.js';
 import {
   getAgentInstallStatus,
   getGlobalInstallStatus,
@@ -35,28 +49,60 @@ import {
   getEpics, saveEpic, removeEpic,
   toWorkspaceSlug,
 } from './services/ticket-storage.js';
+import { getGettingStartedContext, saveGettingStartedState } from './services/getting-started-state.js';
+import {
+  getBacklogStories,
+  getBacklogEpics,
+  createBacklogEpic,
+  updateBacklogEpic,
+  createBacklogStory,
+  updateBacklogStory,
+  getBacklogTasks,
+  createBacklogTask,
+  updateBacklogTask,
+  getBacklogSprints,
+  createBacklogSprint,
+  updateBacklogSprint,
+} from './services/backlog-service.js';
 import { generateContext } from './services/agent-context.js';
 import { createTerminal, writeToTerminal, resizeTerminal, destroyTerminal } from './services/terminal.js';
-import { runAgentCommand, cancelAgentRun, resolveAgentCwd } from './services/agent-runner.js';
-import { getConversations, saveConversation, deleteConversation } from './services/conversation-store.js';
+import { runAgentCommand, cancelAgentRun, resolveAgentCwd } from './services/agent-runner-bridge.js';
+import { startWorkspaceSyncBridge, stopAllSyncBridges, triggerSyncPush } from './services/sync-bridge.js';
+import { executeAction } from './services/action-orchestrator.js';
+import { getConversations, deleteConversationEntry } from './services/conversation-reader.js';
+import { pushWorkspaceContext, pullRemoteContext } from './services/context-sync.js';
+import {
+  readArtifactFile,
+  saveArtifactVersion,
+  listArtifactVersions,
+  listAllArtifacts,
+  pullAllArtifacts,
+  listContextArtifactFiles,
+  getArtifactFilePath,
+} from './services/artifact-service.js';
+import {
+  takeSnapshot,
+  diffSnapshot,
+  revertSnapshot,
+  resolveSnapshot,
+  listPendingSnapshots,
+} from './services/snapshot-service.js';
+import { checkPendingPreview, applyPreview, applyPreviewFile, discardPreview } from './services/preview-service.js';
 import { getAgentTabsState, saveAgentTabsState, clearAgentTabsState } from './services/agent-tabs-store.js';
 import {
   generatePKCE,
   generateState,
   openAuthUrl,
-  exchangeCodeForTokens,
-  getAccessibleResources,
-  getJiraUserInfo,
 } from './services/jira-oauth.js';
 import {
-  saveTokens,
-  clearTokens,
-  getTokenMeta,
-  loadTokens,
-  getValidAccessToken,
-} from './services/jira-token-store.js';
-import { syncJiraTickets } from './services/jira-sync.js';
-import { fetchProjects, fetchProjectBoardType, countIssues } from './services/jira-connector.js';
+  completeJiraOAuth,
+  countJiraTickets,
+  disconnectJira,
+  getJiraBoardSelection,
+  getJiraProjects,
+  getJiraStatus,
+  syncWorkspaceJiraTickets,
+} from './services/jira-auth-service.js';
 import { sendSessionFeedback, sendProductFeedback, retryQueue } from './services/feedback-service.js';
 import type { SessionFeedbackData, ProductFeedbackData } from './services/feedback-service.js';
 import type {
@@ -64,14 +110,30 @@ import type {
   AuthCompletePayload,
   AuthErrorPayload,
   AuthSignedOutPayload,
+  NakirosActionBlock,
   StoredWorkspace,
   LocalTicket,
   LocalEpic,
   AppPreferences,
   AgentInstallRequest,
   AgentProvider,
-  StoredConversation,
+  BindWorkspaceProviderCredentialInput,
+  CreateProviderCredentialInput,
+  JiraAuthCompletePayload,
+  JiraAuthErrorPayload,
+  JiraSyncFilter,
+  SetWorkspaceProviderDefaultInput,
   StoredAgentTabsState,
+  CreateEpicPayload,
+  UpdateEpicPayload,
+  CreateStoryPayload,
+  UpdateStoryPayload,
+  CreateTaskPayload,
+  UpdateTaskPayload,
+  CreateSprintPayload,
+  UpdateSprintPayload,
+  UpsertWorkspaceMembershipInput,
+  UpdateProviderCredentialInput,
 } from '@nakiros/shared';
 
 // ─── Single-instance lock (required for protocol handling on Windows/Linux) ───
@@ -98,6 +160,7 @@ if (process.defaultApp) {
 interface PendingOAuth {
   codeVerifier: string;
   wsId: string;
+  jiraUrl?: string;
 }
 
 const pendingOAuth = new Map<string, PendingOAuth>();
@@ -146,56 +209,13 @@ async function handleOAuthCallback(url: string): Promise<void> {
   const { codeVerifier, wsId } = pending;
 
   try {
-    const tokens = await exchangeCodeForTokens(code, codeVerifier);
-    const resources = await getAccessibleResources(tokens.access_token);
-
-    if (resources.length === 0) {
-      throw new Error('No accessible Jira sites found. Make sure you have access to at least one Jira Cloud instance.');
-    }
-
-    // Try to match configured jiraUrl, otherwise use first resource
-    const workspaces = getAll();
-    const workspace = workspaces.find((w) => w.id === wsId);
-
-    let resource = resources[0]!;
-    if (workspace?.jiraUrl && resources.length > 1) {
-      const normalizedConfigured = workspace.jiraUrl.replace(/\/$/, '').toLowerCase();
-      const match = resources.find((r) => r.url.replace(/\/$/, '').toLowerCase() === normalizedConfigured);
-      if (match) resource = match;
-    }
-
-    const { displayName } = await getJiraUserInfo(tokens.access_token, resource.id);
-
-    saveTokens(wsId, {
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresIn: tokens.expires_in,
-      cloudId: resource.id,
-      cloudUrl: resource.url,
-      displayName,
-    });
-
-    // Update workspace with connection info
-    if (workspace) {
-      const updated: StoredWorkspace = {
-        ...workspace,
-        jiraConnected: true,
-        jiraCloudId: resource.id,
-        jiraCloudUrl: resource.url,
-        jiraUrl: workspace.jiraUrl ?? resource.url,
-      };
-      save(updated);
-      win.webContents.send(IPC_CHANNELS['jira:auth-complete'], {
-        wsId,
-        cloudUrl: resource.url,
-        displayName,
-        workspace: updated,
-      });
-    } else {
-      win.webContents.send(IPC_CHANNELS['jira:auth-complete'], { wsId, cloudUrl: resource.url, displayName });
-    }
+    const payload = await completeJiraOAuth(wsId, code, codeVerifier, pending.jiraUrl);
+    win.webContents.send(IPC_CHANNELS['jira:auth-complete'], payload satisfies JiraAuthCompletePayload);
   } catch (err) {
-    win.webContents.send(IPC_CHANNELS['jira:auth-error'], { wsId, error: String(err) });
+    win.webContents.send(IPC_CHANNELS['jira:auth-error'], {
+      wsId,
+      error: err instanceof Error ? err.message : String(err),
+    } satisfies JiraAuthErrorPayload);
   }
 }
 
@@ -338,7 +358,26 @@ ipcMain.handle(IPC_CHANNELS['dialog:openFile'], async () => {
   const result = await dialog.showOpenDialog({ properties: ['openFile'] });
   return result.canceled ? null : (result.filePaths[0] ?? null);
 });
-ipcMain.handle(IPC_CHANNELS['workspace:getAll'], () => getHydratedWorkspaces());
+ipcMain.handle(IPC_CHANNELS['workspace:getAll'], async (event) => {
+  const workspaces = await getHydratedWorkspaces();
+  // Start a file-watcher sync bridge for each workspace (idempotent)
+  for (const ws of workspaces) {
+    startWorkspaceSyncBridge(ws, (syncEvent) => {
+      // Forward NDJSON events from nakiros subprocess to the renderer
+      BrowserWindow.getAllWindows().forEach((win) => {
+        win.webContents.send(IPC_CHANNELS['sync:event'], syncEvent);
+      });
+    });
+  }
+  void event; // event.sender not needed — we broadcast to all windows
+  return workspaces;
+});
+ipcMain.handle(IPC_CHANNELS['workspace:listMembers'], (_, workspaceId: string) => listWorkspaceMembers(workspaceId));
+ipcMain.handle(
+  IPC_CHANNELS['workspace:upsertMember'],
+  (_, workspaceId: string, input: UpsertWorkspaceMembershipInput) => upsertWorkspaceMember(workspaceId, input),
+);
+ipcMain.handle(IPC_CHANNELS['workspace:removeMember'], (_, workspaceId: string, userId: string) => removeWorkspaceMember(workspaceId, userId));
 ipcMain.handle(IPC_CHANNELS['workspace:save'], (_, w: StoredWorkspace) => save(w));
 ipcMain.handle(IPC_CHANNELS['workspace:saveCanonical'], (_, w: StoredWorkspace) => saveCanonicalWorkspace(w));
 ipcMain.handle(IPC_CHANNELS['workspace:delete'], (_, id: string) => remove(id));
@@ -348,13 +387,108 @@ ipcMain.handle(IPC_CHANNELS['repo:detectProfile'], (_, path: string) => detectPr
 ipcMain.handle(IPC_CHANNELS['repo:copyLocal'], (_, sourcePath: string, targetParentDir: string) =>
   copyRepoToDirectory(sourcePath, targetParentDir));
 ipcMain.handle(IPC_CHANNELS['workspace:syncYaml'], (_, w: StoredWorkspace) => syncWorkspaceYaml(w));
+ipcMain.handle(IPC_CHANNELS['workspace:getStartedContext'], (_, w: StoredWorkspace) =>
+  getGettingStartedContext(w.name, w.repos.map((r) => r.localPath)));
+ipcMain.handle(IPC_CHANNELS['workspace:saveStartedState'], (_, workspaceName: string, state: unknown) =>
+  saveGettingStartedState(workspaceName, state as Parameters<typeof saveGettingStartedState>[1]));
 ipcMain.handle(IPC_CHANNELS['workspace:reset'], (_, w: StoredWorkspace) => resetWorkspace(w));
 ipcMain.handle(IPC_CHANNELS['workspace:sync'], (_, w: StoredWorkspace) => {
   const prefs = getPreferences();
   syncToRepos(w, prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL);
 });
+ipcMain.handle(IPC_CHANNELS['context:push'], (_, w: StoredWorkspace, force?: boolean) => pushWorkspaceContext(w, force));
+ipcMain.handle(IPC_CHANNELS['context:pull'], (_, w: StoredWorkspace) => pullRemoteContext(w));
+
+ipcMain.handle(IPC_CHANNELS['artifact:listVersions'], async (_event, workspaceId: string, artifactPath: string) => {
+  return listArtifactVersions(workspaceId, artifactPath);
+});
+
+ipcMain.handle(IPC_CHANNELS['artifact:saveVersion'], async (_event, workspaceId: string, workspace: StoredWorkspace, input: unknown) => {
+  return saveArtifactVersion(workspaceId, workspace, input as import('@nakiros/shared').SaveProductArtifactInput);
+});
+
+ipcMain.handle(IPC_CHANNELS['artifact:listAll'], async (_event, workspaceId: string) => {
+  return listAllArtifacts(workspaceId);
+});
+
+ipcMain.handle(IPC_CHANNELS['artifact:pullAll'], async (_event, workspaceId: string, workspace: StoredWorkspace) => {
+  return pullAllArtifacts(workspaceId, workspace);
+});
+
+ipcMain.handle(IPC_CHANNELS['artifact:listContextFiles'], async (_event, workspace: StoredWorkspace) => {
+  return listContextArtifactFiles(workspace);
+});
+
+ipcMain.handle(IPC_CHANNELS['artifact:readFile'], async (_event, workspace: StoredWorkspace, artifactPath: string) => {
+  return readArtifactFile(workspace, artifactPath);
+});
+
+ipcMain.handle(IPC_CHANNELS['artifact:getFilePath'], (_event, workspace: StoredWorkspace, artifactPath: string) => {
+  return getArtifactFilePath(workspace, artifactPath);
+});
+
+ipcMain.handle(IPC_CHANNELS['snapshot:take'], (_event, workspaceSlug: string, runId: string) => {
+  return takeSnapshot(workspaceSlug, runId);
+});
+
+ipcMain.handle(IPC_CHANNELS['snapshot:diff'], (_event, workspaceSlug: string, runId: string) => {
+  return diffSnapshot(workspaceSlug, runId);
+});
+
+ipcMain.handle(IPC_CHANNELS['snapshot:revert'], (_event, workspaceSlug: string, runId: string, relativePaths?: string[]) => {
+  return revertSnapshot(workspaceSlug, runId, relativePaths);
+});
+
+ipcMain.handle(IPC_CHANNELS['snapshot:resolve'], (_event, workspaceSlug: string, runId: string) => {
+  return resolveSnapshot(workspaceSlug, runId);
+});
+
+ipcMain.handle(IPC_CHANNELS['snapshot:listPending'], (_event, workspaceSlug: string) => {
+  return listPendingSnapshots(workspaceSlug);
+});
+
+ipcMain.handle(IPC_CHANNELS['preview:check'], (_event, workspaceSlug: string) => {
+  return checkPendingPreview(workspaceSlug);
+});
+ipcMain.handle(IPC_CHANNELS['preview:apply'], async (_event, previewRoot: string, workspaceSlug: string) => {
+  const result = await applyPreview(previewRoot, workspaceSlug);
+  const ws = getAll().find((w) => resolveWorkspaceSlug(w.id, w.name) === workspaceSlug);
+  if (ws) triggerSyncPush(ws.id);
+  return result;
+});
+ipcMain.handle(IPC_CHANNELS['preview:apply-file'], async (_event, previewRoot: string, filePath: string, workspaceSlug: string) => {
+  const result = await applyPreviewFile(previewRoot, filePath, workspaceSlug);
+  const ws = getAll().find((w) => resolveWorkspaceSlug(w.id, w.name) === workspaceSlug);
+  if (ws) triggerSyncPush(ws.id);
+  return result;
+});
+ipcMain.handle(IPC_CHANNELS['preview:discard'], (_event, previewRoot: string) => {
+  discardPreview(previewRoot);
+});
 ipcMain.handle(IPC_CHANNELS['docs:scan'], (_, w: StoredWorkspace) => scanWorkspaceDocs(w));
 ipcMain.handle(IPC_CHANNELS['docs:read'], (_, absolutePath: string) => readFileSync(absolutePath, 'utf-8'));
+ipcMain.handle(IPC_CHANNELS['docs:write'], (_, absolutePath: string, content: string) => {
+  writeFileSync(absolutePath, content, 'utf-8');
+});
+
+// File watchers per path (for doc editor yolo mode)
+const docWatchers = new Map<string, FSWatcher>();
+ipcMain.handle(IPC_CHANNELS['docs:watch'], (event, absolutePath: string) => {
+  if (docWatchers.has(absolutePath)) return;
+  const watcher = chokidar.watch(absolutePath, { ignoreInitial: true });
+  watcher.on('change', () => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    win?.webContents.send(IPC_CHANNELS['docs:changed'], absolutePath);
+  });
+  docWatchers.set(absolutePath, watcher);
+});
+ipcMain.handle(IPC_CHANNELS['docs:unwatch'], async (_, absolutePath: string) => {
+  const watcher = docWatchers.get(absolutePath);
+  if (watcher) {
+    await watcher.close();
+    docWatchers.delete(absolutePath);
+  }
+});
 ipcMain.handle(IPC_CHANNELS['shell:openPath'], (_, path: string) => shell.openPath(path));
 ipcMain.handle(IPC_CHANNELS['git:remoteUrl'], async (_, repoPath: string) => {
   try {
@@ -390,6 +524,33 @@ ipcMain.handle(IPC_CHANNELS['preferences:getSystemLanguage'], () => {
   return locale.toLowerCase().startsWith('fr') ? 'fr' : 'en';
 });
 ipcMain.handle(IPC_CHANNELS['preferences:save'], (_, prefs: AppPreferences) => savePreferences(prefs));
+ipcMain.handle(IPC_CHANNELS['providerCredentials:getAll'], () => listProviderCredentials());
+ipcMain.handle(IPC_CHANNELS['providerCredentials:create'], (_, input: CreateProviderCredentialInput) => createProviderCredential(input));
+ipcMain.handle(
+  IPC_CHANNELS['providerCredentials:update'],
+  (_, credentialId: string, input: UpdateProviderCredentialInput) => updateProviderCredential(credentialId, input),
+);
+ipcMain.handle(IPC_CHANNELS['providerCredentials:revoke'], (_, credentialId: string) => revokeProviderCredential(credentialId));
+ipcMain.handle(
+  IPC_CHANNELS['providerCredentials:delete'],
+  (_, credentialId: string, force?: boolean) => deleteProviderCredential(credentialId, force),
+);
+ipcMain.handle(
+  IPC_CHANNELS['providerCredentials:getWorkspace'],
+  (_, workspaceId: string) => getWorkspaceProviderCredentials(workspaceId),
+);
+ipcMain.handle(
+  IPC_CHANNELS['providerCredentials:bindWorkspace'],
+  (_, workspaceId: string, input: BindWorkspaceProviderCredentialInput) => bindWorkspaceProviderCredential(workspaceId, input),
+);
+ipcMain.handle(
+  IPC_CHANNELS['providerCredentials:unbindWorkspace'],
+  (_, workspaceId: string, credentialId: string) => unbindWorkspaceProviderCredential(workspaceId, credentialId),
+);
+ipcMain.handle(
+  IPC_CHANNELS['providerCredentials:setWorkspaceDefault'],
+  (_, workspaceId: string, input: SetWorkspaceProviderDefaultInput) => setWorkspaceProviderDefault(workspaceId, input),
+);
 ipcMain.handle(IPC_CHANNELS['agents:status'], (_, repoPath: string) => getAgentInstallStatus(repoPath));
 ipcMain.handle(IPC_CHANNELS['agents:install'], (_, request: AgentInstallRequest) => installAgents(request));
 ipcMain.handle(IPC_CHANNELS['agents:global-status'], () => getGlobalInstallStatus());
@@ -438,15 +599,18 @@ ipcMain.handle(IPC_CHANNELS['org:acceptInvitations'], (_event, email: string) =>
 ipcMain.handle(IPC_CHANNELS['auth:signIn'], async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   signIn(win ?? undefined)
-    .then((result) => {
+    .then(async (result) => {
       win?.webContents.send(IPC_CHANNELS['auth:complete'], { email: result.email } satisfies AuthCompletePayload);
       for (const ws of getAll()) {
-        try { syncWorkspaceYaml(ws); } catch (error) {
+        try { await syncWorkspaceYaml(ws); } catch (error) {
           console.error(`[auth] Failed to sync workspace "${ws.name}" after sign-in:`, error);
         }
+        // Trigger push for any files saved while offline
+        triggerSyncPush(ws.id);
       }
     })
     .catch((error: unknown) => {
+      console.error('[auth] Sign-in failed:', error);
       const message = error instanceof Error ? error.message : 'Authentication failed';
       if (message !== 'Cancelled') {
         win?.webContents.send(IPC_CHANNELS['auth:error'], { message } satisfies AuthErrorPayload);
@@ -458,7 +622,7 @@ ipcMain.handle(IPC_CHANNELS['auth:signOut'], async () => {
   // Re-sync workspaces to remove the token from .claude/settings.json
   for (const ws of getAll()) {
     try {
-      syncWorkspaceYaml(ws);
+      await syncWorkspaceYaml(ws);
     } catch (error) {
       console.error(`[auth] Failed to sync workspace "${ws.name}" after sign-out:`, error);
     }
@@ -467,6 +631,22 @@ ipcMain.handle(IPC_CHANNELS['auth:signOut'], async () => {
     win.webContents.send(IPC_CHANNELS['auth:signedOut'], {} satisfies AuthSignedOutPayload);
   }
 });
+
+// ─── IPC: Backlog ─────────────────────────────────────────────────────────────
+
+ipcMain.handle(IPC_CHANNELS['backlog:getStories'], (_, workspaceId: string) => getBacklogStories(workspaceId));
+ipcMain.handle(IPC_CHANNELS['backlog:getEpics'], (_, workspaceId: string) => getBacklogEpics(workspaceId));
+ipcMain.handle(IPC_CHANNELS['backlog:createEpic'], (_, workspaceId: string, body: CreateEpicPayload) => createBacklogEpic(workspaceId, body));
+ipcMain.handle(IPC_CHANNELS['backlog:updateEpic'], (_, workspaceId: string, epicId: string, body: UpdateEpicPayload) => updateBacklogEpic(workspaceId, epicId, body));
+ipcMain.handle(IPC_CHANNELS['backlog:createStory'], (_, workspaceId: string, body: CreateStoryPayload) => createBacklogStory(workspaceId, body));
+ipcMain.handle(IPC_CHANNELS['backlog:updateStory'], (_, workspaceId: string, storyId: string, body: UpdateStoryPayload) => updateBacklogStory(workspaceId, storyId, body));
+ipcMain.handle(IPC_CHANNELS['backlog:getTasks'], (_, workspaceId: string, storyId: string) => getBacklogTasks(workspaceId, storyId));
+ipcMain.handle(IPC_CHANNELS['backlog:createTask'], (_, workspaceId: string, storyId: string, body: CreateTaskPayload) => createBacklogTask(workspaceId, storyId, body));
+ipcMain.handle(IPC_CHANNELS['backlog:updateTask'], (_, workspaceId: string, storyId: string, taskId: string, body: UpdateTaskPayload) =>
+  updateBacklogTask(workspaceId, storyId, taskId, body));
+ipcMain.handle(IPC_CHANNELS['backlog:getSprints'], (_, workspaceId: string) => getBacklogSprints(workspaceId));
+ipcMain.handle(IPC_CHANNELS['backlog:createSprint'], (_, workspaceId: string, body: CreateSprintPayload) => createBacklogSprint(workspaceId, body));
+ipcMain.handle(IPC_CHANNELS['backlog:updateSprint'], (_, workspaceId: string, sprintId: string, body: UpdateSprintPayload) => updateBacklogSprint(workspaceId, sprintId, body));
 
 // ─── IPC: Tickets ─────────────────────────────────────────────────────────────
 
@@ -552,7 +732,7 @@ ipcMain.handle(IPC_CHANNELS['terminal:destroy'], (_, terminalId: string) => {
 
 ipcMain.handle(
   IPC_CHANNELS['agent:run'],
-  (
+  async (
     event,
     request: AgentRunRequest,
   ) => {
@@ -568,18 +748,33 @@ ipcMain.handle(
     )
       ? requestedProvider
       : (prefs.agentProvider ?? 'claude');
-    const agentWorkspacePath = resolve(homedir(), '.nakiros');
-    const effectiveAgentCwd = resolveAgentCwd(repoPath, additionalDirs);
+    await assertWorkspaceLaunchAllowed({
+      workspaceId: request.workspaceId,
+      enforceRoles: (prefs.agentChannel ?? 'stable') !== 'beta',
+    });
+    // Sync workspace symlinks so ~/.nakiros/workspaces/{slug}/ is up to date before the run.
+    const allWorkspaces = getAll();
+    const workspace = allWorkspaces.find((w) => w.id === request.workspaceId);
+    const workspaceSlug = workspace ? resolveWorkspaceSlug(workspace.id, workspace.name) : '';
+    if (workspace) {
+      try { syncWorkspaceSymlinks(workspace); } catch (err) {
+        console.warn(`[agent:run] Unable to sync workspace symlinks: ${String(err)}`);
+      }
+    }
+    const nakirosWorkspaceDir = workspaceSlug ? getNakirosWorkspaceDir(workspaceSlug) : resolve(homedir(), '.nakiros');
+    const effectiveAgentCwd = resolveAgentCwd(repoPath, additionalDirs, nakirosWorkspaceDir);
 
     try {
-      ensureCommandsInRepo(agentWorkspacePath, provider);
+      ensureCommandsInRepo(nakirosWorkspaceDir, provider);
     } catch (err) {
-      console.warn(`[agent:run] Unable to ensure command templates in agent workspace: ${String(err)}`);
+      console.warn(`[agent:run] Unable to ensure command templates in workspace dir: ${String(err)}`);
     }
-    try {
-      ensureCommandsInRepo(effectiveAgentCwd, provider);
-    } catch (err) {
-      console.warn(`[agent:run] Unable to ensure command templates in effective cwd ${effectiveAgentCwd}: ${String(err)}`);
+    if (effectiveAgentCwd !== nakirosWorkspaceDir) {
+      try {
+        ensureCommandsInRepo(effectiveAgentCwd, provider);
+      } catch (err) {
+        console.warn(`[agent:run] Unable to ensure command templates in effective cwd ${effectiveAgentCwd}: ${String(err)}`);
+      }
     }
 
     const rawLines: unknown[] = [];
@@ -603,13 +798,17 @@ ipcMain.handle(IPC_CHANNELS['agent:cancel'], (_, runId: string) => {
   cancelAgentRun(runId);
 });
 
+ipcMain.handle(IPC_CHANNELS['agent:action-execute'], (_, workspaceId: string, block: NakirosActionBlock) =>
+  executeAction(workspaceId, block),
+);
+
 // ─── IPC: Conversations ───────────────────────────────────────────────────────
 
-ipcMain.handle(IPC_CHANNELS['conversation:getAll'], (_, workspaceId: string) => getConversations(resolveSlug(workspaceId)));
-ipcMain.handle(IPC_CHANNELS['conversation:save'], (_, conv: StoredConversation) => {
-  saveConversation(conv, resolveSlug(conv.workspaceId));
+ipcMain.handle(IPC_CHANNELS['conversation:getAll'], (_, workspaceId: string) => getConversations(resolveSlug(workspaceId), workspaceId));
+ipcMain.handle(IPC_CHANNELS['conversation:save'], () => {
+  // Sessions are now persisted by the orchestrator — no-op from Desktop side.
 });
-ipcMain.handle(IPC_CHANNELS['conversation:delete'], (_, id: string, workspaceId: string) => deleteConversation(id, resolveSlug(workspaceId)));
+ipcMain.handle(IPC_CHANNELS['conversation:delete'], (_, id: string, workspaceId: string) => deleteConversationEntry(id, resolveSlug(workspaceId)));
 
 // ─── IPC: Agent tabs (multi-conversations state) ────────────────────────────
 
@@ -620,63 +819,30 @@ ipcMain.handle(IPC_CHANNELS['agentTabs:clear'], (_, workspaceId: string) => clea
 
 // ─── IPC: Jira OAuth ─────────────────────────────────────────────────────────
 
-ipcMain.handle(IPC_CHANNELS['jira:startAuth'], (_, wsId: string) => {
+ipcMain.handle(IPC_CHANNELS['jira:startAuth'], (_, wsId: string, jiraUrl?: string) => {
   const state = generateState();
   const { codeVerifier, codeChallenge } = generatePKCE();
-  pendingOAuth.set(state, { codeVerifier, wsId });
+  pendingOAuth.set(state, { codeVerifier, wsId, jiraUrl: jiraUrl?.trim() || undefined });
   openAuthUrl(state, codeChallenge);
 });
 
-ipcMain.handle(IPC_CHANNELS['jira:disconnect'], (_, wsId: string) => {
-  clearTokens(wsId);
-  const workspaces = getAll();
-  const workspace = workspaces.find((w) => w.id === wsId);
-  if (workspace) {
-    const updated: StoredWorkspace = {
-      ...workspace,
-      jiraConnected: false,
-      jiraCloudId: undefined,
-      jiraCloudUrl: undefined,
-    };
-    save(updated);
-    return updated;
-  }
-  return null;
-});
+ipcMain.handle(IPC_CHANNELS['jira:disconnect'], (_, wsId: string) => disconnectJira(wsId));
 
-ipcMain.handle(IPC_CHANNELS['jira:getStatus'], (_, wsId: string) => getTokenMeta(wsId));
+ipcMain.handle(IPC_CHANNELS['jira:getStatus'], (_, wsId: string) => getJiraStatus(wsId));
 
 ipcMain.handle(IPC_CHANNELS['jira:syncTickets'], async (_, wsId: string, workspace: StoredWorkspace) => {
   // Ensure we use the persisted cloudId (workspace from renderer may be stale)
   const persisted = getAll().find((w) => w.id === wsId) ?? workspace;
-  return syncJiraTickets(wsId, persisted);
+  return syncWorkspaceJiraTickets(wsId, persisted);
 });
 
-ipcMain.handle(IPC_CHANNELS['jira:getValidToken'], (_, wsId: string) => getValidAccessToken(wsId));
+ipcMain.handle(IPC_CHANNELS['jira:getProjects'], async (_, wsId: string) => getJiraProjects(wsId));
 
-ipcMain.handle(IPC_CHANNELS['jira:getProjects'], async (_, wsId: string) => {
-  const token = await getValidAccessToken(wsId);
-  const workspace = getAll().find((w) => w.id === wsId);
-  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
-  if (!cloudId) throw new Error('Not connected to Jira');
-  return fetchProjects(token, cloudId);
-});
+ipcMain.handle(IPC_CHANNELS['jira:countTickets'], async (_, wsId: string, projectKey: string, syncFilter: string, boardType: string) =>
+  countJiraTickets(wsId, projectKey, syncFilter as JiraSyncFilter, boardType as 'scrum' | 'kanban' | 'unknown'));
 
-ipcMain.handle(IPC_CHANNELS['jira:countTickets'], async (_, wsId: string, projectKey: string, syncFilter: string, boardType: string) => {
-  const token = await getValidAccessToken(wsId);
-  const workspace = getAll().find((w) => w.id === wsId);
-  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
-  if (!cloudId) throw new Error('Not connected to Jira');
-  return countIssues(token, cloudId, projectKey, syncFilter as 'sprint_active' | 'last_3_months' | 'all', boardType as 'scrum' | 'kanban' | 'unknown');
-});
-
-ipcMain.handle(IPC_CHANNELS['jira:getBoardType'], async (_, wsId: string, projectKey: string) => {
-  const token = await getValidAccessToken(wsId);
-  const workspace = getAll().find((w) => w.id === wsId);
-  const cloudId = workspace?.jiraCloudId ?? loadTokens(wsId)?.cloudId;
-  if (!cloudId) return { boardType: 'unknown', boardId: null };
-  return fetchProjectBoardType(token, cloudId, projectKey);
-});
+ipcMain.handle(IPC_CHANNELS['jira:getBoardType'], async (_, wsId: string, projectKey: string) =>
+  getJiraBoardSelection(wsId, projectKey));
 
 // ─── MCP Server ───────────────────────────────────────────────────────────────
 
@@ -788,6 +954,7 @@ app.on('before-quit', () => {
   isQuitting = true;
   broadcastServerStatus('stopped');
   stopServer();
+  stopAllSyncBridges();
 });
 
 app.on('window-all-closed', () => {

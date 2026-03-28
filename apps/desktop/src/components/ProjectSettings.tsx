@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranch, LayoutDashboard, Plug, User } from 'lucide-react';
+import { GitBranch, LayoutDashboard, Plug, User, Users } from 'lucide-react';
 import clsx from 'clsx';
 import type { StoredWorkspace } from '@nakiros/shared';
-import { SettingsGeneral, SettingsGit, SettingsMCP, SettingsPM } from './settings';
+import { SettingsGeneral, SettingsGit, SettingsMCP, SettingsPM, SettingsWorkspaceMembers } from './settings';
 
-type SettingsSection = 'general' | 'git' | 'pm' | 'mcps';
+type SettingsSection = 'general' | 'git' | 'members' | 'pm' | 'mcps';
 
 interface Props {
   workspace: StoredWorkspace;
@@ -20,6 +20,7 @@ export default function ProjectSettings({ workspace, onUpdate, onTicketsRefresh,
 
   const navItems: { id: SettingsSection; label: string; icon: ReactNode }[] = [
     { id: 'general', label: t('navGeneral'), icon: <User size={15} /> },
+    { id: 'members', label: t('navAccess'), icon: <Users size={15} /> },
     { id: 'git', label: t('navGit'), icon: <GitBranch size={15} /> },
     { id: 'pm', label: t('navPM'), icon: <LayoutDashboard size={15} /> },
     { id: 'mcps', label: t('navMCPs'), icon: <Plug size={15} /> },
@@ -48,6 +49,7 @@ export default function ProjectSettings({ workspace, onUpdate, onTicketsRefresh,
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-[640px]">
           {section === 'general' && <SettingsGeneral workspace={workspace} onUpdate={onUpdate} onDelete={onDelete} />}
+          {section === 'members' && <SettingsWorkspaceMembers workspace={workspace} onUpdate={onUpdate} />}
           {section === 'git' && <SettingsGit workspace={workspace} onUpdate={onUpdate} />}
           {section === 'pm' && <SettingsPM workspace={workspace} onUpdate={onUpdate} onTicketsRefresh={onTicketsRefresh} />}
           {section === 'mcps' && <SettingsMCP workspace={workspace} onUpdate={onUpdate} />}

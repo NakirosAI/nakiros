@@ -36,7 +36,7 @@ export function SettingsDanger({ workspace, onDeleted }: SettingsDangerProps) {
   }
 
   return (
-    <Card padding="md" className="rounded-[10px] border-[var(--danger)] bg-[var(--bg-soft)]">
+    <Card className="rounded-[16px] border-[var(--danger)] bg-[var(--bg-soft)] p-5 shadow-none">
       <h3 className="mb-2.5 mt-0 text-[13px] font-bold text-[var(--danger)]">{t('deleteWorkspaceTitle')}</h3>
       <p className="mb-3 mt-0 text-xs text-[var(--text-muted)]">
         {t('deleteWorkspaceDesc')}
@@ -67,7 +67,7 @@ export function SettingsDanger({ workspace, onDeleted }: SettingsDangerProps) {
             onChange={(e) => setInputValue(e.target.value)}
             placeholder={workspace.name}
             disabled={running}
-            className="rounded-[10px] border-[var(--line)] bg-[var(--bg-card)] px-2.5 py-2 text-[13px]"
+            className="rounded-[12px] border-[var(--line)] bg-[var(--bg-card)] px-3 py-2.5 text-[13px]"
           />
           <div className="flex gap-2">
             <Button

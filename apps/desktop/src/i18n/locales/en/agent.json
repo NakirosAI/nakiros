@@ -3,6 +3,8 @@
   "workspaceGlobal": "Workspace (global)",
   "tabLimitReached": "Limit of {{count}} tabs reached",
   "unableToStartRun": "Unable to start agent run.",
+  "workspaceLaunchDeniedViewer": "Your role does not allow launching agents in this workspace.",
+  "workspaceLaunchDeniedNotAdded": "You are not added to this workspace. Ask a workspace owner or admin to assign you a role.",
   "stoppedMarker": "_[Stopped]_",
   "timeNow": "now",
   "timeMinutesAgo": "{{count}}m ago",
@@ -99,6 +101,7 @@
     "repos": "Repos",
     "mode": {
       "dispatch": "Dispatch",
+      "consult": "Consult",
       "askUser": "Ask user",
       "synthesize": "Synthesis",
       "documentDecision": "Decision"
@@ -110,6 +113,9 @@
       "needsUserDecision": "User decision required"
     }
   },
+  "agentJoined": "── {{name}} joined the conversation ──",
+  "agentJoinedWithProvider": "── {{name}} ({{provider}}) joined the conversation ──",
+  "providerNotConfigured": "Provider '{{provider}}' not configured — check your global settings",
   "stop": "Stop",
   "sendEnter": "Send (Enter)",
   "processExitedWithCode": "Process exited with code {{code}}",
@@ -127,9 +133,13 @@
     "task": "Sub-agent: {{description}}"
   },
   "definitions": {
-    "nakiros": {
-      "label": "Nakiros",
-      "placeholder": "Talk with Nakiros…"
+    "cto": {
+      "label": "CTO",
+      "placeholder": "Talk with CTO…"
+    },
+    "ceo": {
+      "label": "CEO",
+      "placeholder": "Talk with CEO…"
     },
     "dev": {
       "label": "Dev Agent",
@@ -151,10 +161,6 @@
       "label": "QA Agent",
       "placeholder": "Message for QA Agent…"
     },
-    "hotfix": {
-      "label": "Hotfix Agent",
-      "placeholder": "Message for Hotfix Agent…"
-    },
     "brainstorming": {
       "label": "Brainstorming",
       "placeholder": "Message for Brainstorming…"
@@ -171,6 +177,10 @@
       "label": "Create Ticket",
       "placeholder": "Describe the ticket to create…"
     },
+    "plan-feature": {
+      "label": "Plan Feature",
+      "placeholder": "Describe the feature to plan…"
+    },
     "generate-context": {
       "label": "Generate Context",
       "placeholder": "Run Generate Context on this workspace?"
@@ -183,10 +193,6 @@
       "label": "QA Review",
       "placeholder": "Run QA Review?"
     },
-    "hotfix-story": {
-      "label": "Hotfix Story",
-      "placeholder": "Hotfix ticket ID (e.g. EX-203)"
-    },
     "sprint-planning": {
       "label": "Sprint Planning",
       "placeholder": "Run Sprint Planning?"
@@ -194,6 +200,10 @@
     "fetch-project-context": {
       "label": "Fetch Project Context",
       "placeholder": "Run Fetch Project Context?"
+    },
+    "sprint-retro": {
+      "label": "Sprint Retro",
+      "placeholder": "Run Sprint Retro?"
     }
   }
 }

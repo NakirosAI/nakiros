@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Building2, Languages, Plug, Sparkles, X } from 'lucide-react';
+import { Bot, Building2, KeyRound, Languages, Sparkles, X } from 'lucide-react';
 import clsx from 'clsx';
 import type { AppPreferences } from '@nakiros/shared';
 import { Button } from './ui';
@@ -11,7 +11,7 @@ import {
   GlobalSettingsAgentAISection,
   GlobalSettingsAgentNakirosSection,
   GlobalSettingsGeneralSection,
-  GlobalSettingsMcpNakirosSection,
+  GlobalSettingsProviderCredentialsSection,
   type AgentCliStatus,
   type GlobalSettingsStatus,
   type GlobalSettingsUpdateStatus,
@@ -23,7 +23,12 @@ interface Props {
   onUpdateApplied?(): void;
 }
 
-type SettingsSection = 'general' | 'organization' | 'agent-ai' | 'mcp-nakiros' | 'agent-nakiros';
+type SettingsSection =
+  | 'general'
+  | 'organization'
+  | 'provider-credentials'
+  | 'agent-ai'
+  | 'agent-nakiros';
 
 export type GlobalSettingsSection = SettingsSection;
 
@@ -40,7 +45,6 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
   const [versionInfo, setVersionInfo] = useState<BundleVersionInfo | null>(null);
   const [agentDefinitions, setAgentDefinitions] = useState<AgentDefinition[]>(AGENT_DEFINITIONS);
   const [section, setSection] = useState<SettingsSection>(initialSection);
-  const [mcpServerInput, setMcpServerInput] = useState(preferences.mcpServerUrl ?? '');
 
   useEffect(() => {
     setCliLoading(true);
@@ -89,10 +93,6 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
     window.addEventListener('keydown', onKeydown);
     return () => window.removeEventListener('keydown', onKeydown);
   }, [onClose]);
-
-  useEffect(() => {
-    setMcpServerInput(preferences.mcpServerUrl ?? '');
-  }, [preferences.mcpServerUrl]);
 
   useEffect(() => {
     setSection(initialSection);
@@ -147,13 +147,6 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
     }
   }
 
-  async function handleMcpServerBlur() {
-    const trimmed = mcpServerInput.trim();
-    const nextValue = trimmed || undefined;
-    if ((preferences.mcpServerUrl || undefined) === nextValue) return;
-    await update({ mcpServerUrl: nextValue });
-  }
-
   const statusText =
     status === 'saved' ? t('saveSuccess')
       : status === 'error' ? t('saveError')
@@ -166,8 +159,8 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
   const nav = [
     { id: 'general' as const, label: t('navGeneral'), icon: <Languages size={15} /> },
     { id: 'organization' as const, label: t('navOrganization'), icon: <Building2 size={15} /> },
+    { id: 'provider-credentials' as const, label: t('navProviderCredentials'), icon: <KeyRound size={15} /> },
     { id: 'agent-ai' as const, label: t('navAgentAI'), icon: <Bot size={15} /> },
-    { id: 'mcp-nakiros' as const, label: t('navMcpNakiros'), icon: <Plug size={15} /> },
     { id: 'agent-nakiros' as const, label: t('navAgentNakiros'), icon: <Sparkles size={15} /> },
   ];
 
@@ -223,6 +216,10 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
             <SettingsOrganization />
           )}
 
+          {section === 'provider-credentials' && (
+            <GlobalSettingsProviderCredentialsSection isActive={section === 'provider-credentials'} />
+          )}
+
           {section === 'agent-ai' && (
             <GlobalSettingsAgentAISection
               preferences={preferences}
@@ -233,16 +230,6 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
               providerAvailability={providerAvailability}
               selectedProviderMissing={selectedProviderMissing}
               onUpdate={update}
-            />
-          )}
-
-          {section === 'mcp-nakiros' && (
-            <GlobalSettingsMcpNakirosSection
-              status={status}
-              statusText={statusText}
-              mcpServerInput={mcpServerInput}
-              onMcpServerInputChange={setMcpServerInput}
-              onMcpServerBlur={handleMcpServerBlur}
             />
           )}
 

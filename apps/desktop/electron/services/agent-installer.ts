@@ -6,6 +6,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'fs';
+import { COMMANDS_META_FILE, type CommandMeta } from './update-checker.js';
 import { homedir } from 'os';
 import { resolve } from 'path';
 import type {
@@ -82,6 +83,7 @@ export interface InstalledCommand {
   command: string;
   kind: 'agent' | 'workflow';
   fileName: string;
+  meta?: CommandMeta;
 }
 
 function parseInstalledCommand(fileName: string): InstalledCommand | null {
@@ -102,13 +104,30 @@ function parseInstalledCommand(fileName: string): InstalledCommand | null {
   };
 }
 
+function readCommandsMeta(): Record<string, CommandMeta> {
+  try {
+    if (existsSync(COMMANDS_META_FILE)) {
+      return JSON.parse(readFileSync(COMMANDS_META_FILE, 'utf-8')) as Record<string, CommandMeta>;
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
 export function getInstalledCommands(): InstalledCommand[] {
   const dir = resolve(GLOBAL_RUNTIME_DIR, 'commands');
   if (!existsSync(dir)) return [];
 
+  const metaMap = readCommandsMeta();
+
   return readdirSync(dir, { withFileTypes: true })
     .filter((entry) => entry.isFile())
-    .map((entry) => parseInstalledCommand(entry.name))
+    .map((entry) => {
+      const cmd = parseInstalledCommand(entry.name);
+      if (!cmd) return null;
+      const commandName = entry.name.replace(/\.md$/i, '');
+      const meta = metaMap[`nak-${cmd.kind}-${cmd.id}`] ?? metaMap[commandName];
+      return meta ? { ...cmd, meta } : cmd;
+    })
     .filter((entry): entry is InstalledCommand => entry != null)
     .sort((a, b) => a.command.localeCompare(b.command));
 }
@@ -208,7 +227,6 @@ export function getAgentInstallStatus(repoPath: string): AgentInstallStatus {
 
   return {
     repoPath: resolvedRepoPath,
-    hasWorkspacePointer: existsSync(resolve(resolvedRepoPath, '_nakiros', 'workspace.yaml')),
     environments,
   };
 }

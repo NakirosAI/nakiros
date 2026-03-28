@@ -9,6 +9,7 @@ import { installAgentsGlobally } from './agent-installer.js';
 const BASE_URL = 'https://updates.nakiros.com';
 const GLOBAL_DIR = join(homedir(), '.nakiros');
 const VERSION_FILE = join(GLOBAL_DIR, 'version.json');
+export const COMMANDS_META_FILE = join(GLOBAL_DIR, 'commands-meta.json');
 const APP_SUPPORTED_FEATURES: string[] = [];
 
 const API_KEYS: Record<string, string> = {
@@ -20,12 +21,20 @@ console.log('[update-checker] ENV check:');
 console.log(`  NAKIROS_API_KEY_STABLE = ${API_KEYS.stable ? `"${API_KEYS.stable.slice(0, 8)}…" (${API_KEYS.stable.length} chars)` : '(empty — vérifier .env et define dans electron.vite.config.ts)'}`);
 console.log(`  NAKIROS_API_KEY_BETA   = ${API_KEYS.beta ? `"${API_KEYS.beta.slice(0, 8)}…" (${API_KEYS.beta.length} chars)` : '(empty)'}`);
 
+export interface CommandMeta {
+  tag?: string;
+  label?: string;
+  color?: string;
+  placeholder?: string;
+}
+
 interface BundleManifestFile {
   type: 'agent' | 'workflow' | 'command' | 'core';
   name: string;
   filename: string;
   path: string;
   hash: string;
+  meta?: CommandMeta;
 }
 
 interface BundleManifest {
@@ -87,6 +96,15 @@ function writeVersionInfo(info: BundleVersionInfo): void {
   writeFileSync(VERSION_FILE, JSON.stringify(info, null, 2) + '\n', 'utf-8');
 }
 
+function saveCommandsMeta(files: BundleManifestFile[]): void {
+  const meta: Record<string, CommandMeta> = {};
+  for (const f of files) {
+    if (f.type === 'command' && f.meta) meta[f.name] = f.meta;
+  }
+  mkdirSync(GLOBAL_DIR, { recursive: true });
+  writeFileSync(COMMANDS_META_FILE, JSON.stringify(meta, null, 2) + '\n', 'utf-8');
+}
+
 function shouldCheck(local: BundleVersionInfo | null): boolean {
   if (!local) return true;
   const last = new Date(local.last_check).getTime();
@@ -139,6 +157,7 @@ export async function checkForUpdates(
     }
     manifest = (await res.json()) as BundleManifest;
     console.log(`[update-checker] Manifest OK — version=${manifest.version} channel=${manifest.channel} compatible=${manifest.compatible ?? '(not set)'} files=${manifest.files?.length ?? 'n/a'}`);
+    try { saveCommandsMeta(manifest.files ?? []); } catch { /* non-blocking */ }
   } catch (err) {
     console.warn('[update-checker] Manifest fetch failed:', (err as Error).message);
     return { ...noUpdate, networkError: true };

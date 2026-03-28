@@ -1,6 +1,5 @@
 ---
-description: 'Run the Nakiros sprint workflow: retrospective and/or sprint planning with PM sync'
-disable-model-invocation: true
+description: 'Run the Nakiros sprint workflow: retrospective and/or sprint planning with workspace-global context and PM sync'
 ---
 
 Command Trigger: `/nak-workflow-sprint`

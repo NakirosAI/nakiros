@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import type {
   ArtifactChangeProposal,
-  AuthState,
   LocalTicket,
   OnboardingChatLaunchRequest,
   StoredWorkspace,
@@ -14,7 +13,6 @@ import DashboardErrorBoundary from '../components/dashboard/DashboardErrorBounda
 import { DashboardRouter } from '../components/dashboard/DashboardRouter';
 import ArtifactReviewDock from '../components/review/ArtifactReviewDock';
 import FileChangesReviewDock from '../components/review/FileChangesReviewDock';
-import FeedbackModal from '../components/FeedbackModal';
 import Sidebar, { type SidebarTab } from '../components/Sidebar';
 import StatusBar from '../components/StatusBar';
 import { Button } from '../components/ui';
@@ -25,22 +23,12 @@ import { useTickets } from '../hooks/useTickets';
 import { useWorkspace } from '../hooks/useWorkspace';
 import type { GlobalSettingsSection } from '../components/GlobalSettings';
 
-export interface WorkspaceSyncState {
-  syncing: boolean;
-  lastSyncAt: Date | null;
-  error: string | null;
-}
-
 interface Props {
   onUpdateWorkspace(workspace: StoredWorkspace): Promise<void>;
   onNewWorkspace(): void;
   onGoHome(): void;
   onGoGettingStarted(workspaceId: string): void;
-  authState: AuthState;
   serverStatus: 'starting' | 'running' | 'stopped';
-  workspaceSyncState: WorkspaceSyncState;
-  updateBanner: UpdateCheckResult | null;
-  onDismissUpdateBanner(): void;
   openAgentRunChatTarget?: OpenAgentRunChatPayload | null;
   launchChatRequest?: OnboardingChatLaunchRequest | null;
 }
@@ -50,21 +38,15 @@ export default function Dashboard({
   onNewWorkspace,
   onGoHome,
   onGoGettingStarted,
-  authState,
   serverStatus,
-  workspaceSyncState,
-  updateBanner,
-  onDismissUpdateBanner,
   openAgentRunChatTarget,
   launchChatRequest,
 }: Props) {
   const { t } = useTranslation('dashboard');
-  const { t: tCommon } = useTranslation('common');
   const { t: tContext } = useTranslation('context');
   const { t: tSidebar } = useTranslation('sidebar');
   const { t: tToast } = useTranslation('toast');
   const { t: tSettings } = useTranslation('settings');
-  const { t: tFeedback } = useTranslation('feedback');
   const { preferences } = usePreferences();
   const {
     workspace,
@@ -87,7 +69,6 @@ export default function Dashboard({
   const [activeTab, setActiveTab] = useState<SidebarTab>('overview');
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [globalSettingsSection, setGlobalSettingsSection] = useState<GlobalSettingsSection>('general');
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<LocalTicket | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -340,30 +321,6 @@ export default function Dashboard({
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      {updateBanner && (
-        <div className="flex shrink-0 items-center gap-3 border-b border-[#0f766e] bg-[#0f766e] px-[18px] py-2 text-[13px] text-white">
-          <span className="flex-1 font-semibold">
-            {tCommon('updateBanner', { version: updateBanner.latestVersion })}
-          </span>
-          <button
-            onClick={() => {
-              setGlobalSettingsSection('agent-nakiros');
-              setShowGlobalSettings(true);
-            }}
-            className="rounded-[10px] border border-white/25 bg-white/12 px-3 py-1 text-[12px] font-bold text-white"
-          >
-            {tSettings('updateNow')}
-          </button>
-          <button
-            onClick={onDismissUpdateBanner}
-            className="border-0 bg-transparent px-1 text-[18px] leading-none text-white/90"
-            aria-label={tSettings('closeSettings')}
-          >
-            ×
-          </button>
-        </div>
-      )}
-
       <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--bg-soft)] px-[18px]">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <button
@@ -460,13 +417,6 @@ export default function Dashboard({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
-            onClick={() => setShowFeedbackModal(true)}
-            title={tFeedback('productTitle')}
-            className="rounded-lg border border-[var(--line)] bg-transparent px-[9px] py-1 text-[11px] text-[var(--text-muted)]"
-          >
-            {tFeedback('productButton')}
-          </button>
-          <button
             onClick={() => {
               setGlobalSettingsSection('general');
               setShowGlobalSettings((prev) => !prev);
@@ -514,7 +464,6 @@ export default function Dashboard({
               epics={epics}
               repoNames={repoNames}
               serverStatus={serverStatus}
-              workspaceSyncState={workspaceSyncState}
               overviewDocsCount={overviewDocsCount}
               overviewConversationCount={overviewConversationCount}
               lastConversationAt={lastConversationAt}
@@ -542,7 +491,7 @@ export default function Dashboard({
                 setOpenPrdAssistantSignal((prev) => prev + 1);
               }}
               onCloseGlobalSettings={() => setShowGlobalSettings(false)}
-              onGlobalUpdateApplied={onDismissUpdateBanner}
+              onGlobalUpdateApplied={() => {}}
               onChatRunCompletionNoticeChange={handleChatRunCompletionNoticeChange}
               onChatPendingPreviewChange={handleChatPendingPreviewChange}
               launchChatRequest={contextLaunchRequest ?? launchChatRequest}
@@ -579,18 +528,10 @@ export default function Dashboard({
         </DashboardErrorBoundary>
       </div>
       <StatusBar
-        authState={authState}
         serverStatus={serverStatus}
-        workspaceSyncState={workspaceSyncState}
         repoCount={workspace.repos.length}
         topology={workspaceTopology}
       />
-      {showFeedbackModal && (
-        <FeedbackModal
-          onClose={() => setShowFeedbackModal(false)}
-          onToast={pushToast}
-        />
-      )}
       {toast && (
         <div className="fixed bottom-[14px] right-4 z-[1200] rounded-[10px] bg-[#0f172a] px-3 py-[9px] text-xs text-white shadow-[var(--shadow-lg)]">
           {toast}

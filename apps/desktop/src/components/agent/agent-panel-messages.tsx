@@ -32,7 +32,7 @@ import {
   sanitizeVisibleMessageContent,
 } from './agent-panel-utils.js';
 
-interface StreamingActivityLabel {
+export interface StreamingActivityLabel {
   primary: string;
   detail: string;
 }

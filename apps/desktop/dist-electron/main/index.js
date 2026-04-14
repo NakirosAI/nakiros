@@ -18470,10 +18470,10 @@ function requireAccepts() {
  * Copyright(c) 2014-2015 Douglas Christopher Wilson
  * MIT Licensed
  */
-var request$1;
+var request;
 var hasRequiredRequest;
 function requireRequest() {
-  if (hasRequiredRequest) return request$1;
+  if (hasRequiredRequest) return request;
   hasRequiredRequest = 1;
   var accepts2 = requireAccepts();
   var deprecate = requireDepd()("express");
@@ -18485,7 +18485,7 @@ function requireRequest() {
   var parse2 = requireParseurl();
   var proxyaddr = requireProxyAddr();
   var req = Object.create(http.IncomingMessage.prototype);
-  request$1 = req;
+  request = req;
   req.get = req.header = function header(name) {
     if (!name) {
       throw new TypeError("name argument is required to req.get");
@@ -18632,7 +18632,7 @@ function requireRequest() {
       get: getter
     });
   }
-  return request$1;
+  return request;
 }
 var cookieSignature = {};
 var hasRequiredCookieSignature;
@@ -53804,24 +53804,6 @@ function save(workspace) {
     set: { name: workspace.name, data: JSON.stringify(workspace), updatedAt: now }
   }).run();
 }
-function replaceAll(workspaces$1) {
-  migrateIfNeeded();
-  const db = getDb();
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  const incomingIds = new Set(workspaces$1.map((workspace) => workspace.id));
-  const existingRows = db.select({ id: workspaces.id }).from(workspaces).all();
-  for (const row of existingRows) {
-    if (!incomingIds.has(row.id)) {
-      db.delete(workspaces).where(eq(workspaces.id, row.id)).run();
-    }
-  }
-  for (const workspace of workspaces$1) {
-    db.insert(workspaces).values({ id: workspace.id, name: workspace.name, data: JSON.stringify(workspace), updatedAt: now }).onConflictDoUpdate({
-      target: workspaces.id,
-      set: { name: workspace.name, data: JSON.stringify(workspace), updatedAt: now }
-    }).run();
-  }
-}
 function remove(id2) {
   getDb().delete(workspaces).where(eq(workspaces.id, id2)).run();
 }
@@ -53876,348 +53858,11 @@ function removeWorkspaceSymlinks(workspaceSlug) {
     }
   }
 }
-function extractErrorCode(value) {
-  if (!value || typeof value !== "object") return void 0;
-  const code2 = "code" in value ? value.code : void 0;
-  return typeof code2 === "string" && code2.trim().length > 0 ? code2 : void 0;
-}
-function extractErrorDetails(value) {
-  if (!value || typeof value !== "object") return [];
-  const details = [];
-  const syscall = "syscall" in value ? value.syscall : void 0;
-  const hostname = "hostname" in value ? value.hostname : void 0;
-  const address = "address" in value ? value.address : void 0;
-  const port = "port" in value ? value.port : void 0;
-  if (typeof syscall === "string" && syscall.trim().length > 0) details.push(`syscall=${syscall}`);
-  if (typeof hostname === "string" && hostname.trim().length > 0) details.push(`host=${hostname}`);
-  if (typeof address === "string" && address.trim().length > 0) details.push(`address=${address}`);
-  if (typeof port === "number" || typeof port === "string") details.push(`port=${port}`);
-  return details;
-}
-function flattenErrorMessages(error, messages, seen) {
-  if (!error || seen.has(error)) return;
-  seen.add(error);
-  if (error instanceof AggregateError) {
-    for (const nested of error.errors) flattenErrorMessages(nested, messages, seen);
-  }
-  if (error instanceof Error) {
-    const message = error.message.trim();
-    if (message.length > 0 && !messages.includes(message)) messages.push(message);
-    const code22 = extractErrorCode(error);
-    if (code22 && !messages.includes(code22)) messages.push(code22);
-    for (const detail of extractErrorDetails(error)) {
-      if (!messages.includes(detail)) messages.push(detail);
-    }
-    flattenErrorMessages(error.cause, messages, seen);
-    return;
-  }
-  if (typeof error === "string") {
-    const message = error.trim();
-    if (message.length > 0 && !messages.includes(message)) messages.push(message);
-    return;
-  }
-  const code2 = extractErrorCode(error);
-  if (code2 && !messages.includes(code2)) messages.push(code2);
-  for (const detail of extractErrorDetails(error)) {
-    if (!messages.includes(detail)) messages.push(detail);
-  }
-}
-function shouldHideMessage(message) {
-  const normalized = message.trim().toLowerCase();
-  return normalized === "fetch failed" || normalized === "error" || normalized === "typeerror: fetch failed";
-}
-function formatNetworkError(error, fallback) {
-  const messages = [];
-  flattenErrorMessages(error, messages, /* @__PURE__ */ new Set());
-  const usefulMessages = messages.filter((message) => !shouldHideMessage(message));
-  if (usefulMessages.length === 0) return fallback;
-  return `${fallback}: ${usefulMessages.join(" | ")}`;
-}
-const AUTH_SERVER = "https://auth.nakiros.com";
-const CLIENT_ID = "A4ec21b4916aD9b4C5a682C29A6D8747b0966e657704C5bfbd73137Ba8276cDB";
-const REDIRECT_URI = "nakiros://auth/callback";
-const AUTH_SESSION_PARTITION = "persist:nakiros-auth";
-const TOKEN_PATH = require$$0$3.join(electron.app.getPath("userData"), "nakiros-auth.bin");
-const AUTH_META_PATH = require$$0$3.join(electron.app.getPath("userData"), "nakiros-auth-meta.json");
-const REFRESH_WINDOW_MS = 5 * 60 * 1e3;
-const CLI_CREDENTIALS_PATH = require$$0$3.join(os.homedir(), ".nakiros", "credentials.json");
-function generateCodeVerifier() {
-  return require$$0$9.randomBytes(32).toString("base64url");
-}
-function generateCodeChallenge(verifier) {
-  return require$$0$9.createHash("sha256").update(verifier).digest("base64url");
-}
-function getStoredToken() {
-  if (!require$$1$2.existsSync(TOKEN_PATH)) return null;
-  if (!electron.safeStorage.isEncryptionAvailable()) return null;
-  try {
-    return electron.safeStorage.decryptString(require$$1$2.readFileSync(TOKEN_PATH));
-  } catch {
-    return null;
-  }
-}
-function readAuthMeta() {
-  if (!require$$1$2.existsSync(AUTH_META_PATH)) return {};
-  try {
-    return JSON.parse(require$$1$2.readFileSync(AUTH_META_PATH, "utf-8"));
-  } catch {
-    return {};
-  }
-}
-function writeAuthMeta(meta) {
-  require$$1$2.writeFileSync(AUTH_META_PATH, JSON.stringify(meta), "utf-8");
-}
-function storeAuth(accessToken, meta) {
-  if (electron.safeStorage.isEncryptionAvailable()) {
-    require$$1$2.writeFileSync(TOKEN_PATH, electron.safeStorage.encryptString(accessToken));
-  }
-  writeAuthMeta(meta);
-  writeCliCredentials(accessToken, meta);
-}
-function writeCliCredentials(accessToken, meta) {
-  try {
-    require$$1$2.mkdirSync(require$$0$3.join(os.homedir(), ".nakiros"), { recursive: true });
-    const expiresAt = meta.expiresAt ? Date.parse(meta.expiresAt) : void 0;
-    require$$1$2.writeFileSync(
-      CLI_CREDENTIALS_PATH,
-      JSON.stringify({ accessToken, refreshToken: meta.refreshToken, expiresAt, apiUrl: "https://api.nakiros.com", email: meta.email ?? null }),
-      { encoding: "utf-8", mode: 384 }
-    );
-  } catch (error) {
-    console.warn("[auth] Failed to write CLI credentials:", error);
-  }
-}
-function clearAuthFiles() {
-  if (require$$1$2.existsSync(TOKEN_PATH)) require$$1$2.unlinkSync(TOKEN_PATH);
-  if (require$$1$2.existsSync(AUTH_META_PATH)) require$$1$2.unlinkSync(AUTH_META_PATH);
-  if (require$$1$2.existsSync(CLI_CREDENTIALS_PATH)) require$$1$2.unlinkSync(CLI_CREDENTIALS_PATH);
-}
-async function clearAuthBrowserSession() {
-  const authSession = electron.session.fromPartition(AUTH_SESSION_PARTITION);
-  await Promise.all([
-    authSession.clearCache(),
-    authSession.clearStorageData({
-      storages: ["cookies", "localstorage", "indexdb", "serviceworkers", "cachestorage"]
-    })
-  ]);
-}
-function parseJwtClaim(token, claim) {
-  try {
-    const part = token.split(".")[1];
-    if (!part) return void 0;
-    const payload = JSON.parse(Buffer.from(part, "base64url").toString());
-    return payload[claim];
-  } catch {
-    return void 0;
-  }
-}
-async function exchangeCode(code2, verifier) {
-  let response2;
-  try {
-    response2 = await fetch(`${AUTH_SERVER}/oauth2/v1/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code: code2,
-        code_verifier: verifier,
-        client_id: CLIENT_ID,
-        redirect_uri: REDIRECT_URI
-      }).toString()
-    });
-  } catch (error) {
-    throw new Error(formatNetworkError(error, "Authentication request failed"));
-  }
-  if (!response2.ok) {
-    const bodyText = (await response2.text().catch(() => "")).trim();
-    const details = bodyText.length > 0 ? `: ${bodyText}` : "";
-    throw new Error(`Token exchange failed (${response2.status})${details}`);
-  }
-  const data = await response2.json();
-  const accessToken = data.access_token;
-  if (!accessToken) throw new Error("No access token in response");
-  if (!data.refresh_token) {
-    console.warn("[auth] No refresh token returned by auth server. Check offline_access scope and client settings.");
-  }
-  const email2 = parseJwtClaim(data.id_token ?? "", "email");
-  const expClaim = parseJwtClaim(accessToken, "exp");
-  const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1e3).toISOString() : expClaim ? new Date(expClaim * 1e3).toISOString() : void 0;
-  storeAuth(accessToken, { email: email2, expiresAt, refreshToken: data.refresh_token });
-  return { email: email2 };
-}
-async function refreshAccessToken$1(token, email2) {
-  try {
-    const response2 = await fetch(`${AUTH_SERVER}/oauth2/v1/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: token,
-        client_id: CLIENT_ID
-      }).toString()
-    });
-    if (!response2.ok) return null;
-    const data = await response2.json();
-    const accessToken = data.access_token;
-    if (!accessToken) return null;
-    const nextEmail = parseJwtClaim(data.id_token ?? "", "email") ?? email2;
-    const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1e3).toISOString() : void 0;
-    storeAuth(accessToken, { email: nextEmail, expiresAt, refreshToken: data.refresh_token ?? token });
-    return { email: nextEmail, isAuthenticated: true };
-  } catch (error) {
-    console.warn("[auth] Access token refresh failed:", formatNetworkError(error, "Refresh token request failed"));
-    return null;
-  }
-}
-async function ensureValidAccessToken() {
-  const token = getStoredToken();
-  const meta = readAuthMeta();
-  if (!token) {
-    return {
-      token: null,
-      email: meta.email,
-      refreshed: false,
-      sessionExpired: false
-    };
-  }
-  const userId = parseJwtClaim(token, "sub");
-  if (!meta.expiresAt) {
-    return {
-      token,
-      userId,
-      email: meta.email,
-      refreshed: false,
-      sessionExpired: false
-    };
-  }
-  const expiresAtMs = Date.parse(meta.expiresAt);
-  const now = Date.now();
-  if (Number.isNaN(expiresAtMs) || expiresAtMs - now > REFRESH_WINDOW_MS) {
-    return {
-      token,
-      userId,
-      email: meta.email,
-      refreshed: false,
-      sessionExpired: false
-    };
-  }
-  if (meta.refreshToken) {
-    const refreshed = await refreshAccessToken$1(meta.refreshToken, meta.email);
-    if (refreshed) {
-      const refreshedToken = getStoredToken();
-      return {
-        token: refreshedToken,
-        userId: refreshedToken ? parseJwtClaim(refreshedToken, "sub") : userId,
-        email: refreshed.email ?? meta.email,
-        refreshed: true,
-        sessionExpired: false
-      };
-    }
-  }
-  if (expiresAtMs > now) {
-    console.warn("[auth] Token refresh unavailable or failed; continuing with current access token until expiry.");
-    return {
-      token,
-      userId,
-      email: meta.email,
-      refreshed: false,
-      sessionExpired: false
-    };
-  }
-  clearAuthFiles();
-  return {
-    token: null,
-    userId,
-    email: meta.email,
-    refreshed: false,
-    sessionExpired: true
-  };
-}
-async function getAuthState() {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) {
-    return {
-      email: resolved.email,
-      userId: resolved.userId,
-      isAuthenticated: false,
-      ...resolved.sessionExpired ? { sessionExpired: true } : {}
-    };
-  }
-  return {
-    email: resolved.email,
-    userId: resolved.userId,
-    isAuthenticated: true
-  };
-}
-async function signIn(parentWindow) {
-  const verifier = generateCodeVerifier();
-  const challenge = generateCodeChallenge(verifier);
-  const state = require$$0$9.randomBytes(16).toString("base64url");
-  const authorizeUrl = `${AUTH_SERVER}/oauth2/v1/authorize?${new URLSearchParams({
-    response_type: "code",
-    client_id: CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
-    code_challenge: challenge,
-    code_challenge_method: "S256",
-    scope: "openid profile email offline_access",
-    state
-  }).toString()}`;
-  return new Promise((resolve2, reject) => {
-    let settled = false;
-    const popup = new electron.BrowserWindow({
-      width: 480,
-      height: 680,
-      parent: parentWindow,
-      modal: false,
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        partition: AUTH_SESSION_PARTITION
-      }
-    });
-    const settle = (result) => {
-      if (settled) return;
-      settled = true;
-      if (!popup.isDestroyed()) popup.close();
-      if (result instanceof Error) reject(result);
-      else resolve2(result);
-    };
-    const checkUrl = (navUrl) => {
-      try {
-        if (!navUrl.startsWith("nakiros://auth/")) return;
-        const parsed = new URL(navUrl);
-        const error = parsed.searchParams.get("error");
-        if (error) {
-          settle(new Error(error));
-          return;
-        }
-        const code2 = parsed.searchParams.get("code");
-        if (!code2) {
-          settle(new Error("Missing code in callback"));
-          return;
-        }
-        exchangeCode(code2, verifier).then((result) => settle(result)).catch((err) => settle(err instanceof Error ? err : new Error(String(err))));
-      } catch {
-      }
-    };
-    popup.webContents.on("will-navigate", (_, navUrl) => checkUrl(navUrl));
-    popup.webContents.on("will-redirect", (_, navUrl) => checkUrl(navUrl));
-    popup.webContents.on("did-fail-load", (_, __, ___, validatedUrl) => {
-      if (validatedUrl?.startsWith("nakiros://auth/")) checkUrl(validatedUrl);
-    });
-    popup.on("closed", () => settle(new Error("Cancelled")));
-    popup.loadURL(authorizeUrl).catch((err) => settle(new Error(String(err))));
-  });
-}
-async function signOut() {
-  clearAuthFiles();
-  await clearAuthBrowserSession();
-}
 function buildNakirosMcpServerEntry(workspaceId, mcpServerUrl, authToken) {
   return {
     type: "http",
     url: `${mcpServerUrl}/ws/${workspaceId}/mcp`,
-    ...authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : {}
+    ...{}
   };
 }
 function upsertNakirosMcpConfig(configPath, workspaceId, mcpServerUrl, authToken) {
@@ -54231,7 +53876,7 @@ function upsertNakirosMcpConfig(configPath, workspaceId, mcpServerUrl, authToken
   }
   const nextServers = {
     ...existing.mcpServers ?? {},
-    nakiros: buildNakirosMcpServerEntry(workspaceId, mcpServerUrl, authToken)
+    nakiros: buildNakirosMcpServerEntry(workspaceId, mcpServerUrl)
   };
   require$$1$2.mkdirSync(require$$0$3.dirname(configPath), { recursive: true });
   require$$1$2.writeFileSync(
@@ -54301,9 +53946,8 @@ function getWorkspaceAppDir(wsId) {
 async function writeClaudeMcpSettings(repoPath, workspaceId) {
   const claudeDir = require$$0$3.join(repoPath, ".claude");
   require$$1$2.mkdirSync(claudeDir, { recursive: true });
-  const apiBase = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
-  const resolved = await ensureValidAccessToken();
-  upsertNakirosMcpConfig(require$$0$3.join(claudeDir, "settings.json"), workspaceId, apiBase, resolved.token);
+  const apiBase = process.env["NAKIROS_API_URL"] ?? "http://localhost:3210";
+  upsertNakirosMcpConfig(require$$0$3.join(claudeDir, "settings.json"), workspaceId, apiBase);
 }
 function writeAgentWorkspaceYaml(workspace) {
   const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
@@ -54321,378 +53965,6 @@ async function syncWorkspaceYaml(workspace) {
     await writeClaudeMcpSettings(repo.localPath, workspace.id);
   }
   return workspace.workspacePath ?? workspace.repos[0]?.localPath ?? appDir;
-}
-const WORKER_API$6 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
-function isStoredRepo(value) {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value;
-  return typeof candidate.name === "string" && typeof candidate.localPath === "string" && typeof candidate.role === "string" && typeof candidate.profile === "string";
-}
-function isStoredWorkspace(value) {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value;
-  return typeof candidate.id === "string" && typeof candidate.name === "string" && Array.isArray(candidate.repos) && candidate.repos.every(isStoredRepo);
-}
-function normalizeWorkspaceList(payload) {
-  if (Array.isArray(payload)) return payload.filter(isStoredWorkspace);
-  if (payload && typeof payload === "object") {
-    const candidate = payload;
-    if (Array.isArray(candidate.workspaces)) return candidate.workspaces.filter(isStoredWorkspace);
-  }
-  return [];
-}
-async function parseWorkerError$1(response2, fallbackMessage) {
-  const payload = await response2.json().catch(() => null);
-  return new Error(payload?.error ?? fallbackMessage);
-}
-async function listRemoteWorkspacesWithToken(token) {
-  const response2 = await fetch(`${WORKER_API$6}/ws`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!response2.ok) {
-    throw await parseWorkerError$1(response2, "Failed to load workspaces from Nakiros Cloud.");
-  }
-  return normalizeWorkspaceList(await response2.json().catch(() => []));
-}
-async function getHydratedWorkspaces() {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return getAll();
-  try {
-    const remoteWorkspaces = await listRemoteWorkspacesWithToken(resolved.token);
-    replaceAll(remoteWorkspaces);
-    for (const workspace of remoteWorkspaces) {
-      try {
-        writeAgentWorkspaceYaml(workspace);
-      } catch {
-      }
-    }
-    return remoteWorkspaces;
-  } catch (error) {
-    console.warn("[workspace-remote] Falling back to local cache:", error);
-    return getAll();
-  }
-}
-async function saveCanonicalWorkspace(workspace) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) {
-    throw new Error(
-      resolved.sessionExpired ? "Session expired. Sign in again to save workspace changes to Nakiros Cloud." : "Sign in to save workspace changes to Nakiros Cloud."
-    );
-  }
-  const response2 = await fetch(`${WORKER_API$6}/ws/${workspace.id}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${resolved.token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(workspace)
-  });
-  if (!response2.ok) {
-    throw await parseWorkerError$1(response2, "Failed to save workspace to Nakiros Cloud.");
-  }
-  const remoteWorkspaces = await listRemoteWorkspacesWithToken(resolved.token);
-  replaceAll(remoteWorkspaces);
-  for (const workspace2 of remoteWorkspaces) {
-    try {
-      writeAgentWorkspaceYaml(workspace2);
-    } catch {
-    }
-  }
-}
-function createAddOrgMemberPayload(email2, role, inviterEmail) {
-  return {
-    email: email2,
-    role,
-    ...inviterEmail ? { inviterEmail } : {}
-  };
-}
-const WORKER_API$5 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
-function isOrgRole(value) {
-  return value === "admin" || value === "member";
-}
-function isOrgInfo(value) {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value;
-  return typeof candidate.id === "string" && typeof candidate.name === "string" && typeof candidate.slug === "string" && isOrgRole(candidate.role);
-}
-function isOrgMember(value) {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value;
-  return (candidate.userId === void 0 || typeof candidate.userId === "string") && (candidate.invitationId === void 0 || typeof candidate.invitationId === "string") && (candidate.email === null || typeof candidate.email === "string") && isOrgRole(candidate.role) && (candidate.joinedAt === void 0 || typeof candidate.joinedAt === "string") && (candidate.invitedAt === void 0 || typeof candidate.invitedAt === "string") && (candidate.status === "active" || candidate.status === "pending");
-}
-function normalizeOrgList(payload) {
-  if (Array.isArray(payload)) return payload.filter(isOrgInfo);
-  if (payload && typeof payload === "object") {
-    const candidate = payload;
-    if (Array.isArray(candidate.organizations)) return candidate.organizations.filter(isOrgInfo);
-    if (Array.isArray(candidate.orgs)) return candidate.orgs.filter(isOrgInfo);
-    if (isOrgInfo(candidate.organization)) return [candidate.organization];
-    if (isOrgInfo(payload)) return [payload];
-  }
-  return [];
-}
-function normalizeOrgMembers(payload) {
-  if (Array.isArray(payload)) return payload.filter(isOrgMember);
-  if (payload && typeof payload === "object") {
-    const candidate = payload;
-    if (Array.isArray(candidate.members)) return candidate.members.filter(isOrgMember);
-    if (Array.isArray(candidate.items)) return candidate.items.filter(isOrgMember);
-  }
-  return [];
-}
-async function listMyOrgs() {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return [];
-  try {
-    const res = await fetch(`${WORKER_API$5}/orgs/mine`, {
-      headers: { Authorization: `Bearer ${resolved.token}` }
-    });
-    if (!res.ok) return [];
-    return normalizeOrgList(await res.json().catch(() => []));
-  } catch {
-    return [];
-  }
-}
-async function getMyOrg() {
-  const orgs = await listMyOrgs();
-  return orgs[0];
-}
-async function createOrg(name, slug) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
-  const res = await fetch(`${WORKER_API$5}/orgs`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${resolved.token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ name, slug })
-  });
-  const payload = await res.json().catch(() => null);
-  if (!res.ok || !payload?.organizationId) {
-    throw new Error(payload?.error ?? "Failed to create organization");
-  }
-  return {
-    organizationId: payload.organizationId,
-    organizationName: payload.organizationName ?? name,
-    organizationSlug: payload.organizationSlug ?? slug
-  };
-}
-async function deleteOrg(orgId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
-  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => null);
-    throw new Error(payload?.error ?? "Failed to delete organization");
-  }
-}
-async function listOrgMembers(orgId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
-  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/members`, {
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!res.ok) throw new Error(`Failed to list members: ${res.status}`);
-  return normalizeOrgMembers(await res.json().catch(() => []));
-}
-async function addOrgMember(orgId, email2, role, inviterEmail) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
-  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/members`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${resolved.token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(createAddOrgMemberPayload(email2, role, inviterEmail))
-  });
-  const payload = await res.json().catch(() => null);
-  if (!res.ok) {
-    const code2 = payload?.code ?? "UNKNOWN";
-    throw new Error(`${code2}:${payload?.error ?? "Failed to add member"}`);
-  }
-  return {
-    id: payload.id,
-    userId: payload.userId,
-    email: payload.email,
-    role: payload.role ?? role,
-    status: payload.status ?? "pending"
-  };
-}
-async function removeOrgMember(orgId, userId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
-  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/members/${userId}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => null);
-    throw new Error(payload?.error ?? "Failed to remove member");
-  }
-}
-async function leaveOrg(orgId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
-  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/members/me`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => null);
-    throw new Error(payload?.error ?? "Failed to leave organization");
-  }
-}
-async function cancelInvitation(orgId, invitationId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
-  const res = await fetch(`${WORKER_API$5}/orgs/${orgId}/invitations/${invitationId}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => null);
-    throw new Error(payload?.error ?? "Failed to cancel invitation");
-  }
-}
-async function acceptInvitations(email2) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return { joined: 0 };
-  try {
-    const res = await fetch(`${WORKER_API$5}/invitations/accept`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resolved.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email2 })
-    });
-    if (!res.ok) return { joined: 0 };
-    return await res.json();
-  } catch {
-    return { joined: 0 };
-  }
-}
-function toWorkspaceLaunchDeniedCode(reason) {
-  return `workspace_launch_denied:${reason}`;
-}
-function evaluateWorkspaceLaunchAccess(args) {
-  if (!args.enforceRoles) {
-    return { allowed: true, reason: "beta-bypass" };
-  }
-  if (args.subject.scope === "personal" || args.subject.status === "personal") {
-    return { allowed: true, reason: "personal" };
-  }
-  if (args.subject.status !== "active" || args.subject.role === null) {
-    return { allowed: false, reason: "not-added" };
-  }
-  if (args.subject.role === "viewer") {
-    return { allowed: false, reason: "viewer" };
-  }
-  return { allowed: true, reason: "allowed" };
-}
-const WORKER_API$4 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
-function isWorkspaceRole(value) {
-  return value === "owner" || value === "admin" || value === "pm" || value === "dev" || value === "viewer";
-}
-function isWorkspaceMembershipScope(value) {
-  return value === "organization" || value === "personal";
-}
-function isWorkspaceMembershipStatus(value) {
-  return value === "active" || value === "not_added";
-}
-function isWorkspaceMembershipListItem(value) {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value;
-  return typeof candidate.userId === "string" && (candidate.email === null || typeof candidate.email === "string") && (candidate.organizationRole === "admin" || candidate.organizationRole === "member") && (candidate.workspaceRole === null || isWorkspaceRole(candidate.workspaceRole)) && isWorkspaceMembershipStatus(candidate.status) && (candidate.joinedAt === void 0 || typeof candidate.joinedAt === "string") && (candidate.addedAt === void 0 || typeof candidate.addedAt === "string") && (candidate.updatedAt === void 0 || typeof candidate.updatedAt === "string") && typeof candidate.isCurrentUser === "boolean";
-}
-function isWorkspaceMembershipListPayload(value) {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value;
-  return typeof candidate.workspaceId === "string" && isWorkspaceMembershipScope(candidate.scope) && (candidate.currentUserRole === null || isWorkspaceRole(candidate.currentUserRole)) && typeof candidate.canManage === "boolean" && Array.isArray(candidate.members) && candidate.members.every(isWorkspaceMembershipListItem);
-}
-function isWorkspaceMembershipSubject(value) {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value;
-  return typeof candidate.workspaceId === "string" && isWorkspaceMembershipScope(candidate.scope) && (candidate.role === null || isWorkspaceRole(candidate.role)) && (candidate.status === "personal" || isWorkspaceMembershipStatus(candidate.status));
-}
-async function parseWorkerError(response2, fallbackMessage) {
-  const payload = await response2.json().catch(() => null);
-  return new Error(payload?.error ?? fallbackMessage);
-}
-async function requireAccessToken() {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) {
-    throw new Error(
-      resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated"
-    );
-  }
-  return resolved.token;
-}
-async function listWorkspaceMembers(workspaceId) {
-  const token = await requireAccessToken();
-  const response2 = await fetch(`${WORKER_API$4}/ws/${workspaceId}/members`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!response2.ok) {
-    throw await parseWorkerError(response2, "Failed to load workspace members.");
-  }
-  const payload = await response2.json().catch(() => null);
-  if (!isWorkspaceMembershipListPayload(payload)) {
-    throw new Error("Invalid workspace members payload.");
-  }
-  return payload;
-}
-async function upsertWorkspaceMember(workspaceId, input) {
-  const token = await requireAccessToken();
-  const response2 = await fetch(`${WORKER_API$4}/ws/${workspaceId}/members/${input.userId}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ role: input.role })
-  });
-  if (!response2.ok) {
-    throw await parseWorkerError(response2, "Failed to update workspace member.");
-  }
-  const payload = await response2.json().catch(() => null);
-  if (!isWorkspaceMembershipListPayload(payload)) {
-    throw new Error("Invalid workspace members payload.");
-  }
-  return payload;
-}
-async function removeWorkspaceMember(workspaceId, userId) {
-  const token = await requireAccessToken();
-  const response2 = await fetch(`${WORKER_API$4}/ws/${workspaceId}/members/${userId}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!response2.ok) {
-    throw await parseWorkerError(response2, "Failed to remove workspace member.");
-  }
-}
-async function getCurrentWorkspaceMembership(workspaceId) {
-  const token = await requireAccessToken();
-  const response2 = await fetch(`${WORKER_API$4}/ws/${workspaceId}/members/me`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!response2.ok) {
-    throw await parseWorkerError(response2, "Failed to resolve workspace membership.");
-  }
-  const payload = await response2.json().catch(() => null);
-  if (!isWorkspaceMembershipSubject(payload)) {
-    throw new Error("Invalid workspace membership payload.");
-  }
-  return payload;
-}
-async function assertWorkspaceLaunchAllowed(args) {
-  const subject = await getCurrentWorkspaceMembership(args.workspaceId);
-  const decision = evaluateWorkspaceLaunchAccess({
-    subject,
-    enforceRoles: args.enforceRoles
-  });
-  if (!decision.allowed) {
-    if (decision.reason === "not-added" || decision.reason === "viewer") {
-      throw new Error(toWorkspaceLaunchDeniedCode(decision.reason));
-    }
-    throw new Error("Workspace launch is not allowed.");
-  }
 }
 function resetWorkspace(workspace) {
   const deletedPaths = [];
@@ -55162,247 +54434,7 @@ function savePreferences(prefs) {
   };
   require$$1$2.writeFileSync(getStoragePath(), JSON.stringify(next, null, 2), "utf-8");
 }
-const WORKER_API$3 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
-async function parseJson(response2) {
-  return response2.json().catch(() => null);
-}
-async function getAuthToken() {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) {
-    throw new Error(resolved.sessionExpired ? "Session expired. Sign in again." : "Not authenticated");
-  }
-  return resolved.token;
-}
-async function request(path, init2) {
-  const token = await getAuthToken();
-  const response2 = await fetch(`${WORKER_API$3}${path}`, {
-    ...init2,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...init2?.body ? { "Content-Type": "application/json" } : {},
-      ...init2?.headers ?? {}
-    }
-  });
-  if (!response2.ok) {
-    const payload = await parseJson(response2);
-    if (response2.status === 409 && payload?.impactedWorkspaces) {
-      const error = new Error(payload.error ?? "Credential is still in use");
-      Object.assign(error, { impactedWorkspaces: payload.impactedWorkspaces });
-      throw error;
-    }
-    throw new Error(payload?.error ?? "Provider credentials request failed");
-  }
-  return response2.json();
-}
-function listProviderCredentials() {
-  return request("/provider-credentials");
-}
-function createProviderCredential(input) {
-  return request("/provider-credentials", {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
-}
-function updateProviderCredential(credentialId, input) {
-  return request(`/provider-credentials/${credentialId}`, {
-    method: "PUT",
-    body: JSON.stringify(input)
-  });
-}
-function revokeProviderCredential(credentialId) {
-  return request(`/provider-credentials/${credentialId}/revoke`, {
-    method: "POST"
-  });
-}
-async function deleteProviderCredential(credentialId, force = false) {
-  return request(`/provider-credentials/${credentialId}${force ? "?force=true" : ""}`, {
-    method: "DELETE"
-  });
-}
-function getWorkspaceProviderCredentials(workspaceId) {
-  return request(`/ws/${workspaceId}/provider-credentials`);
-}
-function bindWorkspaceProviderCredential(workspaceId, input) {
-  return request(`/ws/${workspaceId}/provider-credentials/bind`, {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
-}
-function unbindWorkspaceProviderCredential(workspaceId, credentialId) {
-  return request(`/ws/${workspaceId}/provider-credentials/${credentialId}`, {
-    method: "DELETE"
-  });
-}
-function setWorkspaceProviderDefault(workspaceId, input) {
-  return request(`/ws/${workspaceId}/provider-credentials/default`, {
-    method: "PUT",
-    body: JSON.stringify(input)
-  });
-}
-const BASE_URL$1 = "https://updates.nakiros.com";
-const GLOBAL_DIR$2 = require$$0$3.join(os.homedir(), ".nakiros");
-const VERSION_FILE = require$$0$3.join(GLOBAL_DIR$2, "version.json");
-const COMMANDS_META_FILE = require$$0$3.join(GLOBAL_DIR$2, "commands-meta.json");
-const APP_SUPPORTED_FEATURES = [];
-const API_KEYS = {
-  stable: "019cbafa-2570-7216-8639-1a4aaab35d20",
-  beta: "019cbaf8-f46b-7df7-a601-ef560291fd40"
-};
-console.log("[update-checker] ENV check:");
-console.log(`  NAKIROS_API_KEY_STABLE = ${`"${API_KEYS.stable.slice(0, 8)}…" (${API_KEYS.stable.length} chars)`}`);
-console.log(`  NAKIROS_API_KEY_BETA   = ${`"${API_KEYS.beta.slice(0, 8)}…" (${API_KEYS.beta.length} chars)`}`);
-function getVersionInfo() {
-  if (!require$$1$2.existsSync(VERSION_FILE)) return null;
-  try {
-    return JSON.parse(require$$1$2.readFileSync(VERSION_FILE, "utf-8"));
-  } catch {
-    return null;
-  }
-}
-function writeVersionInfo(info) {
-  require$$1$2.mkdirSync(GLOBAL_DIR$2, { recursive: true });
-  require$$1$2.writeFileSync(VERSION_FILE, JSON.stringify(info, null, 2) + "\n", "utf-8");
-}
-function saveCommandsMeta(files) {
-  const meta = {};
-  for (const f of files) {
-    if (f.type === "command" && f.meta) meta[f.name] = f.meta;
-  }
-  require$$1$2.mkdirSync(GLOBAL_DIR$2, { recursive: true });
-  require$$1$2.writeFileSync(COMMANDS_META_FILE, JSON.stringify(meta, null, 2) + "\n", "utf-8");
-}
-function shouldCheck(local) {
-  if (!local) return true;
-  const last = new Date(local.last_check).getTime();
-  return Date.now() - last > 24 * 60 * 60 * 1e3;
-}
-async function checkForUpdates(force = false, channel = "stable") {
-  const noUpdate = {
-    hasUpdate: false,
-    compatible: true,
-    latestVersion: "",
-    changelog: "",
-    channel,
-    changedFiles: []
-  };
-  const local = getVersionInfo();
-  if (!force && !shouldCheck(local)) return noUpdate;
-  const appVersion = electron.app.getVersion();
-  const ua = `Nakiros/${appVersion} (${os.platform()}; ${os.arch()})`;
-  const apiKey = API_KEYS[channel] ?? "";
-  const featuresParam = APP_SUPPORTED_FEATURES.length > 0 ? `&features=${APP_SUPPORTED_FEATURES.join(",")}` : "";
-  const url = `${BASE_URL$1}/manifest?channel=${channel}&app_version=${encodeURIComponent(appVersion)}${featuresParam}`;
-  console.log(`[update-checker] GET ${url}`);
-  console.log(`[update-checker] Headers: User-Agent=${ua} | X-Nakiros-Key=${apiKey ? `${apiKey.slice(0, 8)}…` : "(empty)"}`);
-  let manifest;
-  try {
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(8e3),
-      headers: {
-        "X-Nakiros-Key": apiKey,
-        "User-Agent": ua
-      }
-    });
-    console.log(`[update-checker] Response: HTTP ${res.status}`);
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.warn(`[update-checker] Error body: ${body}`);
-      throw new Error(`HTTP ${res.status}${body ? ` — ${body}` : ""}`);
-    }
-    manifest = await res.json();
-    console.log(`[update-checker] Manifest OK — version=${manifest.version} channel=${manifest.channel} compatible=${manifest.compatible ?? "(not set)"} files=${manifest.files?.length ?? "n/a"}`);
-    try {
-      saveCommandsMeta(manifest.files ?? []);
-    } catch {
-    }
-  } catch (err) {
-    console.warn("[update-checker] Manifest fetch failed:", err.message);
-    return { ...noUpdate, networkError: true };
-  }
-  if (local) {
-    writeVersionInfo({ ...local, last_check: (/* @__PURE__ */ new Date()).toISOString() });
-  }
-  if (manifest.compatible === false) {
-    return {
-      hasUpdate: false,
-      compatible: false,
-      incompatibleReason: manifest.reason,
-      incompatibleMessage: manifest.message,
-      latestVersion: manifest.version,
-      changelog: manifest.changelog ?? "",
-      channel,
-      changedFiles: []
-    };
-  }
-  const changedFiles = (manifest.files ?? []).filter((f) => !local?.files?.[f.path] || local.files[f.path] !== f.hash).map((f) => ({
-    type: f.type,
-    name: f.name,
-    filename: f.filename,
-    path: f.path,
-    hash: f.hash,
-    downloadUrl: `${BASE_URL$1}/download/${manifest.version}/${f.path}?channel=${channel}`
-  }));
-  return {
-    hasUpdate: changedFiles.length > 0,
-    compatible: true,
-    latestVersion: manifest.version,
-    changelog: manifest.changelog ?? "",
-    channel,
-    changedFiles
-  };
-}
-async function applyUpdate(files, bundleVersion, win, onFileProgress) {
-  const local = getVersionInfo();
-  const channel = local?.channel ?? "stable";
-  const apiKey = API_KEYS[channel] ?? "";
-  const appVersion = electron.app.getVersion();
-  const ua = `Nakiros/${appVersion} (${os.platform()}; ${os.arch()})`;
-  const updatedHashes = {};
-  for (const file of files) {
-    const targetPath = require$$0$3.join(GLOBAL_DIR$2, file.path);
-    const targetDir = require$$0$3.join(targetPath, "..");
-    try {
-      const res = await fetch(file.downloadUrl, {
-        signal: AbortSignal.timeout(3e4),
-        headers: {
-          "X-Nakiros-Key": apiKey,
-          "User-Agent": ua
-        }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buffer = Buffer.from(await res.arrayBuffer());
-      const expectedHash = file.hash.replace(/^sha256:/, "");
-      const actualHash = require$$0$9.createHash("sha256").update(buffer).digest("hex");
-      if (actualHash !== expectedHash) {
-        throw new Error(`Hash mismatch for ${file.filename}`);
-      }
-      require$$1$2.mkdirSync(targetDir, { recursive: true });
-      require$$1$2.writeFileSync(targetPath, buffer);
-      updatedHashes[file.path] = file.hash;
-      win.webContents.send("updates:progress", { file: file.filename, done: true });
-      onFileProgress?.(file.filename, true);
-    } catch (err) {
-      const errorMsg = err.message;
-      win.webContents.send("updates:progress", { file: file.filename, done: false, error: errorMsg });
-      onFileProgress?.(file.filename, false, errorMsg);
-    }
-  }
-  try {
-    installAgentsGlobally();
-  } catch {
-  }
-  if (Object.keys(updatedHashes).length > 0) {
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    writeVersionInfo({
-      bundle_version: bundleVersion,
-      channel: local?.channel ?? "stable",
-      app_version: appVersion,
-      last_check: now,
-      installed_at: now,
-      files: { ...local?.files ?? {}, ...updatedHashes }
-    });
-  }
-}
+const COMMANDS_META_FILE = require$$0$3.join(os.homedir(), ".nakiros", "commands-meta.json");
 const GLOBAL_RUNTIME_DIR = require$$0$3.resolve(os.homedir(), ".nakiros");
 const ENVIRONMENTS = {
   cursor: {
@@ -55594,26 +54626,22 @@ function ensureCommandsInRepo(repoPath, provider) {
     require$$1$2.writeFileSync(targetPath, content, "utf8");
   }
 }
-const GLOBAL_DIR$1 = require$$0$3.join(os.homedir(), ".nakiros");
+const GLOBAL_DIR = require$$0$3.join(os.homedir(), ".nakiros");
 const EDITOR_DEFS = {
   claude: {
     label: "Claude Code",
-    markerPaths: [require$$0$3.join(os.homedir(), ".claude")],
+    markerPaths: ["/usr/local/bin/claude", require$$0$3.join(os.homedir(), ".claude")],
     targetDir: require$$0$3.join(os.homedir(), ".claude", "commands")
   },
   cursor: {
     label: "Cursor",
-    markerPaths: [
-      "/Applications/Cursor.app",
-      require$$0$3.join(os.homedir(), ".cursor"),
-      require$$0$3.join(os.homedir(), "AppData", "Local", "Programs", "cursor")
-    ],
+    markerPaths: ["/Applications/Cursor.app", require$$0$3.join(os.homedir(), ".cursor")],
     targetDir: require$$0$3.join(os.homedir(), ".cursor", "commands")
   },
   codex: {
     label: "Codex",
-    markerPaths: [require$$0$3.join(os.homedir(), ".codex")],
-    targetDir: require$$0$3.join(os.homedir(), ".codex", "prompts")
+    markerPaths: ["/usr/local/bin/codex", require$$0$3.join(os.homedir(), ".codex")],
+    targetDir: require$$0$3.join(os.homedir(), ".codex", "commands")
   }
 };
 function detectEditors() {
@@ -55627,9 +54655,7 @@ function detectEditors() {
   );
 }
 function nakirosConfigExists() {
-  if (!require$$1$2.existsSync(require$$0$3.join(GLOBAL_DIR$1, "config.yaml"))) return false;
-  const info = getVersionInfo();
-  return !!info && info.bundle_version !== "0.0.0";
+  return require$$1$2.existsSync(require$$0$3.join(GLOBAL_DIR, "config.yaml"));
 }
 function emit(win, event) {
   win.webContents.send("onboarding:progress", event);
@@ -55637,73 +54663,19 @@ function emit(win, event) {
 async function installNakiros(editors, win) {
   const errors2 = [];
   try {
-    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "agents"), { recursive: true });
-    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "workflows"), { recursive: true });
-    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "commands"), { recursive: true });
-    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "core"), { recursive: true });
-    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR$1, "workspaces"), { recursive: true });
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR, "agents"), { recursive: true });
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR, "workflows"), { recursive: true });
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR, "commands"), { recursive: true });
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR, "core"), { recursive: true });
+    require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR, "workspaces"), { recursive: true });
     emit(win, { label: "~/.nakiros/ créé", done: true });
   } catch (err) {
     const msg = `Création ~/.nakiros/ : ${err.message}`;
     errors2.push(msg);
     emit(win, { label: msg, done: false, error: msg });
   }
-  let r2Success = false;
-  emit(win, { label: "Connexion aux serveurs Nakiros…", done: false });
   try {
-    const result = await checkForUpdates(true, "stable");
-    if (result.networkError) {
-      errors2.push("network");
-      emit(win, {
-        label: "Erreur réseau — impossible de joindre les serveurs Nakiros",
-        done: false,
-        error: "network"
-      });
-    } else if (!result.compatible) {
-      errors2.push("incompatible");
-      emit(win, {
-        label: "Version app incompatible — agents installables depuis les Settings",
-        done: false,
-        error: "incompatible"
-      });
-    } else if (result.changedFiles.length > 0) {
-      let downloaded = 0;
-      let failed = 0;
-      await applyUpdate(
-        result.changedFiles,
-        result.latestVersion,
-        win,
-        (filename, done, error) => {
-          if (done) {
-            downloaded += 1;
-            emit(win, { label: `↓ ${filename}`, done: true });
-          } else {
-            failed += 1;
-            emit(win, { label: `✗ ${filename} : ${error ?? "erreur"}`, done: false, error });
-          }
-        }
-      );
-      if (failed > 0) {
-        errors2.push(`${failed} fichier(s) en erreur`);
-      } else {
-        r2Success = true;
-      }
-      emit(win, {
-        label: `${downloaded} fichier(s) installé(s)${failed > 0 ? `, ${failed} en erreur` : ""}`,
-        done: failed === 0,
-        error: failed > 0 ? `${failed} fichier(s) en erreur` : void 0
-      });
-    } else {
-      emit(win, { label: "Aucun fichier à télécharger depuis R2", done: false, error: "empty" });
-      errors2.push("empty");
-    }
-  } catch (err) {
-    const msg = err.message;
-    errors2.push(msg);
-    emit(win, { label: `Erreur inattendue : ${msg}`, done: false, error: msg });
-  }
-  try {
-    const configPath = require$$0$3.join(GLOBAL_DIR$1, "config.yaml");
+    const configPath = require$$0$3.join(GLOBAL_DIR, "config.yaml");
     if (!require$$1$2.existsSync(configPath)) {
       require$$1$2.writeFileSync(
         configPath,
@@ -55716,25 +54688,21 @@ async function installNakiros(editors, win) {
         "utf-8"
       );
     }
-    if (r2Success) emit(win, { label: "config.yaml créé", done: true });
+    emit(win, { label: "config.yaml créé", done: true });
   } catch (err) {
     const msg = `config.yaml : ${err.message}`;
     errors2.push(msg);
     emit(win, { label: msg, done: false, error: msg });
   }
-  if (r2Success) {
-    for (const editor of editors.filter((e) => e.detected)) {
-      emit(win, { label: `${editor.label} : commandes déployées`, done: true });
-    }
-  }
-  if (!getVersionInfo()) {
-    try {
+  try {
+    const versionPath = require$$0$3.join(GLOBAL_DIR, "version.json");
+    if (!require$$1$2.existsSync(versionPath)) {
       require$$1$2.writeFileSync(
-        require$$0$3.join(GLOBAL_DIR$1, "version.json"),
+        versionPath,
         JSON.stringify(
           {
-            bundle_version: "0.0.0",
-            channel: "stable",
+            bundle_version: electron.app.getVersion(),
+            channel: "local",
             app_version: electron.app.getVersion(),
             last_check: (/* @__PURE__ */ new Date()).toISOString(),
             installed_at: (/* @__PURE__ */ new Date()).toISOString(),
@@ -55745,12 +54713,15 @@ async function installNakiros(editors, win) {
         ) + "\n",
         "utf-8"
       );
-      emit(win, { label: "version.json créé", done: true });
-    } catch (err) {
-      const msg = `version.json : ${err.message}`;
-      errors2.push(msg);
-      emit(win, { label: msg, done: false, error: msg });
     }
+    emit(win, { label: "version.json créé", done: true });
+  } catch (err) {
+    const msg = `version.json : ${err.message}`;
+    errors2.push(msg);
+    emit(win, { label: msg, done: false, error: msg });
+  }
+  for (const editor of editors.filter((e) => e.detected)) {
+    emit(win, { label: `${editor.label} : détecté`, done: true });
   }
   return { success: errors2.length === 0, errors: errors2 };
 }
@@ -56017,160 +54988,6 @@ function getGettingStartedContext(workspaceName, repoPaths) {
   }
   return { state, brownfieldMode, step1Complete, step2Complete };
 }
-const WORKER_API$2 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
-async function getBacklogStories(workspaceId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return [];
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories`, {
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!response2.ok) return [];
-  return await response2.json().catch(() => []);
-}
-async function createBacklogEpic(workspaceId, body) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error("Not authenticated");
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/epics`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resolved.token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  if (!response2.ok) throw new Error(`Failed to create epic: ${response2.status}`);
-  return await response2.json();
-}
-async function updateBacklogEpic(workspaceId, epicId, body) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error("Not authenticated");
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/epics/${epicId}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${resolved.token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  if (!response2.ok) throw new Error(`Failed to update epic: ${response2.status}`);
-  return await response2.json();
-}
-async function createBacklogStory(workspaceId, body) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error("Not authenticated");
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resolved.token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  if (!response2.ok) throw new Error(`Failed to create story: ${response2.status}`);
-  return await response2.json();
-}
-async function updateBacklogStory(workspaceId, storyId, body) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error("Not authenticated");
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories/${storyId}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${resolved.token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  if (!response2.ok) throw new Error(`Failed to update story: ${response2.status}`);
-  return await response2.json();
-}
-async function getBacklogEpics(workspaceId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return [];
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/epics`, {
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!response2.ok) return [];
-  return await response2.json().catch(() => []);
-}
-async function getBacklogTasks(workspaceId, storyId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return [];
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories/${storyId}/tasks`, {
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!response2.ok) return [];
-  return await response2.json().catch(() => []);
-}
-async function createBacklogTask(workspaceId, storyId, body) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error("Not authenticated");
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories/${storyId}/tasks`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resolved.token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  if (!response2.ok) throw new Error(`Failed to create task: ${response2.status}`);
-  return await response2.json();
-}
-async function updateBacklogTask(workspaceId, storyId, taskId, body) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error("Not authenticated");
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/stories/${storyId}/tasks/${taskId}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${resolved.token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  if (!response2.ok) throw new Error(`Failed to update task: ${response2.status}`);
-  return await response2.json();
-}
-async function getBacklogSprints(workspaceId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return [];
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/sprints`, {
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!response2.ok) return [];
-  return await response2.json().catch(() => []);
-}
-async function createBacklogSprint(workspaceId, body) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error("Not authenticated");
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/sprints`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resolved.token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  if (!response2.ok) throw new Error(`Failed to create sprint: ${response2.status}`);
-  return await response2.json();
-}
-async function updateBacklogSprint(workspaceId, sprintId, body) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) throw new Error("Not authenticated");
-  const response2 = await fetch(`${WORKER_API$2}/ws/${workspaceId}/sprints/${sprintId}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${resolved.token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-  if (!response2.ok) {
-    const errorBody = await response2.json().catch(() => ({}));
-    const err = new Error(errorBody.error ?? `Failed to update sprint: ${response2.status}`);
-    err.code = errorBody.code;
-    throw err;
-  }
-  return await response2.json();
-}
 function generateContext(workspaceId, ticketId, workspace) {
   const allTickets = getTickets(workspaceId);
   const epics = getEpics(workspaceId);
@@ -56314,7 +55131,7 @@ function destroyTerminal(terminalId) {
     terminals.delete(terminalId);
   }
 }
-function resolveNakirosBin$1() {
+function resolveNakirosBin() {
   if (electron.app.isPackaged) {
     return require$$0$3.join(process.resourcesPath, "nakiros");
   }
@@ -56327,7 +55144,7 @@ const runs = /* @__PURE__ */ new Map();
 let runCounter = 0;
 function runAgentCommand(provider, request2, onStart, onEvent, onDone, _onRawLine) {
   const bridgeRunId = `run-${++runCounter}`;
-  const nakirosBin = resolveNakirosBin$1();
+  const nakirosBin = resolveNakirosBin();
   const additionalDirs = request2.additionalDirs ?? request2.activeRepoPaths ?? [];
   const agentId = request2.agentId ?? "default";
   const legacyProviderSessionId = request2.providerSessionId ?? request2.sessionId;
@@ -56450,125 +55267,6 @@ function cancelAgentRun(runId) {
   runs.get(runId)?.kill();
   runs.delete(runId);
 }
-function resolveNakirosBin() {
-  if (electron.app.isPackaged) {
-    return require$$0$3.join(process.resourcesPath, "nakiros");
-  }
-  const workspaceRoot = require$$0$3.join(__dirname, "../../../../..");
-  const devBin = require$$0$3.join(workspaceRoot, "node_modules", ".bin", "nakiros");
-  if (require$$1$2.existsSync(devBin)) return devBin;
-  return "nakiros";
-}
-const syncProcesses = /* @__PURE__ */ new Map();
-function startWorkspaceSyncBridge(workspace, onEvent) {
-  if (syncProcesses.has(workspace.id)) {
-    console.log(`[sync-bridge] Watcher already running for workspace "${workspace.name}"`);
-    return;
-  }
-  const nakirosBin = resolveNakirosBin();
-  const args = [
-    "sync",
-    "start",
-    "--workspace-id",
-    workspace.id,
-    "--workspace-name",
-    workspace.name
-  ];
-  console.log(`[sync-bridge] Spawning watcher for "${workspace.name}" — ${nakirosBin} ${args.join(" ")}`);
-  let child;
-  try {
-    child = child_process.spawn(nakirosBin, args, {
-      env: orchestrator.buildEnv(),
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-  } catch (err) {
-    console.error(`[sync-bridge] Spawn error for "${workspace.name}": ${String(err)}`);
-    onEvent({ type: "sync:error", message: String(err) });
-    return;
-  }
-  let buffer = "";
-  child.stdout?.on("data", (chunk) => {
-    buffer += chunk.toString("utf8");
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const event = JSON.parse(trimmed);
-        console.log(`[sync-bridge] Event from "${workspace.name}":`, event.type);
-        onEvent(event);
-      } catch {
-      }
-    }
-  });
-  child.stderr?.on("data", (chunk) => {
-    const text2 = chunk.toString("utf8").trim();
-    if (text2) process.stderr.write(`[sync-bridge][${workspace.name}] ${text2}
-`);
-  });
-  child.on("close", (code2) => {
-    syncProcesses.delete(workspace.id);
-    console.log(`[sync-bridge] Watcher closed for "${workspace.name}" (code: ${code2 ?? 0})`);
-  });
-  child.on("error", (err) => {
-    syncProcesses.delete(workspace.id);
-    console.error(`[sync-bridge] Process error for "${workspace.name}": ${err.message}`);
-    const hint = err.message.includes("ENOENT") || err.message.includes("not found") ? "nakiros CLI not found. Run `pnpm build` in the monorepo root." : err.message;
-    onEvent({ type: "sync:error", message: hint });
-  });
-  syncProcesses.set(workspace.id, child);
-}
-function triggerSyncPush(workspaceId) {
-  const child = syncProcesses.get(workspaceId);
-  if (!child || child.pid == null) return;
-  try {
-    process.kill(child.pid, "SIGUSR1");
-  } catch {
-  }
-}
-function stopWorkspaceSyncBridge(workspaceId) {
-  const child = syncProcesses.get(workspaceId);
-  if (child) {
-    child.kill("SIGTERM");
-    syncProcesses.delete(workspaceId);
-    console.log(`[sync-bridge] Stopped watcher for workspace ${workspaceId}`);
-  }
-}
-function stopAllSyncBridges() {
-  for (const [workspaceId] of syncProcesses) {
-    stopWorkspaceSyncBridge(workspaceId);
-  }
-}
-const NAKIROS_API_URL = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
-async function executeAction(workspaceId, block) {
-  const { token } = await ensureValidAccessToken();
-  if (!token) {
-    throw new Error("Not authenticated — cannot execute action");
-  }
-  let response2;
-  try {
-    response2 = await fetch(`${NAKIROS_API_URL}/ws/${workspaceId}/actions/${block.tool}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(block.args)
-    });
-  } catch (error) {
-    throw new Error(formatNetworkError(error, `Action ${block.tool} request failed`));
-  }
-  if (!response2.ok) {
-    const bodyText = (await response2.text().catch(() => "")).trim();
-    const details = bodyText.length > 0 ? `: ${bodyText}` : "";
-    throw new Error(`Action ${block.tool} failed (${response2.status})${details}`);
-  }
-  const result = await response2.json().catch(() => ({}));
-  return `[ACTION RESULT: ${block.tool}]
-${JSON.stringify(result, null, 2)}
-[END ACTION RESULT]`;
-}
 function conversationDir(workspaceSlug, conversationId) {
   return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, "conversations", conversationId);
 }
@@ -56650,165 +55348,6 @@ function getConversations(workspaceSlug, workspaceId) {
 function deleteConversationEntry(conversationId, workspaceSlug) {
   orchestrator.deleteConversation(workspaceSlug, conversationId);
 }
-const WORKER_API$1 = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
-function globalContextDir(workspace) {
-  const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
-  return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", slug, "context");
-}
-async function readFileOrNull(filePath) {
-  try {
-    if (!require$$1$2.existsSync(filePath)) return null;
-    return await promises$1.readFile(filePath, "utf-8");
-  } catch {
-    return null;
-  }
-}
-async function buildGlobalContext(workspace) {
-  const contextDir = globalContextDir(workspace);
-  const [global2, productA, productB, interRepo] = await Promise.all([
-    readFileOrNull(require$$0$3.join(contextDir, "global-context.md")),
-    readFileOrNull(require$$0$3.join(contextDir, "product-context.md")),
-    readFileOrNull(require$$0$3.join(contextDir, "pm-context.md")),
-    readFileOrNull(require$$0$3.join(contextDir, "inter-repo.md"))
-  ]);
-  return {
-    global: global2 ?? void 0,
-    product: productA ?? productB ?? void 0,
-    interRepo: interRepo ?? void 0,
-    generatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function buildRepoContext(repoLocalPath) {
-  const nakDir = require$$0$3.join(repoLocalPath, "_nakiros");
-  if (!require$$1$2.existsSync(nakDir)) return null;
-  const [architecture, stack, conventions, api, llms] = await Promise.all([
-    readFileOrNull(require$$0$3.join(nakDir, "architecture.md")),
-    readFileOrNull(require$$0$3.join(nakDir, "stack.md")),
-    readFileOrNull(require$$0$3.join(nakDir, "conventions.md")),
-    readFileOrNull(require$$0$3.join(nakDir, "api.md")),
-    readFileOrNull(require$$0$3.join(nakDir, "llms.txt"))
-  ]);
-  if (!architecture && !stack && !conventions && !api && !llms) return null;
-  return {
-    architecture: architecture ?? void 0,
-    stack: stack ?? void 0,
-    conventions: conventions ?? void 0,
-    api: api ?? void 0,
-    llms: llms ?? void 0,
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function pushWorkspaceContext(workspace, force = false) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return { status: "unauthenticated" };
-  try {
-    const globalCtx = await buildGlobalContext(workspace);
-    const globalResponse = await fetch(`${WORKER_API$1}/ws/${workspace.id}/context`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${resolved.token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ ...globalCtx, force })
-    });
-    if (globalResponse.status === 409) {
-      const payload = await globalResponse.json().catch(() => ({}));
-      return {
-        status: "conflict",
-        conflict: { type: "global", updatedBy: payload.updatedBy, remoteUpdatedAt: payload.remoteUpdatedAt }
-      };
-    }
-    if (!globalResponse.ok) {
-      console.warn("[context-sync] Push global failed:", globalResponse.status);
-      return { status: "offline" };
-    }
-    for (const repo of workspace.repos) {
-      if (!require$$1$2.existsSync(repo.localPath)) continue;
-      const repoCtx = await buildRepoContext(repo.localPath);
-      if (!repoCtx) continue;
-      const repoResponse = await fetch(
-        `${WORKER_API$1}/ws/${workspace.id}/repos/${encodeURIComponent(repo.name)}/context`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${resolved.token}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ ...repoCtx, force })
-        }
-      );
-      if (repoResponse.status === 409) {
-        const payload = await repoResponse.json().catch(() => ({}));
-        return {
-          status: "conflict",
-          conflict: { type: "repo", repoName: repo.name, updatedBy: payload.updatedBy, remoteUpdatedAt: payload.remoteUpdatedAt }
-        };
-      }
-      if (!repoResponse.ok) {
-        console.warn(`[context-sync] Push repo context failed for ${repo.name}:`, repoResponse.status);
-      }
-    }
-    return { status: "ok" };
-  } catch (err) {
-    console.warn("[context-sync] Network error during push:", err);
-    return { status: "offline" };
-  }
-}
-async function pullRemoteContext(workspace) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return { status: "unauthenticated", reposPulled: [] };
-  try {
-    const contextDir = globalContextDir(workspace);
-    await promises$1.mkdir(contextDir, { recursive: true });
-    const globalFiles = [
-      { endpoint: "global-context", outputName: "global-context.md" },
-      { endpoint: "product-context", outputName: "product-context.md" },
-      { endpoint: "inter-repo", outputName: "inter-repo.md" }
-    ];
-    for (const { endpoint, outputName } of globalFiles) {
-      const response2 = await fetch(
-        `${WORKER_API$1}/ws/${workspace.id}/context/_global/${endpoint}`,
-        { headers: { Authorization: `Bearer ${resolved.token}` } }
-      );
-      if (response2.ok) {
-        const content = await response2.text();
-        await promises$1.writeFile(require$$0$3.join(contextDir, outputName), content, "utf-8");
-      }
-    }
-    const reposPulled = [];
-    const manifestResponse = await fetch(`${WORKER_API$1}/ws/${workspace.id}/context`, {
-      headers: { Authorization: `Bearer ${resolved.token}` }
-    });
-    if (manifestResponse.ok) {
-      const manifest = await manifestResponse.json();
-      const localRepoNames = new Set(workspace.repos.map((r) => r.name));
-      for (const repoName of Object.keys(manifest.repos ?? {})) {
-        if (localRepoNames.has(repoName)) continue;
-        const repoCtxResponse = await fetch(
-          `${WORKER_API$1}/ws/${workspace.id}/repos/${encodeURIComponent(repoName)}/context`,
-          { headers: { Authorization: `Bearer ${resolved.token}` } }
-        );
-        if (!repoCtxResponse.ok) continue;
-        const repoCtx = await repoCtxResponse.json();
-        const repoDir = require$$0$3.join(contextDir, "repos", repoName);
-        await promises$1.mkdir(repoDir, { recursive: true });
-        const writes = [];
-        if (repoCtx.architecture) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "architecture.md"), repoCtx.architecture, "utf-8"));
-        if (repoCtx.stack) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "stack.md"), repoCtx.stack, "utf-8"));
-        if (repoCtx.conventions) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "conventions.md"), repoCtx.conventions, "utf-8"));
-        if (repoCtx.api) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "api.md"), repoCtx.api, "utf-8"));
-        if (repoCtx.llms) writes.push(promises$1.writeFile(require$$0$3.join(repoDir, "llms.txt"), repoCtx.llms, "utf-8"));
-        await Promise.all(writes);
-        reposPulled.push(repoName);
-      }
-    }
-    return { status: "ok", reposPulled };
-  } catch (err) {
-    console.warn("[context-sync] Network error during pull:", err);
-    return { status: "offline", reposPulled: [] };
-  }
-}
-const WORKER_API = process.env["NAKIROS_API_URL"] ?? "https://api.nakiros.com";
 function getArtifactContextDir(workspace) {
   const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
   return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", slug, "context");
@@ -56860,90 +55399,6 @@ async function getContextArtifactTotalBytes(workspace) {
   if (!require$$1$2.existsSync(contextDir)) return 0;
   const files = await collectMarkdownArtifactPaths(contextDir, contextDir);
   return files.reduce((sum, f) => sum + f.sizeBytes, 0);
-}
-async function writeArtifactFile(workspace, artifactPath, content) {
-  const filePath = getArtifactFilePath(workspace, artifactPath);
-  require$$1$2.mkdirSync(require$$0$3.dirname(filePath), { recursive: true });
-  await promises$1.writeFile(filePath, content, "utf-8");
-}
-async function listArtifactVersions(workspaceId, artifactPath) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return [];
-  const response2 = await fetch(
-    `${WORKER_API}/ws/${workspaceId}/artifacts/${encodeURIComponent(artifactPath)}/versions`,
-    { headers: { Authorization: `Bearer ${resolved.token}` } }
-  );
-  if (!response2.ok) return [];
-  return await response2.json().catch(() => []);
-}
-async function saveArtifactVersion(workspaceId, workspace, input) {
-  await writeArtifactFile(workspace, input.artifactPath, input.content);
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return null;
-  const response2 = await fetch(
-    `${WORKER_API}/ws/${workspaceId}/artifacts/${encodeURIComponent(input.artifactPath)}/versions`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resolved.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        artifactPath: input.artifactPath,
-        artifactType: input.artifactType,
-        epicId: input.epicId ?? null,
-        content: input.content,
-        author: resolved.email ?? null
-      })
-    }
-  );
-  if (!response2.ok) return null;
-  return await response2.json();
-}
-async function listAllArtifacts(workspaceId) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return [];
-  const response2 = await fetch(`${WORKER_API}/ws/${workspaceId}/artifacts`, {
-    headers: { Authorization: `Bearer ${resolved.token}` }
-  });
-  if (!response2.ok) return [];
-  return await response2.json().catch(() => []);
-}
-async function pullAllArtifacts(workspaceId, workspace) {
-  const resolved = await ensureValidAccessToken();
-  if (!resolved.token) return { pulled: 0, failed: 0 };
-  const slug = resolveWorkspaceSlug(workspace.id, workspace.name);
-  const headers = { Authorization: `Bearer ${resolved.token}` };
-  const listRes = await fetch(`${WORKER_API}/ws/${workspaceId}/artifacts`, { headers });
-  if (!listRes.ok) return { pulled: 0, failed: 0 };
-  const metaList = await listRes.json().catch(() => []);
-  if (metaList.length === 0) return { pulled: 0, failed: 0 };
-  let pulled = 0;
-  let failed = 0;
-  const chunks = [];
-  for (let i = 0; i < metaList.length; i += 5) chunks.push(metaList.slice(i, i + 5));
-  for (const chunk of chunks) {
-    await Promise.all(chunk.map(async (meta) => {
-      try {
-        const contentRes = await fetch(
-          `${WORKER_API}/ws/${workspaceId}/artifacts/${encodeURIComponent(meta.artifactPath)}/versions/${meta.version}`,
-          { headers }
-        );
-        if (!contentRes.ok) {
-          failed++;
-          return;
-        }
-        const row = await contentRes.json();
-        if (!row.content) {
-          failed++;
-          return;
-        }
-        await writeArtifactFile(workspace, meta.artifactPath, row.content);
-        orchestrator.markArtifactSynced(slug, meta.artifactPath, row.content, meta.version);
-        pulled++;
-      } catch {
-        failed++;
-      }
-    }));
-  }
-  return { pulled, failed };
 }
 function getContextDir$1(workspaceSlug) {
   return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, "context");
@@ -57684,12 +56139,6 @@ function findWorkspace(wsId) {
   return getAll().find((workspace) => workspace.id === wsId);
 }
 async function persistWorkspaceMetadata(workspace) {
-  try {
-    await saveCanonicalWorkspace(workspace);
-    return;
-  } catch (error) {
-    console.warn("[jira-auth] Falling back to local workspace cache:", error);
-  }
   save(workspace);
 }
 function storeTokens(wsId, tokens) {
@@ -57819,95 +56268,6 @@ async function syncWorkspaceJiraTickets(wsId, workspace) {
     cloudId: resolveCloudId(wsId, workspace)
   });
 }
-const BASE_URL = "https://feedback.nakiros.com";
-const GLOBAL_DIR = require$$0$3.join(os.homedir(), ".nakiros");
-const QUEUE_FILE = require$$0$3.join(GLOBAL_DIR, "feedback-queue.json");
-const API_KEY = "019cbd75-cb5d-7474-a0ea-7a87ec85ecdb";
-function getAppVersion() {
-  return electron.app.getVersion();
-}
-function getBundleVersion() {
-  return getVersionInfo()?.bundle_version ?? "0.0.0";
-}
-function getUserAgent() {
-  return `Nakiros/${getAppVersion()} (${os.platform()}; ${os.arch()})`;
-}
-function loadQueue() {
-  if (!require$$1$2.existsSync(QUEUE_FILE)) return [];
-  try {
-    return JSON.parse(require$$1$2.readFileSync(QUEUE_FILE, "utf-8"));
-  } catch {
-    return [];
-  }
-}
-function saveQueue(items2) {
-  require$$1$2.mkdirSync(GLOBAL_DIR, { recursive: true });
-  require$$1$2.writeFileSync(QUEUE_FILE, JSON.stringify(items2, null, 2) + "\n", "utf-8");
-}
-function enqueue(item) {
-  const queue = loadQueue();
-  queue.push(item);
-  const trimmed = queue.slice(-50);
-  saveQueue(trimmed);
-}
-async function postFeedback(endpoint, body) {
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
-    method: "POST",
-    signal: AbortSignal.timeout(8e3),
-    headers: {
-      "Content-Type": "application/json",
-      "X-Nakiros-Key": API_KEY,
-      "User-Agent": getUserAgent()
-    },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) {
-    const text2 = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}${text2 ? ` — ${text2}` : ""}`);
-  }
-}
-async function sendSessionFeedback(data) {
-  const body = {
-    ...data,
-    app_version: getAppVersion(),
-    bundle_version: getBundleVersion(),
-    platform: os.platform()
-  };
-  try {
-    await postFeedback("/session", body);
-  } catch {
-    enqueue({ type: "session", endpoint: "/session", body, addedAt: (/* @__PURE__ */ new Date()).toISOString() });
-  }
-}
-async function sendProductFeedback(data) {
-  const body = {
-    ...data,
-    app_version: getAppVersion(),
-    bundle_version: getBundleVersion(),
-    platform: os.platform()
-  };
-  try {
-    await postFeedback("/product", body);
-  } catch {
-    enqueue({ type: "product", endpoint: "/product", body, addedAt: (/* @__PURE__ */ new Date()).toISOString() });
-  }
-}
-async function retryQueue() {
-  const queue = loadQueue();
-  if (queue.length === 0) return;
-  const remaining = [];
-  for (const item of queue) {
-    try {
-      await postFeedback(item.endpoint, item.body);
-    } catch {
-      remaining.push(item);
-    }
-  }
-  saveQueue(remaining);
-  if (remaining.length < queue.length) {
-    console.log(`[feedback] Retried queue: ${queue.length - remaining.length} sent, ${remaining.length} remaining`);
-  }
-}
 const execFileAsync = require$$1$1.promisify(child_process.execFile);
 const gotTheLock = electron.app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -57935,7 +56295,6 @@ async function handleOAuthCallback(url) {
     if (win.isMinimized()) win.restore();
     win.focus();
   }
-  if (parsed.hostname === "auth") return;
   if (parsed.hostname !== "oauth") return;
   const code2 = parsed.searchParams.get("code");
   const state = parsed.searchParams.get("state");
@@ -58058,25 +56417,8 @@ electron.ipcMain.handle(IPC_CHANNELS["dialog:openFile"], async () => {
   const result = await electron.dialog.showOpenDialog({ properties: ["openFile"] });
   return result.canceled ? null : result.filePaths[0] ?? null;
 });
-electron.ipcMain.handle(IPC_CHANNELS["workspace:getAll"], async (event) => {
-  const workspaces2 = await getHydratedWorkspaces();
-  for (const ws of workspaces2) {
-    startWorkspaceSyncBridge(ws, (syncEvent) => {
-      electron.BrowserWindow.getAllWindows().forEach((win) => {
-        win.webContents.send(IPC_CHANNELS["sync:event"], syncEvent);
-      });
-    });
-  }
-  return workspaces2;
-});
-electron.ipcMain.handle(IPC_CHANNELS["workspace:listMembers"], (_, workspaceId) => listWorkspaceMembers(workspaceId));
-electron.ipcMain.handle(
-  IPC_CHANNELS["workspace:upsertMember"],
-  (_, workspaceId, input) => upsertWorkspaceMember(workspaceId, input)
-);
-electron.ipcMain.handle(IPC_CHANNELS["workspace:removeMember"], (_, workspaceId, userId) => removeWorkspaceMember(workspaceId, userId));
+electron.ipcMain.handle(IPC_CHANNELS["workspace:getAll"], () => getAll());
 electron.ipcMain.handle(IPC_CHANNELS["workspace:save"], (_, w) => save(w));
-electron.ipcMain.handle(IPC_CHANNELS["workspace:saveCanonical"], (_, w) => saveCanonicalWorkspace(w));
 electron.ipcMain.handle(IPC_CHANNELS["workspace:delete"], (_, id2) => remove(id2));
 electron.ipcMain.handle(IPC_CHANNELS["workspace:createRoot"], (_, parentDir, workspaceName) => createWorkspaceRoot(parentDir, workspaceName));
 electron.ipcMain.handle(IPC_CHANNELS["repo:detectProfile"], (_, path) => detectProfile(path));
@@ -58088,20 +56430,6 @@ electron.ipcMain.handle(IPC_CHANNELS["workspace:reset"], (_, w) => resetWorkspac
 electron.ipcMain.handle(IPC_CHANNELS["workspace:sync"], (_, w) => {
   const prefs = getPreferences();
   syncToRepos(w, prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL);
-});
-electron.ipcMain.handle(IPC_CHANNELS["context:push"], (_, w, force) => pushWorkspaceContext(w, force));
-electron.ipcMain.handle(IPC_CHANNELS["context:pull"], (_, w) => pullRemoteContext(w));
-electron.ipcMain.handle(IPC_CHANNELS["artifact:listVersions"], async (_event, workspaceId, artifactPath) => {
-  return listArtifactVersions(workspaceId, artifactPath);
-});
-electron.ipcMain.handle(IPC_CHANNELS["artifact:saveVersion"], async (_event, workspaceId, workspace, input) => {
-  return saveArtifactVersion(workspaceId, workspace, input);
-});
-electron.ipcMain.handle(IPC_CHANNELS["artifact:listAll"], async (_event, workspaceId) => {
-  return listAllArtifacts(workspaceId);
-});
-electron.ipcMain.handle(IPC_CHANNELS["artifact:pullAll"], async (_event, workspaceId, workspace) => {
-  return pullAllArtifacts(workspaceId, workspace);
 });
 electron.ipcMain.handle(IPC_CHANNELS["artifact:listContextFiles"], async (_event, workspace) => {
   return listContextArtifactFiles(workspace);
@@ -58137,16 +56465,10 @@ electron.ipcMain.handle(IPC_CHANNELS["preview:check"], (_event, workspaceSlug) =
   return checkPendingPreview(workspaceSlug);
 });
 electron.ipcMain.handle(IPC_CHANNELS["preview:apply"], async (_event, previewRoot, workspaceSlug) => {
-  const result = await applyPreview(previewRoot, workspaceSlug);
-  const ws = getAll().find((w) => resolveWorkspaceSlug(w.id, w.name) === workspaceSlug);
-  if (ws) triggerSyncPush(ws.id);
-  return result;
+  return applyPreview(previewRoot, workspaceSlug);
 });
 electron.ipcMain.handle(IPC_CHANNELS["preview:apply-file"], async (_event, previewRoot, filePath, workspaceSlug) => {
-  const result = await applyPreviewFile(previewRoot, filePath, workspaceSlug);
-  const ws = getAll().find((w) => resolveWorkspaceSlug(w.id, w.name) === workspaceSlug);
-  if (ws) triggerSyncPush(ws.id);
-  return result;
+  return applyPreviewFile(previewRoot, filePath, workspaceSlug);
 });
 electron.ipcMain.handle(IPC_CHANNELS["preview:discard"], (_event, previewRoot) => {
   discardPreview(previewRoot);
@@ -58208,33 +56530,6 @@ electron.ipcMain.handle(IPC_CHANNELS["preferences:getSystemLanguage"], () => {
   return locale.toLowerCase().startsWith("fr") ? "fr" : "en";
 });
 electron.ipcMain.handle(IPC_CHANNELS["preferences:save"], (_, prefs) => savePreferences(prefs));
-electron.ipcMain.handle(IPC_CHANNELS["providerCredentials:getAll"], () => listProviderCredentials());
-electron.ipcMain.handle(IPC_CHANNELS["providerCredentials:create"], (_, input) => createProviderCredential(input));
-electron.ipcMain.handle(
-  IPC_CHANNELS["providerCredentials:update"],
-  (_, credentialId, input) => updateProviderCredential(credentialId, input)
-);
-electron.ipcMain.handle(IPC_CHANNELS["providerCredentials:revoke"], (_, credentialId) => revokeProviderCredential(credentialId));
-electron.ipcMain.handle(
-  IPC_CHANNELS["providerCredentials:delete"],
-  (_, credentialId, force) => deleteProviderCredential(credentialId, force)
-);
-electron.ipcMain.handle(
-  IPC_CHANNELS["providerCredentials:getWorkspace"],
-  (_, workspaceId) => getWorkspaceProviderCredentials(workspaceId)
-);
-electron.ipcMain.handle(
-  IPC_CHANNELS["providerCredentials:bindWorkspace"],
-  (_, workspaceId, input) => bindWorkspaceProviderCredential(workspaceId, input)
-);
-electron.ipcMain.handle(
-  IPC_CHANNELS["providerCredentials:unbindWorkspace"],
-  (_, workspaceId, credentialId) => unbindWorkspaceProviderCredential(workspaceId, credentialId)
-);
-electron.ipcMain.handle(
-  IPC_CHANNELS["providerCredentials:setWorkspaceDefault"],
-  (_, workspaceId, input) => setWorkspaceProviderDefault(workspaceId, input)
-);
 electron.ipcMain.handle(IPC_CHANNELS["agents:status"], (_, repoPath) => getAgentInstallStatus(repoPath));
 electron.ipcMain.handle(IPC_CHANNELS["agents:install"], (_, request2) => installAgents(request2));
 electron.ipcMain.handle(IPC_CHANNELS["agents:global-status"], () => getGlobalInstallStatus());
@@ -58248,72 +56543,6 @@ electron.ipcMain.handle(IPC_CHANNELS["onboarding:install"], async (event, editor
   if (!win) return { success: false, errors: ["No window"] };
   return installNakiros(editors, win);
 });
-electron.ipcMain.handle(IPC_CHANNELS["updates:check"], (_, force, channel) => checkForUpdates(force, channel ?? (getPreferences().agentChannel ?? "stable")));
-electron.ipcMain.handle(IPC_CHANNELS["updates:apply"], async (event, files, bundleVersion) => {
-  const win = electron.BrowserWindow.fromWebContents(event.sender);
-  if (!win) return;
-  return applyUpdate(files, bundleVersion, win);
-});
-electron.ipcMain.handle(IPC_CHANNELS["updates:getVersionInfo"], () => getVersionInfo());
-electron.ipcMain.handle(IPC_CHANNELS["auth:getState"], () => getAuthState());
-electron.ipcMain.handle(IPC_CHANNELS["org:getMine"], () => getMyOrg());
-electron.ipcMain.handle(IPC_CHANNELS["org:listMine"], () => listMyOrgs());
-electron.ipcMain.handle(IPC_CHANNELS["org:create"], (_event, name, slug) => createOrg(name, slug));
-electron.ipcMain.handle(IPC_CHANNELS["org:delete"], (_event, orgId) => deleteOrg(orgId));
-electron.ipcMain.handle(IPC_CHANNELS["org:listMembers"], (_event, orgId) => listOrgMembers(orgId));
-electron.ipcMain.handle(
-  IPC_CHANNELS["org:addMember"],
-  (_event, orgId, email2, role, inviterEmail) => addOrgMember(orgId, email2, role, inviterEmail)
-);
-electron.ipcMain.handle(IPC_CHANNELS["org:leave"], (_event, orgId) => leaveOrg(orgId));
-electron.ipcMain.handle(IPC_CHANNELS["org:removeMember"], (_event, orgId, userId) => removeOrgMember(orgId, userId));
-electron.ipcMain.handle(IPC_CHANNELS["org:cancelInvitation"], (_event, orgId, invitationId) => cancelInvitation(orgId, invitationId));
-electron.ipcMain.handle(IPC_CHANNELS["org:acceptInvitations"], (_event, email2) => acceptInvitations(email2));
-electron.ipcMain.handle(IPC_CHANNELS["auth:signIn"], async (event) => {
-  const win = electron.BrowserWindow.fromWebContents(event.sender);
-  signIn(win ?? void 0).then(async (result) => {
-    win?.webContents.send(IPC_CHANNELS["auth:complete"], { email: result.email });
-    for (const ws of getAll()) {
-      try {
-        await syncWorkspaceYaml(ws);
-      } catch (error) {
-        console.error(`[auth] Failed to sync workspace "${ws.name}" after sign-in:`, error);
-      }
-      triggerSyncPush(ws.id);
-    }
-  }).catch((error) => {
-    console.error("[auth] Sign-in failed:", error);
-    const message = error instanceof Error ? error.message : "Authentication failed";
-    if (message !== "Cancelled") {
-      win?.webContents.send(IPC_CHANNELS["auth:error"], { message });
-    }
-  });
-});
-electron.ipcMain.handle(IPC_CHANNELS["auth:signOut"], async () => {
-  await signOut();
-  for (const ws of getAll()) {
-    try {
-      await syncWorkspaceYaml(ws);
-    } catch (error) {
-      console.error(`[auth] Failed to sync workspace "${ws.name}" after sign-out:`, error);
-    }
-  }
-  for (const win of electron.BrowserWindow.getAllWindows()) {
-    win.webContents.send(IPC_CHANNELS["auth:signedOut"], {});
-  }
-});
-electron.ipcMain.handle(IPC_CHANNELS["backlog:getStories"], (_, workspaceId) => getBacklogStories(workspaceId));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:getEpics"], (_, workspaceId) => getBacklogEpics(workspaceId));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:createEpic"], (_, workspaceId, body) => createBacklogEpic(workspaceId, body));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:updateEpic"], (_, workspaceId, epicId, body) => updateBacklogEpic(workspaceId, epicId, body));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:createStory"], (_, workspaceId, body) => createBacklogStory(workspaceId, body));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:updateStory"], (_, workspaceId, storyId, body) => updateBacklogStory(workspaceId, storyId, body));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:getTasks"], (_, workspaceId, storyId) => getBacklogTasks(workspaceId, storyId));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:createTask"], (_, workspaceId, storyId, body) => createBacklogTask(workspaceId, storyId, body));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:updateTask"], (_, workspaceId, storyId, taskId, body) => updateBacklogTask(workspaceId, storyId, taskId, body));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:getSprints"], (_, workspaceId) => getBacklogSprints(workspaceId));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:createSprint"], (_, workspaceId, body) => createBacklogSprint(workspaceId, body));
-electron.ipcMain.handle(IPC_CHANNELS["backlog:updateSprint"], (_, workspaceId, sprintId, body) => updateBacklogSprint(workspaceId, sprintId, body));
 function resolveSlug(wsId) {
   const ws = getAll().find((w) => w.id === wsId);
   return ws ? toWorkspaceSlug$1(ws.name) : wsId;
@@ -58379,10 +56608,6 @@ electron.ipcMain.handle(
     const additionalDirs = request2.additionalDirs ?? request2.activeRepoPaths;
     const requestedProvider = request2.provider;
     const provider = requestedProvider === "claude" || requestedProvider === "codex" || requestedProvider === "cursor" ? requestedProvider : prefs.agentProvider ?? "claude";
-    await assertWorkspaceLaunchAllowed({
-      workspaceId: request2.workspaceId,
-      enforceRoles: (prefs.agentChannel ?? "stable") !== "beta"
-    });
     const allWorkspaces = getAll();
     const workspace = allWorkspaces.find((w) => w.id === request2.workspaceId);
     const workspaceSlug = workspace ? resolveWorkspaceSlug(workspace.id, workspace.name) : "";
@@ -58424,10 +56649,6 @@ electron.ipcMain.handle(
 electron.ipcMain.handle(IPC_CHANNELS["agent:cancel"], (_, runId) => {
   cancelAgentRun(runId);
 });
-electron.ipcMain.handle(
-  IPC_CHANNELS["agent:action-execute"],
-  (_, workspaceId, block) => executeAction(workspaceId, block)
-);
 electron.ipcMain.handle(IPC_CHANNELS["conversation:getAll"], (_, workspaceId) => getConversations(resolveSlug(workspaceId), workspaceId));
 electron.ipcMain.handle(IPC_CHANNELS["conversation:save"], () => {
 });
@@ -58465,12 +56686,6 @@ electron.ipcMain.handle(IPC_CHANNELS["server:getStatus"], async () => {
     return "stopped";
   }
 });
-electron.ipcMain.handle(IPC_CHANNELS["feedback:sendSession"], async (_, data) => {
-  await sendSessionFeedback(data);
-});
-electron.ipcMain.handle(IPC_CHANNELS["feedback:sendProduct"], async (_, data) => {
-  await sendProductFeedback(data);
-});
 electron.ipcMain.handle(IPC_CHANNELS["server:restart"], async () => {
   broadcastServerStatus("starting");
   stopServer();
@@ -58506,20 +56721,6 @@ async function ensureMcpServer(port) {
 electron.app.whenReady().then(() => {
   createWindow();
   void ensureMcpServer(3737);
-  void retryQueue();
-  setTimeout(() => {
-    void (async () => {
-      try {
-        const channel = getPreferences().agentChannel ?? "stable";
-        const result = await checkForUpdates(false, channel);
-        if (result.compatible && result.hasUpdate) {
-          const win = electron.BrowserWindow.getAllWindows()[0];
-          win?.webContents.send(IPC_CHANNELS["updates:available"], result);
-        }
-      } catch {
-      }
-    })();
-  }, 5e3);
   if (pendingProtocolUrl) {
     const urlToProcess = pendingProtocolUrl;
     pendingProtocolUrl = null;
@@ -58535,7 +56736,6 @@ electron.app.on("before-quit", () => {
   isQuitting = true;
   broadcastServerStatus("stopped");
   stopServer();
-  stopAllSyncBridges();
 });
 electron.app.on("window-all-closed", () => {
   if (process.platform !== "darwin") electron.app.quit();

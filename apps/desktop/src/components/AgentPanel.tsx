@@ -21,7 +21,6 @@ import type {
   StoredConversation,
   StoredRepo,
 } from '@nakiros/shared';
-import SessionFeedback, { type SessionFeedbackHandle } from './SessionFeedback.js';
 import {
   AGENT_DEFINITIONS,
   buildAgentColorMap,
@@ -70,7 +69,7 @@ import {
 } from './agent/agent-panel-prompts.js';
 import { AgentInputMenus } from './agent/agent-panel-input-menus.js';
 import { handleAgentInputKeydown } from './agent/agent-panel-input-keydown.js';
-import { AgentMessagesPane, WorkflowProgressBar } from './agent/agent-panel-messages.js';
+import { AgentMessagesPane, WorkflowProgressBar, type StreamingActivityLabel } from './agent/agent-panel-messages.js';
 import {
   applyPreparedDispatchToTab,
   buildConversationUpsertForDispatch,
@@ -268,7 +267,6 @@ export default function AgentPanel({
   const runStartedAtRef = useRef(new Map<string, number>());
   const sessionStartTimesRef = useRef(new Map<string, number>());
   const tabRawLinesRef = useRef(new Map<string, unknown[]>());
-  const feedbackRefsMap = useRef(new Map<string, React.RefObject<SessionFeedbackHandle | null>>());
   const orchestrationExecutionsRef = useRef(new Map<string, OrchestrationExecution>());
   const runToOrchestrationExecutionRef = useRef(new Map<string, { executionId: string; role: 'participant' | 'synthesis' }>());
   const workspaceSlug = useMemo(() => toWorkspaceSlug(workspaceName || workspaceId), [workspaceId, workspaceName]);
@@ -979,44 +977,8 @@ export default function AgentPanel({
     upsertConversation,
   });
 
-  async function maybeExecuteActions(tabId: string, messageId: string, blocks: NakirosActionBlock[]) {
-    const allResults: string[] = [];
-
-    for (const block of blocks) {
-      let resultString: string;
-      let summary: string;
-      try {
-        resultString = await window.nakiros.agentActionExecute(workspaceId, block);
-        // Extract the JSON body between the fences for summary parsing
-        const jsonBody = resultString
-          .replace(/^\[ACTION RESULT:.*?\]\n/, '')
-          .replace(/\n\[END ACTION RESULT\]$/, '')
-          .trim();
-        summary = buildActionResultSummary(block.tool, block.args, jsonBody);
-      } catch (err) {
-        resultString = `[ACTION RESULT: ${block.tool}]\n{"error": "${String(err)}"}\n[END ACTION RESULT]`;
-        summary = `↳ ${block.tool} · error`;
-      }
-
-      allResults.push(resultString);
-
-      const actionResult: ActionResult = { tool: block.tool, summary };
-      setTabsAndRef((prev) => prev.map((tab) => {
-        if (tab.id !== tabId) return tab;
-        return {
-          ...tab,
-          messages: tab.messages.map((msg) => (
-            msg.id === messageId
-              ? { ...msg, actionResults: [...(msg.actionResults ?? []), actionResult] }
-              : msg
-          )),
-        };
-      }));
-    }
-
-    if (allResults.length > 0) {
-      await sendMessageToTab(tabId, allResults.join('\n\n'), { silent: true });
-    }
+  async function maybeExecuteActions(_tabId: string, _messageId: string, _blocks: NakirosActionBlock[]) {
+    // Agent action execution removed (SaaS feature)
   }
 
   function updateTabInput(tabId: string, value: string) {
@@ -1115,8 +1077,6 @@ export default function AgentPanel({
     const tab = tabsRef.current.find((item) => item.id === tabId);
     if (!tab) return;
 
-    feedbackRefsMap.current.get(tabId)?.current?.autoSubmitIfPending();
-    feedbackRefsMap.current.delete(tabId);
     sessionStartTimesRef.current.delete(tabId);
     tabRawLinesRef.current.delete(tabId);
     for (const [executionId, execution] of orchestrationExecutionsRef.current.entries()) {
@@ -1577,8 +1537,6 @@ export default function AgentPanel({
   );
   const showMentionMenu = Boolean(activeTab && !activeTab.activeRunId && activeMention);
   const showProjectScopeMenu = Boolean(activeTab && !activeTab.activeRunId && activeProjectScope);
-  const feedbackAgent = activeCommandDefinition?.kind === 'agent' ? activeCommandDefinition.id : null;
-  const feedbackWorkflow = activeCommandDefinition?.kind === 'workflow' ? activeCommandDefinition.id : null;
   const historyCount = workspaceConversations.length;
   const isInputDisabled = !activeTab || !!activeTab.activeRunId;
   const canSend = Boolean(activeTab && !activeTab.activeRunId && activeTab.input.trim());
@@ -1930,28 +1888,6 @@ export default function AgentPanel({
         <div ref={messagesEndRef} />
       </div>
 
-      {activeTab && activeMessages.length > 0 && (() => {
-        if (!feedbackRefsMap.current.has(activeTab.id)) {
-          feedbackRefsMap.current.set(activeTab.id, { current: null });
-        }
-        const fbRef = feedbackRefsMap.current.get(activeTab.id)!;
-        return (
-          <SessionFeedback
-            ref={fbRef}
-            sessionId={activeTab.id}
-            workspaceId={workspaceId}
-            agent={feedbackAgent}
-            workflow={feedbackWorkflow}
-            editor={activeTab.provider ?? 'claude'}
-            messageCount={activeMessages.length}
-            getDurationSeconds={() => {
-              const start = sessionStartTimesRef.current.get(activeTab.id);
-              return start ? Math.floor((Date.now() - start) / 1000) : 0;
-            }}
-            getRawLines={() => tabRawLinesRef.current.get(activeTab.id) ?? []}
-          />
-        );
-      })()}
 
       <div className={INPUT_BAR_CLASS}>
         <AgentInputMenus

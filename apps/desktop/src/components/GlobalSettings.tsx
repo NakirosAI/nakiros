@@ -1,20 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Building2, KeyRound, Languages, Sparkles, X } from 'lucide-react';
+import { Bot, Languages, Sparkles, X } from 'lucide-react';
 import clsx from 'clsx';
 import type { AppPreferences } from '@nakiros/shared';
 import { Button } from './ui';
 import { usePreferences } from '../hooks/usePreferences';
 import { AGENT_DEFINITIONS, resolveAgentDefinitions, type AgentDefinition } from '../constants/agents';
-import { SettingsOrganization } from './settings';
 import {
   GlobalSettingsAgentAISection,
   GlobalSettingsAgentNakirosSection,
   GlobalSettingsGeneralSection,
-  GlobalSettingsProviderCredentialsSection,
   type AgentCliStatus,
   type GlobalSettingsStatus,
-  type GlobalSettingsUpdateStatus,
 } from './settings/GlobalSettingsSections';
 
 interface Props {
@@ -25,8 +22,6 @@ interface Props {
 
 type SettingsSection =
   | 'general'
-  | 'organization'
-  | 'provider-credentials'
   | 'agent-ai'
   | 'agent-nakiros';
 
@@ -39,10 +34,6 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
   const timerRef = useRef<number | null>(null);
   const [cliInfo, setCliInfo] = useState<AgentCliStatus[] | null>(null);
   const [cliLoading, setCliLoading] = useState(false);
-  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
-  const [updateStatus, setUpdateStatus] = useState<GlobalSettingsUpdateStatus>('idle');
-  const [updateMsg, setUpdateMsg] = useState('');
-  const [versionInfo, setVersionInfo] = useState<BundleVersionInfo | null>(null);
   const [agentDefinitions, setAgentDefinitions] = useState<AgentDefinition[]>(AGENT_DEFINITIONS);
   const [section, setSection] = useState<SettingsSection>(initialSection);
 
@@ -53,14 +44,6 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
     }).finally(() => setCliLoading(false));
   }, []);
 
-  useEffect(() => {
-    void window.nakiros.getVersionInfo().then(setVersionInfo);
-  }, []);
-
-  useEffect(() => {
-    void handleCheckUpdates();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,43 +81,6 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
     setSection(initialSection);
   }, [initialSection]);
 
-  async function handleCheckUpdates(channelOverride?: 'stable' | 'beta') {
-    setUpdateStatus('checking');
-    setUpdateMsg('');
-    setUpdateResult(null);
-    try {
-      const channel = channelOverride ?? preferences.agentChannel ?? 'stable';
-      const result = await window.nakiros.checkForUpdates(true, channel);
-      setUpdateResult(result);
-      setUpdateStatus(result.hasUpdate || !result.compatible ? 'idle' : 'success');
-      if (!result.hasUpdate && result.compatible) setUpdateMsg(t('agentsUpToDate'));
-    } catch {
-      setUpdateStatus('error');
-      setUpdateMsg(t('unableToCheckUpdates'));
-    }
-  }
-
-  async function handleApplyUpdate() {
-    if (!updateResult?.changedFiles.length) return;
-    setUpdateStatus('updating');
-    try {
-      await window.nakiros.applyUpdate(updateResult.changedFiles, updateResult.latestVersion);
-      const [nextVersionInfo, installedCommands] = await Promise.all([
-        window.nakiros.getVersionInfo(),
-        window.nakiros.getInstalledCommands(),
-      ]);
-      setVersionInfo(nextVersionInfo);
-      setAgentDefinitions(resolveAgentDefinitions(installedCommands));
-      setUpdateStatus('success');
-      setUpdateMsg(t('updatedTo', { version: updateResult.latestVersion }));
-      setUpdateResult(null);
-      onUpdateApplied?.();
-    } catch {
-      setUpdateStatus('error');
-      setUpdateMsg(t('updateFailed'));
-    }
-  }
-
   async function update(partial: Partial<AppPreferences>) {
     setStatus('saving');
     try {
@@ -158,8 +104,6 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
 
   const nav = [
     { id: 'general' as const, label: t('navGeneral'), icon: <Languages size={15} /> },
-    { id: 'organization' as const, label: t('navOrganization'), icon: <Building2 size={15} /> },
-    { id: 'provider-credentials' as const, label: t('navProviderCredentials'), icon: <KeyRound size={15} /> },
     { id: 'agent-ai' as const, label: t('navAgentAI'), icon: <Bot size={15} /> },
     { id: 'agent-nakiros' as const, label: t('navAgentNakiros'), icon: <Sparkles size={15} /> },
   ];
@@ -212,14 +156,6 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
             />
           )}
 
-          {section === 'organization' && (
-            <SettingsOrganization />
-          )}
-
-          {section === 'provider-credentials' && (
-            <GlobalSettingsProviderCredentialsSection isActive={section === 'provider-credentials'} />
-          )}
-
           {section === 'agent-ai' && (
             <GlobalSettingsAgentAISection
               preferences={preferences}
@@ -235,13 +171,7 @@ export default function GlobalSettings({ onClose, initialSection = 'general', on
 
           {section === 'agent-nakiros' && (
             <GlobalSettingsAgentNakirosSection
-              versionInfo={versionInfo}
               agentDefinitions={agentDefinitions}
-              updateResult={updateResult}
-              updateStatus={updateStatus}
-              updateMsg={updateMsg}
-              onApplyUpdate={handleApplyUpdate}
-              onCheckUpdates={handleCheckUpdates}
             />
           )}
         </div>

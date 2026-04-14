@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AuthState, OrganizationInfo, StoredWorkspace, AgentProfile, JiraSyncFilter } from '@nakiros/shared';
+import type { StoredWorkspace, AgentProfile, JiraSyncFilter } from '@nakiros/shared';
 import clsx from 'clsx';
 import { Button } from '../components/ui';
 import { PROFILE_LABELS } from '../utils/profiles';
@@ -88,10 +88,6 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [syncFilter, setSyncFilter] = useState<JiraSyncFilter>('sprint_active');
-  const [authState, setAuthState] = useState<AuthState | null>(null);
-  const [availableOrganizations, setAvailableOrganizations] = useState<OrganizationInfo[]>([]);
-  const [ownershipLoading, setOwnershipLoading] = useState(true);
-  const [workspaceOwnerId, setWorkspaceOwnerId] = useState<string | null>(null);
 
   const jiraConnection = useJiraConnection({
     workspaceId: workspaceDraftId,
@@ -130,38 +126,6 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
     };
   }, [initialDirectory]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const [nextAuthState, currentOrg, orgs] = await Promise.all([
-          window.nakiros.authGetState().catch(() => ({ isAuthenticated: false } as AuthState)),
-          window.nakiros.orgGetMine().catch(() => undefined),
-          window.nakiros.orgListMine().catch(() => []),
-        ]);
-
-        if (cancelled) return;
-
-        setAuthState(nextAuthState);
-        setAvailableOrganizations(orgs);
-
-        if (nextAuthState.isAuthenticated && nextAuthState.userId) {
-          setWorkspaceOwnerId(currentOrg?.id ?? nextAuthState.userId);
-        } else {
-          setWorkspaceOwnerId(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setOwnershipLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   function handleNameChange(value: string) {
     setName(value);
@@ -402,7 +366,6 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
       const workspace: StoredWorkspace = {
         id: workspaceDraftId,
         name,
-        ownerId: workspaceOwnerId ?? undefined,
         workspacePath: prepared.workspacePath,
         repos: prepared.repos,
         topology,
@@ -421,7 +384,7 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
         lastOpenedAt: new Date().toISOString(),
       };
 
-      await window.nakiros.saveWorkspaceCanonical(workspace);
+      await window.nakiros.saveWorkspace(workspace);
       await syncWorkspaceArtifacts(workspace);
 
       if (workspace.pmTool === 'jira' && workspace.projectKey && jiraStatus?.connected) {
@@ -495,41 +458,6 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
               />
             </label>
 
-            <div className="flex flex-col gap-2">
-              <span className="text-sm font-medium text-[var(--text)]">{t('workspaceOwnerLabel')}</span>
-              {ownershipLoading ? (
-                <p className={MUTED_TEXT_CLASS}>{t('workspaceOwnerLoading')}</p>
-              ) : !authState?.isAuthenticated || !authState.userId ? (
-                <p className={MUTED_TEXT_CLASS}>{t('workspaceOwnerSignInHint')}</p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setWorkspaceOwnerId(authState.userId ?? null)}
-                      className={chipClass(workspaceOwnerId === authState.userId)}
-                    >
-                      {t('workspaceOwnerPersonal')}
-                    </button>
-                    {availableOrganizations.map((org) => (
-                      <button
-                        key={org.id}
-                        type="button"
-                        onClick={() => setWorkspaceOwnerId(org.id)}
-                        className={chipClass(workspaceOwnerId === org.id)}
-                      >
-                        {t('workspaceOwnerOrganization', { name: org.name })}
-                      </button>
-                    ))}
-                  </div>
-                  <p className={MUTED_TEXT_CLASS}>
-                    {workspaceOwnerId === authState.userId
-                      ? t('workspaceOwnerPersonalHint')
-                      : t('workspaceOwnerOrganizationHint')}
-                  </p>
-                </div>
-              )}
-            </div>
 
             <p className="m-0 text-sm text-[var(--text-muted)]">Structure du workspace</p>
             <div className="flex gap-3">

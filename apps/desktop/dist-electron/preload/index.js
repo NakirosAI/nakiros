@@ -159,11 +159,7 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
   selectDirectory: () => electron.ipcRenderer.invoke(IPC_CHANNELS["dialog:selectDirectory"]),
   openFilePicker: () => electron.ipcRenderer.invoke(IPC_CHANNELS["dialog:openFile"]),
   getWorkspaces: () => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:getAll"]),
-  workspaceListMembers: (workspaceId) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:listMembers"], workspaceId),
-  workspaceUpsertMember: (workspaceId, input) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:upsertMember"], workspaceId, input),
-  workspaceRemoveMember: (workspaceId, userId) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:removeMember"], workspaceId, userId),
   saveWorkspace: (w) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:save"], w),
-  saveWorkspaceCanonical: (w) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:saveCanonical"], w),
   deleteWorkspace: (id) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:delete"], id),
   createWorkspaceRoot: (parentDir, workspaceName) => electron.ipcRenderer.invoke(IPC_CHANNELS["workspace:createRoot"], parentDir, workspaceName),
   detectProfile: (path) => electron.ipcRenderer.invoke(IPC_CHANNELS["repo:detectProfile"], path),
@@ -180,34 +176,12 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
   getPreferences: () => electron.ipcRenderer.invoke(IPC_CHANNELS["preferences:get"]),
   getSystemLanguage: () => electron.ipcRenderer.invoke(IPC_CHANNELS["preferences:getSystemLanguage"]),
   savePreferences: (prefs) => electron.ipcRenderer.invoke(IPC_CHANNELS["preferences:save"], prefs),
-  providerCredentialsGetAll: () => electron.ipcRenderer.invoke(IPC_CHANNELS["providerCredentials:getAll"]),
-  providerCredentialCreate: (input) => electron.ipcRenderer.invoke(IPC_CHANNELS["providerCredentials:create"], input),
-  providerCredentialUpdate: (credentialId, input) => electron.ipcRenderer.invoke(IPC_CHANNELS["providerCredentials:update"], credentialId, input),
-  providerCredentialRevoke: (credentialId) => electron.ipcRenderer.invoke(IPC_CHANNELS["providerCredentials:revoke"], credentialId),
-  providerCredentialDelete: (credentialId, force) => electron.ipcRenderer.invoke(IPC_CHANNELS["providerCredentials:delete"], credentialId, force),
-  workspaceProviderCredentialsGet: (workspaceId) => electron.ipcRenderer.invoke(IPC_CHANNELS["providerCredentials:getWorkspace"], workspaceId),
-  workspaceProviderCredentialBind: (workspaceId, input) => electron.ipcRenderer.invoke(IPC_CHANNELS["providerCredentials:bindWorkspace"], workspaceId, input),
-  workspaceProviderCredentialUnbind: (workspaceId, credentialId) => electron.ipcRenderer.invoke(IPC_CHANNELS["providerCredentials:unbindWorkspace"], workspaceId, credentialId),
-  workspaceProviderCredentialSetDefault: (workspaceId, input) => electron.ipcRenderer.invoke(IPC_CHANNELS["providerCredentials:setWorkspaceDefault"], workspaceId, input),
   getAgentInstallStatus: (repoPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:status"], repoPath),
   installAgents: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:install"], request),
   getGlobalInstallStatus: () => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:global-status"]),
   getInstalledCommands: () => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:installed-commands"]),
   installAgentsGlobal: () => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:install-global"]),
   getAgentCliStatus: () => electron.ipcRenderer.invoke(IPC_CHANNELS["agents:cli-status"]),
-  // Backlog
-  backlogGetStories: (workspaceId) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:getStories"], workspaceId),
-  backlogGetEpics: (workspaceId) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:getEpics"], workspaceId),
-  backlogCreateEpic: (workspaceId, body) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:createEpic"], workspaceId, body),
-  backlogUpdateEpic: (workspaceId, epicId, body) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:updateEpic"], workspaceId, epicId, body),
-  backlogCreateStory: (workspaceId, body) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:createStory"], workspaceId, body),
-  backlogUpdateStory: (workspaceId, storyId, body) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:updateStory"], workspaceId, storyId, body),
-  backlogGetTasks: (workspaceId, storyId) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:getTasks"], workspaceId, storyId),
-  backlogCreateTask: (workspaceId, storyId, body) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:createTask"], workspaceId, storyId, body),
-  backlogUpdateTask: (workspaceId, storyId, taskId, body) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:updateTask"], workspaceId, storyId, taskId, body),
-  backlogGetSprints: (workspaceId) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:getSprints"], workspaceId),
-  backlogCreateSprint: (workspaceId, body) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:createSprint"], workspaceId, body),
-  backlogUpdateSprint: (workspaceId, sprintId, body) => electron.ipcRenderer.invoke(IPC_CHANNELS["backlog:updateSprint"], workspaceId, sprintId, body),
   // Tickets
   getTickets: (wsId) => electron.ipcRenderer.invoke(IPC_CHANNELS["ticket:getAll"], wsId),
   saveTicket: (wsId, t) => electron.ipcRenderer.invoke(IPC_CHANNELS["ticket:save"], wsId, t),
@@ -222,7 +196,6 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
   // Agent runner
   agentRun: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["agent:run"], request),
   agentCancel: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["agent:cancel"], runId),
-  agentActionExecute: (workspaceId, block) => electron.ipcRenderer.invoke(IPC_CHANNELS["agent:action-execute"], workspaceId, block),
   onAgentStart: (cb) => {
     const listener = (_, payload) => cb(payload);
     electron.ipcRenderer.on(IPC_CHANNELS["agent:start"], listener);
@@ -305,9 +278,6 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
     electron.ipcRenderer.on(IPC_CHANNELS["jira:auth-error"], listener);
     return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["jira:auth-error"], listener);
   },
-  // Context sync
-  pushContext: (workspace, force) => electron.ipcRenderer.invoke(IPC_CHANNELS["context:push"], workspace, force),
-  pullContext: (workspace) => electron.ipcRenderer.invoke(IPC_CHANNELS["context:pull"], workspace),
   // Docs
   scanDocs: (workspace) => electron.ipcRenderer.invoke(IPC_CHANNELS["docs:scan"], workspace),
   readDoc: (absolutePath) => electron.ipcRenderer.invoke(IPC_CHANNELS["docs:read"], absolutePath),
@@ -319,11 +289,7 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
     electron.ipcRenderer.on(IPC_CHANNELS["docs:changed"], listener);
     return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["docs:changed"], listener);
   },
-  // Artifacts
-  artifactListVersions: (workspaceId, artifactPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:listVersions"], workspaceId, artifactPath),
-  artifactSaveVersion: (workspaceId, workspace, input) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:saveVersion"], workspaceId, workspace, input),
-  artifactListAll: (workspaceId) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:listAll"], workspaceId),
-  artifactPullAll: (workspaceId, workspace) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:pullAll"], workspaceId, workspace),
+  // Artifacts (local only)
   artifactListContextFiles: (workspace) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:listContextFiles"], workspace),
   artifactReadFile: (workspace, artifactPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:readFile"], workspace, artifactPath),
   artifactGetFilePath: (workspace, artifactPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:getFilePath"], workspace, artifactPath),
@@ -355,57 +321,5 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
     const listener = (_, payload) => cb(payload);
     electron.ipcRenderer.on(IPC_CHANNELS["onboarding:progress"], listener);
     return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["onboarding:progress"], listener);
-  },
-  // Updates
-  checkForUpdates: (force, channel) => electron.ipcRenderer.invoke(IPC_CHANNELS["updates:check"], force, channel),
-  applyUpdate: (files, bundleVersion) => electron.ipcRenderer.invoke(IPC_CHANNELS["updates:apply"], files, bundleVersion),
-  getVersionInfo: () => electron.ipcRenderer.invoke(IPC_CHANNELS["updates:getVersionInfo"]),
-  onUpdatesAvailable: (cb) => {
-    const listener = (_, result) => cb(result);
-    electron.ipcRenderer.on(IPC_CHANNELS["updates:available"], listener);
-    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["updates:available"], listener);
-  },
-  onUpdatesProgress: (cb) => {
-    const listener = (_, payload) => cb(payload);
-    electron.ipcRenderer.on(IPC_CHANNELS["updates:progress"], listener);
-    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["updates:progress"], listener);
-  },
-  // Feedback
-  sendSessionFeedback: (data) => electron.ipcRenderer.invoke(IPC_CHANNELS["feedback:sendSession"], data),
-  sendProductFeedback: (data) => electron.ipcRenderer.invoke(IPC_CHANNELS["feedback:sendProduct"], data),
-  // Auth
-  authGetState: () => electron.ipcRenderer.invoke(IPC_CHANNELS["auth:getState"]),
-  orgGetMine: () => electron.ipcRenderer.invoke(IPC_CHANNELS["org:getMine"]),
-  orgListMine: () => electron.ipcRenderer.invoke(IPC_CHANNELS["org:listMine"]),
-  orgCreate: (name, slug) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:create"], name, slug),
-  orgDelete: (orgId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:delete"], orgId),
-  orgListMembers: (orgId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:listMembers"], orgId),
-  orgAddMember: (orgId, email, role, inviterEmail) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:addMember"], orgId, email, role, inviterEmail),
-  orgLeave: (orgId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:leave"], orgId),
-  orgCancelInvitation: (orgId, invitationId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:cancelInvitation"], orgId, invitationId),
-  orgAcceptInvitations: (email) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:acceptInvitations"], email),
-  orgRemoveMember: (orgId, userId) => electron.ipcRenderer.invoke(IPC_CHANNELS["org:removeMember"], orgId, userId),
-  authSignIn: () => electron.ipcRenderer.invoke(IPC_CHANNELS["auth:signIn"]),
-  authSignOut: () => electron.ipcRenderer.invoke(IPC_CHANNELS["auth:signOut"]),
-  onAuthComplete: (cb) => {
-    const listener = (_, data) => cb(data);
-    electron.ipcRenderer.on(IPC_CHANNELS["auth:complete"], listener);
-    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["auth:complete"], listener);
-  },
-  onAuthError: (cb) => {
-    const listener = (_, data) => cb(data);
-    electron.ipcRenderer.on(IPC_CHANNELS["auth:error"], listener);
-    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["auth:error"], listener);
-  },
-  onAuthSignedOut: (cb) => {
-    const listener = (_, data) => cb(data);
-    electron.ipcRenderer.on(IPC_CHANNELS["auth:signedOut"], listener);
-    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["auth:signedOut"], listener);
-  },
-  // Artifact sync
-  onSyncEvent: (cb) => {
-    const listener = (_, event) => cb(event);
-    electron.ipcRenderer.on(IPC_CHANNELS["sync:event"], listener);
-    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["sync:event"], listener);
   }
 });

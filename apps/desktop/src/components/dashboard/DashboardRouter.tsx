@@ -7,15 +7,12 @@ import type {
   OnboardingChatLaunchRequest,
   StoredWorkspace,
 } from '@nakiros/shared';
-import type { WorkspaceSyncState } from '../../views/Dashboard';
 import GlobalSettings, { type GlobalSettingsSection } from '../GlobalSettings';
 import ProductView from '../../views/ProductView';
 import ProjectSettings from '../ProjectSettings';
 import WorkspaceOverview from '../WorkspaceOverview';
 import type { SidebarTab } from '../Sidebar';
 import ChatView from '../../views/ChatView';
-import BacklogView from '../../views/BacklogView';
-import DeliveryView from '../../views/DeliveryView';
 import type { ArtifactReviewMutation } from '../../hooks/useArtifactReview';
 
 interface DashboardRouterProps {
@@ -30,7 +27,6 @@ interface DashboardRouterProps {
   epics: LocalEpic[];
   repoNames: string[];
   serverStatus: 'starting' | 'running' | 'stopped';
-  workspaceSyncState: WorkspaceSyncState;
   overviewDocsCount: number;
   overviewConversationCount: number;
   lastConversationAt: string | null;
@@ -83,7 +79,6 @@ export function DashboardRouter({
   epics: _epics,
   repoNames: _repoNames,
   serverStatus,
-  workspaceSyncState,
   overviewDocsCount,
   overviewConversationCount,
   lastConversationAt,
@@ -119,8 +114,6 @@ export function DashboardRouter({
   const chatSelected = activeTab === 'chat';
   const overviewSelected = activeTab === 'overview';
   const productSelected = activeTab === 'product';
-  const deliverySelected = activeTab === 'delivery';
-  const backlogSelected = activeTab === 'backlog';
   const settingsSelected = activeTab === 'settings';
 
   return (
@@ -159,7 +152,6 @@ export function DashboardRouter({
           conversationCount={overviewConversationCount}
           lastConversationAt={lastConversationAt}
           serverStatus={serverStatus}
-          workspaceSyncState={workspaceSyncState}
           showSetupBanner={showSetupBanner}
           onGoProduct={() => onSetActiveTab('product')}
           onGoDelivery={() => onSetActiveTab('delivery')}
@@ -182,21 +174,6 @@ export function DashboardRouter({
         </div>
       )}
 
-      {!showGlobalSettings && deliverySelected && (
-        <div className="flex min-w-0 flex-1 overflow-hidden">
-          <DeliveryView workspace={workspace} onLaunchChat={onLaunchChatRequest ?? (() => {})} />
-        </div>
-      )}
-
-      {!showGlobalSettings && backlogSelected && (
-        <div className="flex min-w-0 flex-1 overflow-hidden">
-          <BacklogView
-            workspace={workspace}
-            onArtifactChangeProposal={(event) => onArtifactChangeProposal('backlog', event)}
-            lastArtifactReviewMutation={lastArtifactReviewMutation}
-          />
-        </div>
-      )}
 
       {!showGlobalSettings && settingsSelected && (
         <ProjectSettings

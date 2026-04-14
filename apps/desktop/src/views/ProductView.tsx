@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, Clock, FileText, FolderOpen, Layers, Sparkles, X } from 'lucide-react';
+import { ChevronDown, FileText, FolderOpen, Layers, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import type {
   ArtifactChangeProposal,
   OnboardingChatLaunchRequest,
   ProductArtifactType,
-  ProductArtifactVersion,
   StoredWorkspace,
 } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui/MarkdownViewer';
@@ -293,8 +292,6 @@ export default function ProductView({
   const [docContent, setDocContent] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [showChat, setShowChat] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [versions, setVersions] = useState<ProductArtifactVersion[]>([]);
   const [loadingContent, setLoadingContent] = useState(false);
   const [absoluteFilePath, setAbsoluteFilePath] = useState<string>('');
   const [activeFeatureSlug, setActiveFeatureSlug] = useState<string | null>(null);
@@ -353,7 +350,6 @@ export default function ProductView({
     if (!selection) {
       setDocContent(null);
       setAbsoluteFilePath('');
-      setVersions([]);
       setLoadingContent(false);
       return;
     }
@@ -380,14 +376,6 @@ export default function ProductView({
       })
       .finally(() => {
         if (!cancelled) setLoadingContent(false);
-      });
-
-    void window.nakiros.artifactListVersions(workspace.id, selection.path)
-      .then((nextVersions) => {
-        if (!cancelled) setVersions(nextVersions);
-      })
-      .catch(() => {
-        if (!cancelled) setVersions([]);
       });
 
     return () => {
@@ -428,32 +416,23 @@ export default function ProductView({
     saveTimeoutRef.current = setTimeout(() => {
       setSaveStatus('saving');
 
-      void window.nakiros.artifactSaveVersion(workspace.id, workspace, {
-        artifactPath: currentSelection.path,
-        artifactType: currentSelection.artifactType,
-        content: markdown,
-      }).then(() => {
-        setSaveStatus('saved');
-        void loadArtifactPaths(workspace)
-          .then((paths) => setArtifactPaths(paths))
-          .catch(() => setArtifactPaths([]));
-        void window.nakiros.artifactListVersions(workspace.id, currentSelection.path)
-          .then(setVersions)
-          .catch(() => {});
-      });
+      void window.nakiros.artifactGetFilePath(workspace, currentSelection.path)
+        .then((filePath) => window.nakiros.writeDoc(filePath, markdown))
+        .then(() => {
+          setSaveStatus('saved');
+          void loadArtifactPaths(workspace)
+            .then((paths) => setArtifactPaths(paths))
+            .catch(() => setArtifactPaths([]));
+        })
+        .catch(() => {
+          setSaveStatus('saved');
+        });
     }, 1200);
-  }
-
-  function handleRestoreVersion(version: ProductArtifactVersion) {
-    setDocContent(version.content);
-    setSaveStatus('unsaved');
-    setShowHistory(false);
   }
 
   function selectFeature(feature: FeatureSummary) {
     setActiveFeatureSlug(feature.slug);
     setActiveFeatureTab('spec');
-    setShowHistory(false);
     setShowChat(false);
     setSelection(feature.primary);
   }
@@ -461,7 +440,6 @@ export default function ProductView({
   function switchFeatureTab(tab: 'spec' | 'ux' | 'stories') {
     if (!activeFeatureSummary) return;
     setActiveFeatureTab(tab);
-    setShowHistory(false);
     if (tab === 'spec') {
       setSelection(activeFeatureSummary.primary);
     } else if (tab === 'ux') {
@@ -505,7 +483,6 @@ export default function ProductView({
         onClick={() => {
           setActiveFeatureSlug(null);
           setSelection(item);
-          setShowHistory(false);
         }}
         className={clsx(
           'flex w-full items-center gap-2 border-l-2 py-2 pr-3 text-left transition-colors',
@@ -539,7 +516,6 @@ export default function ProductView({
         onClick={() => {
           setActiveFeatureSlug(null);
           setSelection(item);
-          setShowHistory(false);
         }}
         className={clsx(
           'flex w-full items-center gap-2 border-l-2 py-2 pr-3 text-left transition-colors',
@@ -590,7 +566,6 @@ export default function ProductView({
     if (artifactPaths.includes(resolvedPath)) {
       setActiveFeatureSlug(null);
       setSelection(selectionFromPath(resolvedPath, t));
-      setShowHistory(false);
     }
   }
 
@@ -824,21 +799,6 @@ export default function ProductView({
                             {saveStatusLabel}
                           </span>
                         </div>
-                        {versions.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setShowHistory((v) => !v)}
-                            className={clsx(
-                              'flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors',
-                              showHistory
-                                ? 'border-[var(--primary)] bg-[rgba(20,184,166,0.08)] text-[var(--primary)]'
-                                : 'border-[var(--line)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text)]',
-                            )}
-                          >
-                            <Clock size={11} />
-                            v{versions[versions.length - 1]?.version ?? 1}
-                          </button>
-                        )}
                       </div>
                       {loadingContent ? (
                         <div className="flex flex-1 items-center justify-center bg-[var(--bg)]">
@@ -896,38 +856,6 @@ export default function ProductView({
                 )}
               </div>
 
-              {showHistory && versions.length > 0 && (
-                <div className="flex w-64 shrink-0 flex-col overflow-hidden border-l border-[var(--line)] bg-[var(--bg-soft)]">
-                  <div className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-3 py-2.5">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]">
-                      {t('productHistoryTitle')}
-                    </span>
-                    <button type="button" onClick={() => setShowHistory(false)} className="text-[var(--text-muted)] hover:text-[var(--text)]">
-                      <X size={13} />
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto py-1">
-                    {[...versions].reverse().map((version) => (
-                      <button
-                        key={version.id}
-                        type="button"
-                        onClick={() => handleRestoreVersion(version)}
-                        className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-[var(--bg-muted)]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-semibold text-[var(--text)]">v{version.version}</span>
-                          <span className="text-[10px] text-[var(--text-muted)]">
-                            {new Date(version.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                        {version.author && (
-                          <span className="text-[10px] text-[var(--text-muted)]">{version.author}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -957,21 +885,6 @@ export default function ProductView({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {versions.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowHistory((value) => !value)}
-                  className={clsx(
-                    'flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors',
-                    showHistory
-                      ? 'border-[var(--primary)] bg-[rgba(20,184,166,0.08)] text-[var(--primary)]'
-                      : 'border-[var(--line)] bg-transparent text-[var(--text-muted)] hover:text-[var(--text)]',
-                  )}
-                >
-                  <Clock size={11} />
-                  v{versions[versions.length - 1]?.version ?? 1}
-                </button>
-              )}
               <Button size="sm" variant="default" onClick={() => setShowChat((value) => !value)}>
                 <Sparkles data-icon="inline-start" size={12} />
                 {showChat ? t('productAgentClose') : t('productAgentOpen')}
@@ -1039,38 +952,6 @@ export default function ProductView({
               )}
             </div>
 
-            {showHistory && versions.length > 0 && (
-              <div className="flex w-64 shrink-0 flex-col overflow-hidden border-l border-[var(--line)] bg-[var(--bg-soft)]">
-                <div className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-3 py-2.5">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]">
-                    {t('productHistoryTitle')}
-                  </span>
-                  <button type="button" onClick={() => setShowHistory(false)} className="text-[var(--text-muted)] hover:text-[var(--text)]">
-                    <X size={13} />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto py-1">
-                  {[...versions].reverse().map((version) => (
-                    <button
-                      key={version.id}
-                      type="button"
-                      onClick={() => handleRestoreVersion(version)}
-                      className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-[var(--bg-muted)]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-[var(--text)]">v{version.version}</span>
-                        <span className="text-[10px] text-[var(--text-muted)]">
-                          {new Date(version.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      {version.author && (
-                        <span className="text-[10px] text-[var(--text-muted)]">{version.author}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

@@ -7,10 +7,8 @@ import type {
   LanguagePreference,
 } from '@nakiros/shared';
 import { getAgentDefinitionLabel, type AgentDefinition } from '../../constants/agents';
-import { formatLastCheck } from '../../utils/dates';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '../ui';
 
-export { GlobalSettingsProviderCredentialsSection } from './ProviderCredentialsSettings';
 export type GlobalSettingsStatus = 'idle' | 'saving' | 'saved' | 'error';
 export type GlobalSettingsUpdateStatus = 'idle' | 'checking' | 'updating' | 'success' | 'error';
 export type AgentCliStatus = {
@@ -42,13 +40,7 @@ interface GlobalSettingsAgentAISectionProps {
 }
 
 interface GlobalSettingsAgentNakirosSectionProps {
-  versionInfo: BundleVersionInfo | null;
   agentDefinitions: AgentDefinition[];
-  updateResult: UpdateCheckResult | null;
-  updateStatus: GlobalSettingsUpdateStatus;
-  updateMsg: string;
-  onApplyUpdate(): Promise<void>;
-  onCheckUpdates(): Promise<void>;
 }
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
@@ -95,24 +87,6 @@ export function GlobalSettingsGeneralSection({
     Math.max(0, Math.round(preferences.desktopNotificationMinDurationSeconds ?? 60)),
   );
   const [desktopThresholdInput, setDesktopThresholdInput] = useState(String(desktopNotificationThreshold));
-  const [authState, setAuthState] = useState<{ isAuthenticated: boolean; email?: string; userId?: string } | null>(null);
-  const [authLoading, setAuthLoading] = useState(false);
-
-  useEffect(() => {
-    void window.nakiros.authGetState().then((state) => {
-      setAuthState({ isAuthenticated: state.isAuthenticated, email: state.email, userId: state.userId });
-    });
-    const unsubComplete = window.nakiros.onAuthComplete(() => {
-      void window.nakiros.authGetState().then((nextState) => {
-        setAuthState({ isAuthenticated: nextState.isAuthenticated, email: nextState.email, userId: nextState.userId });
-      });
-      setAuthLoading(false);
-    });
-    const unsubError = window.nakiros.onAuthError(() => {
-      setAuthLoading(false);
-    });
-    return () => { unsubComplete(); unsubError(); };
-  }, []);
 
   useEffect(() => {
     setDesktopThresholdInput(String(desktopNotificationThreshold));
@@ -138,53 +112,6 @@ export function GlobalSettingsGeneralSection({
           </p>
         )}
       </div>
-
-      {/* Account */}
-      <Card className={settingsCardClass}>
-        <CardHeader className={settingsCardHeaderClass}>
-          <CardTitle className={settingsCardTitleClass}>
-            {t('accountTitle')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className={settingsCardContentClass}>
-          {authState?.isAuthenticated ? (
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-foreground">{authState.email ?? t('accountConnected')}</span>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={authLoading}
-                onClick={() => {
-                  setAuthLoading(true);
-                  void window.nakiros.authSignOut().then(() => {
-                    setAuthState({ isAuthenticated: false });
-                    setAuthLoading(false);
-                  });
-                }}
-              >
-                {t('accountSignOut')}
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground">{t('accountNotConnected')}</span>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                disabled={authLoading}
-                onClick={() => {
-                  setAuthLoading(true);
-                  void window.nakiros.authSignIn();
-                }}
-              >
-                {authLoading ? t('accountConnecting') : t('accountSignIn')}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Language */}
       <Card className={settingsCardClass}>
@@ -374,13 +301,7 @@ export function GlobalSettingsAgentAISection({
 // ─── Agent Nakiros section ────────────────────────────────────────────────────
 
 export function GlobalSettingsAgentNakirosSection({
-  versionInfo,
   agentDefinitions,
-  updateResult,
-  updateStatus,
-  updateMsg,
-  onApplyUpdate,
-  onCheckUpdates,
 }: GlobalSettingsAgentNakirosSectionProps) {
   const { t } = useTranslation('settings');
   const { t: tAgent } = useTranslation('agent');
@@ -391,76 +312,6 @@ export function GlobalSettingsAgentNakirosSection({
         <h2 className="mb-1 mt-0 text-xl font-bold text-foreground">{t('navAgentNakiros')}</h2>
         <p className="m-0 text-sm text-muted-foreground">{t('agentNakirosSubtitle')}</p>
       </div>
-
-      <Card className={settingsCardClass}>
-        <CardHeader className={settingsCardHeaderClass}>
-          <CardTitle className={settingsCardTitleClass}>
-            {t('agentsWorkflowsTitle')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className={clsx(settingsCardContentClass, 'flex flex-col gap-3')}>
-          {versionInfo && (
-            <p className="m-0 text-xs text-muted-foreground">
-              {t('installedVersion')}{' '}
-              <strong className="text-foreground">{versionInfo.bundle_version}</strong>
-              {' · '}
-              {t('lastCheck')} {formatLastCheck(versionInfo.last_check, t)}
-            </p>
-          )}
-
-          {updateResult?.compatible === false && (
-            <div className="rounded-[14px] border border-[var(--line)] bg-[var(--bg-card)] px-4 py-3.5">
-              <p className="mb-1 mt-0 text-sm font-bold text-foreground">{t('incompatibleUpdate')}</p>
-              <p className="m-0 text-xs text-muted-foreground">
-                {updateResult.incompatibleMessage ??
-                  t('incompatibleUpdateDesc', { version: updateResult.latestVersion })}
-              </p>
-            </div>
-          )}
-
-          {updateResult?.hasUpdate && (
-            <div className="rounded-[14px] border border-[var(--line-strong)] bg-[var(--bg-card)] px-4 py-3.5">
-              <p className="mb-1 mt-0 text-sm font-bold text-foreground">
-                {t('updateVersionAvailable', { version: updateResult.latestVersion })}
-              </p>
-              {updateResult.changelog && (
-                <p className="m-0 text-xs text-muted-foreground">{updateResult.changelog}</p>
-              )}
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void onApplyUpdate()}
-                disabled={updateStatus === 'updating'}
-                className="mt-2.5"
-              >
-                {updateStatus === 'updating' ? t('updating') : t('updateNow')}
-              </Button>
-            </div>
-          )}
-
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => void onCheckUpdates()}
-            disabled={updateStatus === 'checking' || updateStatus === 'updating'}
-            className="self-start"
-          >
-            {updateStatus === 'checking' ? t('checking') : t('checkForUpdates')}
-          </Button>
-
-          {updateMsg && (
-            <p
-              className={clsx(
-                'm-0 text-xs',
-                updateStatus === 'error' ? 'text-destructive' : 'text-muted-foreground',
-              )}
-            >
-              {updateMsg}
-            </p>
-          )}
-        </CardContent>
-      </Card>
 
       <Card className={settingsCardClass}>
         <CardHeader className={settingsCardHeaderClass}>

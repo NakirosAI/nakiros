@@ -66,7 +66,6 @@ export default function ContextPanel({
   const [scanElapsedMs, setScanElapsedMs] = useState(0);
   const [lastScanAt, setLastScanAt] = useState<number | null>(null);
   const [generatingContext, setGeneratingContext] = useState(false);
-  const [contextConflict, setContextConflict] = useState<ContextConflict | null>(null);
   const [localContextHasGlobal, setLocalContextHasGlobal] = useState(
     Boolean(workspace.context?.global),
   );
@@ -157,9 +156,6 @@ export default function ContextPanel({
         setGeneratingContext(false);
         setLocalContextHasGlobal(true);
         void window.nakiros.syncWorkspace(workspace);
-        void window.nakiros.pushContext(workspace).then((result) => {
-          if (result.status === 'conflict') setContextConflict(result.conflict ?? null);
-        });
       }
       // Re-scan after any agent run — agents may write new files to _nakiros/
       scan();
@@ -276,7 +272,6 @@ export default function ContextPanel({
         void window.nakiros.writeDoc(doc.absolutePath, markdown)
           .then(() => {
             setSaveStatus('saved');
-            void window.nakiros.pushContext(workspace).catch(() => {});
           })
           .finally(() => {
             // Keep the guard active long enough for chokidar to fire and be ignored
@@ -426,35 +421,6 @@ export default function ContextPanel({
 
       {/* ── Left: doc tree ── */}
       <div className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-[var(--line)]">
-        {contextConflict && (
-          <div className="shrink-0 border-b border-[var(--line)] bg-[var(--bg-soft)] px-[14px] py-2">
-            <p className="m-0 text-[11px] text-[var(--text-muted)]">
-              {t('contextConflict', {
-                updatedBy: contextConflict.updatedBy ?? t('contextConflictUnknownUser'),
-                repo: contextConflict.repoName ?? t('contextConflictGlobal'),
-              })}
-            </p>
-            <div className="mt-1.5 flex gap-2">
-              <button
-                className="rounded border border-[var(--line)] bg-[var(--bg)] px-2 py-0.5 text-[10px] text-[var(--text)]"
-                onClick={() => {
-                  void window.nakiros.pushContext(workspace, true).then((r) => {
-                    if (r.status !== 'conflict') setContextConflict(null);
-                  });
-                }}
-              >
-                {t('contextConflictOverwrite')}
-              </button>
-              <button
-                className="rounded border border-[var(--line)] bg-[var(--bg)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]"
-                onClick={() => setContextConflict(null)}
-              >
-                {t('contextConflictDismiss')}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Generate Context */}
         <div className="shrink-0 border-b border-[var(--line)] px-[14px] py-[10px]">
           <div className="mb-1.5 flex items-center justify-between">

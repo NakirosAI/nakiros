@@ -3,7 +3,6 @@ import clsx from 'clsx';
 import type { LocalTicket, StoredWorkspace } from '@nakiros/shared';
 import { Button, Card } from './ui';
 import GettingStartedBanner from './GettingStartedBanner';
-import type { WorkspaceSyncState } from '../views/Dashboard';
 
 interface Props {
   workspace: StoredWorkspace;
@@ -12,7 +11,6 @@ interface Props {
   conversationCount: number;
   lastConversationAt: string | null;
   serverStatus: 'starting' | 'running' | 'stopped';
-  workspaceSyncState: WorkspaceSyncState;
   showSetupBanner?: boolean;
   onGoProduct(): void;
   onGoDelivery(): void;
@@ -49,7 +47,6 @@ export default function WorkspaceOverview({
   conversationCount,
   lastConversationAt,
   serverStatus,
-  workspaceSyncState,
   showSetupBanner = false,
   onGoProduct,
   onGoDelivery,
@@ -73,20 +70,6 @@ export default function WorkspaceOverview({
       ? t('mcpStarting')
       : t('mcpStopped');
 
-  const syncLabel = workspaceSyncState.syncing
-    ? t('syncSyncing')
-    : workspaceSyncState.error
-      ? t('syncError')
-      : workspaceSyncState.lastSyncAt
-        ? t('syncSynced')
-        : t('syncNever');
-  const syncDotClass = workspaceSyncState.syncing
-    ? 'bg-[var(--warning)] animate-pulse'
-    : workspaceSyncState.error
-      ? 'bg-[var(--danger)]'
-      : workspaceSyncState.lastSyncAt
-        ? 'bg-[var(--success)]'
-        : 'bg-[var(--text-muted)]';
 
   const actions: OverviewAction[] = [];
   if (tickets.length === 0 && docsCount === 0) {
@@ -123,13 +106,6 @@ export default function WorkspaceOverview({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <div
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs text-[var(--text-muted)]"
-                title={workspaceSyncState.error ?? (workspaceSyncState.lastSyncAt ? workspaceSyncState.lastSyncAt.toLocaleTimeString() : undefined)}
-              >
-                <span className={clsx('inline-block h-2 w-2 rounded-full', syncDotClass)} />
-                {syncLabel}
-              </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs text-[var(--text-muted)]">
                 <span className={clsx('inline-block h-2 w-2 rounded-full', STATUS_DOT_CLASS[serverStatus])} />
                 {serverLabel}

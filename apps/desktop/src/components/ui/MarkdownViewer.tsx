@@ -146,12 +146,38 @@ const components: Components = {
 interface MarkdownViewerProps {
   content?: string;
   className?: string;
+  onInternalLinkClick?: (href: string) => void;
 }
 
-export function MarkdownViewer({ content = '', className }: MarkdownViewerProps) {
+export function MarkdownViewer({ content = '', className, onInternalLinkClick }: MarkdownViewerProps) {
+  const resolvedComponents: Components = {
+    ...components,
+    a({ children, href, ...props }) {
+      const isExternal = href?.startsWith('http://') || href?.startsWith('https://');
+      return (
+        <a
+          {...props}
+          href={href}
+          className="text-blue-400 hover:text-blue-300 underline underline-offset-2"
+          onClick={(e) => {
+            e.preventDefault();
+            if (!href) return;
+            if (isExternal) {
+              void window.nakiros.openPath(href);
+            } else if (onInternalLinkClick) {
+              onInternalLinkClick(href);
+            }
+          }}
+        >
+          {children}
+        </a>
+      );
+    },
+  };
+
   return (
     <div className={clsx('overflow-y-auto px-4 py-3', className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={resolvedComponents}>
         {content}
       </ReactMarkdown>
     </div>

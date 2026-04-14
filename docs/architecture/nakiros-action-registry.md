@@ -1,5 +1,7 @@
 # Architecture — Registre des Nakiros Actions
 
+> **Statut : En cours.** Le registre est défini. Le naming canonique (ex. `pm.create_ticket`) n'est pas encore totalement appliqué dans le transport — `packages/worker/src/agent-actions.ts` utilise un naming plus plat.
+
 > Document de référence pour les `nakiros-actions`.
 > Il définit les catégories d'actions, leur sémantique métier, leurs noms canoniques et leur forme de transport actuelle.
 

@@ -19,7 +19,6 @@ import {
 } from './jira-oauth.js';
 import { countIssues, fetchProjectBoardType, fetchProjects } from './jira-connector.js';
 import { selectAccessibleResource, isSecureStorageBackendSupported } from './jira-auth-utils.js';
-import { saveCanonicalWorkspace } from './workspace-remote.js';
 import { getAll, save } from './workspace.js';
 import { syncJiraTickets } from './jira-sync.js';
 
@@ -88,13 +87,6 @@ function findWorkspace(wsId: string): StoredWorkspace | undefined {
 }
 
 async function persistWorkspaceMetadata(workspace: StoredWorkspace): Promise<void> {
-  try {
-    await saveCanonicalWorkspace(workspace);
-    return;
-  } catch (error) {
-    console.warn('[jira-auth] Falling back to local workspace cache:', error);
-  }
-
   save(workspace);
 }
 

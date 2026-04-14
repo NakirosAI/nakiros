@@ -186,11 +186,24 @@ export default function PreviewReviewPanel({ previewRoot, workspaceSlug, files, 
         </div>
 
         {/* Content viewer */}
-        <div className="min-w-0 flex-1 overflow-y-auto p-4">
+        <div className="min-w-0 flex-1 overflow-hidden">
           {content !== null ? (
-            <MarkdownViewer content={content} />
+            selectedFile?.endsWith('.html') ? (
+              <iframe
+                srcDoc={content}
+                sandbox="allow-same-origin"
+                className="h-full w-full border-0"
+                title="HTML preview"
+              />
+            ) : (
+              <div className="h-full overflow-y-auto p-4">
+                <MarkdownViewer content={content} />
+              </div>
+            )
           ) : (
-            <p className="text-[12px] text-[var(--text-muted)]">Sélectionnez un fichier</p>
+            <div className="p-4">
+              <p className="text-[12px] text-[var(--text-muted)]">Sélectionnez un fichier</p>
+            </div>
           )}
         </div>
       </div>

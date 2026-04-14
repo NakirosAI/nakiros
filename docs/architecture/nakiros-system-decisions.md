@@ -1,286 +1,147 @@
-# Nakiros — Décisions Système & Architecture
+# Nakiros — Décisions Système
 
-> Document issu de la session de design du 2026-03-19.
-> Source de vérité pour les décisions structurantes sur Nakiros Desktop, l'orchestrateur, le MCP et la stratégie de contexte.
-
----
-
-## 1. Vision produit
-
-**Nakiros = le Memory Bank d'équipe pour les agents IA.**
-
-Le contexte est la pierre angulaire d'un projet développé correctement par l'IA. Un contexte bien structuré produit de meilleurs agents, qui produisent un meilleur code.
-
-> *"Plus tu utilises Nakiros, plus tes agents deviennent performants sur ton projet spécifique."*
-
-### Différenciateurs vs concurrents
-
-| Produit | Focus | Limite |
-|---|---|---|
-| Zencoder / Copilot | Agent qui code | Contexte implicite, jetable, individuel |
-| BMAD | Framework méthodologie | Local, complexe, pas SaaS, pas équipe |
-| Kiro | IDE AWS-centric | Individuel, pas de gestion de contexte équipe |
-| **Nakiros** | **Contexte = produit principal** | — |
-
-Nakiros couvre le cycle complet : Produit → Contexte → Dev → Delivery. Les agents (PM, Architect, Dev, QA) consomment et enrichissent le même contexte partagé.
+> Source de vérité pour les décisions structurantes.
+> Dernière mise à jour : 2026-04-09
 
 ---
 
-## 2. Nakiros Desktop — Périmètre
+## 1. Vision
 
-### Ce que Desktop fait
+**Nakiros = layer de contexte partagé pour les organisations produit.**
 
-- **Éditeur de contexte structuré** par sections (workspace, repo, domaine fonctionnel)
-- **Générateur de contexte assisté** : lance des agents de discovery qui produisent les markdowns
-- **Synchronisation SaaS** : push/pull des markdowns vers le backend Cloudflare
-- **Gestion du workspace** : configuration des repos, PM tool, membres, rôles
-- **Interface PM** : backlog, tickets, epics, sprints (synced Jira/GitHub/Linear)
-- **Indicateurs de fraîcheur** : sections non mises à jour depuis X jours
-- **Validation de contexte** : quand un agent propose une mise à jour, l'humain valide en 1 clic
+Nakiros n'est pas un outil PM, pas un IDE, pas un outil de documentation. C'est la couche qui connecte tous ces outils via un contexte commun et des agents spécialisés par rôle.
 
-### Ce que Desktop ne fait PAS
-
-- ❌ Lancer des agents en production (c'est le rôle de l'orchestrateur CLI)
-- ❌ Parser des nakiros-action blocks
-- ❌ Être obligatoire pour utiliser les agents au quotidien
-
-**Rationale** : Séparer Desktop de l'orchestrateur permet à n'importe quel client (Claude CLI, Codex, extensions VS Code) de bénéficier du contexte sans dépendre de l'application Electron.
+**Layer B** — Nakiros se pose au-dessus de tous les providers IA (Claude, Codex, Gemini, Cursor). Il ne remplace pas ces outils, il les coordonne.
 
 ---
 
-## 3. L'Orchestrateur — Process séparé
+## 2. Surfaces
 
-### Principe
+### Desktop App
+Hub organisationnel pour **tous les rôles**. C'est la même app pour tout le monde — le rôle change le contenu, pas la navigation.
 
-L'orchestrateur est un **CLI indépendant** (`nakiros run` ou `nakiros attach`), pas un module embarqué dans le Desktop.
+4 sections + Settings :
+- **Home** — état du projet, activité, contributions, fraîcheur
+- **Context** — arborescence documentaire, écriture selon scope, protection de fichiers, review
+- **Chat IA** — conversations privées avec agents, diffs inline, @ # /
+- **Agents** — éditeur visuel (workflow nodes/edges), MCPs, instructions
+- **Settings** — profil, providers, workspace, admin (rôles/membres)
 
-```
-nakiros run --agent dev "implémente le ticket AUTH-42"
-```
+**Workspace switcher** : dropdown depuis le logo sidebar.
 
-### Responsabilités
+### VS Code Extension
+Surface dédiée aux devs. Même contexte partagé, mêmes agents, dans l'éditeur.
 
-1. **Pré-chargement du contexte** : lit `~/.nakiros/{wsId}/workspace.yaml` → récupère les sections pertinentes depuis le cache local (synced depuis SaaS) → construit le system prompt
-2. **Lancement de l'agent** : injecte le contexte + passe les `--add-dir` des repos locaux
-3. **Parsing des nakiros-action blocks** : intercepte les outputs, exécute les actions
-4. **Post-session** : propose les mises à jour de contexte générées par l'agent
-
-### Ce que l'orchestrateur NE fait PAS
-
-- ❌ Il ne tourne pas dans le Desktop Electron
-- ❌ Il n'est pas nécessaire pour les extensions VS Code interactives
-
-### Compatibilité clients
-
-| Mode | Orchestrateur | nakiros-actions | Context injection |
-|---|---|---|---|
-| `nakiros run` (API directe) | ✅ | ✅ | ✅ |
-| Claude CLI non-interactif (`claude -p`) | ✅ | ✅ | ✅ |
-| Claude Code extension VS Code | ❌ | ❌ | ✅ via CLAUDE.md |
-| Codex CLI interactif | ❌ | ❌ | ✅ via fichiers locaux |
+### Web App (temps 2)
+Back-office organisationnel : créer l'org, gérer les membres, configurer les rôles, gérer les abonnements.
 
 ---
 
-## 4. Stratégie de contexte
+## 3. Gouvernance
 
-### Principe : injection pré-session, pas de RAG pour v1
+### Read : universel
+Tout le monde lit tout le contexte. C'est une feature.
 
-Le contexte est injecté **avant** le lancement de l'agent, pas demandé dynamiquement pendant la session.
+### Write : libre dans son scope
+L'écriture est activée par rôle. Le scope réel se gère fichier par fichier et dossier par dossier dans Context — pas dans Settings.
 
-**Pourquoi pas de RAG en v1 :**
-- Les workspaces v1 ont des contextes de 5-20KB au total
-- Le overhead infrastructure (Vectorize, embedding workers) n'est pas justifié
-- L'injection de fichiers markdown ciblés suffit largement
-- Le RAG devient pertinent quand le contexte dépasse X tokens en moyenne → backlog v2
+### Pas de structure imposée
+Nakiros ne force pas de structure de dossiers. Chaque workspace s'organise librement. Les exemples par défaut sont des suggestions.
 
-### Stockage dual
+### Protection de fichiers et dossiers
+Par défaut, l'écriture est directe. L'admin ou le owner peut protéger un fichier/dossier en un clic dans la toolbar de Context :
+- Fichier protégé → toute modification passe en review
+- Un reviewer est assigné
+- Le geste est contextuel (dans Context, pas dans Settings)
+- Même logique que les branch protection rules GitHub
 
-| Couche | Contenu | Emplacement |
-|---|---|---|
-| **SaaS (Cloudflare D1)** | Markdowns de contexte, membership, PM data | `api.nakiros.com` |
-| **Local cache** | Copie des markdowns synced | `~/.nakiros/{wsId}/` |
-| **Repo pointer** | Lightweight link vers le workspace | `{repo}/_nakiros/workspace.yaml` |
+### Scope = agents aussi
+**L'agent respecte le même scope que l'humain qui l'a lancé.** L'agent PM ne peut pas écrire dans architecture/ même si l'humain le lui demande. Les guardrails sont structurels, pas des instructions.
 
-### Paths locaux — jamais dans le SaaS
+### Rôles
+Rôles par défaut livrés avec Nakiros (tous modifiables, nouveaux créables). Un rôle définit :
+- Quels agents sont disponibles
+- Quels MCPs sont disponibles
+- L'écriture est activée (scope géré dans Context)
 
-Le SaaS ne connaît que les **noms symboliques** des repos (`frontend`, `backend`).
-Les chemins absolus (`/Users/thomas/projects/frontend`) vivent uniquement dans `workspace.yaml` local, propres à chaque machine.
-
-```yaml
-# ~/.nakiros/{wsId}/workspace.yaml  (jamais commité)
-workspace:
-  name: MonProjet
-  repos:
-    - name: frontend
-      localPath: /Users/thomas/projects/frontend
-    - name: backend
-      localPath: /Users/thomas/projects/backend
-```
-
-### Context injection pour extensions VS Code
-
-Pour Claude Code extension et Codex en mode interactif :
-
-```markdown
-<!-- _nakiros/CLAUDE.md — généré par l'orchestrateur au workspace:sync -->
-@_nakiros/context/workspace.md
-@_nakiros/context/auth.md
-@_nakiros/context/conventions.md
-```
-
-L'agent lit le contexte sans tool call, sans dépendance réseau.
-
-### Structure des markdowns de contexte
-
-**Niveau workspace :**
-- `product.md` — vision produit, personas, glossaire
-- `global.md` — décisions cross-cutting, contraintes, log de décisions
-- `inter-repo.md` — contrats entre repos, points d'intégration, API boundaries
-
-**Niveau repo :**
-- `architecture.md` — design structurel, patterns, entry points
-- `stack.md` — tech stack, frameworks, versions, dépendances
-- `conventions.md` — naming, style, structure de dossiers, testing strategy
-- `api.md` — contrats exposés (pour intégration multi-repo)
-- `{domain}.md` — sections par domaine fonctionnel (auth, payment, notifications...)
-
-**Chunking par domaine fonctionnel** (pas par taille fixe) : un agent qui travaille sur l'auth ne charge que `auth.md`, pas tout `architecture.md`.
+### Contribution workflow
+Quand un humain ou agent modifie hors scope ou sur un fichier protégé :
+1. Modification crée une **contribution** (comme une PR)
+2. Le fichier apparaît avec badge "À reviewer" dans Context
+3. Le reviewer valide ou refuse directement dans Context
+4. Les contributions vivent dans Context, pas dans Chat IA
 
 ---
 
-## 5. MCP — 2 tools uniquement
+## 4. Conversations
 
-### Rationale
+### Privées
+Les conversations Chat IA sont privées. Personne ne voit les échanges avec ton agent.
 
-Chaque tool MCP charge son schema complet dans le contexte de l'agent. Avec 15 tools, on perd 2-3k tokens en définitions. La solution : **2 tools génériques** qui couvrent tous les cas.
+### Outputs partagés
+Quand tu valides un diff proposé par ton agent → ça s'écrit dans Context → visible par tous.
 
-### Design
+**Le lien entre les rôles c'est le Context, pas le Chat.**
+
+---
+
+## 5. Contexte partagé
+
+### Injection
+Injecté pré-session, pas de RAG. L'agent reçoit les sections pertinentes avant de démarrer.
+
+### Chunking par rôle
+Un dev qui implémente une feature charge la spec + les contraintes archi — pas tout le contexte. Signal/bruit ciblé.
+
+---
+
+## 6. MCP — 2 tools uniquement
 
 ```typescript
-// Découverte — "qu'est-ce que je dois envoyer ?"
-nakiros_api(intent: string): {
-  operationId: string,   // identifiant sémantique de l'opération
-  schema: object,        // champs attendus
-  example: object        // exemple prêt à adapter
-}
-
-// Exécution — "envoie ça"
-nakiros_execute(operationId: string, payload: object): any
+nakiros_api(intent: string)              // découverte
+nakiros_execute(operationId, payload)    // exécution
 ```
 
-### Flow agent
-
-```
-Agent : "je veux créer un ticket"
-
-1. nakiros_api("create ticket")
-   → { operationId: "create_ticket",
-       schema: { title: string, description: string, epicId?: string },
-       example: { title: "Auth login page", description: "...", epicId: "EP-12" } }
-
-2. Agent adapte l'exemple avec ses valeurs
-
-3. nakiros_execute("create_ticket", { title: "...", description: "...", epicId: "EP-12" })
-   → { id: "TK-47", url: "..." }
-```
-
-### Avantages
-
-- **Auth invisible** : `nakiros_execute` gère le token Clerk, l'agent ne le voit jamais
-- **Endpoints invisibles** : l'agent travaille avec des `operationId` sémantiques
-- **Extensible sans nouveau tool** : ajouter une opération = enregistrer un nouvel `operationId` côté serveur
-- **2 schemas seulement** dans le contexte, quel que soit le nombre d'opérations
-
-### Opérations couvertes
-
-```
-create_ticket / update_ticket / add_comment / update_ticket_status
-create_epic / create_story / create_task
-workspace_context_set / repo_context_set
-workspace_context_get / repo_context_get
-list_tickets / get_sprint
-```
+Extensible sans nouveau tool : ajouter une opération = enregistrer un `operationId` côté serveur.
 
 ---
 
-## 6. Les agents et leur relation au contexte
+## 7. Human in the loop — toujours
 
-### Principe fondamental
+L'IA fait le travail, l'humain valide. Nakiros couvre Discovery, Delivery et Support — l'agent analyse, rédige, propose, enrichit — mais rien ne s'écrit dans le contexte sans validation humaine.
 
-**Chaque agent laisse le contexte meilleur qu'il ne l'a trouvé.**
+- L'agent produit → l'humain valide (diff, contribution, action)
+- Rien ne s'écrit automatiquement dans le contexte
+- Pas d'agents qui tournent en arrière-plan
+- L'agent fait 95% du travail. L'humain fait le dernier clic.
 
-Les agents ne consomment pas seulement le contexte — ils le font vivre. Après chaque session, l'agent peut proposer des mises à jour ; l'humain valide en 1 clic dans le Desktop.
+### Mode auto progressif (V1b)
+L'automatisation se déverrouille action par action dans le workflow editor (switch "Diff + validation" / "Écrire directement" sur chaque nœud). Pas un mode global — chaque action est indépendante. L'équipe va à son rythme.
 
-### Carte agents / contexte
-
-```
-[PM]          lit product, global        → enrichit product (specs, personas, ACs)
-[Architect]   lit architecture, stack    → enrichit architecture, api, inter-repo
-[Dev]         lit tout                   → propose màj conventions, stack, domaines
-[QA]          lit specs + tests          → enrichit context tests, edge cases
-[SM]          lit statuts + dépendances  → enrichit global (décisions, gouvernance)
-```
-
-### Flux d'une feature
-
-```
-1. PM        → rédige specs → enrichit product context
-2. Architect → design       → enrichit architecture + api
-3. Dev       → implémente   → propose màj conventions + domaines
-4. QA        → valide       → enrichit context edge cases
-5. SM        → close        → enrichit global (décisions de sprint)
-```
-
-Chaque sprint, le projet est **mieux compris par les agents** que le précédent. C'est le moat Nakiros — aucun concurrent ne peut répliquer le contexte accumulé sur un workspace spécifique.
+Ce qui différencie Nakiros des systèmes d'orchestration autonomes (Paperclip) : on démarre en validation, le full auto se mérite.
 
 ---
 
-## 7. Modèle économique — ce que justifie le SaaS
+## 8. Onboarding
 
-La synchronisation distante est ce qui justifie l'abonnement mensuel.
+**Zéro config pour le nouveau membre.**
 
-| Valeur | Pourquoi l'utilisateur paie |
-|---|---|
-| Contexte partagé entre devs | Junior onboardé avec le contexte de l'équipe dès le jour 1 |
-| Multi-device | Même contexte Mac perso + poste pro |
-| Historique des versions | Traçabilité des décisions d'architecture |
-| Accès par rôle | PM peut lire, tech lead peut éditer |
-| Sync automatique post-génération | Contexte maintenu sans action manuelle |
+Admin configure les rôles et invite. Le membre installe, se connecte, arrive sur Home avec tout prêt.
 
 ---
 
-## 8. Roadmap v1 — 4 sprints
-
-### Sprint 1 — Context Foundation
-- Structure des markdowns de contexte (sections validées)
-- SaaS sync CRUD (push/pull markdowns)
-- Agent Discovery (scan repo → génère contexte initial)
-- Desktop = éditeur de contexte structuré par sections
-- Orchestrateur CLI (`nakiros run`) : inject context → lance agent → parse nakiros-actions
-
-### Sprint 2 — PM Layer
-- Agent PM (specs, user stories, ACs)
-- Backlog Nakiros + sync Jira
-- Agent Architect (design, tech decisions, mise à jour contexte)
-
-### Sprint 3 — Dev Layer
-- Agent Dev (implémentation, proposition de mise à jour contexte)
-- Flow de validation contexte : agent propose → humain valide 1 clic
-- Agent QA (validation ACs, enrichissement contexte tests)
-
-### Sprint 4 — Feedback Loop + Polish
-- Loop complet end-to-end fonctionnel
-- Indicateurs de qualité contexte (fraîcheur, complétude par section)
-- Distribution : DMG / AppImage + CLI npm package
-
----
-
-## Décisions rejetées (et pourquoi)
+## 9. Décisions rejetées
 
 | Décision | Rejetée car |
 |---|---|
-| RAG + Vectorize en v1 | Over-engineering pour des contextes de 5-20KB. Backlog v2 avec trigger clair. |
-| MCP complet (15+ tools) | Overhead de 2-3k tokens en schemas. Remplacé par `nakiros_api` + `nakiros_execute`. |
-| Orchestrateur dans le Desktop | Lock-in Electron. Agents CLI (Claude, Codex) ne peuvent pas en bénéficier. |
-| Context fetch dynamique via actions | Round trip mid-session coûteux. Remplacé par injection pré-session. |
-| Paths absolus dans le SaaS | Non-portable entre machines. Paths locaux uniquement dans `workspace.yaml` local. |
+| Nakiros = outil delivery uniquement | Trop limité, pas d'adoption cross-rôles |
+| Cible solo dev / petite équipe | Pas assez de valeur sur le contexte partagé |
+| Desktop = launcher d'agents seulement | Ne couvre pas les besoins des rôles non-devs |
+| PRD comme document de référence | Le produit vit — un PRD figé est obsolète |
+| RAG v1 | Over-engineering pour des contextes de 5-20KB |
+| MCP complet (15+ tools) | Overhead tokens. Remplacé par nakiros_api + nakiros_execute |
+| Scopes hardcodés dans Settings | Chaque workspace a sa propre structure de dossiers |
+| Conversations partagées entre rôles | Bruit. Les conversations sont privées, les outputs sont partagés via Context |
+| Validation systématique sur tous les fichiers | Contre-intuitif, tue l'adoption. Protection ciblée fichier par fichier |
+| Navigation différente par rôle | Même app pour tous. Le contenu s'adapte, pas la navigation |
+| Agents autonomes (style Paperclip) | L'humain garde le contrôle. L'IA propose, l'humain valide. Pas d'actions en arrière-plan. |

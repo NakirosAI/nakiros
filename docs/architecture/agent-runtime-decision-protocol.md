@@ -1,6 +1,8 @@
 # Architecture — Protocole de Décision Runtime & Registre de Workflows
 
-> Suite de [agent-workflow-orchestration-model.md](/Users/thomasailleaume/Perso/timetrackerAgent/docs/architecture/agent-workflow-orchestration-model.md).
+> **Statut : En cours.** Le concept est défini, l'implémentation dans `packages/worker/src/agent-actions.ts` est partielle. Le naming canonique et le routing complet restent à finaliser.
+
+> Suite de [agent-workflow-orchestration-model.md](./agent-workflow-orchestration-model.md).
 > Ce document décrit la forme concrète des décisions qu'un agent exprime au runtime et la manière dont l'orchestrateur résout workflows, actions et reviews.
 
 ---

@@ -53747,6 +53747,8 @@ const IPC_CHANNELS = {
   "artifact:listContextFiles": "artifact:listContextFiles",
   "artifact:readFile": "artifact:readFile",
   "artifact:getFilePath": "artifact:getFilePath",
+  "artifact:getContextTotalBytes": "artifact:getContextTotalBytes",
+  "artifact:listContextFilesWithSizes": "artifact:listContextFilesWithSizes",
   "snapshot:take": "snapshot:take",
   "snapshot:diff": "snapshot:diff",
   "snapshot:revert": "snapshot:revert",
@@ -54868,9 +54870,11 @@ async function walkMarkdown(repoPath, llmDocs) {
         continue;
       }
       let lastModifiedAt;
+      let charCount;
       try {
         const filestat = await promises$1.stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
       }
       results.push({
@@ -54880,7 +54884,8 @@ async function walkMarkdown(repoPath, llmDocs) {
           relativePath: normalized,
           absolutePath,
           isGenerated,
-          lastModifiedAt
+          lastModifiedAt,
+          charCount
         }
       });
     }
@@ -54928,12 +54933,12 @@ async function scanGlobalSection(workspace) {
       resolvedExpectedFilenames.add(resolvedFilename);
       const absolutePath = require$$0$3.join(contextDir, resolvedFilename);
       let lastModifiedAt;
+      let charCount;
       try {
         lastModifiedAt = meta[resolvedFilename]?.generatedAt ?? meta[filename]?.generatedAt;
-        if (!lastModifiedAt) {
-          const filestat = await promises$1.stat(absolutePath);
-          lastModifiedAt = filestat.mtimeMs;
-        }
+        const filestat = await promises$1.stat(absolutePath);
+        if (!lastModifiedAt) lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
       }
       docs.push({
@@ -54941,7 +54946,8 @@ async function scanGlobalSection(workspace) {
         relativePath: `context/${resolvedFilename}`,
         absolutePath,
         isGenerated: true,
-        lastModifiedAt
+        lastModifiedAt,
+        charCount
       });
     } else {
       missingNames.push(filename.replace(/\.md$/i, ""));
@@ -54955,9 +54961,11 @@ async function scanGlobalSection(workspace) {
       if (resolvedExpectedFilenames.has(entry.name)) continue;
       const absolutePath = require$$0$3.join(contextDir, entry.name);
       let lastModifiedAt;
+      let charCount;
       try {
         const filestat = await promises$1.stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
       }
       docs.push({
@@ -54965,7 +54973,8 @@ async function scanGlobalSection(workspace) {
         relativePath: `context/${entry.name}`,
         absolutePath,
         isGenerated: true,
-        lastModifiedAt
+        lastModifiedAt,
+        charCount
       });
     }
   } catch {
@@ -54977,9 +54986,11 @@ async function scanGlobalSection(workspace) {
       if (!entry.name.toLowerCase().endsWith(".md")) continue;
       const absolutePath = require$$0$3.join(decisionsDir, entry.name);
       let lastModifiedAt;
+      let charCount;
       try {
         const filestat = await promises$1.stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
       }
       decisionDocs.push({
@@ -54987,7 +54998,8 @@ async function scanGlobalSection(workspace) {
         relativePath: `context/decisions/${entry.name}`,
         absolutePath,
         isGenerated: true,
-        lastModifiedAt
+        lastModifiedAt,
+        charCount
       });
     }
   } catch {
@@ -55028,9 +55040,11 @@ async function scanRemoteRepos(workspace, localRepoNames) {
       if (!lowerName.endsWith(".md") && lowerName !== "llms.txt") continue;
       const absolutePath = require$$0$3.join(repoDir, file.name);
       let lastModifiedAt;
+      let charCount;
       try {
         const filestat = await promises$1.stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
       }
       docs.push({
@@ -55039,7 +55053,8 @@ async function scanRemoteRepos(workspace, localRepoNames) {
         absolutePath,
         isGenerated: true,
         isRemote: true,
-        lastModifiedAt
+        lastModifiedAt,
+        charCount
       });
     }
     if (docs.length > 0) {
@@ -56817,7 +56832,14 @@ async function collectMarkdownArtifactPaths(rootDir, currentDir) {
     }
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
     const normalizedPath = require$$0$3.relative(rootDir, absolutePath).replace(/\\/g, "/").replace(/\.md$/i, "");
-    if (normalizedPath) collected.push(normalizedPath);
+    if (!normalizedPath) continue;
+    let sizeBytes = 0;
+    try {
+      const fileStat = await promises$1.stat(absolutePath);
+      sizeBytes = fileStat.size;
+    } catch {
+    }
+    collected.push({ path: normalizedPath, sizeBytes });
   }
   return collected;
 }
@@ -56825,7 +56847,19 @@ async function listContextArtifactFiles(workspace) {
   const contextDir = getArtifactContextDir(workspace);
   if (!require$$1$2.existsSync(contextDir)) return [];
   const files = await collectMarkdownArtifactPaths(contextDir, contextDir);
-  return files.sort((left, right) => left.localeCompare(right));
+  return files.map((f) => f.path).sort((left, right) => left.localeCompare(right));
+}
+async function listContextArtifactFilesWithSizes(workspace) {
+  const contextDir = getArtifactContextDir(workspace);
+  if (!require$$1$2.existsSync(contextDir)) return [];
+  const files = await collectMarkdownArtifactPaths(contextDir, contextDir);
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+async function getContextArtifactTotalBytes(workspace) {
+  const contextDir = getArtifactContextDir(workspace);
+  if (!require$$1$2.existsSync(contextDir)) return 0;
+  const files = await collectMarkdownArtifactPaths(contextDir, contextDir);
+  return files.reduce((sum, f) => sum + f.sizeBytes, 0);
 }
 async function writeArtifactFile(workspace, artifactPath, content) {
   const filePath = getArtifactFilePath(workspace, artifactPath);
@@ -58077,6 +58111,12 @@ electron.ipcMain.handle(IPC_CHANNELS["artifact:readFile"], async (_event, worksp
 });
 electron.ipcMain.handle(IPC_CHANNELS["artifact:getFilePath"], (_event, workspace, artifactPath) => {
   return getArtifactFilePath(workspace, artifactPath);
+});
+electron.ipcMain.handle(IPC_CHANNELS["artifact:getContextTotalBytes"], async (_event, workspace) => {
+  return getContextArtifactTotalBytes(workspace);
+});
+electron.ipcMain.handle(IPC_CHANNELS["artifact:listContextFilesWithSizes"], async (_event, workspace) => {
+  return listContextArtifactFilesWithSizes(workspace);
 });
 electron.ipcMain.handle(IPC_CHANNELS["snapshot:take"], (_event, workspaceSlug, runId) => {
   return takeSnapshot(workspaceSlug, runId);

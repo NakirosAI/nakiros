@@ -8,7 +8,6 @@ import type {
   WorkspaceStructure,
   WorkspaceYamlRepo,
 } from '@nakiros/shared';
-import { ensureValidAccessToken } from './auth.js';
 import { upsertNakirosMcpConfig } from './mcp-config.js';
 import { getNakirosWorkspaceDir, resolveWorkspaceSlug } from './workspace.js';
 import { syncWorkspaceSymlinks } from './workspace-symlinks.js';
@@ -214,9 +213,8 @@ export function getWorkspaceAppDir(wsId: string): string {
 async function writeClaudeMcpSettings(repoPath: string, workspaceId: string): Promise<void> {
   const claudeDir = join(repoPath, '.claude');
   mkdirSync(claudeDir, { recursive: true });
-  const apiBase = process.env['NAKIROS_API_URL'] ?? 'https://api.nakiros.com';
-  const resolved = await ensureValidAccessToken();
-  upsertNakirosMcpConfig(join(claudeDir, 'settings.json'), workspaceId, apiBase, resolved.token);
+  const apiBase = process.env['NAKIROS_API_URL'] ?? 'http://localhost:3210';
+  upsertNakirosMcpConfig(join(claudeDir, 'settings.json'), workspaceId, apiBase);
 }
 
 /**

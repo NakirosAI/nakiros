@@ -49,6 +49,11 @@ export function DocRow({
               ☁
             </span>
           )}
+          {doc.charCount != null && (
+            <span className="ml-auto shrink-0 text-[9px] text-[var(--text-muted)]">
+              ~{formatTokens(doc.charCount)}
+            </span>
+          )}
         </span>
         {label && days !== null && <span className={clsx('text-[10px]', freshnessTextClass(days))}>{label}</span>}
       </button>
@@ -213,5 +218,11 @@ function freshnessTextClass(days: number): string {
   if (days < 3) return 'text-[var(--text-muted)]';
   if (days < 7) return 'text-[#f59e0b]';
   return 'text-[#ef4444]';
+}
+
+export function formatTokens(charCount: number): string {
+  const tokens = Math.round(charCount / 3.5);
+  if (tokens < 1000) return `${tokens}`;
+  return `${(tokens / 1000).toFixed(1)}k`;
 }
 

@@ -1,7 +1,5 @@
 import { runAgentCommand } from '../src/runner.js';
 import { listConversations, deleteConversation } from '../src/conversation.js';
-import { workspaceGet, resolveWorkspaceFromCwd } from '../src/workspace.js';
-import { startSyncWatcher, stopSyncWatcher, getSyncStatus, pushAllArtifacts } from '../src/sync-watcher.js';
 import type { AgentProvider, CliEvent, StreamEvent, RunStartInfo } from '../src/types.js';
 
 function emit(event: CliEvent): void {
@@ -15,8 +13,6 @@ nakiros — Orchestrateur d'agents IA
 Commandes :
   run           Lancer un agent
   conversations Gérer les conversations
-  workspace     Gérer le contexte du workspace
-  sync          Synchroniser les artefacts avec le cloud
 
 Usage — run :
   nakiros run [options]
@@ -28,22 +24,8 @@ Usage — run :
   --session <provider-session>    Alias legacy pour reprendre via un ancien ID provider
   --add-dir <path>                Répertoire additionnel (répétable)
 
-Usage — workspace :
-  nakiros workspace get            Télécharge le contexte du workspace (détecté via cwd)
-  nakiros workspace get --workspace <slug>   Override manuel
-  nakiros workspace list           Liste les workspaces accessibles
-
-Usage — sync :
-  nakiros sync start               Démarre le watcher de sync (détecté via cwd)
-  nakiros sync stop                Arrête le watcher
-  nakiros sync status              État du watcher
-  nakiros sync push                Push one-shot de tous les artefacts locaux
-  nakiros sync push --file <path>  Push un artefact précis
-
 Exemples :
   nakiros run --agent claude --agent-id nakiros --workspace myapp --message "implémente AUTH-42"
-  nakiros workspace get
-  nakiros sync start
   nakiros conversations --workspace myapp
 `);
 }
@@ -199,111 +181,8 @@ switch (command) {
   case 'sessions': // backward compat alias
     handleConversations(argv.slice(1));
     break;
-  case 'workspace':
-    handleWorkspace(argv.slice(1)).catch((err: unknown) => {
-      process.stderr.write(`[nakiros] ${String(err)}\n`);
-      process.exit(1);
-    });
-    break;
-  case 'sync':
-    handleSync(argv.slice(1)).catch((err: unknown) => {
-      process.stderr.write(`[nakiros] ${String(err)}\n`);
-      process.exit(1);
-    });
-    break;
   default:
     process.stderr.write(`Unknown command: ${command}\n`);
     printHelp();
     process.exit(1);
-}
-
-// ─── workspace ────────────────────────────────────────────────────────────────
-
-async function handleWorkspace(argv: string[]): Promise<void> {
-  const sub = argv[0];
-
-  if (sub === 'list') {
-    const { getAccessToken } = await import('../src/credentials.js');
-    const auth = await getAccessToken();
-    if (!auth) { process.exit(1); }
-    const res = await fetch(`${auth.apiUrl}/ws`, { headers: { Authorization: `Bearer ${auth.token}` } });
-    if (!res.ok) { process.stderr.write(`Failed to list workspaces (${res.status})\n`); process.exit(1); }
-    const workspaces = await res.json() as { id: string; name: string }[];
-    for (const ws of workspaces) {
-      process.stdout.write(`${ws.name}\n`);
-    }
-    return;
-  }
-
-  if (sub === 'get' || !sub) {
-    let workspaceOverride: string | undefined;
-    for (let i = 1; i < argv.length; i++) {
-      if (argv[i] === '--workspace' && argv[i + 1]) { workspaceOverride = argv[i + 1]; i++; }
-    }
-    const result = await workspaceGet({ cwd: process.cwd(), workspaceOverride });
-    if (!result) { process.exit(1); }
-    process.stdout.write(JSON.stringify(result) + '\n');
-    return;
-  }
-
-  process.stderr.write(`Unknown workspace subcommand: ${sub}\n`);
-  process.exit(1);
-}
-
-// ─── sync ─────────────────────────────────────────────────────────────────────
-
-async function handleSync(argv: string[]): Promise<void> {
-  const sub = argv[0];
-  let workspaceOverride: string | undefined;
-  let filePath: string | undefined;
-  // Direct-mode flags (Desktop passes these to bypass API resolution)
-  let workspaceIdDirect: string | undefined;
-  let workspaceNameDirect: string | undefined;
-
-  for (let i = 1; i < argv.length; i++) {
-    if (argv[i] === '--workspace' && argv[i + 1]) { workspaceOverride = argv[i + 1]; i++; }
-    if (argv[i] === '--file' && argv[i + 1]) { filePath = argv[i + 1]; i++; }
-    if (argv[i] === '--workspace-id' && argv[i + 1]) { workspaceIdDirect = argv[i + 1]; i++; }
-    if (argv[i] === '--workspace-name' && argv[i + 1]) { workspaceNameDirect = argv[i + 1]; i++; }
-  }
-
-  const cwd = process.cwd();
-
-  if (sub === 'start') {
-    // Direct mode: Desktop already knows the workspace — skip API call
-    if (workspaceIdDirect && workspaceNameDirect) {
-      const slug = workspaceNameDirect.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      await startSyncWatcher({ id: workspaceIdDirect, name: workspaceNameDirect } as import('@nakiros/shared').StoredWorkspace, slug);
-      return;
-    }
-    const resolved = await resolveWorkspaceFromCwd(cwd, workspaceOverride);
-    if (!resolved) { process.exit(1); }
-    await startSyncWatcher(resolved.workspace, resolved.slug);
-    return;
-  }
-
-  if (sub === 'stop') {
-    const resolved = await resolveWorkspaceFromCwd(cwd, workspaceOverride);
-    if (!resolved) { process.exit(1); }
-    stopSyncWatcher(resolved.slug);
-    return;
-  }
-
-  if (sub === 'status') {
-    const resolved = await resolveWorkspaceFromCwd(cwd, workspaceOverride);
-    if (!resolved) { process.exit(1); }
-    const status = getSyncStatus(resolved.slug);
-    process.stdout.write(JSON.stringify(status) + '\n');
-    return;
-  }
-
-  if (sub === 'push') {
-    const resolved = await resolveWorkspaceFromCwd(cwd, workspaceOverride);
-    if (!resolved) { process.exit(1); }
-    await pushAllArtifacts(resolved.workspace, resolved.slug, filePath);
-    return;
-  }
-
-  process.stderr.write(`Unknown sync subcommand: ${sub}\n`);
-  process.exit(1);
 }

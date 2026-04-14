@@ -1,5 +1,3 @@
-import type { OrgRole } from './auth.js';
-
 export type WorkspaceRole = 'owner' | 'admin' | 'pm' | 'dev' | 'viewer';
 
 export type WorkspaceMembershipScope = 'organization' | 'personal';
@@ -9,7 +7,6 @@ export type WorkspaceMembershipStatus = 'active' | 'not_added';
 export interface WorkspaceMembershipListItem {
   userId: string;
   email: string | null;
-  organizationRole: OrgRole;
   workspaceRole: WorkspaceRole | null;
   status: WorkspaceMembershipStatus;
   joinedAt?: string;

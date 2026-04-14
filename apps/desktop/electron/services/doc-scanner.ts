@@ -13,6 +13,7 @@ export interface ScannedDoc {
   isGenerated: boolean;
   isRemote?: boolean;
   lastModifiedAt?: number;
+  charCount?: number;
 }
 
 export interface ScannedRepo {
@@ -121,9 +122,11 @@ async function walkMarkdown(repoPath: string, llmDocs: string[]): Promise<Scanne
       }
 
       let lastModifiedAt: number | undefined;
+      let charCount: number | undefined;
       try {
         const filestat = await stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
         // ignore
       }
@@ -136,6 +139,7 @@ async function walkMarkdown(repoPath: string, llmDocs: string[]): Promise<Scanne
           absolutePath,
           isGenerated,
           lastModifiedAt,
+          charCount,
         },
       });
     }
@@ -192,12 +196,12 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
       resolvedExpectedFilenames.add(resolvedFilename);
       const absolutePath = join(contextDir, resolvedFilename);
       let lastModifiedAt: number | undefined;
+      let charCount: number | undefined;
       try {
         lastModifiedAt = meta[resolvedFilename]?.generatedAt ?? meta[filename]?.generatedAt;
-        if (!lastModifiedAt) {
-          const filestat = await stat(absolutePath);
-          lastModifiedAt = filestat.mtimeMs;
-        }
+        const filestat = await stat(absolutePath);
+        if (!lastModifiedAt) lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
         // ignore
       }
@@ -207,6 +211,7 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
         absolutePath,
         isGenerated: true,
         lastModifiedAt,
+        charCount,
       });
     } else {
       missingNames.push(filename.replace(/\.md$/i, ''));
@@ -223,9 +228,11 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
 
       const absolutePath = join(contextDir, entry.name);
       let lastModifiedAt: number | undefined;
+      let charCount: number | undefined;
       try {
         const filestat = await stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
         // ignore
       }
@@ -235,6 +242,7 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
         absolutePath,
         isGenerated: true,
         lastModifiedAt,
+        charCount,
       });
     }
   } catch {
@@ -249,9 +257,11 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
 
       const absolutePath = join(decisionsDir, entry.name);
       let lastModifiedAt: number | undefined;
+      let charCount: number | undefined;
       try {
         const filestat = await stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
         // ignore
       }
@@ -262,6 +272,7 @@ async function scanGlobalSection(workspace: StoredWorkspace): Promise<GlobalSect
         absolutePath,
         isGenerated: true,
         lastModifiedAt,
+        charCount,
       });
     }
   } catch {
@@ -311,9 +322,11 @@ async function scanRemoteRepos(workspace: StoredWorkspace, localRepoNames: Set<s
 
       const absolutePath = join(repoDir, file.name);
       let lastModifiedAt: number | undefined;
+      let charCount: number | undefined;
       try {
         const filestat = await stat(absolutePath);
         lastModifiedAt = filestat.mtimeMs;
+        charCount = filestat.size;
       } catch {
         // ignore
       }
@@ -325,6 +338,7 @@ async function scanRemoteRepos(workspace: StoredWorkspace, localRepoNames: Set<s
         isGenerated: true,
         isRemote: true,
         lastModifiedAt,
+        charCount,
       });
     }
 

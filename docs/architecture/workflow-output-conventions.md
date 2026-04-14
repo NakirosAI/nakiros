@@ -1,5 +1,7 @@
 # Workflow Output Conventions
 
+> **Statut : En cours.** Les patterns step/choices sont définis. Tous les workflows dans `packages/agents-bundle/workflows/` n'ont pas encore été migrés pour les respecter.
+
 ## Purpose
 
 Defines the two mandatory markdown patterns that all Nakiros workflow instructions must emit:

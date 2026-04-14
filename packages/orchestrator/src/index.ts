@@ -9,4 +9,3 @@ export {
 } from './conversation.js';
 export type { ConversationMeta, RunnerMeta } from './conversation.js';
 export type { StreamEvent, CliEvent, RunStartInfo, AgentProvider, AgentRunRequest } from './types.js';
-export { markArtifactSynced } from './sync-watcher.js';

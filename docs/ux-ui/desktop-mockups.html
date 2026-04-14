@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Nakiros Desktop — Mockups v3</title>
+<style>
+:root {
+  --bg:#080808; --bg-card:#111111; --bg-soft:#111111; --bg-muted:#0d0d0d;
+  --line:#1a1a1a; --line-strong:#2a2a2a;
+  --text:#f0f0f0; --text-muted:rgba(240,240,240,0.55);
+  --primary:#0d9e9e; --primary-soft:rgba(13,158,158,0.14);
+  --success:#2ecfcf; --danger:#ff8e8e; --warn:#f0af24;
+  --shadow-lg:0 20px 48px rgba(13,158,158,0.14);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans','Segoe UI',sans-serif;background:#040404;color:var(--text);font-size:13px;}
+
+/* ── Switcher ── */
+.sw{position:fixed;top:0;left:0;right:0;z-index:200;background:#020202;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:4px;padding:8px 14px;flex-wrap:wrap;}
+.sw-l{font-size:10px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-right:4px;}
+.sw-b{padding:4px 10px;border-radius:5px;border:1px solid var(--line);background:var(--bg-muted);color:var(--text-muted);cursor:pointer;font-size:11px;white-space:nowrap;font-family:inherit;}
+.sw-b:hover{background:var(--bg-card);color:var(--text);}
+.sw-b.on{background:var(--primary-soft);border-color:var(--primary);color:var(--primary);}
+.sw-sep{width:1px;height:18px;background:var(--line-strong);margin:0 4px;}
+
+/* ── Role toggle ── */
+.role-bar{position:fixed;top:40px;left:0;right:0;z-index:190;background:#020202;border-bottom:1px solid var(--line);padding:5px 14px;display:flex;align-items:center;gap:6px;}
+.role-label{font-size:10px;color:#333;font-weight:600;letter-spacing:.04em;}
+.role-btn{padding:3px 9px;border-radius:4px;border:1px solid var(--line);background:var(--bg-muted);color:#444;cursor:pointer;font-size:10px;font-family:inherit;}
+.role-btn:hover{color:var(--text-muted);}
+.role-btn.on{background:var(--primary-soft);border-color:rgba(13,158,158,.3);color:var(--primary);}
+.role-info{margin-left:auto;font-size:10px;color:#333;font-style:italic;}
+
+/* ── Screen ── */
+.screen{display:none;padding-top:68px;min-height:100vh;}
+.screen.on{display:block;}
+
+/* ── Window ── */
+.win{background:var(--bg);border-radius:10px;overflow:hidden;box-shadow:var(--shadow-lg),0 0 0 1px var(--line);margin:16px auto;max-width:1080px;}
+.titlebar{background:var(--bg-muted);height:34px;display:flex;align-items:center;padding:0 12px;gap:6px;border-bottom:1px solid var(--line);}
+.dot{width:11px;height:11px;border-radius:50%;}.dot-r{background:#ff5f57;}.dot-y{background:#ffbd2e;}.dot-g{background:#28c840;}
+.tbar-t{margin:0 auto;color:#333;font-size:11px;font-family:'Space Mono',monospace;letter-spacing:.03em;}
+
+/* ── Shell ── */
+.shell{display:flex;height:calc(100vh - 104px);min-height:540px;}
+
+/* ── Sidebar 68px ── */
+.sb{width:68px;min-width:68px;background:var(--bg-muted);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;}
+.sb-logo{width:32px;height:32px;border-radius:8px;background:var(--primary-soft);border:1px solid rgba(13,158,158,.25);display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--primary);}
+.si{width:44px;height:44px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:3px;color:var(--text-muted);transition:all .12s;position:relative;}
+.si:hover{background:var(--bg-card);color:var(--text);}
+.si.on{background:var(--bg-card);color:var(--primary);border-left:2px solid var(--primary);}
+.si svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
+.si-l{font-size:8px;font-weight:500;letter-spacing:.01em;}
+.si-badge{position:absolute;top:5px;right:5px;min-width:14px;height:14px;border-radius:7px;background:var(--danger);color:#000;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px;}
+.si-dot{position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:var(--success);}
+.sb-sp{flex:1;}
+.sb-ava{width:32px;height:32px;border-radius:50%;background:var(--primary-soft);border:1px solid rgba(13,158,158,.25);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--primary);cursor:pointer;margin-top:8px;}
+
+/* ── Main ── */
+.mn{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+.topbar{height:42px;background:var(--bg);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:10px;flex-shrink:0;}
+.tb-t{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.02em;}
+.tb-s{font-size:11px;color:var(--text-muted);}
+.sp{flex:1;}
+.content{flex:1;overflow-y:auto;padding:18px;}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1px solid var(--line-strong);background:var(--bg-card);color:var(--text-muted);cursor:pointer;font-size:11px;font-family:inherit;transition:all .1s;}
+.btn:hover{background:#1a1a1a;color:var(--text);}
+.btn-p{background:var(--primary-soft);border-color:rgba(13,158,158,.3);color:var(--primary);}
+.btn-p:hover{background:rgba(13,158,158,.22);}
+.btn-sm{padding:3px 8px;font-size:10px;}
+.btn-ghost{background:transparent;border-color:transparent;color:#333;}
+.btn-ghost:hover{background:var(--bg-card);border-color:var(--line);color:var(--text-muted);}
+
+/* ── Cards / Badges ── */
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:10px;}
+.card-t{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;font-family:'Space Mono',monospace;}
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;}
+.b-teal{background:var(--primary-soft);color:var(--primary);}
+.b-green{background:rgba(46,207,207,.1);color:var(--success);}
+.b-red{background:rgba(255,142,142,.1);color:var(--danger);}
+.b-warn{background:rgba(240,175,36,.1);color:var(--warn);}
+.b-muted{background:rgba(240,240,240,.06);color:#555;}
+
+/* ── Row ── */
+.row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);}
+.row:last-child{border-bottom:none;}
+.row-t{font-size:12px;color:var(--text-muted);flex:1;}
+.row-s{font-size:10px;color:#333;margin-top:1px;}
+
+/* ── Info / warn boxes ── */
+.info{background:var(--primary-soft);border:1px solid rgba(13,158,158,.2);border-radius:7px;padding:10px 13px;font-size:11px;color:rgba(13,158,158,.85);line-height:1.6;}
+.warnbox{background:rgba(240,175,36,.06);border:1px solid rgba(240,175,36,.18);border-radius:7px;padding:10px 13px;font-size:11px;color:var(--warn);line-height:1.6;}
+
+/* ── Input ── */
+.input{background:var(--bg-muted);border:1px solid var(--line-strong);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;width:100%;outline:none;font-family:inherit;}
+.input:focus{border-color:rgba(13,158,158,.5);}
+
+/* ── StatusBar ── */
+.sbar{height:26px;background:var(--bg-muted);border-top:1px solid var(--line);display:flex;align-items:center;padding:0 12px;gap:14px;font-size:10px;color:#333;flex-shrink:0;}
+.sbar-dot{width:5px;height:5px;border-radius:50%;background:var(--success);}
+
+/* ── Progress ── */
+.prog{background:var(--line);border-radius:3px;height:3px;}.prog-f{height:100%;border-radius:3px;background:var(--primary);}.prog-f.done{background:var(--success);}
+
+/* ── Stat card ── */
+.stat{background:var(--bg-card);border:1px solid var(--line);border-radius:8px;padding:14px;}
+.stat-n{font-size:24px;font-weight:700;color:var(--text);font-family:'Space Mono',monospace;}
+.stat-l{font-size:10px;color:#444;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;font-family:'Space Mono',monospace;}
+.stat-d{font-size:10px;margin-top:4px;}
+
+/* ── Tree ── */
+.tree-s{font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:10px 10px 4px;display:flex;align-items:center;gap:6px;}
+.tree-i{display:flex;align-items:center;gap:7px;padding:5px 10px;cursor:pointer;font-size:11px;color:var(--text-muted);}
+.tree-i:hover{background:var(--bg-card);color:var(--text);}
+.tree-i.on{background:var(--bg-card);color:var(--text);border-left:2px solid var(--primary);}
+.fr{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.fr-ok{background:var(--success);}.fr-w{background:var(--warn);}.fr-old{background:var(--danger);}
+
+/* ── Diff ── */
+.diff{font-family:'JetBrains Mono','Cascadia Code',Menlo,monospace;font-size:11px;line-height:1.7;background:#050505;border:1px solid var(--line-strong);border-radius:0 0 8px 8px;border-top:none;overflow:hidden;}
+.diff-h{background:var(--bg-card);padding:6px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:10px;}
+.diff-p{color:var(--primary);}.diff-m{color:#333;}
+.dl{padding:1px 12px;}.dl-c{color:#444;}.dl-a{background:rgba(46,207,207,.06);color:var(--success);border-left:2px solid var(--success);}.dl-r{background:rgba(255,142,142,.06);color:var(--danger);border-left:2px solid var(--danger);}
+.diff-act{padding:8px 12px;background:var(--bg-muted);border-top:1px solid var(--line);display:flex;gap:6px;align-items:center;}
+
+/* ── Chat ── */
+.chat-w{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;}
+.msg{display:flex;gap:9px;}.msg.usr{flex-direction:row-reverse;}
+.bub{background:var(--bg-card);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--text-muted);line-height:1.6;max-width:80%;}
+.msg.usr .bub{background:var(--bg-muted);border-color:var(--line-strong);}
+.chat-in{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);align-items:center;flex-shrink:0;}
+.chat-sh{font-size:11px;color:#333;font-family:'Space Mono',monospace;}
+
+/* ── Pills ── */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;background:var(--bg-muted);border:1px solid var(--line-strong);font-size:10px;color:var(--text-muted);cursor:pointer;}
+.pill.on{background:var(--primary-soft);border-color:rgba(13,158,158,.3);color:var(--primary);}
+.ctx-chip{padding:2px 7px;border-radius:4px;background:var(--primary-soft);color:var(--primary);font-size:10px;font-family:'Space Mono',monospace;}
+.ctx-bar{background:var(--bg-muted);border-bottom:1px solid var(--line);padding:5px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;}
+.conv-tab{padding:4px 10px;border-radius:5px;border:1px solid var(--line);background:var(--bg-muted);font-size:11px;color:#333;cursor:pointer;}
+.conv-tab.on{background:var(--bg-card);border-color:var(--primary);color:var(--primary);}
+
+/* ── Avatar ── */
+.ava{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;}
+.ava-s{width:22px;height:22px;font-size:9px;}
+.ava-t{background:var(--primary);color:#000;}
+.ava-b{background:rgba(59,130,246,.15);color:#3b82f6;}
+.ava-pur{background:rgba(171,74,186,.15);color:#ab4aba;}
+.ava-r{background:rgba(255,142,142,.1);color:var(--danger);}
+.ava-ai{background:var(--primary-soft);color:var(--primary);}
+
+/* ── Activity item ── */
+.act{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
+.act:last-child{border-bottom:none;}
+.act-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px;}
+.act-body{flex:1;}
+.act-t{font-size:12px;color:var(--text-muted);line-height:1.5;}
+.act-m{font-size:10px;color:#333;margin-top:2px;}
+
+/* ── Node (workflow) ── */
+.node{position:absolute;background:var(--bg-card);border:1px solid var(--line-strong);border-radius:8px;padding:10px 12px;font-size:11px;}
+.node-t{font-size:9px;color:#333;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;}
+.node-n{font-size:11px;font-weight:600;color:var(--text-muted);}
+.node-s{font-size:10px;color:#333;margin-top:3px;}
+
+/* ── Permission table ── */
+.ptable{width:100%;border-collapse:collapse;}
+.ptable th{text-align:left;font-size:10px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:6px 10px;border-bottom:1px solid var(--line);}
+.ptable td{padding:7px 10px;border-bottom:1px solid #0d0d0d;font-size:11px;color:var(--text-muted);}
+.ptable tr:last-child td{border-bottom:none;}
+.pc{color:var(--success);}.pd{color:#1a1a1a;}
+
+/* ── Grid ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;}
+
+::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:2px;}
+hr.div{border:none;border-top:1px solid var(--line);margin:12px 0;}
+
+/* ── Role-conditional display ── */
+.only-pm,.only-dev,.only-sup,.only-admin{display:none;}
+body.r-pm .only-pm,body.r-dev .only-dev,body.r-sup .only-sup,body.r-admin .only-admin{display:block;}
+body.r-pm .flex-pm,body.r-dev .flex-dev,body.r-sup .flex-sup,body.r-admin .flex-admin{display:flex!important;}
+body.r-pm .hide-pm,body.r-dev .hide-dev,body.r-sup .hide-sup{display:none!important;}
+</style>
+</head>
+<body class="r-pm">
+
+<div class="sw">
+  <span class="sw-l">Sections</span>
+  <button class="sw-b on" onclick="show('s-home',this)">Home</button>
+  <button class="sw-b" onclick="show('s-ctx',this)">Context</button>
+  <button class="sw-b" onclick="show('s-chat',this)">Chat IA</button>
+  <button class="sw-b" onclick="show('s-agents',this)">Agents</button>
+  <button class="sw-b" onclick="show('s-review',this)">Context — Review</button>
+  <button class="sw-b" onclick="show('s-settings',this)">Settings</button>
+  <button class="sw-b" onclick="show('s-ws',this)">Workspace Switcher</button>
+  <div class="sw-sep"></div>
+  <button class="sw-b" onclick="show('s-login',this)">Login</button>
+  <button class="sw-b" onclick="show('s-onb',this)">Onboarding</button>
+</div>
+<div class="role-bar">
+  <span class="role-label">Voir en tant que :</span>
+  <button class="role-btn on" onclick="setRole('pm',this)">PM</button>
+  <button class="role-btn" onclick="setRole('dev',this)">Dev</button>
+  <button class="role-btn" onclick="setRole('sup',this)">Support</button>
+  <button class="role-btn" onclick="setRole('admin',this)">Admin</button>
+  <span class="role-info">Le rôle change le contenu, pas la navigation</span>
+</div>
+
+<!-- ═══════ SIDEBAR (shared) ═══════ -->
+
+<!-- ═══════════════════════════════════
+     LOGIN
+═══════════════════════════════════ -->
+<div id="s-login" class="screen">
+<div class="win">
+  <div class="titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="tbar-t">nakiros</span></div>
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:540px;background:var(--bg);padding:40px;">
+    <div style="background:var(--bg-card);border:1px solid var(--line);border-radius:10px;padding:36px;width:100%;max-width:380px;">
+      <div style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--primary);letter-spacing:.04em;margin-bottom:4px;">nakiros_</div>
+      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;">Bienvenue</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:22px;line-height:1.5;">Connectez-vous pour rejoindre votre organisation.</div>
+      <button class="btn btn-p" style="width:100%;justify-content:center;padding:9px 0;font-size:12px;">Continuer avec Nakiros Auth →</button>
+      <div style="margin-top:10px;text-align:center;font-size:10px;color:#333;font-family:'Space Mono',monospace;">auth.nakiros.com</div>
+      <hr class="div">
+      <div style="font-size:11px;color:#333;text-align:center;line-height:1.6;">Pas de compte ? Votre admin vous a envoyé une invitation.</div>
+    </div>
+  </div>
+  <div class="sbar"><div class="sbar-dot" style="background:#333;"></div>Non connecté</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════
+     ONBOARDING
+═══════════════════════════════════ -->
+<div id="s-onb" class="screen">
+<div class="win">
+  <div class="titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="tbar-t">nakiros — configuration</span></div>
+  <div style="display:flex;min-height:540px;">
+    <div style="width:240px;background:var(--bg-muted);border-right:1px solid var(--line);padding:28px 20px;display:flex;flex-direction:column;">
+      <div style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--primary);margin-bottom:2px;">nakiros_</div>
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:24px;">Bienvenue, Sophie</div>
+      <div class="step"><div class="step-dot" style="width:20px;height:20px;border-radius:50%;background:var(--primary-soft);border:1px solid rgba(13,158,158,.3);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--primary);flex-shrink:0;">✓</div><div style="font-size:12px;color:var(--success);">Connexion</div></div>
+      <div class="step" style="display:flex;gap:10px;padding:8px 0;"><div style="width:20px;height:20px;border-radius:50%;background:var(--primary-soft);border:1px solid rgba(13,158,158,.3);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--primary);flex-shrink:0;">✓</div><div><div style="font-size:12px;color:var(--success);">Organisation</div><div style="font-size:10px;color:#333;">Acme Corp</div></div></div>
+      <div class="step" style="display:flex;gap:10px;padding:8px 0;"><div style="width:20px;height:20px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000;flex-shrink:0;">3</div><div><div style="font-size:12px;color:var(--text-muted);">Synchronisation</div><div style="font-size:10px;color:#333;">En cours…</div></div></div>
+      <div class="step" style="display:flex;gap:10px;padding:8px 0;"><div style="width:20px;height:20px;border-radius:50%;background:var(--bg-muted);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:9px;color:#333;flex-shrink:0;">4</div><div style="font-size:12px;color:#333;">Prêt</div></div>
+      <div style="margin-top:auto;"><div class="info" style="font-size:10px;">Rôle <strong>PM</strong> préconfiguré. Agents et permissions prêts.</div></div>
+    </div>
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:40px;background:var(--bg);">
+      <div style="width:100%;max-width:380px;">
+        <div style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Synchronisation workspace</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:24px;">Récupération du contexte…</div>
+        <div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px;"><span style="color:var(--text-muted);">Profil & permissions</span><span style="color:var(--success);">✓</span></div><div class="prog"><div class="prog-f done" style="width:100%;"></div></div></div>
+        <div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px;"><span style="color:var(--text-muted);">Contexte produit</span><span style="color:var(--success);">✓</span></div><div class="prog"><div class="prog-f done" style="width:100%;"></div></div></div>
+        <div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px;"><span style="color:var(--text-muted);">Agents</span><span style="color:var(--primary);">62%</span></div><div class="prog"><div class="prog-f" style="width:62%;"></div></div></div>
+        <div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px;"><span style="color:#333;">MCPs</span><span style="color:#333;">—</span></div><div class="prog"><div class="prog-f" style="width:0%;"></div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="sbar"><div class="sbar-dot"></div>Synchronisation…<div class="sp"></div>Acme Corp</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════
+     HOME
+═══════════════════════════════════ -->
+<div id="s-home" class="screen on">
+<div class="win">
+  <div class="titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="tbar-t">nakiros — acme corp</span></div>
+  <div class="shell">
+    <div class="sb" id="sb-home">
+      <div class="sb-logo">N</div>
+      <div class="si on"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="si-l">Home</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="si-l">Context</span></div>
+      <div class="si"><div class="si-dot"></div><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-l">Chat IA</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="si-l">Agents</span></div>
+      <div class="sb-sp"></div>
+      <div class="sb-ava" id="home-ava">SP</div>
+    </div>
+    <div class="mn">
+      <div class="topbar">
+        <div class="tb-t">Home</div>
+        <div class="tb-s" id="home-role-label">— Sophie P. · Product Manager</div>
+        <div class="sp"></div>
+        <div class="btn btn-sm">⚙ Settings</div>
+      </div>
+      <div class="content">
+        <!-- Stats row -->
+        <div class="g4" style="margin-bottom:16px;">
+          <div class="stat">
+            <div class="stat-n" id="home-stat1">2</div>
+            <div class="stat-l" id="home-stat1-l">À reviewer</div>
+            <div class="stat-d" style="color:var(--warn);" id="home-stat1-d">Contributions Support</div>
+          </div>
+          <div class="stat">
+            <div class="stat-n">3</div>
+            <div class="stat-l">Features actives</div>
+            <div class="stat-d" style="color:var(--primary);">EP-04 en spec</div>
+          </div>
+          <div class="stat">
+            <div class="stat-n" style="color:var(--success);">80%</div>
+            <div class="stat-l">Réalisation agents</div>
+            <div class="stat-d" style="color:var(--success);">Contexte complet ✓</div>
+          </div>
+          <div class="stat">
+            <div class="stat-n" id="home-stat4">1</div>
+            <div class="stat-l">Agent actif</div>
+            <div class="stat-d" style="color:var(--primary);" id="home-stat4-d">Agent PM · EP-04</div>
+          </div>
+        </div>
+
+        <div class="g2">
+          <!-- Left: Activity feed -->
+          <div class="card">
+            <div class="card-t">Activité récente</div>
+            <div class="act">
+              <div class="act-dot" style="background:var(--primary);"></div>
+              <div class="act-body">
+                <div class="act-t"><strong style="color:var(--text);">Sophie P.</strong> a mis à jour <span style="color:var(--primary);font-family:'Space Mono',monospace;font-size:11px;">features/ep-04/spec.md</span></div>
+                <div class="act-m">PM · il y a 1h · +4 ACs ajoutés</div>
+              </div>
+            </div>
+            <div class="act">
+              <div class="act-dot" style="background:#3b82f6;"></div>
+              <div class="act-body">
+                <div class="act-t"><strong style="color:var(--text);">Jean D.</strong> — PR #142 mergée (SSO flow)</div>
+                <div class="act-m">Dev · il y a 3h</div>
+              </div>
+            </div>
+            <div class="act">
+              <div class="act-dot" style="background:#f0af24;"></div>
+              <div class="act-body">
+                <div class="act-t"><strong style="color:var(--text);">Rémi M.</strong> a mis à jour <span style="color:var(--primary);font-family:'Space Mono',monospace;font-size:11px;">architecture/auth.md</span></div>
+                <div class="act-m">Architect · ce matin</div>
+              </div>
+            </div>
+            <div class="act">
+              <div class="act-dot" style="background:#ab4aba;"></div>
+              <div class="act-body">
+                <div class="act-t"><strong style="color:var(--text);">Marc K.</strong> a signalé un besoin : "Limite import CSV"</div>
+                <div class="act-m">Support · il y a 2h · via Zendesk #4521</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right col -->
+          <div>
+            <!-- Contributions pending (PM sees reviews, Dev sees his contribs) -->
+            <div class="card only-pm" style="border-color:rgba(240,175,36,.2);">
+              <div class="card-t" style="color:var(--warn);">📥 Contributions en attente de review</div>
+              <div class="row">
+                <div class="ava ava-s ava-pur">MK</div>
+                <div style="flex:1;"><div class="row-t">Limite d'import CSV trop basse</div><div class="row-s">Marc K. · Support · il y a 2h</div></div>
+                <button class="btn btn-p btn-sm">Review</button>
+              </div>
+              <div class="row">
+                <div class="ava ava-s ava-pur">MK</div>
+                <div style="flex:1;"><div class="row-t">Bug UX récurrent — import CSV</div><div class="row-s">Marc K. · Support · hier</div></div>
+                <button class="btn btn-p btn-sm">Review</button>
+              </div>
+            </div>
+
+            <div class="card only-dev" style="border-color:rgba(13,158,158,.2);">
+              <div class="card-t" style="color:var(--primary);">📌 Mes tasks</div>
+              <div class="row">
+                <div style="width:8px;height:8px;border-radius:2px;background:var(--primary);flex-shrink:0;"></div>
+                <div style="flex:1;"><div class="row-t">Implémenter flow PKCE côté client</div><div class="row-s">EP-04 · Spec ✓ · Archi ✓</div></div>
+                <span class="badge b-teal">In Progress</span>
+              </div>
+              <div class="row">
+                <div style="width:8px;height:8px;border-radius:2px;background:var(--line-strong);flex-shrink:0;"></div>
+                <div style="flex:1;"><div class="row-t">Tests E2E login/logout</div><div class="row-s">EP-04 · Dépend de PKCE</div></div>
+                <span class="badge b-muted">To Do</span>
+              </div>
+            </div>
+
+            <div class="card only-sup" style="border-color:rgba(171,74,186,.2);">
+              <div class="card-t" style="color:#ab4aba;">📥 Mes contributions</div>
+              <div class="row">
+                <span class="badge b-warn">En attente PM</span>
+                <div style="flex:1;margin-left:6px;"><div class="row-t">Limite d'import CSV</div><div class="row-s">il y a 2h</div></div>
+              </div>
+              <div class="row">
+                <span class="badge b-green">Validé</span>
+                <div style="flex:1;margin-left:6px;"><div class="row-t">Export Excel natif</div><div class="row-s">il y a 3j</div></div>
+              </div>
+            </div>
+
+            <div class="card only-admin" style="border-color:rgba(255,142,142,.2);">
+              <div class="card-t" style="color:var(--danger);">👥 Organisation</div>
+              <div class="row"><div style="flex:1;"><div class="row-t">12 membres · 5 rôles · 3 workspaces</div></div></div>
+              <div class="row"><div style="flex:1;"><div class="row-t">Dernier membre ajouté : Claire L. (QA) il y a 2j</div></div></div>
+            </div>
+
+            <!-- Context freshness -->
+            <div class="card">
+              <div class="card-t">⚠ Contexte à rafraîchir</div>
+              <div class="row">
+                <div class="fr fr-old"></div>
+                <div style="flex:1;"><div class="row-t"><span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--primary);">features/ep-03/spec.md</span></div><div class="row-s">23 jours sans mise à jour</div></div>
+              </div>
+              <div class="row">
+                <div class="fr fr-w"></div>
+                <div style="flex:1;"><div class="row-t"><span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--primary);">architecture/conventions.md</span></div><div class="row-s">12 jours</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="sbar"><div class="sbar-dot"></div>Synchronisé<div class="sp"></div><span id="sbar-user">Sophie P. · PM</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════
+     CONTEXT
+═══════════════════════════════════ -->
+<div id="s-ctx" class="screen">
+<div class="win">
+  <div class="titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="tbar-t">nakiros — acme corp</span></div>
+  <div class="shell">
+    <div class="sb">
+      <div class="sb-logo">N</div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="si-l">Home</span></div>
+      <div class="si on"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="si-l">Context</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-l">Chat IA</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="si-l">Agents</span></div>
+      <div class="sb-sp"></div>
+      <div class="sb-ava">SP</div>
+    </div>
+    <div class="mn">
+      <div class="topbar">
+        <div class="tb-t">Context</div>
+        <div class="sp"></div>
+        <button class="btn btn-sm">🔍</button>
+        <button class="btn btn-p btn-sm">+ Nouveau</button>
+      </div>
+      <div style="display:flex;flex:1;overflow:hidden;">
+        <!-- Tree -->
+        <div style="width:185px;border-right:1px solid var(--line);overflow-y:auto;flex-shrink:0;background:var(--bg-muted);">
+          <div class="tree-s">Workspace</div>
+          <div class="tree-i"><div class="fr fr-ok"></div><span style="opacity:.7;">🔒</span> product.md</div>
+
+          <div class="tree-s">Features</div>
+          <div class="tree-i on"><div class="fr fr-ok"></div>ep-04 / spec.md</div>
+          <div class="tree-i"><div class="fr fr-w"></div>ep-05 / spec.md</div>
+          <div class="tree-i"><div class="fr fr-old"></div>ep-03 / spec.md</div>
+
+          <div class="tree-s">Requests <span class="badge b-red" style="font-size:8px;padding:1px 5px;">2</span></div>
+          <div class="tree-i"><div class="fr fr-ok"></div>csv-import.md</div>
+          <div class="tree-i"><div class="fr fr-ok"></div>excel-export.md</div>
+
+          <div class="tree-s">Architecture</div>
+          <div class="tree-i"><div class="fr fr-ok"></div><span style="opacity:.7;">🔒</span> auth.md</div>
+          <div class="tree-i"><div class="fr fr-w"></div>conventions.md</div>
+
+          <div class="tree-s">Sprints</div>
+          <div class="tree-i"><div class="fr fr-ok"></div>current.md</div>
+
+          <div style="margin:10px 8px;padding:8px;background:var(--bg-card);border-radius:6px;border:1px solid var(--line);">
+            <div style="font-size:9px;color:#333;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Légende</div>
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;"><div class="fr fr-ok"></div><span style="font-size:10px;color:#444;">&lt; 7j</span></div>
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;"><div class="fr fr-w"></div><span style="font-size:10px;color:#444;">7–21j</span></div>
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;"><div class="fr fr-old"></div><span style="font-size:10px;color:#444;">&gt; 21j</span></div>
+            <div style="display:flex;align-items:center;gap:5px;"><span style="font-size:10px;opacity:.7;">🔒</span><span style="font-size:10px;color:#444;">Protégé</span></div>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div style="flex:1;overflow-y:auto;padding:20px;background:var(--bg);">
+          <!-- File toolbar -->
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--primary);">features/ep-04/spec.md</span>
+            <span class="badge b-green">Fraîche · 1j</span>
+            <div class="sp"></div>
+            <span style="font-size:10px;color:#333;">Sophie P. · hier</span>
+            <!-- Protection toggle (admin only) -->
+            <div class="only-admin" style="display:none;padding:3px 8px;border-radius:5px;border:1px solid var(--line);background:var(--bg-muted);cursor:pointer;font-size:10px;color:#444;" title="Cliquer pour protéger ce fichier">🔓 Non protégé</div>
+            <button class="btn btn-sm">Modifier</button>
+          </div>
+
+          <!-- Example: product.md would show this instead -->
+          <div class="only-admin" style="display:none;margin-bottom:8px;padding:6px 10px;background:rgba(240,175,36,.06);border:1px solid rgba(240,175,36,.12);border-radius:6px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;">🔒</span>
+            <span style="font-size:10px;color:var(--warn);">Fichier protégé</span>
+            <span style="font-size:10px;color:#333;">— Reviewer :</span>
+            <span style="font-size:10px;color:var(--text-muted);">Alice L. (Head of Product)</span>
+            <div class="sp"></div>
+            <button class="btn btn-ghost btn-sm" style="font-size:9px;">✕ Retirer la protection</button>
+          </div>
+
+          <hr class="div">
+          <div style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;">EP-04 — Authentification SSO</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:14px;">Permettre aux organisations d'utiliser leur SSO (Okta, Azure AD, Google) pour authentifier leurs utilisateurs.</div>
+          <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:600;color:var(--text);margin-bottom:6px;">ACCEPTANCE CRITERIA</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.8;margin-bottom:16px;">
+            • L'admin configure un provider SAML 2.0 ou OIDC<br>
+            • Les membres se connectent via SSO sans mot de passe<br>
+            • Fallback email/password en cas d'échec SSO<br>
+            • Si user désactivé dans l'IdP → session révoquée ≤ 5 min<br>
+            • L'user est redirigé vers login avec message explicite<br>
+            • Tokens locaux supprimés via safeStorage
+          </div>
+          <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:600;color:var(--text);margin-bottom:6px;">CONTRAINTES TECHNIQUES</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.8;">• Flow PKCE existant dans auth.ts<br>• Compatibilité Melody Auth<br>• Token storage via electron.safeStorage</div>
+          <hr class="div">
+          <div class="info only-dev" style="display:none;">💡 Cette spec PM est injectée dans ton agent Dev. C'est ce qui améliore le taux de réalisation.</div>
+          <div class="warnbox only-dev" style="display:none;margin-top:8px;">🔒 Fichier protégé. Ta modification créera une contribution soumise au reviewer.</div>
+          <div class="warnbox only-pm" style="display:none;">📥 2 contributions en attente de review — <button class="btn btn-sm" style="margin-left:4px;">Voir dans requests/ →</button></div>
+        </div>
+      </div>
+      <div class="sbar"><div class="sbar-dot"></div>Synchronisé<div class="sp"></div><span style="font-family:'Space Mono',monospace;">features/ep-04/spec.md</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════
+     CHAT IA
+═══════════════════════════════════ -->
+<div id="s-chat" class="screen">
+<div class="win">
+  <div class="titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="tbar-t">nakiros — acme corp</span></div>
+  <div class="shell">
+    <div class="sb">
+      <div class="sb-logo">N</div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="si-l">Home</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="si-l">Context</span></div>
+      <div class="si on"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-l">Chat IA</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="si-l">Agents</span></div>
+      <div class="sb-sp"></div>
+      <div class="sb-ava">SP</div>
+    </div>
+    <div class="mn" style="display:flex;flex-direction:column;">
+      <div class="topbar">
+        <div style="display:flex;gap:4px;" id="chat-tabs">
+          <div class="conv-tab on">@PM · EP-04</div>
+          <div class="conv-tab">@Discovery</div>
+        </div>
+        <div class="sp"></div>
+        <button class="btn btn-p btn-sm">+ Nouvelle conversation</button>
+      </div>
+      <div class="ctx-bar" id="chat-ctx-bar">
+        <span style="font-size:10px;color:#333;">via</span>
+        <div class="pill on" id="chat-agent-pill">📝 Agent PM</div>
+        <div class="pill"><div style="width:5px;height:5px;border-radius:50%;background:var(--success);"></div>Claude</div>
+        <div class="sp"></div>
+        <span style="font-size:10px;color:#333;">contexte :</span>
+        <span class="ctx-chip">product.md</span>
+        <span class="ctx-chip">ep-04/spec.md</span>
+      </div>
+
+      <div class="chat-w">
+        <div class="msg">
+          <div class="ava ava-s ava-ai">🤖</div>
+          <div class="bub">J'ai chargé EP-04. La spec est solide mais les scénarios de déprovisionnement ne sont pas couverts dans les ACs — révocation quand un user est désactivé côté IdP. Tu veux qu'on les ajoute ?</div>
+        </div>
+        <div class="msg usr">
+          <div class="ava ava-s ava-t">SP</div>
+          <div class="bub">Oui. Ajoute le cas session active quand l'user est désactivé.</div>
+        </div>
+        <div class="msg">
+          <div class="ava ava-s ava-ai">🤖</div>
+          <div style="max-width:88%;">
+            <div class="bub" style="border-radius:8px 8px 0 0;border-bottom:none;">Voici les ACs que je propose :</div>
+            <div class="diff">
+              <div class="diff-h">
+                <span class="diff-p">features/ep-04/spec.md</span>
+                <span class="diff-m">+4 lignes</span>
+                <div class="sp"></div>
+                <span class="diff-m" style="font-family:'Space Mono',monospace;">@@ -18,4 +18,8 @@</span>
+              </div>
+              <div class="dl dl-c">  • Fallback email/password en cas d'échec SSO</div>
+              <div class="dl dl-c">  • Sessions expirent selon la policy du provider</div>
+              <div class="dl dl-a">+ • Si user désactivé dans l'IdP → session révoquée ≤ 5 min</div>
+              <div class="dl dl-a">+ • L'user est redirigé vers login avec message explicite</div>
+              <div class="dl dl-a">+ • Tokens locaux supprimés (safeStorage)</div>
+              <div class="diff-act">
+                <button class="btn btn-p btn-sm">✓ Valider → écrire dans Context</button>
+                <button class="btn btn-sm">✎ Modifier</button>
+                <button class="btn btn-ghost btn-sm">✕ Ignorer</button>
+                <div class="sp"></div>
+                <span class="diff-m" style="font-family:'Space Mono',monospace;">features/ep-04/spec.md</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="msg">
+          <div class="ava ava-s ava-ai">🤖</div>
+          <div class="bub" style="border-left:2px solid var(--success);">
+            <span style="font-size:10px;color:var(--success);font-weight:600;font-family:'Space Mono',monospace;">✓ ÉCRIT — features/ep-04/spec.md</span><br>
+            <span style="font-size:11px;color:var(--text-muted);">Autre chose à affiner ?</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-in">
+        <span class="chat-sh">@ # /</span>
+        <input class="input" placeholder="Message… (@agent, #fichier, /workflow)" style="flex:1;">
+        <button class="btn btn-p btn-sm">↑</button>
+      </div>
+      <div class="sbar"><div class="sbar-dot"></div>Agent actif<div class="sp"></div>EP-04</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════
+     AGENTS
+═══════════════════════════════════ -->
+<div id="s-agents" class="screen">
+<div class="win">
+  <div class="titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="tbar-t">nakiros — agents</span></div>
+  <div class="shell">
+    <div class="sb">
+      <div class="sb-logo">N</div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="si-l">Home</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="si-l">Context</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-l">Chat IA</span></div>
+      <div class="si on"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="si-l">Agents</span></div>
+      <div class="sb-sp"></div>
+      <div class="sb-ava">SP</div>
+    </div>
+    <div class="mn" style="flex-direction:row;overflow:hidden;">
+      <!-- Agent list -->
+      <div style="width:190px;border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;background:var(--bg-muted);">
+        <div style="padding:10px 10px 6px;border-bottom:1px solid var(--line);">
+          <div style="font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;font-family:'Space Mono',monospace;">MES AGENTS</div>
+          <div id="agent-list">
+            <div style="padding:8px 10px;background:var(--bg-card);border:1px solid var(--primary);border-radius:7px;cursor:pointer;margin-bottom:5px;">
+              <div style="font-size:11px;font-weight:600;color:var(--text);">📝 Agent PM</div>
+              <div style="font-size:10px;color:var(--primary);margin-top:1px;">Nakiros · modifié</div>
+            </div>
+            <div style="padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:7px;cursor:pointer;margin-bottom:5px;">
+              <div style="font-size:11px;color:var(--text-muted);">🔍 Agent Discovery</div>
+              <div style="font-size:10px;color:#333;margin-top:1px;">Nakiros · défaut</div>
+            </div>
+          </div>
+          <div style="padding:7px 10px;background:var(--bg);border:1px dashed var(--line-strong);border-radius:7px;cursor:pointer;opacity:.5;margin-top:4px;">
+            <div style="font-size:11px;color:#333;">+ Nouvel agent</div>
+          </div>
+        </div>
+        <div style="padding:10px 10px 6px;">
+          <div style="font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;font-family:'Space Mono',monospace;">MCPs</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg);border:1px solid var(--line);border-radius:6px;margin-bottom:5px;">
+            <div style="width:5px;height:5px;border-radius:50%;background:var(--success);"></div>
+            <span style="font-size:11px;color:var(--text-muted);">Jira</span>
+            <div class="sp"></div><span style="font-size:10px;color:#333;">actif</span>
+          </div>
+          <div style="padding:6px 8px;background:var(--bg);border:1px dashed var(--line-strong);border-radius:6px;cursor:pointer;opacity:.5;">
+            <span style="font-size:11px;color:#333;">+ Ajouter MCP</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workflow canvas -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+        <div class="topbar">
+          <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text);">📝 Agent PM</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-left:4px;">— plan-feature</div>
+          <div class="sp"></div>
+          <button class="btn btn-sm">Instructions</button>
+          <button class="btn btn-p btn-sm">Workflow ●</button>
+        </div>
+        <div style="flex:1;overflow:auto;background:#050505;position:relative;padding:30px 50px;">
+          <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
+            <defs><marker id="a1" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#2a2a2a"/></marker><marker id="b1" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#f0af24"/></marker></defs>
+            <line x1="138" y1="68" x2="138" y2="108" stroke="#2a2a2a" stroke-width="1.5" marker-end="url(#a1)"/>
+            <line x1="138" y1="168" x2="138" y2="210" stroke="#2a2a2a" stroke-width="1.5" marker-end="url(#a1)"/>
+            <line x1="138" y1="270" x2="138" y2="306" stroke="#2a2a2a" stroke-width="1.5" marker-end="url(#a1)"/>
+            <line x1="110" y1="334" x2="68" y2="376" stroke="#2a2a2a" stroke-width="1.5" stroke-dasharray="4,3"/>
+            <line x1="166" y1="334" x2="222" y2="376" stroke="#f0af24" stroke-width="1.5" stroke-dasharray="4,3"/>
+            <line x1="68" y1="438" x2="138" y2="476" stroke="#2a2a2a" stroke-width="1.5" marker-end="url(#a1)"/>
+            <line x1="228" y1="438" x2="138" y2="476" stroke="#f0af24" stroke-width="1.5" marker-end="url(#a1)"/>
+            <line x1="138" y1="536" x2="138" y2="572" stroke="#2a2a2a" stroke-width="1.5" marker-end="url(#a1)"/>
+          </svg>
+          <div class="node" style="top:36px;left:90px;width:96px;background:var(--primary-soft);border-color:rgba(13,158,158,.3);border-radius:20px;padding:5px 14px;text-align:center;font-size:10px;font-weight:600;color:var(--primary);font-family:'Space Mono',monospace;">▶ START</div>
+          <div class="node" style="top:108px;left:48px;width:180px;"><div class="node-t">Action</div><div class="node-n">📋 Charger contexte</div><div class="node-s">product.md + features/{epic}</div></div>
+          <div class="node" style="top:210px;left:48px;width:180px;"><div class="node-t">Action</div><div class="node-n">🔍 Analyser spec</div><div class="node-s">Vérifier ACs, scope, edge cases</div></div>
+          <div class="node" style="top:300px;left:68px;width:140px;text-align:center;border-color:#f0af24;background:rgba(240,175,36,.04);"><div class="node-t" style="color:#f0af24;">Condition</div><div class="node-n">ACs complets ?</div></div>
+          <div style="position:absolute;top:345px;left:20px;font-size:9px;color:var(--success);font-weight:600;font-family:'Space Mono',monospace;">OUI</div>
+          <div style="position:absolute;top:345px;left:198px;font-size:9px;color:#f0af24;font-weight:600;font-family:'Space Mono',monospace;">NON</div>
+          <div class="node" style="top:376px;left:4px;width:128px;border-color:rgba(46,207,207,.3);background:rgba(46,207,207,.04);"><div class="node-t" style="color:var(--success);">Action</div><div class="node-n" style="font-size:10px;">✓ Résumé prêt pour dev</div></div>
+          <div class="node" style="top:376px;left:168px;width:132px;border-color:#f0af24;background:rgba(240,175,36,.04);"><div class="node-t" style="color:#f0af24;">Action</div><div class="node-n" style="font-size:10px;">✎ Rédiger ACs manquants</div></div>
+          <div class="node" style="top:476px;left:48px;width:180px;border-color:var(--primary);"><div class="node-t" style="color:var(--primary);">Write</div><div class="node-n">↑ Proposer diff</div><div class="node-s">Afficher diff · attendre validation</div></div>
+          <div class="node" style="top:572px;left:88px;width:100px;background:var(--bg-muted);border-color:var(--line);border-radius:20px;padding:5px 14px;text-align:center;font-size:10px;color:#333;font-family:'Space Mono',monospace;">■ END</div>
+          <div style="position:absolute;top:148px;left:248px;padding:5px 10px;background:var(--bg-card);border:1px dashed var(--line-strong);border-radius:6px;cursor:pointer;font-size:10px;color:#333;">+ action</div>
+        </div>
+      </div>
+
+      <!-- Inspector -->
+      <div style="width:200px;border-left:1px solid var(--line);padding:14px;overflow-y:auto;flex-shrink:0;background:var(--bg-muted);">
+        <div style="font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;font-family:'Space Mono',monospace;">NŒUD SÉLECTIONNÉ</div>
+        <div style="background:var(--bg-card);border:1px solid var(--primary);border-radius:7px;padding:10px;margin-bottom:12px;">
+          <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px;">↑ Proposer diff</div>
+          <div style="font-size:10px;color:var(--primary);">Type : Write</div>
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Destination</label>
+          <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--primary);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:6px 8px;">features/{epic}/spec.md</div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Comportement</label>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);cursor:pointer;"><input type="radio" checked style="accent-color:var(--primary);"> Diff + validation</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);cursor:pointer;"><input type="radio" style="accent-color:var(--primary);"> Écrire directement</label>
+          </div>
+        </div>
+        <hr class="div">
+
+        <!-- Admin only: scope config -->
+        <div class="only-admin" style="display:none;">
+          <div style="font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;font-family:'Space Mono',monospace;">PERMISSIONS DU RÔLE</div>
+          <div class="card" style="padding:10px;">
+            <table class="ptable">
+              <thead><tr><th>Dossier</th><th>R</th><th>W</th></tr></thead>
+              <tbody>
+                <tr><td><code style="font-size:10px;color:var(--primary);">features/</code></td><td><span class="pc">✓</span></td><td><span class="pc">✓</span></td></tr>
+                <tr><td><code style="font-size:10px;color:var(--primary);">product.md</code></td><td><span class="pc">✓</span></td><td><span class="pc">✓</span></td></tr>
+                <tr><td><code style="font-size:10px;color:#333;">architecture/</code></td><td><span class="pc">✓</span></td><td><span class="pd">—</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;font-family:'Space Mono',monospace;">AJOUTER APRÈS</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button class="btn btn-sm" style="justify-content:flex-start;">📋 Charger contexte</button>
+          <button class="btn btn-sm" style="justify-content:flex-start;">🔍 Analyser</button>
+          <button class="btn btn-sm" style="justify-content:flex-start;">↑ Write / diff</button>
+          <button class="btn btn-sm" style="justify-content:flex-start;">? Condition</button>
+          <button class="btn btn-sm" style="justify-content:flex-start;">🔗 Appel MCP</button>
+          <button class="btn btn-sm" style="justify-content:flex-start;">💬 Demander input</button>
+        </div>
+      </div>
+    </div>
+    <div class="sbar"><div class="sbar-dot"></div>Agent PM · plan-feature<div class="sp"></div>Non publié</div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════
+     CONTEXT — REVIEW CONTRIBUTION
+═══════════════════════════════════ -->
+<div id="s-review" class="screen">
+<div class="win">
+  <div class="titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="tbar-t">nakiros — acme corp</span></div>
+  <div class="shell">
+    <div class="sb">
+      <div class="sb-logo">N</div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="si-l">Home</span></div>
+      <div class="si on"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="si-l">Context</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-l">Chat IA</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="si-l">Agents</span></div>
+      <div class="sb-sp"></div>
+      <div class="si"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="si-l">Settings</span></div>
+      <div class="sb-ava">SP</div>
+    </div>
+    <div class="mn">
+      <div class="topbar">
+        <div class="tb-t">Context</div>
+        <div class="tb-s">— requests/csv-import.md</div>
+        <div class="sp"></div>
+        <span class="badge b-warn">À reviewer</span>
+      </div>
+      <div style="display:flex;flex:1;overflow:hidden;">
+        <!-- Tree (same as Context, requests highlighted) -->
+        <div style="width:185px;border-right:1px solid var(--line);overflow-y:auto;flex-shrink:0;background:var(--bg-muted);">
+          <div class="tree-s">Workspace</div>
+          <div class="tree-i"><div class="fr fr-ok"></div><span style="opacity:.7;">🔒</span> product.md</div>
+          <div class="tree-s">Features</div>
+          <div class="tree-i"><div class="fr fr-ok"></div>ep-04 / spec.md</div>
+          <div class="tree-i"><div class="fr fr-w"></div>ep-05 / spec.md</div>
+          <div class="tree-s">Requests <span class="badge b-red" style="font-size:8px;padding:1px 5px;">2</span></div>
+          <div class="tree-i on" style="border-left:2px solid var(--warn);"><div class="fr fr-ok"></div>csv-import.md</div>
+          <div class="tree-i"><div class="fr fr-ok"></div>excel-export.md</div>
+          <div class="tree-s">Architecture</div>
+          <div class="tree-i"><div class="fr fr-ok"></div><span style="opacity:.7;">🔒</span> auth.md</div>
+        </div>
+
+        <!-- Review content -->
+        <div style="flex:1;overflow-y:auto;padding:20px;background:var(--bg);">
+          <!-- File header -->
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--primary);">requests/csv-import.md</span>
+            <span class="badge b-warn">À reviewer</span>
+            <div class="sp"></div>
+            <span style="font-size:10px;color:#333;">Marc K. · Support · il y a 2h</span>
+          </div>
+          <hr class="div">
+
+          <!-- Contribution content -->
+          <div style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;">Limite d'import CSV trop basse</div>
+
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:16px;">
+            Les clients demandent à pouvoir importer des fichiers CSV de plus de 10Mo. Actuellement la limite est bloquante pour les équipes de plus de 50 personnes.<br><br>
+            3 clients ont ouvert des tickets similaires en 2 semaines : Zendesk #4521, #4489, #4467.
+          </div>
+
+          <!-- Source data -->
+          <div class="card">
+            <div class="card-t">Données source</div>
+            <div class="row">
+              <span style="font-size:14px;">📎</span>
+              <div style="flex:1;"><div class="row-t">Zendesk #4521</div><div class="row-s">Haute priorité · 3 clients affectés dont 1 Enterprise</div></div>
+            </div>
+            <div class="row">
+              <span style="font-size:14px;">📊</span>
+              <div style="flex:1;"><div class="row-t">7 demandes similaires ce mois</div><div class="row-s">Pattern récurrent identifié par Agent Support</div></div>
+            </div>
+          </div>
+
+          <hr class="div">
+
+          <!-- Where it goes if validated -->
+          <div style="margin-bottom:14px;">
+            <div style="font-family:'Space Mono',monospace;font-size:10px;color:#333;margin-bottom:6px;">SI VALIDÉ → déplacé vers :</div>
+            <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--primary);background:var(--bg-muted);border:1px solid var(--line);border-radius:5px;padding:6px 10px;display:inline-block;">features/csv-import/spec.md</div>
+          </div>
+
+          <!-- Agent assist -->
+          <div class="card" style="border-color:rgba(13,158,158,.2);">
+            <div class="card-t" style="color:var(--primary);">🤖 Analyser avec mon agent</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.5;">Lance ton agent PM pour enrichir cette contribution avec des user stories, ACs et estimation d'impact.</div>
+            <button class="btn btn-p btn-sm">@PM analyser cette contribution →</button>
+            <span style="font-size:10px;color:#333;margin-left:8px;">Ouvre dans Chat IA</span>
+          </div>
+
+          <hr class="div">
+
+          <!-- Review actions -->
+          <div style="margin-bottom:10px;">
+            <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Note pour Marc (optionnel)</label>
+            <textarea class="input" rows="2" placeholder="Commentaire avant de valider ou refuser…" style="resize:none;"></textarea>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-p" style="flex:1;justify-content:center;padding:9px;">✓ Valider → features/</button>
+            <button class="btn" style="flex:1;justify-content:center;padding:9px;">✕ Refuser</button>
+          </div>
+          <div style="margin-top:8px;font-size:10px;color:#333;text-align:center;">Marc sera notifié de ta décision.</div>
+        </div>
+      </div>
+      <div class="sbar"><div class="sbar-dot"></div>Synchronisé<div class="sp"></div><span style="font-family:'Space Mono',monospace;">requests/csv-import.md</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SETTINGS
+═══════════════════════════════════ -->
+<div id="s-settings" class="screen">
+<div class="win">
+  <div class="titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="tbar-t">nakiros — settings</span></div>
+  <div class="shell">
+    <div class="sb">
+      <div class="sb-logo">N</div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="si-l">Home</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="si-l">Context</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-l">Chat IA</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="si-l">Agents</span></div>
+      <div class="sb-sp"></div>
+      <div class="si on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="si-l">Settings</span></div>
+      <div class="sb-ava">SP</div>
+    </div>
+    <div class="mn" style="flex-direction:row;overflow:hidden;">
+      <!-- Settings nav -->
+      <div style="width:160px;border-right:1px solid var(--line);padding:12px 8px;background:var(--bg-muted);flex-shrink:0;">
+        <div style="font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;padding:0 6px;font-family:'Space Mono',monospace;">PERSONNEL</div>
+        <div class="tree-i on" style="font-size:11px;">Profil</div>
+        <div class="tree-i" style="font-size:11px;">Providers IA</div>
+        <div class="tree-i" style="font-size:11px;">Notifications</div>
+        <div style="font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin:16px 0 10px;padding:0 6px;font-family:'Space Mono',monospace;">WORKSPACE</div>
+        <div class="tree-i" style="font-size:11px;">Général</div>
+        <div class="tree-i" style="font-size:11px;">Repos</div>
+        <div class="tree-i" style="font-size:11px;">Intégrations</div>
+        <div style="font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.07em;margin:16px 0 10px;padding:0 6px;font-family:'Space Mono',monospace;">ORGANISATION <span class="badge b-red" style="font-size:8px;padding:1px 4px;">admin</span></div>
+        <div class="tree-i" style="font-size:11px;">Membres</div>
+        <div class="tree-i" style="font-size:11px;">Rôles & Permissions</div>
+        <div class="tree-i" style="font-size:11px;">Abonnement</div>
+      </div>
+
+      <!-- Settings content -->
+      <div style="flex:1;overflow-y:auto;padding:24px;background:var(--bg);">
+        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Profil</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:20px;">Paramètres de ton compte Nakiros.</div>
+
+        <div class="card">
+          <div class="card-t">Informations</div>
+          <div class="g2" style="gap:14px;">
+            <div>
+              <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Nom</label>
+              <input class="input" value="Sophie P." style="width:100%;">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">Email</label>
+              <input class="input" value="sophie@acme.com" style="width:100%;" disabled>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-t">Rôle dans Acme Corp</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="badge b-teal" style="font-size:12px;padding:4px 10px;">Product Manager</span>
+            <span style="font-size:11px;color:#333;">Assigné par l'admin</span>
+          </div>
+          <div style="margin-top:10px;font-size:11px;color:var(--text-muted);line-height:1.5;">
+            Scope écriture : <span style="font-family:'Space Mono',monospace;color:var(--primary);">features/</span> <span style="font-family:'Space Mono',monospace;color:var(--primary);">product.md</span> <span style="font-family:'Space Mono',monospace;color:var(--primary);">requests/</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-t">Providers IA préférés</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-muted);border:1px solid var(--line);border-radius:6px;">
+              <div style="width:6px;height:6px;border-radius:50%;background:var(--success);"></div>
+              <span style="font-size:12px;color:var(--text-muted);flex:1;">Claude</span>
+              <span class="badge b-green">Par défaut</span>
+              <button class="btn btn-ghost btn-sm">Configurer</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-muted);border:1px solid var(--line);border-radius:6px;">
+              <div style="width:6px;height:6px;border-radius:50%;background:#555;"></div>
+              <span style="font-size:12px;color:var(--text-muted);flex:1;">Codex</span>
+              <span class="badge b-muted">Disponible</span>
+              <button class="btn btn-ghost btn-sm">Configurer</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg-muted);border:1px dashed var(--line-strong);border-radius:6px;opacity:.5;cursor:pointer;">
+              <span style="font-size:12px;color:#333;">+ Ajouter un provider (Gemini, Cursor…)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin-only section -->
+        <hr class="div" style="margin:20px 0;">
+        <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Organisation <span class="badge b-red" style="font-size:9px;margin-left:6px;">Admin only</span></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;">Visible uniquement par les admins de l'organisation.</div>
+
+        <div class="g2" style="gap:14px;">
+          <!-- Roles -->
+          <div class="card">
+            <div class="card-t">Rôles</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;background:var(--bg-muted);border-radius:6px;">
+                <span>📝</span><span style="font-size:11px;color:var(--text-muted);flex:1;">Product Manager</span><span style="font-size:10px;color:#333;">3</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;background:var(--bg-muted);border-radius:6px;">
+                <span>🏗</span><span style="font-size:11px;color:var(--text-muted);flex:1;">Architect</span><span style="font-size:10px;color:#333;">1</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;background:var(--bg-muted);border-radius:6px;">
+                <span>💻</span><span style="font-size:11px;color:var(--text-muted);flex:1;">Developer</span><span style="font-size:10px;color:#333;">5</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;background:var(--bg-muted);border-radius:6px;">
+                <span>🎧</span><span style="font-size:11px;color:var(--text-muted);flex:1;">Support</span><span style="font-size:10px;color:#333;">2</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 8px;background:var(--bg-muted);border-radius:6px;">
+                <span>⚙</span><span style="font-size:11px;color:var(--text-muted);flex:1;">DevOps</span><span style="font-size:10px;color:#333;">1</span>
+              </div>
+            </div>
+            <button class="btn btn-p btn-sm" style="margin-top:10px;width:100%;justify-content:center;">+ Nouveau rôle</button>
+          </div>
+
+          <!-- Role capabilities -->
+          <div class="card">
+            <div class="card-t">Capacités — Product Manager</div>
+
+            <div style="margin-bottom:14px;">
+              <div style="font-size:10px;color:#333;margin-bottom:6px;">Accès au contexte</div>
+              <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--bg-muted);border:1px solid var(--line);border-radius:6px;margin-bottom:6px;">
+                <span class="pc" style="font-size:14px;">✓</span>
+                <span style="font-size:11px;color:var(--text-muted);flex:1;">Lecture sur tout le contexte</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--bg-muted);border:1px solid var(--line);border-radius:6px;">
+                <span class="pc" style="font-size:14px;">✎</span>
+                <span style="font-size:11px;color:var(--text-muted);flex:1;">Écriture — selon le scope défini dans Context</span>
+              </div>
+              <div style="margin-top:6px;font-size:10px;color:#333;line-height:1.5;padding:0 2px;">Les droits d'écriture et les protections se gèrent fichier par fichier dans Context.</div>
+            </div>
+
+            <hr class="div">
+            <div style="font-size:10px;color:#333;margin-bottom:6px;">Agents disponibles</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;">
+              <span class="badge b-teal">Agent PM</span>
+              <span class="badge b-teal">Agent Discovery</span>
+              <span class="badge b-teal">Agent Brainstorming</span>
+              <div style="padding:2px 7px;border-radius:4px;border:1px dashed var(--line-strong);font-size:10px;color:#333;cursor:pointer;">+ Ajouter</div>
+            </div>
+
+            <div style="font-size:10px;color:#333;margin-bottom:6px;">MCPs disponibles</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;">
+              <span class="badge b-green">Jira ✓</span>
+              <span class="badge b-muted">GitHub (lecture)</span>
+              <div style="padding:2px 7px;border-radius:4px;border:1px dashed var(--line-strong);font-size:10px;color:#333;cursor:pointer;">+ Ajouter</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Members -->
+        <div class="card" style="margin-top:10px;">
+          <div class="card-t">Membres <span style="font-size:10px;color:#333;text-transform:none;letter-spacing:0;font-weight:400;">— 12 membres</span></div>
+          <div class="row">
+            <div class="ava ava-s ava-t">SP</div>
+            <div style="flex:1;"><div class="row-t">Sophie P.</div><div class="row-s">sophie@acme.com</div></div>
+            <span class="badge b-teal">PM</span>
+          </div>
+          <div class="row">
+            <div class="ava ava-s" style="background:rgba(240,175,36,.15);color:var(--warn);">RM</div>
+            <div style="flex:1;"><div class="row-t">Rémi M.</div><div class="row-s">remi@acme.com</div></div>
+            <span class="badge b-warn">Architect</span>
+          </div>
+          <div class="row">
+            <div class="ava ava-s ava-b">JD</div>
+            <div style="flex:1;"><div class="row-t">Jean D.</div><div class="row-s">jean@acme.com</div></div>
+            <span class="badge b-muted">Dev</span>
+          </div>
+          <div class="row">
+            <div class="ava ava-s ava-pur">MK</div>
+            <div style="flex:1;"><div class="row-t">Marc K.</div><div class="row-s">marc@acme.com</div></div>
+            <span class="badge" style="background:rgba(171,74,186,.1);color:#ab4aba;">Support</span>
+          </div>
+          <button class="btn btn-p btn-sm" style="margin-top:10px;">+ Inviter un membre</button>
+        </div>
+      </div>
+    </div>
+    <div class="sbar"><div class="sbar-dot"></div>Settings<div class="sp"></div>Acme Corp</div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════
+     WORKSPACE SWITCHER (overlay on sidebar)
+═══════════════════════════════════ -->
+<div id="s-ws" class="screen">
+<div class="win">
+  <div class="titlebar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="tbar-t">nakiros — acme corp</span></div>
+  <div class="shell">
+    <div class="sb" style="position:relative;">
+      <div class="sb-logo" style="border-color:var(--primary);cursor:pointer;">N</div>
+      <!-- Dropdown overlay -->
+      <div style="position:absolute;top:48px;left:4px;width:220px;background:var(--bg-card);border:1px solid var(--line-strong);border-radius:8px;box-shadow:0 16px 48px rgba(0,0,0,.6);z-index:10;padding:8px;">
+        <div style="font-size:9px;color:#333;font-weight:600;text-transform:uppercase;letter-spacing:.07em;padding:6px 8px;font-family:'Space Mono',monospace;">WORKSPACES</div>
+        <!-- Active workspace -->
+        <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--primary-soft);border:1px solid rgba(13,158,158,.25);border-radius:6px;margin-bottom:4px;cursor:pointer;">
+          <div style="width:28px;height:28px;border-radius:6px;background:var(--primary-soft);border:1px solid rgba(13,158,158,.25);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--primary);">AC</div>
+          <div style="flex:1;">
+            <div style="font-size:11px;font-weight:600;color:var(--text);">Acme Corp</div>
+            <div style="font-size:10px;color:var(--primary);">PM · 3 repos · 12 membres</div>
+          </div>
+          <div style="width:6px;height:6px;border-radius:50%;background:var(--success);"></div>
+        </div>
+        <!-- Other workspaces -->
+        <div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;cursor:pointer;margin-bottom:4px;" onmouseover="this.style.background='var(--bg-muted)'" onmouseout="this.style.background='transparent'">
+          <div style="width:28px;height:28px;border-radius:6px;background:var(--bg-muted);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text-muted);">SL</div>
+          <div style="flex:1;">
+            <div style="font-size:11px;color:var(--text-muted);">Side Lab</div>
+            <div style="font-size:10px;color:#333;">Admin · 1 repo · solo</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;cursor:pointer;margin-bottom:4px;" onmouseover="this.style.background='var(--bg-muted)'" onmouseout="this.style.background='transparent'">
+          <div style="width:28px;height:28px;border-radius:6px;background:var(--bg-muted);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--text-muted);">FT</div>
+          <div style="flex:1;">
+            <div style="font-size:11px;color:var(--text-muted);">FinTrack</div>
+            <div style="font-size:10px;color:#333;">Dev · 4 repos · 8 membres</div>
+          </div>
+        </div>
+        <hr class="div" style="margin:6px 0;">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;cursor:pointer;opacity:.5;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='0.5'">
+          <span style="font-size:14px;width:28px;text-align:center;">+</span>
+          <span style="font-size:11px;color:#333;">Rejoindre ou créer un workspace</span>
+        </div>
+      </div>
+
+      <div class="si on"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="si-l">Home</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="si-l">Context</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="si-l">Chat IA</span></div>
+      <div class="si"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="si-l">Agents</span></div>
+      <div class="sb-sp"></div>
+      <div class="si"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="si-l">Settings</span></div>
+      <div class="sb-ava">SP</div>
+    </div>
+
+    <div class="mn">
+      <div class="topbar">
+        <div class="tb-t">Home</div>
+        <div class="tb-s">— Sophie P. · Product Manager</div>
+        <div class="sp"></div>
+      </div>
+      <div class="content" style="opacity:.3;pointer-events:none;">
+        <div style="font-size:13px;color:var(--text-muted);">Contenu flou — workspace switcher ouvert</div>
+      </div>
+      <div class="sbar"><div class="sbar-dot"></div>Synchronisé<div class="sp"></div>Acme Corp</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+function show(id, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('.sw-b').forEach(b => b.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  btn.classList.add('on');
+}
+
+function setRole(role, btn) {
+  document.body.className = 'r-' + role;
+  document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+
+  // Update dynamic elements based on role
+  const labels = {
+    pm:    { user: 'Sophie P. · PM',   ava: 'SP', role: '— Sophie P. · Product Manager', stat1: '2', stat1l: 'À reviewer', stat1d: 'Contributions Support', stat4: '1', stat4d: 'Agent PM · EP-04', agent: '📝 Agent PM', tabs: '@PM · EP-04' },
+    dev:   { user: 'Jean D. · Dev',    ava: 'JD', role: '— Jean D. · Developer',         stat1: '4', stat1l: 'Tasks',       stat1d: '1 in progress',           stat4: '1', stat4d: 'Agent Dev · EP-04', agent: '💻 Agent Dev', tabs: '@Dev · EP-04' },
+    sup:   { user: 'Marc K. · Support',ava: 'MK', role: '— Marc K. · Support',           stat1: '2', stat1l: 'Contributions', stat1d: '1 en attente PM',      stat4: '0', stat4d: '—',                  agent: '🎧 Agent Support', tabs: '@Support' },
+    admin: { user: 'Admin · Owner',    ava: 'AD', role: '— Admin · Owner',               stat1: '12', stat1l: 'Membres',     stat1d: '5 rôles · 3 workspaces', stat4: '3', stat4d: 'Agents actifs',       agent: '⚙ Admin',         tabs: '@Admin' },
+  };
+  const l = labels[role];
+  const qs = s => document.querySelector(s);
+  const qi = s => document.getElementById(s);
+
+  if (qi('sbar-user')) qi('sbar-user').textContent = l.user;
+  if (qi('home-role-label')) qi('home-role-label').textContent = l.role;
+  if (qi('home-stat1')) qi('home-stat1').textContent = l.stat1;
+  if (qi('home-stat1-l')) qi('home-stat1-l').textContent = l.stat1l;
+  if (qi('home-stat1-d')) qi('home-stat1-d').textContent = l.stat1d;
+  if (qi('home-stat4')) qi('home-stat4').textContent = l.stat4;
+  if (qi('home-stat4-d')) qi('home-stat4-d').textContent = l.stat4d;
+  if (qi('chat-agent-pill')) qi('chat-agent-pill').textContent = l.agent;
+
+  // Avatar colors
+  const avaColors = { pm: 'var(--primary)', dev: '#3b82f6', sup: '#ab4aba', admin: 'var(--danger)' };
+  document.querySelectorAll('.sb-ava').forEach(a => { a.textContent = l.ava; a.style.background = avaColors[role] + '22'; a.style.color = avaColors[role]; });
+  if (qi('home-ava')) { qi('home-ava').textContent = l.ava; qi('home-ava').style.color = avaColors[role]; qi('home-ava').style.background = avaColors[role] + '22'; }
+}
+</script>
+</body>
+</html>

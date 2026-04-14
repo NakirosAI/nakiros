@@ -13,6 +13,7 @@ import { MarkdownViewer } from '../components/ui/MarkdownViewer';
 import ProductDocChat from '../components/product/ProductDocChat';
 import { Badge, Button } from '../components/ui';
 import type { ArtifactReviewMutation } from '../hooks/useArtifactReview';
+import { formatTokens } from '../components/context/ContextPanelParts';
 
 interface Props {
   workspace: StoredWorkspace;
@@ -286,6 +287,8 @@ export default function ProductView({
   const { t } = useTranslation('context');
 
   const [artifactPaths, setArtifactPaths] = useState<string[]>([]);
+  const [contextFileSizes, setContextFileSizes] = useState<Map<string, number>>(new Map());
+  const [contextTotalBytes, setContextTotalBytes] = useState<number | null>(null);
   const [selection, setSelection] = useState<ProductDocSelection | null>(null);
   const [docContent, setDocContent] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
@@ -332,9 +335,18 @@ export default function ProductView({
   }, []);
 
   useEffect(() => {
-    void loadArtifactPaths(workspace)
-      .then((paths) => setArtifactPaths(paths))
-      .catch(() => setArtifactPaths([]));
+    void window.nakiros.artifactListContextFilesWithSizes(workspace)
+      .then((files) => {
+        setArtifactPaths(files.map((f) => f.path));
+        const sizeMap = new Map(files.map((f) => [f.path, f.sizeBytes]));
+        setContextFileSizes(sizeMap);
+        setContextTotalBytes(files.reduce((sum, f) => sum + f.sizeBytes, 0));
+      })
+      .catch(() => {
+        setArtifactPaths([]);
+        setContextFileSizes(new Map());
+        setContextTotalBytes(null);
+      });
   }, [workspace]);
 
   useEffect(() => {
@@ -483,6 +495,8 @@ export default function ProductView({
 
     const item = selectionFromPath(node.path, t);
     const isSelected = selection?.path === item.path;
+    const sizeBytes = contextFileSizes.get(item.path);
+    const tokenBadge = sizeBytes != null && sizeBytes > 0 ? `~${formatTokens(sizeBytes)}` : null;
 
     return (
       <button
@@ -505,6 +519,9 @@ export default function ProductView({
         <div className="min-w-0 flex-1">
           <div className="truncate text-[12px] font-medium">{item.treeLabel}</div>
         </div>
+        {tokenBadge && (
+          <span className="shrink-0 text-[9px] text-[var(--text-muted)]">{tokenBadge}</span>
+        )}
       </button>
     );
   }
@@ -512,6 +529,8 @@ export default function ProductView({
 
   function renderDocButton(item: ProductDocSelection, depth: number, muted = false): ReactNode {
     const isSelected = selection?.path === item.path;
+    const sizeBytes = contextFileSizes.get(item.path);
+    const tokenBadge = sizeBytes != null && sizeBytes > 0 ? `~${formatTokens(sizeBytes)}` : null;
 
     return (
       <button
@@ -536,6 +555,9 @@ export default function ProductView({
         <div className="min-w-0 flex-1">
           <div className="truncate text-[12px] font-medium">{item.treeLabel}</div>
         </div>
+        {tokenBadge && (
+          <span className="shrink-0 text-[9px] text-[var(--text-muted)]">{tokenBadge}</span>
+        )}
       </button>
     );
   }
@@ -554,11 +576,36 @@ export default function ProductView({
       ? t('docEditorUnsaved')
       : t('docEditorSaved');
 
+  function handleInternalLinkClick(href: string) {
+    const currentPath = selectionRef.current?.path ?? '';
+    const currentDir = currentPath.includes('/') ? currentPath.slice(0, currentPath.lastIndexOf('/')) : '';
+    const segments = [...(currentDir ? currentDir.split('/') : []), ...href.replace(/\.md$/i, '').split('/')];
+    const resolved: string[] = [];
+    for (const part of segments) {
+      if (part === '.') continue;
+      if (part === '..') resolved.pop();
+      else if (part) resolved.push(part);
+    }
+    const resolvedPath = resolved.join('/');
+    if (artifactPaths.includes(resolvedPath)) {
+      setActiveFeatureSlug(null);
+      setSelection(selectionFromPath(resolvedPath, t));
+      setShowHistory(false);
+    }
+  }
+
   return (
     <div className="flex h-full w-full min-w-0 flex-1 overflow-hidden">
       <div className="flex w-80 shrink-0 flex-col overflow-hidden border-r border-[var(--line)] bg-[var(--bg-soft)]">
         <div className="shrink-0 border-b border-[var(--line)] px-3 py-3">
-          <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]">context/</div>
+          <div className="flex items-center gap-1.5">
+            <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]">context/</div>
+            {contextTotalBytes != null && contextTotalBytes > 0 && (
+              <span className="rounded bg-[var(--bg-soft)] px-1 py-px text-[9px] text-[var(--text-muted)]">
+                ~{formatTokens(contextTotalBytes)} tokens
+              </span>
+            )}
+          </div>
           <div className="mt-1 text-[12px] text-[var(--text-muted)]">{workspace.name}</div>
         </div>
 
@@ -602,7 +649,13 @@ export default function ProductView({
                           <Layers size={14} className="shrink-0" />
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-[12px] font-semibold text-[var(--text)]">{feature.title}</div>
-                            <div className="truncate text-[10px] text-[var(--text-muted)]">{feature.subtitle}</div>
+                            <div className="truncate text-[10px] text-[var(--text-muted)]">
+                              {feature.subtitle}
+                              {(() => {
+                                const total = feature.allDocs.reduce((sum, doc) => sum + (contextFileSizes.get(doc.path) ?? 0), 0);
+                                return total > 0 ? ` · ~${formatTokens(total)}` : null;
+                              })()}
+                            </div>
                           </div>
                           <span className={clsx('shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold', feature.badgeClassName)}>
                             {feature.badgeLabel}
@@ -805,7 +858,7 @@ export default function ProductView({
                         </div>
                       ) : (
                         <div className="flex-1 overflow-hidden">
-                          <MarkdownViewer content={docContent} className="h-full" />
+                          <MarkdownViewer content={docContent} className="h-full" onInternalLinkClick={handleInternalLinkClick} />
                         </div>
                       )}
                     </>
@@ -967,7 +1020,7 @@ export default function ProductView({
                   </div>
                 ) : (
                   <div className="flex-1 overflow-hidden">
-                    <MarkdownViewer content={docContent} className="h-full" />
+                    <MarkdownViewer content={docContent} className="h-full" onInternalLinkClick={handleInternalLinkClick} />
                   </div>
                 )}
               </div>

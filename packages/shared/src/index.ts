@@ -8,7 +8,6 @@ export * from './types/preferences.js';
 export * from './types/installer.js';
 export * from './types/workspace-settings.js';
 export * from './types/conversation.js';
-export * from './types/auth.js';
 export * from './types/collab.js';
 export * from './types/jira.js';
 export * from './types/provider-credentials.js';

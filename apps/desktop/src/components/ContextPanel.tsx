@@ -20,6 +20,7 @@ import {
   FreshnessBanner,
   MissingDocRow,
   SectionHeader,
+  formatTokens,
 } from './context/ContextPanelParts';
 import { WORKFLOW_CAPABILITIES } from '../utils/workflow-capabilities';
 import type { ArtifactReviewMutation } from '../hooks/useArtifactReview';
@@ -329,6 +330,17 @@ export default function ContextPanel({
       ? t('lastScan', { count: lastScanDocsCount ?? 0, duration: lastScanDurationMs, time: lastScanAt ? new Date(lastScanAt).toLocaleTimeString() : '-' })
       : t('noScanYet');
 
+  const totalContextTokens = useMemo(() => {
+    if (!scanResult) return null;
+    const allDocs = [
+      ...scanResult.globalSection.docs,
+      ...scanResult.globalSection.decisionDocs,
+      ...scanResult.repos.flatMap((r) => r.docs),
+    ];
+    const totalChars = allDocs.reduce((sum, d) => sum + (d.charCount ?? 0), 0);
+    return totalChars > 0 ? formatTokens(totalChars) : null;
+  }, [scanResult]);
+
   const isEditableDoc = Boolean(selectedDoc && !selectedDoc.isRemote);
   const agentModeLabel = agentMode === 'diff' ? t('docEditorModeReview') : t('docEditorModeYolo');
 
@@ -495,9 +507,16 @@ export default function ContextPanel({
         {/* Documents */}
         <div className="flex shrink-0 items-center justify-between px-[14px] pb-0 pt-[10px]">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]">
-              {t('documents')}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-[var(--text-muted)]">
+                {t('documents')}
+              </span>
+              {totalContextTokens && (
+                <span className="rounded bg-[var(--bg-soft)] px-1 py-px text-[9px] text-[var(--text-muted)]">
+                  ~{totalContextTokens} tokens
+                </span>
+              )}
+            </div>
             <span className="text-[10px] text-[var(--text-muted)]">{scanStatusLabel}</span>
           </div>
           <button

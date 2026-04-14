@@ -6,9 +6,17 @@ import {
   readFileSync,
   writeFileSync,
 } from 'fs';
-import { COMMANDS_META_FILE, type CommandMeta } from './update-checker.js';
 import { homedir } from 'os';
-import { resolve } from 'path';
+import { join, resolve } from 'path';
+
+export const COMMANDS_META_FILE = join(homedir(), '.nakiros', 'commands-meta.json');
+
+export interface CommandMeta {
+  tag?: string;
+  label?: string;
+  color?: string;
+  placeholder?: string;
+}
 import type {
   AgentEnvironmentId,
   AgentEnvironmentStatus,

@@ -1,14 +1,4 @@
 import type {
-  AuthCompletePayload,
-  AuthErrorPayload,
-  AuthSignedOutPayload,
-  AuthState,
-  NakirosActionBlock,
-  OrgRole,
-  OrganizationInfo,
-  OrganizationInvitationAcceptanceResult,
-  OrganizationInvitationResult,
-  OrganizationMemberListItem,
   StoredWorkspace,
   AgentProfile,
   LocalTicket,
@@ -22,8 +12,6 @@ import type {
   ResolvedLanguage,
   StoredConversation,
   StoredAgentTabsState,
-  BindWorkspaceProviderCredentialInput,
-  CreateProviderCredentialInput,
   JiraAuthCompletePayload,
   JiraAuthErrorPayload,
   JiraBoardSelection,
@@ -31,64 +19,11 @@ import type {
   JiraStatus,
   JiraSyncResult,
   JiraTicketCount,
-  ProviderCredentialDeleteImpact,
-  ProviderCredentialSummary,
-  SetWorkspaceProviderDefaultInput,
-  UpdateProviderCredentialInput,
-  UpsertWorkspaceMembershipInput,
-  WorkspaceMembershipListPayload,
-  WorkspaceProviderCredentialsPayload,
   WorkspaceGettingStartedContext,
   WorkspaceGettingStartedState,
-  BacklogEpic as SharedBacklogEpic,
-  BacklogSprint as SharedBacklogSprint,
-  BacklogStory as SharedBacklogStory,
-  BacklogTask as SharedBacklogTask,
-  CreateEpicPayload as SharedCreateEpicPayload,
-  CreateSprintPayload as SharedCreateSprintPayload,
-  CreateStoryPayload as SharedCreateStoryPayload,
-  CreateTaskPayload as SharedCreateTaskPayload,
-  UpdateEpicPayload as SharedUpdateEpicPayload,
-  UpdateSprintPayload as SharedUpdateSprintPayload,
-  UpdateStoryPayload as SharedUpdateStoryPayload,
-  UpdateTaskPayload as SharedUpdateTaskPayload,
-  ProductArtifactVersion,
-  SaveProductArtifactInput,
   FileChangesReviewSession,
   SnapshotMeta,
 } from '@nakiros/shared';
-
-interface CreateStoryPayload extends SharedCreateStoryPayload {}
-interface UpdateStoryPayload extends SharedUpdateStoryPayload {}
-interface BacklogStory extends SharedBacklogStory {}
-interface CreateEpicPayload extends SharedCreateEpicPayload {}
-interface UpdateEpicPayload extends SharedUpdateEpicPayload {}
-interface BacklogEpic extends SharedBacklogEpic {}
-interface BacklogSprint extends SharedBacklogSprint {}
-interface CreateSprintPayload extends SharedCreateSprintPayload {}
-interface UpdateSprintPayload extends SharedUpdateSprintPayload {}
-interface CreateTaskPayload extends SharedCreateTaskPayload {}
-interface UpdateTaskPayload extends SharedUpdateTaskPayload {}
-interface BacklogTask extends SharedBacklogTask {}
-
-interface SessionFeedbackData {
-  session_id: string;
-  workspace_id: string;
-  rating: 1 | -1;
-  comment?: string;
-  agent: string;
-  workflow?: string;
-  editor: string;
-  duration_seconds?: number;
-  message_count?: number;
-  conversation_shared?: boolean;
-  conversation?: unknown;
-}
-
-interface ProductFeedbackData {
-  category: 'bug' | 'suggestion' | 'agent' | 'workflow' | 'ux';
-  message: string;
-}
 
 declare global {
   interface DetectedEditor {
@@ -109,36 +44,6 @@ declare global {
     errors: string[];
   }
 
-  interface UpdateManifestFile {
-    type: 'agent' | 'workflow' | 'command' | 'core';
-    name: string;
-    filename: string;
-    path: string;         // e.g. "agents/dev.md"
-    hash: string;         // "sha256:..."
-    downloadUrl: string;  // computed in checkForUpdates
-  }
-
-  interface UpdateCheckResult {
-    hasUpdate: boolean;
-    compatible: boolean;
-    networkError?: boolean;
-    incompatibleReason?: string;   // "min_app_version" | "required_features"
-    incompatibleMessage?: string;
-    latestVersion: string;
-    changelog: string;
-    channel: string;
-    changedFiles: UpdateManifestFile[];
-  }
-
-  interface BundleVersionInfo {
-    bundle_version: string;
-    channel: string;
-    app_version: string;
-    last_check: string;
-    installed_at: string;
-    files: Record<string, string>; // path → "sha256:..."
-  }
-
   interface InstalledCommand {
     id: string;
     command: string;
@@ -153,6 +58,7 @@ declare global {
     isGenerated: boolean;
     isRemote?: boolean;
     lastModifiedAt?: number;
+    charCount?: number;
   }
 
   interface ScannedRepo {
@@ -165,23 +71,6 @@ declare global {
     docs: ScannedDoc[];
     decisionDocs: ScannedDoc[];
     missingNames: string[];
-  }
-
-  interface ContextConflict {
-    type: 'global' | 'repo';
-    repoName?: string;
-    updatedBy?: string;
-    remoteUpdatedAt?: string;
-  }
-
-  interface ContextPushResult {
-    status: 'ok' | 'conflict' | 'offline' | 'unauthenticated';
-    conflict?: ContextConflict;
-  }
-
-  interface ContextPullResult {
-    status: 'ok' | 'offline' | 'unauthenticated';
-    reposPulled: string[];
   }
 
   interface ScanResult {
@@ -218,11 +107,7 @@ declare global {
       selectDirectory(): Promise<string | null>;
       openFilePicker(): Promise<string | null>;
       getWorkspaces(): Promise<StoredWorkspace[]>;
-      workspaceListMembers(workspaceId: string): Promise<WorkspaceMembershipListPayload>;
-      workspaceUpsertMember(workspaceId: string, input: UpsertWorkspaceMembershipInput): Promise<WorkspaceMembershipListPayload>;
-      workspaceRemoveMember(workspaceId: string, userId: string): Promise<void>;
       saveWorkspace(w: StoredWorkspace): Promise<void>;
-      saveWorkspaceCanonical(w: StoredWorkspace): Promise<void>;
       deleteWorkspace(id: string): Promise<void>;
       createWorkspaceRoot(parentDir: string, workspaceName: string): Promise<string>;
       detectProfile(localPath: string): Promise<AgentProfile>;
@@ -239,15 +124,6 @@ declare global {
       getPreferences(): Promise<AppPreferences>;
       getSystemLanguage(): Promise<ResolvedLanguage>;
       savePreferences(prefs: AppPreferences): Promise<void>;
-      providerCredentialsGetAll(): Promise<ProviderCredentialSummary[]>;
-      providerCredentialCreate(input: CreateProviderCredentialInput): Promise<ProviderCredentialSummary>;
-      providerCredentialUpdate(credentialId: string, input: UpdateProviderCredentialInput): Promise<ProviderCredentialSummary>;
-      providerCredentialRevoke(credentialId: string): Promise<ProviderCredentialSummary>;
-      providerCredentialDelete(credentialId: string, force?: boolean): Promise<ProviderCredentialDeleteImpact>;
-      workspaceProviderCredentialsGet(workspaceId: string): Promise<WorkspaceProviderCredentialsPayload>;
-      workspaceProviderCredentialBind(workspaceId: string, input: BindWorkspaceProviderCredentialInput): Promise<WorkspaceProviderCredentialsPayload>;
-      workspaceProviderCredentialUnbind(workspaceId: string, credentialId: string): Promise<WorkspaceProviderCredentialsPayload>;
-      workspaceProviderCredentialSetDefault(workspaceId: string, input: SetWorkspaceProviderDefaultInput): Promise<WorkspaceProviderCredentialsPayload>;
       getAgentInstallStatus(repoPath: string): Promise<AgentInstallStatus>;
       installAgents(request: AgentInstallRequest): Promise<AgentInstallSummary>;
       getAgentCliStatus(): Promise<Array<{
@@ -283,20 +159,6 @@ declare global {
         commandFilesOverwritten: number;
       }>;
 
-      // Backlog
-      backlogGetStories(workspaceId: string): Promise<BacklogStory[]>;
-      backlogGetEpics(workspaceId: string): Promise<BacklogEpic[]>;
-      backlogCreateEpic(workspaceId: string, body: CreateEpicPayload): Promise<BacklogEpic>;
-      backlogUpdateEpic(workspaceId: string, epicId: string, body: UpdateEpicPayload): Promise<BacklogEpic>;
-      backlogCreateStory(workspaceId: string, body: CreateStoryPayload): Promise<BacklogStory>;
-      backlogUpdateStory(workspaceId: string, storyId: string, body: UpdateStoryPayload): Promise<BacklogStory>;
-      backlogGetTasks(workspaceId: string, storyId: string): Promise<BacklogTask[]>;
-      backlogCreateTask(workspaceId: string, storyId: string, body: CreateTaskPayload): Promise<BacklogTask>;
-      backlogUpdateTask(workspaceId: string, storyId: string, taskId: string, body: UpdateTaskPayload): Promise<BacklogTask>;
-      backlogGetSprints(workspaceId: string): Promise<BacklogSprint[]>;
-      backlogCreateSprint(workspaceId: string, body: CreateSprintPayload): Promise<BacklogSprint>;
-      backlogUpdateSprint(workspaceId: string, sprintId: string, body: UpdateSprintPayload): Promise<BacklogSprint>;
-
       // Tickets
       getTickets(wsId: string): Promise<LocalTicket[]>;
       saveTicket(wsId: string, t: LocalTicket): Promise<void>;
@@ -314,7 +176,6 @@ declare global {
       // Agent runner
       agentRun(request: AgentRunRequest): Promise<string>;
       agentCancel(runId: string): Promise<void>;
-      agentActionExecute(workspaceId: string, block: NakirosActionBlock): Promise<string>;
       onAgentStart(cb: (event: { runId: string; command: string; cwd: string; conversationId?: string; agentId?: string }) => void): () => void;
       onAgentEvent(cb: (payload: { runId: string; event: AgentStreamEvent }) => void): () => void;
       onAgentDone(cb: (event: { runId: string; exitCode: number; error?: string; rawLines?: unknown[] }) => void): () => void;
@@ -348,10 +209,6 @@ declare global {
       jiraGetBoardType(wsId: string, projectKey: string): Promise<JiraBoardSelection>;
       jiraCountTickets(wsId: string, projectKey: string, syncFilter: string, boardType: string): Promise<JiraTicketCount>;
 
-      // Context sync
-      pushContext(workspace: StoredWorkspace, force?: boolean): Promise<ContextPushResult>;
-      pullContext(workspace: StoredWorkspace): Promise<ContextPullResult>;
-
       // Docs
       scanDocs(workspace: StoredWorkspace): Promise<ScanResult>;
       readDoc(absolutePath: string): Promise<string>;
@@ -360,36 +217,12 @@ declare global {
       unwatchDoc(absolutePath: string): Promise<void>;
       onDocChanged(cb: (absolutePath: string) => void): () => void;
 
-      // MCP Server
-      getServerStatus(): Promise<'starting' | 'running' | 'stopped'>;
-      restartServer(): Promise<void>;
-      onServerStatusChange(cb: (status: 'starting' | 'running' | 'stopped') => void): () => void;
-
-      // Onboarding
-      nakirosConfigExists(): Promise<boolean>;
-      onboardingDetectEditors(): Promise<DetectedEditor[]>;
-      onboardingInstall(editors: DetectedEditor[]): Promise<OnboardingInstallResult>;
-      onOnboardingProgress(cb: (event: OnboardingProgressEvent) => void): () => void;
-
-      // Updates
-      checkForUpdates(force?: boolean, channel?: string): Promise<UpdateCheckResult>;
-      applyUpdate(files: UpdateManifestFile[], bundleVersion: string): Promise<void>;
-      getVersionInfo(): Promise<BundleVersionInfo | null>;
-      onUpdatesAvailable(cb: (result: UpdateCheckResult) => void): () => void;
-      onUpdatesProgress(cb: (event: { file: string; done: boolean; error?: string }) => void): () => void;
-
-      // Feedback
-      sendSessionFeedback(data: SessionFeedbackData): Promise<void>;
-      sendProductFeedback(data: ProductFeedbackData): Promise<void>;
-
-      // Artifacts
-      artifactListVersions(workspaceId: string, artifactPath: string): Promise<ProductArtifactVersion[]>;
-      artifactSaveVersion(workspaceId: string, workspace: StoredWorkspace, input: SaveProductArtifactInput): Promise<ProductArtifactVersion | null>;
-      artifactListAll(workspaceId: string): Promise<ProductArtifactVersion[]>;
-      artifactPullAll(workspaceId: string, workspace: StoredWorkspace): Promise<{ pulled: number; failed: number }>;
+      // Artifacts (local only)
       artifactListContextFiles(workspace: StoredWorkspace): Promise<string[]>;
       artifactReadFile(workspace: StoredWorkspace, artifactPath: string): Promise<string | null>;
       artifactGetFilePath(workspace: StoredWorkspace, artifactPath: string): Promise<string>;
+      artifactGetContextTotalBytes(workspace: StoredWorkspace): Promise<number>;
+      artifactListContextFilesWithSizes(workspace: StoredWorkspace): Promise<{ path: string; sizeBytes: number }[]>;
 
       // Snapshots
       snapshotTake(workspaceSlug: string, runId: string): Promise<void>;
@@ -404,24 +237,16 @@ declare global {
       previewApplyFile(previewRoot: string, filePath: string, workspaceSlug: string): Promise<void>;
       previewDiscard(previewRoot: string): Promise<void>;
 
-      // Auth
-      authGetState(): Promise<AuthState>;
-      orgGetMine(): Promise<OrganizationInfo | undefined>;
-      orgListMine(): Promise<OrganizationInfo[]>;
-      orgCreate(name: string, slug: string): Promise<{ organizationId: string; organizationName: string; organizationSlug: string }>;
-      orgDelete(orgId: string): Promise<void>;
-      orgListMembers(orgId: string): Promise<OrganizationMemberListItem[]>;
-      orgAddMember(orgId: string, email: string, role: OrgRole, inviterEmail?: string): Promise<OrganizationInvitationResult>;
-      orgLeave(orgId: string): Promise<void>;
-      orgCancelInvitation(orgId: string, invitationId: string): Promise<void>;
-      orgAcceptInvitations(email: string): Promise<OrganizationInvitationAcceptanceResult>;
-      orgRemoveMember(orgId: string, userId: string): Promise<void>;
-      authSignIn(): Promise<void>;
-      authSignOut(): Promise<void>;
-      onAuthComplete(cb: (data: AuthCompletePayload) => void): () => void;
-      onAuthError(cb: (data: AuthErrorPayload) => void): () => void;
-      onAuthSignedOut(cb: (data: AuthSignedOutPayload) => void): () => void;
-      onSyncEvent(cb: (event: { type: string; [key: string]: unknown }) => void): () => void;
+      // MCP Server
+      getServerStatus(): Promise<'starting' | 'running' | 'stopped'>;
+      restartServer(): Promise<void>;
+      onServerStatusChange(cb: (status: 'starting' | 'running' | 'stopped') => void): () => void;
+
+      // Onboarding
+      nakirosConfigExists(): Promise<boolean>;
+      onboardingDetectEditors(): Promise<DetectedEditor[]>;
+      onboardingInstall(editors: DetectedEditor[]): Promise<OnboardingInstallResult>;
+      onOnboardingProgress(cb: (event: OnboardingProgressEvent) => void): () => void;
     };
   }
 }

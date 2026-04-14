@@ -1,5 +1,7 @@
 # Architecture — Convention locale `_nakiros/`
 
+> **Statut : En cours.** La convention est définie et le parser existe dans `apps/desktop/src/utils/artifact-review.ts`. Les dossiers `_nakiros/` ne sont pas encore seedés dans les repos — adoption à faire lors du setup workspace.
+
 > Document de référence pour le mode portable local-first.
 > Il définit l'arborescence `_nakiros/`, les types d'artefacts portables et leurs formats canoniques.
 

@@ -136,6 +136,8 @@ export const IPC_CHANNELS = {
   'artifact:listContextFiles': 'artifact:listContextFiles',
   'artifact:readFile': 'artifact:readFile',
   'artifact:getFilePath': 'artifact:getFilePath',
+  'artifact:getContextTotalBytes': 'artifact:getContextTotalBytes',
+  'artifact:listContextFilesWithSizes': 'artifact:listContextFilesWithSizes',
   'snapshot:take': 'snapshot:take',
   'snapshot:diff': 'snapshot:diff',
   'snapshot:revert': 'snapshot:revert',

@@ -138,6 +138,8 @@ const IPC_CHANNELS = {
   "artifact:listContextFiles": "artifact:listContextFiles",
   "artifact:readFile": "artifact:readFile",
   "artifact:getFilePath": "artifact:getFilePath",
+  "artifact:getContextTotalBytes": "artifact:getContextTotalBytes",
+  "artifact:listContextFilesWithSizes": "artifact:listContextFilesWithSizes",
   "snapshot:take": "snapshot:take",
   "snapshot:diff": "snapshot:diff",
   "snapshot:revert": "snapshot:revert",
@@ -325,6 +327,8 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
   artifactListContextFiles: (workspace) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:listContextFiles"], workspace),
   artifactReadFile: (workspace, artifactPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:readFile"], workspace, artifactPath),
   artifactGetFilePath: (workspace, artifactPath) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:getFilePath"], workspace, artifactPath),
+  artifactGetContextTotalBytes: (workspace) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:getContextTotalBytes"], workspace),
+  artifactListContextFilesWithSizes: (workspace) => electron.ipcRenderer.invoke(IPC_CHANNELS["artifact:listContextFilesWithSizes"], workspace),
   // Snapshots
   snapshotTake: (workspaceSlug, runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["snapshot:take"], workspaceSlug, runId),
   snapshotDiff: (workspaceSlug, runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["snapshot:diff"], workspaceSlug, runId),

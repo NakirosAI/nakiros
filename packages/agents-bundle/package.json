@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "hash": "node scripts/generate-manifest.js",
-    "push": "node scripts/push-bundle.js",
-    "push:dry": "node scripts/push-bundle.js --dry-run",
-    "push:force": "node scripts/push-bundle.js --force"
+    "hash": "node scripts/generate-manifest.js"
   }
 }

@@ -1,0 +1,35 @@
+.DS_Store
+.nakiros/
+_bmad*
+.claude/
+.codex/
+.cursor/
+.npm-cache/
+dist/
+.agents/
+node_modules/
+.nakiros.yaml
+
+# Wrangler
+.wrangler/
+packages/*/.wrangler/
+
+# Monorepo
+.turbo/
+apps/*/.turbo/
+packages/*/.turbo/
+apps/*/dist/
+apps/*/node_modules/
+packages/*/dist/
+packages/*/node_modules/
+
+# Electron
+apps/desktop/out/
+apps/desktop/.vite/
+apps/desktop/.generated-icons/
+apps/desktop/dist-electron/
+
+# VS Code Extension
+apps/vscode-extension/*.vsix
+tmp/
+_nakiros/

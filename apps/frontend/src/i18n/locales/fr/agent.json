@@ -1,0 +1,209 @@
+{
+  "newConversation": "Nouvelle conversation",
+  "workspaceGlobal": "Workspace (global)",
+  "tabLimitReached": "Limite de {{count}} onglets atteinte",
+  "unableToStartRun": "Impossible de demarrer l'execution de l'agent.",
+  "workspaceLaunchDeniedViewer": "Votre role dans ce workspace ne permet pas de lancer des agents.",
+  "workspaceLaunchDeniedNotAdded": "Vous n'etes pas ajoute a ce workspace. Demandez a un owner ou admin de vous attribuer un role.",
+  "stoppedMarker": "_[Arrete]_",
+  "timeNow": "maintenant",
+  "timeMinutesAgo": "il y a {{count}}m",
+  "timeHoursAgo": "il y a {{count}}h",
+  "timeDaysAgo": "il y a {{count}}j",
+  "historyToday": "Aujourd'hui",
+  "historyYesterday": "Hier",
+  "historyThisWeek": "Cette semaine",
+  "historyOlder": "Plus ancien",
+  "inputPlaceholder": "Message, @agent, #projet ou /nak-workflow…",
+  "allProjects": "Tous les projets",
+  "history": "Historique",
+  "noConversation": "Aucune conversation",
+  "agents": "Agents",
+  "provider": "Fournisseur",
+  "session": "session",
+  "conversationHistory": "Historique des conversations",
+  "new": "Nouveau",
+  "close": "Fermer",
+  "workspaceHistory": "Historique (workspace)",
+  "noSavedConversation": "Aucune conversation sauvegardee",
+  "delete": "Supprimer",
+  "quickActions": {
+    "generateContext": {
+      "label": "Générer le contexte",
+      "description": "Analyse le code + tickets et génère un contexte global"
+    },
+    "projectConfidence": {
+      "label": "Confiance projet",
+      "description": "Évalue la confiance IA sur la compréhension du projet et les docs manquants"
+    },
+    "architect": {
+      "label": "Architect",
+      "description": "Analyse l'architecture et les patterns techniques"
+    },
+    "pmAgent": {
+      "label": "PM Agent",
+      "description": "Crée et affine des tickets, gère les priorités"
+    },
+    "devAgent": {
+      "label": "Dev Agent",
+      "description": "Implémente des stories avec discipline de branche"
+    }
+  },
+  "emptyTitle": "Le chat est workspace-first",
+  "emptySubtitle": "Commence naturellement avec un agent, invite-en un autre en cours de route, cible un repo avec #repo ou lance un workflow si tu veux passer à l'exécution.",
+  "emptyHintAgent": "Démarrer avec un agent",
+  "emptyHintAgentExample": "@PM je veux cadrer une feature pour la compta",
+  "emptyHintInvite": "Inviter un autre agent dans la conversation",
+  "emptyHintInviteExample": "@Architect qu'en penses-tu techniquement ?",
+  "emptyHintRepo": "Restreindre le scope à un repo",
+  "emptyHintWorkflow": "Basculer vers un workflow d'exécution",
+  "emptyHintWorkflowExample": "/nak-workflow-dev-story",
+  "agent": "Agent",
+  "thinking": "Réflexion…",
+  "thinkingPrimary": "Réflexion en cours",
+  "thinkingStates": {
+    "analyzingContext": "Analyse du contexte",
+    "readingWorkspace": "Lecture du workspace",
+    "exploringFiles": "Exploration des fichiers",
+    "verifyingScope": "Vérification du scope",
+    "searchingKeyAreas": "Recherche des points clés",
+    "structuringResponse": "Structuration de la réponse",
+    "preparingNextSteps": "Préparation de la suite",
+    "crossCheckingContext": "Croisement des informations",
+    "consolidatingFindings": "Consolidation des éléments"
+  },
+  "error": "Erreur",
+  "chatFree": "Chat libre",
+  "meta": "Meta",
+  "workflows": "Workflows",
+  "slashCommands": "Commandes",
+  "slashHint": "↑↓ puis Entrée",
+  "slashNoMatch": "Aucune commande",
+  "projectScopes": "Projets",
+  "projectHint": "↑↓ puis Entree",
+  "projectNoMatch": "Aucun projet correspondant",
+  "projectBadge": "Projet",
+  "allProjectsBadge": "Tous",
+  "projectScopeTitle": "Scope actif: {{project}}",
+  "modeGlobal": "Global",
+  "modeRepo": "Repo",
+  "mentionAgents": "Agents",
+  "mentionHint": "↑↓ puis Entree",
+  "mentionNoMeetingAgents": "Aucun agent disponible",
+  "mentionNoMatch": "Aucun agent correspondant",
+  "mentionActiveBadge": "Deja la",
+  "mentionInviteBadge": "Inviter",
+  "toolsPanelTitle": "Actions outils",
+  "orchestration": {
+    "title": "Orchestration",
+    "userGoal": "Objectif",
+    "synthesisGoal": "But de synthèse",
+    "repos": "Repos",
+    "mode": {
+      "dispatch": "Dispatch",
+      "consult": "Consulter",
+      "askUser": "Question utilisateur",
+      "synthesize": "Synthèse",
+      "documentDecision": "Décision"
+    },
+    "roundState": {
+      "continue": "Discussion en cours",
+      "converged": "Convergence",
+      "stalled": "Bloqué",
+      "needsUserDecision": "Décision utilisateur requise"
+    }
+  },
+  "agentJoined": "── {{name}} a rejoint la conversation ──",
+  "agentJoinedWithProvider": "── {{name}} ({{provider}}) a rejoint la conversation ──",
+  "providerNotConfigured": "Provider '{{provider}}' non configuré — vérifie tes réglages globaux",
+  "stop": "Stop",
+  "sendEnter": "Send (Enter)",
+  "processExitedWithCode": "Le processus s'est terminé avec le code {{code}}",
+  "sessionTitle": "Session: {{id}}",
+  "tools": {
+    "reading": "Lecture {{path}}",
+    "writing": "Écriture {{path}}",
+    "editing": "Édition {{path}}",
+    "bash": "$ {{command}}",
+    "glob": "Glob: {{pattern}}",
+    "grep": "Grep: {{pattern}} dans {{path}}",
+    "todoWrite": "Mise à jour des tâches",
+    "webFetch": "Fetch: {{url}}",
+    "webSearch": "Recherche: {{query}}",
+    "task": "Sous-agent: {{description}}"
+  },
+  "definitions": {
+    "cto": {
+      "label": "CTO",
+      "placeholder": "Parle avec CTO…"
+    },
+    "ceo": {
+      "label": "CEO",
+      "placeholder": "Parle avec CEO…"
+    },
+    "dev": {
+      "label": "Dev Agent",
+      "placeholder": "Message pour Dev Agent…"
+    },
+    "pm": {
+      "label": "PM Agent",
+      "placeholder": "Message pour PM Agent…"
+    },
+    "architect": {
+      "label": "Architect",
+      "placeholder": "Message pour Architect…"
+    },
+    "sm": {
+      "label": "SM Agent",
+      "placeholder": "Message pour SM Agent…"
+    },
+    "qa": {
+      "label": "QA Agent",
+      "placeholder": "Message pour QA Agent…"
+    },
+    "brainstorming": {
+      "label": "Brainstorming",
+      "placeholder": "Message pour Brainstorming…"
+    },
+    "dev-story": {
+      "label": "Dev Story",
+      "placeholder": "ID du ticket (ex: EX-203)"
+    },
+    "create-story": {
+      "label": "Create Story",
+      "placeholder": "Decris la story a creer…"
+    },
+    "create-ticket": {
+      "label": "Create Ticket",
+      "placeholder": "Decris le ticket a creer…"
+    },
+    "plan-feature": {
+      "label": "Plan Feature",
+      "placeholder": "Decris la feature a planifier…"
+    },
+    "generate-context": {
+      "label": "Generate Context",
+      "placeholder": "Lancer Generate Context sur ce workspace ?"
+    },
+    "project-confidence": {
+      "label": "Project Confidence",
+      "placeholder": "Evaluer la confiance du projet ?"
+    },
+    "qa-review": {
+      "label": "QA Review",
+      "placeholder": "Lancer QA Review ?"
+    },
+    "sprint-planning": {
+      "label": "Sprint Planning",
+      "placeholder": "Lancer Sprint Planning ?"
+    },
+    "fetch-project-context": {
+      "label": "Fetch Project Context",
+      "placeholder": "Lancer Fetch Project Context ?"
+    },
+    "sprint-retro": {
+      "label": "Sprint Retro",
+      "placeholder": "Lancer Sprint Retro ?"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+name: check-implementation-readiness
+description: "Challenge a ticket (PM + Architect perspectives) against workspace context, surface ambiguities, and propose an updated ticket version for user validation"
+author: "Nakiros"
+
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+installed_path: "~/.nakiros/workflows/2-design/check-implementation-readiness"
+instructions: "{installed_path}/workflow.md"
+
+workspace_context_root: "~/.nakiros/workspaces/{workspace_slug}/context"
+communication_language: "Français"
+document_output_language: "English"
+user_skill_level: "advanced"

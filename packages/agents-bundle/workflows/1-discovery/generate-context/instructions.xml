@@ -1,0 +1,184 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language.</critical>
+  <critical>Write ALL output documents in document_language — optimized for AI agent consumption.</critical>
+  <critical>Target layout is dual-level: workspace-global architecture in `~/.nakiros/workspaces/{workspace_slug}/context/architecture/` and repo-local portable docs in `_nakiros/architecture/index.md` plus focused domain docs. Do not optimize for a single monolithic architecture file.</critical>
+  <critical>Every structural claim must cite a specific file path. Distinguish confirmed evidence from inference and unknowns.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+  <critical>Execution model for multi-repo workspaces: spawn exactly one repo-scoped PM and one repo-scoped Architect per repo. They must write durable repo-local docs inside each repo's `_nakiros/`. Only after that, spawn one Analyst to aggregate those repo-local docs into workspace-global docs under `~/.nakiros/workspaces/{workspace_slug}/context/`.</critical>
+
+  <step n="1" goal="Load configuration and enumerate repos">
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Apply defaults when missing: communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Check for {workspace_config}. If found, treat it as a lightweight pointer only.</action>
+    <action if="workspace_config found">Read `workspace_slug` first, then `workspace_name` from {workspace_config}.</action>
+    <action if="workspace_config found">Load `~/.nakiros/workspaces/{workspace_slug}/workspace.yaml` as the canonical source of truth.</action>
+
+    <action>Determine the list of repos to analyze:
+      - If workspace_config found: {{repos_to_analyze}} = all repos listed in canonical workspace yaml `repos`
+      - Otherwise: {{repos_to_analyze}} = [current repo (project-root)]
+    </action>
+
+    <critical>MULTI-REPO COMMIT: You MUST analyze ALL repos in {{repos_to_analyze}}, not just the cwd.
+      Output this numbered list now:
+        "Repos détectés (N total) :
+         1. {name} — {localPath}
+         2. {name} — {localPath}
+         ..."
+      You are required to complete Steps 2 and 3 for EVERY repo in this list.
+    </critical>
+
+    <output>[GENERATE-CONTEXT] Étape 1/7 — Load configuration ✓
+Config chargée | {N} repo(s) à analyser</output>
+  </step>
+
+  <step n="2" goal="Discovery — analyse workspace et onboarding view (lecture seule, aucun fichier écrit)">
+    <critical>THIS STEP IS READ-ONLY. Do NOT write any files. Collect findings in memory only.</critical>
+    <critical>This step prepares repo-scoped delegation. Do not replace the later PM/Architect runners with your own final analysis.</critical>
+
+    <action for="each repo in repos_to_analyze">
+      <action>Set {{current_repo_path}} = repo.localPath. Set {{current_repo_name}} = repo.name.</action>
+      <action>2.1 — Repo purpose: identify what business or platform responsibility this repo appears to own, citing concrete files.</action>
+      <action>2.2 — Entry Points &amp; Stack: identify main entry files and dependency manifests in {{current_repo_path}}.</action>
+      <action>2.3 — Main modules: map dominant directories/modules and the responsibilities they seem to carry.</action>
+      <action>2.3b — Architecture slicing hints: identify which domains or feature areas deserve their own `_nakiros/architecture/{domain}.md` file, and what should stay only in `_nakiros/architecture/index.md` as summary/navigation.</action>
+      <action>2.4 — Contracts &amp; execution hints: capture exposed APIs/events/types, plus run/test/build commands when discoverable.</action>
+      <action>2.5 — Migration zones / debt / hotspots: flag legacy boundaries, double-writes, hard-coded infra, weak contracts, or risky areas with severity and file reference.</action>
+      <action>2.6 — Confidence: note the current understanding level and explicit unknowns.</action>
+      <action>Store findings as {{findings_repo_N}} in memory. Do not write to disk.</action>
+    </action>
+
+    <check if="workspace_config found (multi-repo)">
+      <action>2.7 — Product/system view: map main end-to-end flows, source-of-truth ownership per domain, and dependency chains between repos.</action>
+      <action>Store as {{findings_workspace_overview}} in memory.</action>
+    </check>
+
+    <output>[GENERATE-CONTEXT] Étape 2/7 — Discovery analysis ✓
+Analyse complète | {N} repo(s) analysé(s) — en attente de validation</output>
+  </step>
+
+  <step n="3" goal="Présentation et validation utilisateur">
+    <critical>STOP HERE. Do NOT proceed to file generation until the user explicitly confirms.</critical>
+
+    <action>Present findings for each repo in communication_language, using this structure:
+
+      "📊 **Voici ce que j'ai compris sur [workspace_name] ({N} repos)** :
+
+      **[repo_name]** (`role`) — `localPath`
+      - Purpose : {what this repo seems to own}
+      - Stack : {language + framework + key libs}
+      - Main modules : {2–3 dominant modules or directories}
+      - Architecture slices : {candidate focused docs such as auth, billing-export, notifications}
+      - Contracts &amp; execution : {key API/events/types and useful run/test clues}
+      - Risks / migration : {2–3 important observations}
+      - Confidence : {high|medium|low} — {main unknown if any}
+
+      [repeat for each repo]
+
+      {if multi-repo:}
+      **Vue système**
+      - {product purpose / end-to-end flow}
+      - {source of truth or contract dependency}
+      - {recommended repo order for a common change}
+      - {candidate workspace-global architecture slices}
+
+      ---
+      ✅ **Tapez 'oui' pour générer les fichiers de contexte**, ou donnez vos corrections/ajouts avant que je commence."
+    </action>
+
+    <action>On user confirmation, output:
+      [GENERATE-CONTEXT] Étape 3/7 — User validation ✓
+    </action>
+
+    <ask>
+---
+
+**Que souhaitez-vous faire ?**
+
+1. Confirmer et générer les fichiers de contexte
+2. Apporter des corrections avant de générer
+    </ask>
+  </step>
+
+  <step n="4" goal="Spawn Repo Specialists — un PM et un Architect par repo">
+    <critical>Only execute after user confirmation. Incorporate any corrections the user mentioned.</critical>
+    <critical>For EACH repo: spawn exactly two dedicated sub-agents via Task tool. One repo-PM and one repo-Architect. They must write repo-local docs directly in `_nakiros/`. Do NOT replace them with one central synthesis.</critical>
+
+    <action for="each repo in repos_to_analyze">
+      <action>Set {{current_repo_path}} = repo.localPath. Set {{current_repo_name}} = repo.name.</action>
+      <action>Ensure directories {{current_repo_path}}/_nakiros/, {{current_repo_path}}/_nakiros/product/, and {{current_repo_path}}/_nakiros/architecture/ exist.</action>
+      <action>Ensure directory {workspace_context_root}/features/ exists (workspace-global features go here, not in repo-local paths).</action>
+
+      <action>Load task template from {steps_path}/step-02-pm-agent.md.</action>
+      <action>Spawn Task (sub-agent) with the content of step-02-pm-agent.md, substituting:
+        - {{repo_name}}         = {{current_repo_name}}
+        - {{repo_path}}         = {{current_repo_path}}
+        - {{pm_agent_file}}     = ~/.nakiros/agents/pm.md
+        - {{corrections}}       = user corrections if any, or "None"
+        - {{date}}              = today's date
+      </action>
+
+      <action>Load task template from {steps_path}/step-02-arch-agent.md.</action>
+      <action>Spawn Task (sub-agent) with the content of step-02-arch-agent.md, substituting:
+        - {{repo_name}}             = {{current_repo_name}}
+        - {{repo_path}}             = {{current_repo_path}}
+        - {{architect_agent_file}}  = ~/.nakiros/agents/architect.md
+        - {{corrections}}           = user corrections if any, or "None"
+        - {{date}}                  = today's date
+      </action>
+
+      <output>[GENERATE-CONTEXT] ⏳ [Repo PM] → {{current_repo_name}}…</output>
+      <output>[GENERATE-CONTEXT] ✓ [Repo PM] docs → {{current_repo_path}}/_nakiros/product/</output>
+      <output>[GENERATE-CONTEXT] ⏳ [Repo Architect] → {{current_repo_name}}…</output>
+      <output>[GENERATE-CONTEXT] ✓ [Repo Architect] docs → {{current_repo_path}}/_nakiros/architecture/ + root context files</output>
+    </action>
+
+    <output>[GENERATE-CONTEXT] Étape 4/7 — Spawn Repo Specialists ✓
+Phase Repo Specialists complète — {2 x N} runner(s) exécuté(s)</output>
+  </step>
+
+  <step n="5" goal="Spawn Workspace Analyst sub-agent — synthèse produit et inter-repo">
+    <critical>Spawn a single Analyst sub-agent only AFTER all repo-local PM and Architect docs exist.</critical>
+    <critical>The Analyst must read repo-local `_nakiros/` docs and write the workspace-global docs. It is the only workspace synthesis runner.</critical>
+    <action>Ensure directory {workspace_context_root}/architecture/ exists.</action>
+
+    <action>Load task template from {steps_path}/step-03-analyst-agent.md.</action>
+    <action>Spawn Task (sub-agent) with the content of step-03-analyst-agent.md, substituting:
+      - {{workspace_name}}        = {workspace_name}
+      - {{workspace_slug}}        = {workspace_slug}
+      - {{workspace_context_root}} = {workspace_context_root}
+      - {{repos_list}}            = all repos in repos_to_analyze (name + localPath, one per line)
+      - {{analyst_agent_file}}    = ~/.nakiros/agents/analyst.md
+      - {{date}}                  = today's date
+      - {{corrections}}           = user corrections if any, or "None"
+    </action>
+
+    <output>[GENERATE-CONTEXT] ⏳ [Workspace Analyst] → workspace {workspace_name}…</output>
+    <output>[GENERATE-CONTEXT] Étape 5/7 — Spawn Workspace Analyst ✓
+[Workspace Analyst] docs → {workspace_context_root}/</output>
+  </step>
+
+  <step n="6" goal="Vérification finale">
+    <critical>Verify that repo-local docs and workspace-global docs were actually written to disk.</critical>
+    <critical>Do NOT replace file generation with MCP-only persistence.</critical>
+
+    <output>[GENERATE-CONTEXT] Étape 6/7 — Final verification ✓
+Vérification terminée — docs repo-locales et workspace-globales présentes</output>
+  </step>
+
+  <step n="7" goal="Finaliser et rapporter">
+    <output>[GENERATE-CONTEXT] Étape 7/7 — Report ✓</output>
+    <output>[GENERATE-CONTEXT] ✅ TERMINÉ
+Per-repo (artefacts techniques) :
+{{for each repo: "├─ {repo.localPath}/_nakiros/architecture/index.md\n├─ {repo.localPath}/_nakiros/architecture/{domain}.md\n├─ {repo.localPath}/_nakiros/stack.md\n├─ {repo.localPath}/_nakiros/conventions.md\n├─ {repo.localPath}/_nakiros/api.md\n└─ {repo.localPath}/_nakiros/product/repo-context.md (intermédiaire PM)"}}
+Workspace (global) :
+├─ {workspace_context_root}/product.md
+├─ {workspace_context_root}/personas.md
+├─ {workspace_context_root}/features/{feature}/feature.md (un par feature détectée)
+├─ {workspace_context_root}/architecture/index.md
+├─ {workspace_context_root}/architecture/{domain}.md
+{{if multi-repo: "└─ {workspace_context_root}/inter-repo.md"}}
+    </output>
+  </step>
+</workflow>

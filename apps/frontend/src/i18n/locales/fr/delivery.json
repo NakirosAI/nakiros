@@ -1,0 +1,53 @@
+{
+  "columnTodo": "À faire",
+  "columnInProgress": "En cours",
+  "columnInReview": "En revue",
+  "columnDone": "Terminé",
+  "noActiveSprint": "Aucun sprint actif",
+  "noActiveSprintDesc": "Démarrez un sprint depuis le Backlog pour voir votre tableau.",
+  "errorLoadingBoard": "Échec du chargement du tableau — Réessayer",
+  "tabDefinition": "Définition",
+  "tabContext": "Contexte",
+  "tabExecution": "Exécution",
+  "tabArtifacts": "Artefacts",
+  "tabPlaceholder": "Disponible dans une prochaine mise à jour.",
+  "taskCount": "{{count}} tâches",
+  "storyCount": "{{count}} stories",
+  "definition": {
+    "launchDevStory": "Lancer Dev Story",
+    "decomposeTasks": "Décomposer en tâches",
+    "decomposePlaceholder": "Disponible dans une prochaine mise à jour.",
+    "noDescription": "Aucune description.",
+    "noAcceptanceCriteria": "Aucun critère d'acceptation défini.",
+    "unassigned": "Non assigné",
+    "storyPoints": "{{count}} pts",
+    "status_todo": "À faire",
+    "status_in_progress": "En cours",
+    "status_in_review": "En révision",
+    "status_done": "Terminé",
+    "status_backlog": "Backlog"
+  },
+  "context": {
+    "generatedAt": "Généré {{time}}",
+    "emptyTitle": "Contexte non généré",
+    "emptyDesc": "Lancez la génération depuis la vue Product.",
+    "goToProduct": "Aller à la vue Product"
+  },
+  "execution": {
+    "emptyTitle": "Aucune exécution",
+    "emptyDesc": "Lancez un Dev Story depuis l'onglet Définition.",
+    "unknownAgent": "Agent inconnu",
+    "statusRunning": "En cours",
+    "statusFailed": "Échoué",
+    "statusCompleted": "Terminé",
+    "duration": "{{duration}}",
+    "startTime": "{{time}}"
+  },
+  "artifacts": {
+    "emptyTitle": "Aucun artefact",
+    "emptyDesc": "Les fichiers générés par les agents apparaîtront ici.",
+    "openButton": "Ouvrir",
+    "typeContext": "Fichier de contexte",
+    "typeDevNotes": "Notes de dev"
+  }
+}

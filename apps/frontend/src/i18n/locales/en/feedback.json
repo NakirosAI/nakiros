@@ -1,0 +1,22 @@
+{
+  "sessionQuestion": "Was this conversation helpful?",
+  "commentPlaceholder": "Any comment? (optional)",
+  "shareConversation": "Share this conversation to help improve Nakiros",
+  "shareWarning": "⚠️ The conversation will be sent to the Nakiros team. It may contain information about your project.",
+  "send": "Send →",
+  "thanks": "Thanks for your feedback 🙏",
+  "productTitle": "Share your feedback",
+  "productButton": "Feedback",
+  "categoryLabel": "Category",
+  "messageLabel": "Your message",
+  "messageMin": "Minimum 10 characters",
+  "cancel": "Cancel",
+  "errorNetwork": "Unable to send feedback. Please try again.",
+  "categoryBug": "Bug",
+  "categorySuggestion": "Suggestion",
+  "categoryAgent": "Agent",
+  "categoryWorkflow": "Workflow",
+  "categoryUx": "UX / Interface",
+  "thumbsUp": "Helpful",
+  "thumbsDown": "Not helpful"
+}

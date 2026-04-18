@@ -1,0 +1,37 @@
+{
+  "name": "nakiros",
+  "version": "0.1.0-beta.2",
+  "description": "Local daemon that observes Claude Code usage and lets you inspect, audit, evaluate and improve skills from your browser.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "nakiros": "./dist/bin/nakiros.js"
+  },
+  "files": [
+    "dist",
+    "bundled-skills"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup && node scripts/copy-frontend.mjs",
+    "dev": "tsx bin/nakiros.ts",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "@fastify/static": "^9.1.1",
+    "@fastify/websocket": "^11.2.0",
+    "@nakiros/agents-bundle": "workspace:*",
+    "@nakiros/shared": "workspace:*",
+    "chokidar": "^5.0.0",
+    "fastify": "^5.8.5",
+    "open": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.13",
+    "tsup": "^8.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0"
+  }
+}

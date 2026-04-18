@@ -1,0 +1,16 @@
+{
+  "title": "Nakiros",
+  "subtitle": "Analysez et améliorez vos équipes d’agents IA",
+  "createWorkspace": "Créer un workspace",
+  "createWorkspaceHint": "Configurer un nouveau projet guidé",
+  "recent": "Workspaces récents",
+  "noRecent": "Aucun workspace récent. Commence par créer ton premier workspace.",
+  "now": "à l'instant",
+  "minutesAgo": "il y a {{count}} min",
+  "hoursAgo": "il y a {{count}}h",
+  "daysAgo": "il y a {{count}}j",
+  "showMore": "Voir {{count}} de plus",
+  "showLess": "Voir moins",
+  "repoCount_one": "{{count}} repo",
+  "repoCount_other": "{{count}} repos"
+}

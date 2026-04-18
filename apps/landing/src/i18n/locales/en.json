@@ -1,0 +1,104 @@
+{
+  "navbar": {
+    "features": "Features",
+    "howItWorks": "How it works",
+    "etymology": "Origin",
+    "github": "GitHub",
+    "install": "Install"
+  },
+  "hero": {
+    "eyebrow": "Local-first · Open source · Node ≥ 20",
+    "titleLine1": "Is your Claude Code skill",
+    "titleAccent": "actually worth",
+    "titleLine2": "keeping?",
+    "description": "Many skills add nothing. Some even make Claude worse. Nakiros audits them, runs evals with and without, and tells you which ones to keep, improve, or drop.",
+    "installLabel": "Install globally",
+    "installCommand": "npm i -g nakiros",
+    "installHint": "Then type `nakiros` — your browser opens on localhost.",
+    "secondaryCta": "How it works"
+  },
+  "etymology": {
+    "eyebrow": "Where the name comes from",
+    "title": "Two words, one purpose.",
+    "nakama": {
+      "term": "Nakama · 仲間",
+      "origin": "Japanese",
+      "meaning": "The companion, the teammate, the one who has your back."
+    },
+    "kairos": {
+      "term": "Kairos · καιρός",
+      "origin": "Greek god",
+      "meaning": "The Greek god of the right moment. The one who knows when to step in."
+    },
+    "synthesis": "Nakiros — the companion that shows up at the right moment. Inside the tool you already use every day, Claude Code."
+  },
+  "features": {
+    "title": "Four simple acts, one continuous loop.",
+    "description": "Nakiros doesn't ask you to change how you work. It reads what's already in ~/.claude and helps you make your skills better.",
+    "items": [
+      {
+        "title": "Scan",
+        "description": "Discover every skill living in your projects and in ~/.claude/skills. See who uses what, how often, and where gaps hide."
+      },
+      {
+        "title": "Audit",
+        "description": "Run a structured audit on any skill — trigger description, references, outputs, examples — against a quality checklist."
+      },
+      {
+        "title": "Evaluate",
+        "description": "Spin up an isolated copy of a skill and run a suite of evals. Measure what works, what regresses, with real Claude runs."
+      },
+      {
+        "title": "Fix & Create",
+        "description": "Tweak a skill in a temp workdir, evaluate the fix against the baseline, then ship once you're sure. Or craft a brand new one from scratch."
+      }
+    ]
+  },
+  "howItWorks": {
+    "title": "Install. Open. Improve.",
+    "steps": [
+      {
+        "number": "01",
+        "title": "Install",
+        "description": "One command. No account, no cloud, no tracking. Nakiros is a daemon that runs on your machine."
+      },
+      {
+        "number": "02",
+        "title": "Open",
+        "description": "Run `nakiros`. Your browser opens on localhost:4242. The daemon scans your Claude projects and skills."
+      },
+      {
+        "number": "03",
+        "title": "Improve",
+        "description": "Pick a skill. Audit it. Run evals. Propose a fix. Compare before and after. Ship when you're satisfied — or don't."
+      }
+    ]
+  },
+  "openSource": {
+    "title": "Local-first. Open source. Yours.",
+    "description": "Your skills and Claude conversations never leave your machine. Nakiros is a plain Node daemon that reads from your disk and serves a local web UI. No telemetry. No sign-up. No lock-in.",
+    "bullets": [
+      "Runs as a local daemon on localhost:4242",
+      "MIT licensed, fully auditable",
+      "No account, no cloud, no data exfiltration",
+      "Contribute, fork, or just read the code"
+    ],
+    "cta": "See the repo on GitHub"
+  },
+  "cta": {
+    "title": "Try Nakiros right now.",
+    "description": "No waitlist, no signup. Just install and go.",
+    "command": "npm i -g nakiros",
+    "then": "then",
+    "then2": "nakiros",
+    "github": "Star on GitHub"
+  },
+  "footer": {
+    "tagline": "The companion that shows up at the right moment.",
+    "builtWith": "Built for developers who love tools they can trust.",
+    "copyright": "© 2026 Nakiros · MIT License"
+  },
+  "language": {
+    "label": "Language"
+  }
+}

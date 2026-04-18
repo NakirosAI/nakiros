@@ -1,0 +1,66 @@
+name: Release nakiros to npm
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance (signed attestation).
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify tag matches package version
+        run: |
+          RAW_TAG="${GITHUB_REF##*/}"
+          # Accept both `v0.1.0-beta.1` and `0.1.0-beta.1` as valid tag formats.
+          TAG="${RAW_TAG#v}"
+          PKG_VERSION=$(node -p "require('./apps/nakiros/package.json').version")
+          if [ "${TAG}" != "${PKG_VERSION}" ]; then
+            echo "::error::Release tag '${RAW_TAG}' (normalized '${TAG}') does not match apps/nakiros package version '${PKG_VERSION}'. Bump the version in apps/nakiros/package.json and re-tag."
+            exit 1
+          fi
+          echo "Tag ${RAW_TAG} matches package version ${PKG_VERSION} — ok."
+
+      - name: Determine npm dist-tag
+        id: dist_tag
+        run: |
+          VERSION=$(node -p "require('./apps/nakiros/package.json').version")
+          if [[ "${VERSION}" == *"-beta"* ]]; then
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+          elif [[ "${VERSION}" == *"-alpha"* ]]; then
+            echo "tag=alpha" >> "$GITHUB_OUTPUT"
+          elif [[ "${VERSION}" == *"-rc"* ]]; then
+            echo "tag=rc" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Publishing ${VERSION} with dist-tag ${tag}"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm turbo build --filter nakiros
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public --tag ${{ steps.dist_tag.outputs.tag }}
+        working-directory: apps/nakiros
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

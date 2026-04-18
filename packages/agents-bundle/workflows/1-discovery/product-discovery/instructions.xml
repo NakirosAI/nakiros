@@ -1,0 +1,323 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language resolved from profile and workspace settings.</critical>
+  <critical>Generate all context documents in {{document_language}}.</critical>
+  <critical>Keep internal data files under `{workspace_root_dir}` in ENGLISH for agent performance.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+  <critical>Nakiros uses a dual-level context model: `~/.nakiros/workspaces/{workspace_slug}/context/` for workspace-global maps and `[repo]/_nakiros/` for repo-local implementation slices.</critical>
+  <critical>You are the product-discovery coordinator. Your role is to fan out one PM and one Architect per repo (plus one UX Designer for frontend repos), collect repo-scoped findings, synthesize them with Analyst discipline at workspace level, and write Nakiros context artifacts: product.md, personas.md, features/{slug}/feature.md, architecture/index.md, architecture/{repo_slug}/index.md, and design-system.md.</critical>
+
+  <step n="1" goal="Load workspace">
+    <action>Load `workspace.yaml` from the current working directory. This is the canonical workspace map.</action>
+    <action>Set {{workspace_name}}, {{workspace_structure}}, and {{repos_to_analyze}} from `workspace.name`, `workspace.structure`, and `repos`. If the yaml is missing, continue in single-repo mode with the current repo only.</action>
+    <action>Map all repos: names, roles, primary repo.</action>
+    <action>If {workspace_context_root}/product.md exists, load it as {{existing_product}} — the analysis will enrich or update it, not replace it blindly.</action>
+    <action>If {workspace_context_root}/personas.md exists, load it as {{existing_personas}}.</action>
+    <action>If {workspace_context_root}/features/ exists, list existing feature folders as {{existing_features}} — new analysis will add missing features and update existing ones.</action>
+    <action>If {workspace_context_root}/architecture/index.md exists, treat it as the first-level system map before diving into repo-local `_nakiros/architecture/` slices.</action>
+    <action>If {workspace_context_root}/design-system.md exists, load it as {{existing_design_system}} — the analysis will enrich or update it, not replace it blindly.</action>
+
+    <output>[WORKFLOW] Step 1/4 — Load workspace ✓</output>
+  </step>
+
+  <step n="2" goal="Parallel repo-scoped analysis — PM + Architect per repo">
+    <critical>If the current runtime supports agent orchestration, dispatch one PM and one Architect for EACH repo simultaneously. Expected runner count = 2 x repo_count. If no orchestration runtime is available, run repo-scoped PM then Architect analysis sequentially inside this workflow before synthesizing.</critical>
+    <critical>Never depend on Desktop-only behavior. The workflow must complete in both runtime-aware and portable environments.</critical>
+
+    <check if="orchestration runtime is available">
+      <action>Before building the orchestration block, identify which repos are frontend repos: repos containing HTML templates, CSS/SCSS files, a component library (Vue, React, Angular, Svelte…), or an assets folder. These repos will receive an additional `ux-designer` participant.</action>
+      <action>Output an agent-orchestration block that includes two participants per repo (pm + architect) and one additional ux-designer for each frontend repo. Replace the example repo names below with the actual repo names.
+
+```agent-orchestration
+{
+      "mode": "orchestration",
+  "round_state": "dispatching",
+  "parallel": true,
+  "participants": [
+    {
+      "agent": "pm",
+      "provider": "current",
+      "reason": "analyze repo-a from the product angle",
+      "focus": "repo-a only. Identify users, capabilities, workflows, business value, maturity clues, and product-facing gaps grounded in repo-a files. Name all users, personas, features, and capabilities in {{document_language}}. Write findings to `.agent-work/pm_analysis__repo-a.md` using your native Write tool."
+    },
+    {
+      "agent": "architect",
+      "provider": "current",
+      "reason": "analyze repo-a from the architecture angle",
+      "focus": "repo-a only. Produce a thorough technical slice covering: (1) Stack — runtime, language, framework versions, build toolchain, test framework; (2) Entry points — main processes, bootstrap files, config files; (3) Module map — top-level directories with one-line role per module; (4) API surface — list every exposed endpoint or event contract (REST routes with method+path+purpose, GraphQL types, event names+payload shape, MCP tools if any); (5) Data stores — DBs, schemas, ORM models, migration strategy; (6) Key conventions — naming, layering, error handling, auth patterns grounded in actual code; (7) Hotspots and risks — large/complex/coupled files; (8) Repo boundaries — what this repo owns vs delegates. All labels and names in {{document_language}}. Write findings to `.agent-work/architect_analysis__repo-a.md` using your native Write tool."
+    },
+    {
+      "agent": "pm",
+      "provider": "current",
+      "reason": "analyze repo-b from the product angle",
+      "focus": "repo-b only. Identify users, capabilities, workflows, business value, maturity clues, and product-facing gaps grounded in repo-b files. Name all users, personas, features, and capabilities in {{document_language}}. Write findings to `.agent-work/pm_analysis__repo-b.md` using your native Write tool."
+    },
+    {
+      "agent": "architect",
+      "provider": "current",
+      "reason": "analyze repo-b from the architecture angle",
+      "focus": "repo-b only. Produce a thorough technical slice covering: (1) Stack — runtime, language, framework versions, build toolchain, test framework; (2) Entry points — main processes, bootstrap files, config files; (3) Module map — top-level directories with one-line role per module; (4) API surface — list every exposed endpoint or event contract (REST routes with method+path+purpose, GraphQL types, event names+payload shape, MCP tools if any); (5) Data stores — DBs, schemas, ORM models, migration strategy; (6) Key conventions — naming, layering, error handling, auth patterns grounded in actual code; (7) Hotspots and risks — large/complex/coupled files; (8) Repo boundaries — what this repo owns vs delegates. All labels and names in {{document_language}}. Write findings to `.agent-work/architect_analysis__repo-b.md` using your native Write tool."
+    },
+    {
+      "agent": "ux-designer",
+      "provider": "current",
+      "reason": "analyze the frontend repo(s) for design system and UX patterns",
+      "focus": "frontend repos only (those containing HTML, CSS/SCSS, or a component library). Produce a UX and design system analysis covering: (1) Component library used and version; (2) Color palette — extract all color tokens, CSS variables, or Tailwind config values (primary, secondary, neutral, semantic colors); (3) Typography — font families, size scale, weight conventions; (4) Spacing and layout system — grid, breakpoints, spacing scale; (5) Component inventory — list recurring UI components (buttons, forms, tables, modals, nav…) with their location and observed states/variants; (6) Icon set used; (7) UI patterns per feature area — which views exist, what layout they use, what interactions are present (grounded in actual HTML/template files); (8) Design inconsistencies or gaps observed. All labels and names in {{document_language}}. Write findings to `.agent-work/ux_analysis__{repo_name}.md` using your native Write tool."
+    }
+  ],
+  "shared_context": {
+    "scope": "repo-scoped full workspace analysis",
+    "repos": ["repo-a", "repo-b"],
+    "document_language": "{{document_language}}",
+    "user_goal": "Understand what this product does today — product and technical perspective. All named artifacts (personas, features, capabilities) must be in {{document_language}}."
+  },
+  "synthesis_goal": "Each scoped runner writes repo-specific findings to `.agent-work/{agent}__{repo}.md` files. Once all repo-scoped PM and Architect runners complete, the coordinator reads those files and performs the final workspace-level synthesis with Analyst discipline."
+}
+```
+      </action>
+
+      <action>Once all repo-scoped runners are complete, read the findings for EACH repo using your native Read tool:
+        - `.agent-work/pm_analysis__{repo_name}.md`
+        - `.agent-work/architect_analysis__{repo_name}.md`
+        - `.agent-work/ux_analysis__{repo_name}.md` (only if the repo is a frontend repo — skip if file does not exist)
+      </action>
+    </check>
+
+    <check if="orchestration runtime is not available">
+      <action>For EACH repo, run a PM-style analysis on that repo only and capture the result as {{pm_analysis__repo_name}}. Cover: users, capabilities, workflows, business value, maturity clues, and product-facing gaps grounded in that repo's files. Name all personas, features, and capabilities in {{document_language}}.</action>
+      <action>For EACH repo, run an Architect-style analysis on that repo only and capture the result as {{architect_analysis__repo_name}}. Cover: (1) Stack — runtime, language, framework versions, build toolchain, test framework; (2) Entry points — main processes, bootstrap files, config files; (3) Module map — top-level directories with one-line role each; (4) API surface — every exposed endpoint or event contract (REST routes with method+path+purpose, GraphQL types, event names+payload, MCP tools if any); (5) Data stores — DBs, schemas, ORM models, migration strategy; (6) Key conventions — naming, layering, error handling, auth patterns grounded in actual code; (7) Hotspots and risks; (8) Repo boundaries. Write all labels and names in {{document_language}}.</action>
+      <action>For EACH repo that contains HTML, CSS/SCSS, or a component library (frontend repos), run a UX Designer-style analysis and capture the result as {{ux_analysis__repo_name}}. Cover: (1) Component library used and version; (2) Color palette — CSS variables, design tokens, Tailwind config (primary, secondary, neutral, semantic); (3) Typography — font families, size scale, weight conventions; (4) Spacing and layout system — grid, breakpoints, spacing scale; (5) Component inventory — recurring UI components with location and observed variants; (6) Icon set; (7) UI patterns per feature area — views, layouts, interactions grounded in actual files; (8) Design inconsistencies or gaps. Write all labels and names in {{document_language}}.</action>
+    </check>
+
+    <output>[WORKFLOW] Step 2/4 — Parallel repo-scoped analysis ✓</output>
+  </step>
+
+  <step n="3" goal="Synthesis — build Nakiros context artifacts in memory">
+    <critical>Synthesize all repo-scoped PM and Architect analyses into Nakiros context artifacts. Use Analyst discipline: connect evidence across repos, surface tensions, keep repo-local facts distinct from workspace-level inference. Do NOT write files yet — store everything in memory for user review in step 4.</critical>
+    <critical>Do NOT output any artifact content in the chat during this step. Do NOT dump product.md, personas.md, feature content, or architecture content as chat text. Keep all generated content in memory variables only. The only allowed output is the step marker at the end of this step.</critical>
+
+    <action>Build {{product_md}} content in {{document_language}}:
+
+      "# Product — {{workspace_name}}
+      > Generated by Nakiros on {date}. Refresh with /nak-workflow-generate-context.
+
+      ## Vision
+      {What the product does and the problem it solves — 2-4 sentences grounded in code evidence.}
+
+      ## Users
+      See personas.md
+
+      ## Core Principles
+      {3-5 guiding principles inferred from the codebase: architecture choices, UX patterns, domain model.}
+
+      ## Repo Responsibilities
+      {How each repo contributes to the product — one line per repo.}
+
+      ## Current Maturity
+      {early prototype / MVP / production-ready / scaling — with evidence}
+
+      ## Gaps and Unknowns
+      {What is missing, unclear, or needs validation — product and technical perspectives.}"
+    </action>
+
+    <action>Build {{personas_md}} content in {{document_language}} by deduplicating actors found across all repos:
+      ALL persona names and field labels MUST be written in {{document_language}}.
+
+      "# Personas — {{workspace_name}}
+      > Generated by Nakiros on {date}. Refresh with /nak-workflow-generate-context.
+
+      ## {Persona Name in {{document_language}}}
+      {Who they are in one sentence — in {{document_language}}.}
+      Needs: {what they need from the product — in {{document_language}}}
+      Frustrations: {current pain or friction points — in {{document_language}}}
+      Context: {when and how they interact — in {{document_language}}}
+
+      [repeat for each distinct persona]"
+    </action>
+
+    <action>Build {{features_list}} — one entry per main capability identified across the workspace.
+    For each feature, prepare:
+      - name: feature name in {{document_language}}
+      - slug: lowercase-hyphenated folder name derived from the {{document_language}} name (transliterate accents, e.g. "Gestion des équipes" → "gestion-des-equipes")
+      - existing: true if folder already exists in {{existing_features}}, false otherwise
+      - content in {{document_language}} — ALL section headers, labels, and text MUST be in {{document_language}}:
+
+      "# Feature: {Feature Name in {{document_language}}}
+      {What this feature does and the value it brings to users — in {{document_language}} — 1-3 sentences grounded in evidence.}
+
+      ## Capacités actuelles
+      - {capability 1 — file path evidence}
+      - {capability 2}
+      ...
+
+      ## Repos impliqués
+      {which repos contribute to this feature}
+
+      ## Dépendances
+      {features this depends on, or 'Aucune'}
+
+      ## Stories
+      | ID | Titre | Statut |
+      |----|-------|--------|
+      | — | À définir | 📋 À planifier |
+
+      ---
+      Generated by Nakiros product-discovery on {date}. Update with /nak-workflow-pm-feature."
+
+    For each feature that has frontend code evidence in the UX analysis, also prepare a {{feature.ux_content}} in {{document_language}}:
+
+      "# UX — {Feature Name in {{document_language}}}
+      > Discovered by Nakiros product-discovery on {date}. Refine with /nak-workflow-create-ux-design.
+
+      ## Existing Screens
+      {List of view/page files that implement this feature, with path — grounded in actual files found}
+
+      ## Components Used
+      {UI components observed in those views}
+
+      ## Key Interactions
+      {Forms, tables, modals, navigation patterns observed in the code}
+
+      ## Layout
+      {Layout approach — full-page, sidebar, modal, drawer…}
+
+      ## Empty & Error States
+      {How empty states or errors are handled, if found — or 'Not observed'}
+
+      ## UX Gaps
+      {Interactions or states missing or inconsistent compared to the declared capabilities}
+
+      ---
+      This file was bootstrapped from existing code. Run /nak-workflow-create-ux-design to produce a full UX specification."
+
+    If no frontend code is found for a feature, set {{feature.ux_content}} to null — do not create the file.
+    </action>
+
+    <action>If at least one {{ux_analysis__*}} key was found, build {{design_system_md}} content in {{document_language}} by merging all UX Designer findings across frontend repos.
+    If {{existing_design_system}} was loaded in step 1, enrich it rather than replacing it.
+    Content template:
+
+      "# Design System — {{workspace_name}}
+      > Generated by Nakiros on {date}. Refresh with /nak-workflow-generate-context.
+
+      ## Component Library
+      {Name, version, installation method — grounded in package.json or equivalent}
+
+      ## Color Palette
+      | Token / Variable | Value | Usage |
+      |-----------------|-------|-------|
+      {rows extracted from CSS variables, Tailwind config, or design token files — primary, secondary, neutral, semantic (success, warning, error, info)}
+
+      ## Typography
+      | Role | Font Family | Size | Weight |
+      |------|------------|------|--------|
+      {rows: heading-1 through body-sm, monospace if any}
+
+      ## Spacing & Layout
+      - **Grid system** : {columns, gutter, container max-width}
+      - **Breakpoints** : {xs/sm/md/lg/xl values}
+      - **Spacing scale** : {base unit and scale, e.g. 4px base, Tailwind scale}
+
+      ## Icon Set
+      {Library name and version, or 'No icon library detected'}
+
+      ## Component Inventory
+      | Component | Location | Variants observed |
+      |-----------|----------|-------------------|
+      {rows: one per recurring UI component — button, input, table, modal, badge, toast, nav…}
+
+      ## UI Patterns
+      {Recurring layout or interaction patterns found across feature areas — e.g. master-detail, wizard, inline edit, confirm modal}
+
+      ## Design Inconsistencies & Gaps
+      {Observed inconsistencies — mixed styling approaches, untokenized hardcoded colors, components with diverging behavior across feature areas}
+
+      ---
+      Generated by Nakiros product-discovery on {date}. Update with /nak-workflow-create-ux-design."
+    If no UX analysis was found (no frontend repos), set {{design_system_md}} to null — do not write the file.</action>
+
+    <action>Build {{architecture_index}} content — compact navigational map of the system using the Repo Responsibilities table already written in {{product_md}}. Add a "Repo Slices" section that links to each `architecture/{repo_slug}/index.md`.</action>
+
+    <action>For EACH repo analyzed in step 2, build a per-repo architecture slice {{architecture_slice__{repo_slug}}} in {{document_language}}.
+    Use the slug: lowercase-hyphenated repo name (e.g. "kpe-back" → "kpe-back").
+    Content template:
+
+      "# Architecture — {repo_name}
+      > Generated by Nakiros on {date}. Refresh with /nak-workflow-generate-context.
+
+      ## Stack
+      | Layer | Technology | Version |
+      |-------|-----------|---------|
+      {rows from architect analysis: runtime, language, framework, build tool, test framework}
+
+      ## Entry Points
+      {bootstrap file(s), main process, config files — with path}
+
+      ## Module Map
+      | Module / Directory | Role |
+      |--------------------|------|
+      {one row per top-level directory or significant module}
+
+      ## API Surface
+      {If REST: table with Method | Route | Purpose}
+      {If events: table with Event | Direction | Payload shape}
+      {If MCP tools: table with Tool name | Input | Output}
+      {If GraphQL: list types and resolvers}
+      Note: only what is actually found in code — no speculation.
+
+      ## Data Stores
+      {DB type, ORM, schema location, migration approach}
+
+      ## Conventions
+      {Naming conventions, layering rules, auth pattern, error handling — grounded in file evidence}
+
+      ## Hotspots & Risks
+      {Files or modules that are large, complex, or tightly coupled — with brief reason}
+
+      ## Boundaries
+      {What this repo owns vs what it delegates to other repos or services}
+
+      ---
+      Generated by Nakiros product-discovery on {date}."
+    </action>
+
+    <action>Read your system prompt. Locate the [NAKIROS_SESSION] block and extract the value of conversation_id. Capture it as {{nakiros_conversation_id}}. If the block is not present or conversation_id is missing, generate a fallback identifier in the format conv_{unix_timestamp_seconds}_{6_random_alphanumeric_chars} (e.g. conv_1743200000_a3f8k2).</action>
+
+    <output>[WORKFLOW] Step 3/4 — Synthesis ✓</output>
+  </step>
+
+  <step n="4" goal="Write preview files to disk">
+    <critical>Write preview files directly using your native Write filesystem tool. Do NOT output file contents in chat. The application handles review and apply — no interactive loop needed.</critical>
+
+    <action>Define {{preview_root}} = {workspace_root_dir}/.preview/{{nakiros_conversation_id}}</action>
+    <action>Write the following files using your native Write tool (create parent directories as needed):
+      - `{{preview_root}}/product.md` ← {{product_md}}
+      - `{{preview_root}}/personas.md` ← {{personas_md}}
+      - For each feature in {{features_list}}: `{{preview_root}}/features/{slug}/feature.md` ← feature content
+      - For each feature with non-null ux_content: `{{preview_root}}/features/{slug}/ux.md` ← ux content
+      - `{{preview_root}}/architecture/index.md` ← {{architecture_index}}
+      - For each repo analyzed: `{{preview_root}}/architecture/{repo_slug}/index.md` ← architecture slice
+      - `{{preview_root}}/design-system.md` ← {{design_system_md}} (only if not null)
+    </action>
+
+    <output>[WORKFLOW] Step 4/4 — Preview written to `{{preview_root}}/` ✓
+
+📂 **{{features_list.length}} feature(s)** — {{feature_slugs}}
+🏗️ **{{repos_analyzed.length}} repo(s)** — {{repos_analyzed}}
+{{if design_system_md: "🎨 Design system detected ✓"}}
+
+Browse the files in your editor if you want.
+
+**What do you want to do?**
+1. [nakiros:preview:apply] Apply — copy the preview to the final context
+2. Edit a file — tell me which one and what to change (or select the passage and send it with your message)
+3. [nakiros:preview:discard] Cancel — discard the preview files</output>
+
+    <!-- Handle user response — Apply and Cancel are handled by the app directly (no AI round-trip) -->
+    <check if="user wants to edit a file">
+      <action>Read the relevant preview file(s) from `{{preview_root}}/` using your native Read tool. Apply the requested changes in place using your native Write tool. Do not regenerate unchanged sections.</action>
+      <output>✏️ Done. Review the changes in your editor, then click Apply or ask for more edits.</output>
+    </check>
+  </step>
+</workflow>

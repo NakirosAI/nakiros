@@ -1,0 +1,24 @@
+name: product-discovery
+description: "Analyze an existing multi-repo codebase by fanning out one PM and one Architect per repo, then synthesize findings into Nakiros context artifacts: product.md, personas.md, features/{name}/feature.md, and architecture/"
+author: "Nakiros"
+
+# Workflow engine bootstrap
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+# Workflow components
+installed_path: "~/.nakiros/workflows/1-discovery/product-discovery"
+instructions: "{installed_path}/instructions.xml"
+validation: "{installed_path}/checklist.md"
+
+# Runtime paths
+profile_config: "~/.nakiros/config.yaml"
+workspace_config: "workspace.yaml"
+workspace_root_dir: "~/.nakiros/workspaces/{workspace_slug}"
+workspace_context_root: "{workspace_root_dir}/context"
+features_root: "{workspace_context_root}/features"
+
+# Defaults
+default_communication_language: "Français"
+default_document_language: "English"
+parallel_analysis: true

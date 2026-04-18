@@ -1,0 +1,22 @@
+name: qa-review
+description: "QA review workflow: workspace-global context, acceptance criteria validation, test coverage analysis, regression scope, sign-off"
+author: "Nakiros"
+
+# Workflow engine bootstrap
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+# Workflow components
+installed_path: "~/.nakiros/workflows/4-quality/qa-review"
+instructions: "{installed_path}/instructions.xml"
+
+# Runtime paths
+profile_config: "~/.nakiros/config.yaml"
+workspace_config: "workspace.yaml"
+workspace_root_dir: "~/.nakiros/workspaces/{workspace_slug}"
+workspace_context_root: "~/.nakiros/workspaces/{workspace_slug}/context"
+repo_review_dir: "{project-root}/_nakiros/qa-reviews"
+
+# Defaults
+default_communication_language: "Français"
+default_document_language: "English"

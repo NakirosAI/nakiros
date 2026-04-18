@@ -1,0 +1,156 @@
+<workflow>
+  <critical>The workflow execution engine is governed by: ~/.nakiros/core/tasks/workflow.xml</critical>
+  <critical>You MUST have already loaded and processed: {installed_path}/workflow.yaml</critical>
+  <critical>YOU MUST ALWAYS SPEAK OUTPUT in the configured communication_language.</critical>
+  <critical>Execute ALL steps in exact order; do NOT skip steps.</critical>
+
+  <step n="1" goal="Load configuration">
+    <action>Load profile config from {profile_config} when available (optional).</action>
+    <action>Apply defaults when missing: communication_language={default_communication_language}, document_language={default_document_language}.</action>
+    <action>Resolve workspace scope from {workspace_config}. If the repo pointer exists, read `workspace_slug` from `{project-root}/_nakiros/workspace.yaml`, then load `~/.nakiros/workspaces/{workspace_slug}/workspace.yaml` as the canonical workspace map. If the pointer is missing, continue in single-repo mode rooted at {project-root}.</action>
+    <action>Set {{workspace_repo_list}} from canonical workspace yaml `repos`. In single-repo fallback mode, set it to the current repo only.</action>
+    <action>Set {{pm_tool}} from canonical workspace yaml `workspace.pm_tool`, defaulting to "none" when absent.</action>
+    <action>Set {{is_multi_repo}} = true when canonical workspace yaml `workspace.structure` is `multi-repo` or more than one repo is listed; otherwise false.</action>
+    <action>Load workspace-global context first by calling context.workspace.get for keys product, global, interRepo, and architecture when available. Use repo-local `_nakiros/` slices only for repo-owned detail.</action>
+    <output>[QA] Étape 1/6 — Load configuration ✓
+Config loaded | PM: {{pm_tool or "standalone"}} | Workspace: {{is_multi_repo ? "multi-repo" : "single-repo"}}</output>
+  </step>
+
+  <step n="2" goal="Identify the review target">
+    <ask>What are you reviewing? (ticket ID, MR/PR URL, or describe the change)</ask>
+    <action>Capture as {{review_target}}.</action>
+
+    <check if="review_target looks like a ticket ID and pm_tool is configured">
+      <action>Fetch ticket details via the configured Nakiros PM integration: title, description, acceptance criteria, status, labels.</action>
+      <action>Capture as {{ticket_context}}. Extract acceptance criteria as {{acceptance_criteria}}.</action>
+    </check>
+
+    <check if="review_target looks like a MR/PR URL">
+      <action>Attempt to fetch MR/PR diff using available CLI (gh pr diff / gitlab mr diff).</action>
+      <action>Capture changed files as {{changed_files}}.</action>
+    </check>
+
+    <check if="no PM integration and no CLI available">
+      <ask>Paste the acceptance criteria or describe what this change is supposed to do:</ask>
+      <action>Capture as {{acceptance_criteria}}.</action>
+    </check>
+
+    <output>[QA] Étape 2/6 — Identify review target ✓
+Review target identified: {{review_target}}</output>
+  </step>
+
+  <step n="3" goal="Acceptance criteria validation (AC gate)">
+    <critical>This is a BLOCKING gate. If criteria are ambiguous, raise the issue before proceeding.</critical>
+
+    <action>Analyze {{acceptance_criteria}} against these testability criteria:
+      - Each criterion is verifiable (pass / fail — no subjective judgment)
+      - Each criterion has a clear scope (which component, which user action, which state)
+      - Edge cases and error states are covered (not just the happy path)
+      - Non-functional requirements are explicit if relevant (performance, accessibility, security)
+    </action>
+
+    <check if="any criterion is ambiguous or missing">
+      <action>List each ambiguous criterion with a concrete explanation of what is missing.</action>
+      <action>Propose explicit, testable rewrites for each ambiguous criterion.</action>
+      <output>[QA] ⚠ AC gap detected — review cannot proceed until criteria are confirmed:</output>
+      <ask>Please clarify or confirm the revised criteria:</ask>
+      <action>Capture confirmed criteria as {{confirmed_acceptance_criteria}}.</action>
+    </check>
+
+    <check if="all criteria are clear and testable">
+      <action>Set {{confirmed_acceptance_criteria}} = {{acceptance_criteria}}.</action>
+    </check>
+
+    <output>[QA] Étape 3/6 — AC validation ✓
+AC validated — {{confirmed_acceptance_criteria | count}} criteria confirmed</output>
+  </step>
+
+  <step n="4" goal="Test coverage analysis">
+    <action>Scan for existing test files relative to the change scope ({{changed_files}} or inferred from {{review_target}}):</action>
+    <action>Look for: *.test.ts, *.spec.ts, *.test.tsx, *.spec.tsx, *_test.py, *Test.java, *Spec.rb, etc.</action>
+    <action>For each confirmed acceptance criterion, determine if a corresponding test exists:</action>
+    <action>Classify each gap as: critical (blocks sign-off), moderate (should be fixed before merge), minor (follow-up).</action>
+
+    <check if="workspace_config is loaded (multi-repo)">
+      <action>Extend scan to integration test directories across repos in {{workspace_repo_list}}.</action>
+      <action>Identify cross-repo integration points covered by the change.</action>
+    </check>
+
+    <action>Build coverage matrix:
+      | Criterion | Test exists? | Test file | Gap severity |
+      |---|---|---|---|
+      | ... | Yes / No / Partial | path or — | — / critical / moderate / minor |
+    </action>
+
+    <output>[QA] Étape 4/6 — Test coverage analysis ✓
+Coverage analysis complete</output>
+  </step>
+
+  <step n="5" goal="Regression scope">
+    <action>Identify the regression risk zone from the change set:</action>
+    <action>For each changed file/module:
+      - List existing tests that exercise this file
+      - Identify callers / dependents that may be affected (static analysis if feasible)
+      - Flag integration points with other repos (if multi-repo)
+    </action>
+    <action>Produce a regression run list: which test commands to run, in which order.</action>
+
+    <output>[QA] Étape 5/6 — Regression scope ✓
+Regression scope defined</output>
+  </step>
+
+  <step n="6" goal="Write QA review artifact and sign-off decision">
+    <action>Ensure directory exists: {repo_review_dir}.</action>
+    <action>Generate artifact filename: {{qa_file}} = {repo_review_dir}/qa-review-{{date}}-{{review_target | slugify}}.md</action>
+
+    <action>Write QA review artifact to {{qa_file}} in {{document_language}}:
+
+      # QA Review — {{review_target}} — {{date}}
+
+      ## Acceptance Criteria
+      {{confirmed_acceptance_criteria as numbered list}}
+
+      ## Coverage Matrix
+      {{coverage_matrix table}}
+
+      ## Coverage Gaps
+      {{list of gaps with severity and suggested test description}}
+
+      ## Regression Scope
+      {{list of existing tests to re-run}}
+      {{regression run commands}}
+
+      ## Cross-repo Impact
+      {{if multi-repo: list impacted repos and integration points, else "Single-repo — N/A"}}
+
+      ## Sign-off Decision
+      {{APPROVED / CONDITIONAL / BLOCKED}}
+
+      **Rationale:** {{one paragraph explaining the decision}}
+
+      {{if CONDITIONAL: "### Conditions\n{{list of required fixes before merge}}"}}
+      {{if BLOCKED: "### Blockers\n{{list of blocking issues}}"}}
+    </action>
+
+    <check if="pm_tool is configured">
+      <action>Post QA review comment on {{review_target}} ticket via the configured Nakiros PM integration:
+        "🔍 QA Review complete
+        Decision: {{sign_off_decision}}
+        Artifact: {{qa_file}}
+        {{if gaps: 'Gaps: ' + gap_count + ' (' + critical_count + ' critical)'}}
+        {{if APPROVED: '✅ Ready to merge'}}
+        {{if CONDITIONAL: '⚠ Conditions: ' + conditions_summary}}
+        {{if BLOCKED: '🚫 Blocked: ' + blockers_summary}}"
+      </action>
+    </check>
+
+    <output>[QA] Étape 6/6 — QA review artifact ✓</output>
+    <output>[QA] ✅ Review complete
+├─ Target: {{review_target}}
+├─ AC: {{confirmed_acceptance_criteria | count}} criteria validated
+├─ Gaps: {{gap_count}} ({{critical_count}} critical, {{moderate_count}} moderate, {{minor_count}} minor)
+├─ Sign-off: {{sign_off_decision}}
+└─ Artifact: {{qa_file}}
+    </output>
+  </step>
+</workflow>

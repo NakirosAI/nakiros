@@ -1,0 +1,289 @@
+{
+  "skill_name": "nakiros-skill-factory",
+  "evals": [
+    {
+      "id": 1,
+      "name": "audit-bad-skill",
+      "prompt": "Audite ce fichier skill: evals/files/bad-skill-example.md",
+      "expected_output": "A structured audit report catching ALL problems in the deliberately bad skill. Output saved to outputs/audit-report.md.",
+      "files": ["evals/files/bad-skill-example.md"],
+      "output_files": ["audit-report.md"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Produces outputs/audit-report.md",
+          "script": "test -f outputs/audit-report.md"
+        },
+        {
+          "type": "script",
+          "text": "Report uses the 23-check table structure",
+          "script": "grep -E 'Score:\\s*[0-9]+/23' outputs/audit-report.md"
+        },
+        {
+          "type": "script",
+          "text": "Score is low (under 8/23)",
+          "script": "grep -E 'Score:\\s*[0-7]/23' outputs/audit-report.md"
+        },
+        {
+          "type": "llm",
+          "text": "Detects invalid name format (uppercase 'Bad-Skill')"
+        },
+        {
+          "type": "llm",
+          "text": "Detects vague description ('Helps with stuff')"
+        },
+        {
+          "type": "llm",
+          "text": "Detects missing Inputs section"
+        },
+        {
+          "type": "llm",
+          "text": "Detects missing Outputs section"
+        },
+        {
+          "type": "llm",
+          "text": "Detects missing context loading section"
+        },
+        {
+          "type": "llm",
+          "text": "Detects vague instructions ('handle errors appropriately', 'follow best practices')"
+        },
+        {
+          "type": "llm",
+          "text": "Detects menu pattern instead of default ('React, Vue, or Angular')"
+        },
+        {
+          "type": "llm",
+          "text": "Detects missing Gotchas section"
+        },
+        {
+          "type": "llm",
+          "text": "Detects missing French communication rule"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "audit-good-skill",
+      "prompt": "Audite ce fichier skill: evals/files/good-skill-example.md",
+      "expected_output": "A structured audit report with a high score, recognizing quality while finding minor improvements.",
+      "files": ["evals/files/good-skill-example.md"],
+      "output_files": ["audit-report.md"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Produces outputs/audit-report.md",
+          "script": "test -f outputs/audit-report.md"
+        },
+        {
+          "type": "script",
+          "text": "Score is high (18/23 or above)",
+          "script": "grep -E 'Score:\\s*(1[89]|2[0-3])/23' outputs/audit-report.md"
+        },
+        {
+          "type": "llm",
+          "text": "Recognizes valid name format"
+        },
+        {
+          "type": "llm",
+          "text": "Recognizes good description with trigger keywords"
+        },
+        {
+          "type": "llm",
+          "text": "Recognizes Inputs section exists and is well-formed"
+        },
+        {
+          "type": "llm",
+          "text": "Recognizes Outputs section exists and is well-formed"
+        },
+        {
+          "type": "llm",
+          "text": "Recognizes Gotchas section exists with specific traps"
+        },
+        {
+          "type": "llm",
+          "text": "Recognizes example flow exists"
+        },
+        {
+          "type": "llm",
+          "text": "Does NOT invent critical failures that don't exist"
+        },
+        {
+          "type": "llm",
+          "text": "If improvements suggested, they are minor (not critical)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "audit-medium-skill",
+      "prompt": "Audite ce fichier skill: evals/files/medium-skill-example.md",
+      "expected_output": "A structured audit report with a medium score, detecting real problems without over-penalizing.",
+      "files": ["evals/files/medium-skill-example.md"],
+      "output_files": ["audit-report.md"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Produces outputs/audit-report.md",
+          "script": "test -f outputs/audit-report.md"
+        },
+        {
+          "type": "script",
+          "text": "Score is medium (10-15/23)",
+          "script": "grep -E 'Score:\\s*(1[0-5])/23' outputs/audit-report.md"
+        },
+        {
+          "type": "llm",
+          "text": "Detects missing Inputs section"
+        },
+        {
+          "type": "llm",
+          "text": "Detects missing Outputs section"
+        },
+        {
+          "type": "llm",
+          "text": "Detects missing example flow"
+        },
+        {
+          "type": "llm",
+          "text": "Detects missing Gotchas section"
+        },
+        {
+          "type": "llm",
+          "text": "Detects menu pattern ('mysqldump or mariadb-dump')"
+        },
+        {
+          "type": "llm",
+          "text": "Detects vague description (no trigger keywords)"
+        },
+        {
+          "type": "llm",
+          "text": "Does NOT flag the name as invalid (it is valid lowercase)"
+        },
+        {
+          "type": "llm",
+          "text": "Does NOT flag the French rule as missing (it exists)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "fix-medium-skill",
+      "prompt": "Fix ce skill: evals/files/medium-skill-example.md — applique les corrections identifiées par l'audit. IMPORTANT : produis la version corrigée dans `outputs/fixed-skill.md` (ne modifie PAS le fixture original dans evals/files/, c'est un fichier stable de test).",
+      "expected_output": "A fixed version of the skill file with all critical/important audit issues resolved.",
+      "files": ["evals/files/medium-skill-example.md"],
+      "output_files": ["fixed-skill.md"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Produces outputs/fixed-skill.md",
+          "script": "test -f outputs/fixed-skill.md"
+        },
+        {
+          "type": "script",
+          "text": "Added an Inputs section",
+          "script": "grep -q -E '^##\\s+Inputs' outputs/fixed-skill.md"
+        },
+        {
+          "type": "script",
+          "text": "Added an Outputs section",
+          "script": "grep -q -E '^##\\s+Outputs' outputs/fixed-skill.md"
+        },
+        {
+          "type": "script",
+          "text": "Added a Gotchas section",
+          "script": "grep -q -E '^##\\s+Gotchas' outputs/fixed-skill.md"
+        },
+        {
+          "type": "llm",
+          "text": "Added an example flow"
+        },
+        {
+          "type": "llm",
+          "text": "Gotchas section contains at least 1 specific gotcha (not vague)"
+        },
+        {
+          "type": "llm",
+          "text": "Replaced menu ('mysqldump or mariadb-dump') with a default choice"
+        },
+        {
+          "type": "llm",
+          "text": "Improved the description with trigger keywords"
+        },
+        {
+          "type": "llm",
+          "text": "Did NOT remove existing valid content (French rule, context loading, commands)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "improve-with-feedback",
+      "prompt": "Améliore ce skill basé sur ce feedback : l'agent n'a pas vérifié que la connexion DB était active avant de lancer le backup, résultat un backup vide. Skill à améliorer: evals/files/medium-skill-example.md. IMPORTANT : produis la version améliorée dans `outputs/improved-skill.md` (ne modifie PAS le fixture original dans evals/files/, c'est un fichier stable de test).",
+      "expected_output": "Targeted improvements addressing the specific feedback, not a complete rewrite.",
+      "files": ["evals/files/medium-skill-example.md"],
+      "output_files": ["improved-skill.md"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Produces outputs/improved-skill.md",
+          "script": "test -f outputs/improved-skill.md"
+        },
+        {
+          "type": "script",
+          "text": "Mentions DB connection check",
+          "script": "grep -qi -E '(connection|connexion).*(db|database|bdd)|check.*db|db.*active' outputs/improved-skill.md"
+        },
+        {
+          "type": "llm",
+          "text": "Added a Gotcha about checking DB connection before backup"
+        },
+        {
+          "type": "llm",
+          "text": "Added a validation step in the workflow (check DB before backup)"
+        },
+        {
+          "type": "llm",
+          "text": "Changes are specific to the feedback given (DB connection check) — not a full rewrite"
+        },
+        {
+          "type": "llm",
+          "text": "Original structure and valid sections are preserved"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "create-asks-first",
+      "mode": "interactive",
+      "prompt": "Crée un nouveau skill nommé exactement `nakiros-eval-commit-writer`. Il doit aider à écrire des messages de commit. Sauvegarde le SKILL.md final dans `outputs/SKILL.md` (pas dans ~/.claude/skills/ ni ailleurs).",
+      "expected_output": "The factory asks 2-3 brief questions about commit style/language before writing. Then produces outputs/SKILL.md.",
+      "files": [],
+      "output_files": ["SKILL.md"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Final outputs/SKILL.md is produced (after the user answered the questions)",
+          "script": "test -f outputs/SKILL.md"
+        },
+        {
+          "type": "script",
+          "text": "Final SKILL.md uses the exact name `nakiros-eval-commit-writer` (not another name)",
+          "script": "grep -q '^name: nakiros-eval-commit-writer' outputs/SKILL.md"
+        },
+        {
+          "type": "llm",
+          "text": "The first assistant turn asks questions — it does NOT contain a full SKILL.md template (should be conversational, < 50 lines)"
+        },
+        {
+          "type": "llm",
+          "text": "The questions are short and easy to answer (binary or brief), not open-ended essays"
+        },
+        {
+          "type": "llm",
+          "text": "Did NOT attempt to write to ~/.claude/skills/ or other locations outside outputs/"
+        }
+      ]
+    }
+  ]
+}

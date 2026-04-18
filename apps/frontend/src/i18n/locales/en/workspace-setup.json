@@ -1,0 +1,35 @@
+{
+  "eyebrow": "Getting Started",
+  "title": "Set up {{name}}",
+  "description": "Complete these 3 steps to make your agents fully operational. Each step launches a guided AI session directly in Chat IA.",
+
+  "stepLabel": "Step {{number}}",
+  "launch": "Launch",
+  "launching": "Launching…",
+  "stepComplete": "Step {{number}} complete",
+  "prerequisiteMessage": "Complete step {{number}} first",
+
+  "step1TitleNew": "Generate the shared project context",
+  "step1TitleBrownfield": "Generate global inter-repo context",
+  "step1DescriptionNew": "Analyze the selected repositories and produce the reference docs your agents will rely on.",
+  "step1DescriptionBrownfield": "Repo-level context already exists. Generate the shared workspace context that connects all repos together.",
+  "step1ChatTitle": "Generate Context · {{workspace}}",
+
+  "step2Title": "Assess project understanding",
+  "step2Description": "Measure what the system understands about the codebase and surface any remaining blind spots.",
+  "step2ChatTitle": "Project Confidence · {{workspace}}",
+
+  "step3Title": "Challenge synchronized tickets",
+  "step3Description": "Review the current delivery scope before development starts so the workspace is operational end to end.",
+  "step3ChatTitle": "PM Challenge · {{workspace}}",
+  "step3NoPmTitle": "PM connection required",
+  "step3NoPmDescription": "Connect a PM tool first to run the PM Challenge.",
+
+  "readyTitle": "Your workspace is ready",
+  "readyDescription": "All 3 onboarding steps are complete. Your agents now have the context they need.",
+  "readyCtaOverview": "Go to Overview",
+
+  "skipButton": "Skip — configure manually",
+  "backHome": "Back to home",
+  "continueButton": "Open workspace"
+}

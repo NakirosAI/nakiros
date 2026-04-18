@@ -1,0 +1,33 @@
+{
+  "eval_id": "{N}",
+  "eval_name": "{test-name}",
+  "skill_name": "{skill-name}",
+  "iteration": "{N}",
+  "config": "with_skill",
+  "timestamp": "{ISO8601}",
+  "grader_model": "{claude-opus-4-7 | gpt-4 | manual | script}",
+  "assertion_results": [
+    {
+      "type": "script",
+      "text": "{The assertion text from evals.json}",
+      "passed": true,
+      "evidence": "{Script stdout or 'Exit code 0'}"
+    },
+    {
+      "type": "llm",
+      "text": "{Qualitative assertion}",
+      "passed": false,
+      "evidence": "{Concrete quote from the output that explains PASS/FAIL}"
+    }
+  ],
+  "summary": {
+    "passed": 0,
+    "failed": 0,
+    "total": 0,
+    "pass_rate": 0.0
+  },
+  "output_files_produced": [
+    "{filename if the eval expected file outputs}"
+  ],
+  "notes": "{Any additional observations not captured by assertions}"
+}

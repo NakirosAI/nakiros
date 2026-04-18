@@ -1,0 +1,22 @@
+name: generate-context
+description: "Refresh stable context artifacts by having PM and Architect write repo-local `_nakiros/` docs for each repo, then having Analyst aggregate them into workspace-global docs under `~/.nakiros/workspaces/{workspace_slug}/context/`."
+author: "Nakiros"
+
+# Workflow engine bootstrap
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+# Workflow components
+installed_path: "~/.nakiros/workflows/1-discovery/generate-context"
+steps_path: "{installed_path}/steps"
+
+# Runtime paths
+profile_config: "~/.nakiros/config.yaml"
+workspace_config: "workspace.yaml"
+
+workspace_root_dir: "~/.nakiros/workspaces/{workspace_slug}"
+workspace_context_root: "{workspace_root_dir}/context"
+
+# Defaults
+default_communication_language: "Français"
+default_document_language: "English"

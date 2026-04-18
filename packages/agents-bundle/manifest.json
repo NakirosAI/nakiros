@@ -1,0 +1,804 @@
+{
+  "version": "1.0.0",
+  "channel": "stable",
+  "released_at": "2026-03-18T00:00:00Z",
+  "min_app_version": "1.0.0",
+  "required_features": [],
+  "changelog": "Agents refactor: nakiros-action replaces MCP for all operations, agent-orchestration moves to JSON format, multi-agent room model, multi-provider challenge pattern, worktree support in Dev, PM strengthened with senior PM questioning, Brainstorming now generates PRD, Product agent removed (replaced by workflow)",
+  "files": [
+    {
+      "type": "agent",
+      "name": "analyst",
+      "filename": "analyst.md",
+      "path": "agents/analyst.md",
+      "hash": "sha256:8b78c4de9c13307ee0f43c1245f4d183bce50bfb045c0e9cbcfd4f8498d72dd2"
+    },
+    {
+      "type": "agent",
+      "name": "architect",
+      "filename": "architect.md",
+      "path": "agents/architect.md",
+      "hash": "sha256:0404d1abe4fad77af5ba085592c2b8ac690af620891e9b3e4f6169832501750f"
+    },
+    {
+      "type": "agent",
+      "name": "brainstorming",
+      "filename": "brainstorming.md",
+      "path": "agents/brainstorming.md",
+      "hash": "sha256:07c61a7e86dab8eb47136ba883473fb7edf00394b72981db3d57cba5cd46a573"
+    },
+    {
+      "type": "agent",
+      "name": "ceo",
+      "filename": "ceo.md",
+      "path": "agents/ceo.md",
+      "hash": "sha256:e419d8c0aaa6e01a4adf197b1ec85e8d352dd128cbeea794c973abba8f51d555"
+    },
+    {
+      "type": "agent",
+      "name": "cto",
+      "filename": "cto.md",
+      "path": "agents/cto.md",
+      "hash": "sha256:554e39a4f287819eeb81c5ce396739dfad48c37d905d0eeccacb95402d0d9c38"
+    },
+    {
+      "type": "agent",
+      "name": "dev",
+      "filename": "dev.md",
+      "path": "agents/dev.md",
+      "hash": "sha256:651f965e024e4f08f9ceebdfab8f8f1af914aa111a1484c7bccd6929ecee7de5"
+    },
+    {
+      "type": "agent",
+      "name": "pm",
+      "filename": "pm.md",
+      "path": "agents/pm.md",
+      "hash": "sha256:781c43cd89bb8b85553f0b592e9742b0053a9d62a062c37a6c525ad16e0c1c39"
+    },
+    {
+      "type": "agent",
+      "name": "qa",
+      "filename": "qa.md",
+      "path": "agents/qa.md",
+      "hash": "sha256:8e8312519df72c9f0dbd9df9847413340226f41d5a1b58b6c9187b063c3e12af"
+    },
+    {
+      "type": "agent",
+      "name": "sm",
+      "filename": "sm.md",
+      "path": "agents/sm.md",
+      "hash": "sha256:0805bcebc727155f8eb388c4d7e87bb83fd5e9af8adb5418b59709ad1f2cc9f2"
+    },
+    {
+      "type": "agent",
+      "name": "ux-designer",
+      "filename": "ux-designer.md",
+      "path": "agents/ux-designer.md",
+      "hash": "sha256:1553d948254ef4f258834873fcfdeb7491f88161a8530ce06652822c3397d5d8"
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-analyst",
+      "filename": "nak-agent-analyst.md",
+      "path": "commands/nak-agent-analyst.md",
+      "hash": "sha256:9e65cc3524e04567e16edf9f50985d8615b9dde4f64b5c9f0eb50b2bdd323565",
+      "meta": {
+        "tag": "Analyst",
+        "label": "Analyst",
+        "color": "#8B5CF6",
+        "placeholder": "Message for Analyst…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-architect",
+      "filename": "nak-agent-architect.md",
+      "path": "commands/nak-agent-architect.md",
+      "hash": "sha256:69022d4014770e0fb047507c1b63ed65c44e149007b4e398278286b80b715abb",
+      "meta": {
+        "tag": "Architect",
+        "label": "Architect",
+        "color": "#2563EB",
+        "placeholder": "Message for Architect…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-brainstorming",
+      "filename": "nak-agent-brainstorming.md",
+      "path": "commands/nak-agent-brainstorming.md",
+      "hash": "sha256:d41fc720f70a0278181316ed95597d9a29eb646920db650a3789ff389c2570a3",
+      "meta": {
+        "tag": "Brainstorming",
+        "label": "Brainstorming",
+        "color": "#DB2777",
+        "placeholder": "Message for Brainstorming…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-ceo",
+      "filename": "nak-agent-ceo.md",
+      "path": "commands/nak-agent-ceo.md",
+      "hash": "sha256:bee82716acfaa42316a7bc63716d8cbd3656336e89a4511256ca769614fc9fd7",
+      "meta": {
+        "tag": "CEO",
+        "label": "CEO",
+        "color": "#4F46E5",
+        "placeholder": "Talk with CEO…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-cto",
+      "filename": "nak-agent-cto.md",
+      "path": "commands/nak-agent-cto.md",
+      "hash": "sha256:553c47748a14aae9c979aa247bae0ed527ed95dbcf548792b1faa8ad46930940",
+      "meta": {
+        "tag": "CTO",
+        "label": "CTO",
+        "color": "#0D9E9E",
+        "placeholder": "Talk with CTO…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-dev",
+      "filename": "nak-agent-dev.md",
+      "path": "commands/nak-agent-dev.md",
+      "hash": "sha256:0822d446cb727c3f156e0b162cd2d0566517ad31dd1be159f09c35f3c6079914",
+      "meta": {
+        "tag": "Dev",
+        "label": "Dev Agent",
+        "color": "#16A34A",
+        "placeholder": "Message for Dev Agent…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-pm",
+      "filename": "nak-agent-pm.md",
+      "path": "commands/nak-agent-pm.md",
+      "hash": "sha256:405626fd49c8c2ae6b9ddb49f5eb00f81b97f51221534860b65fe0dd11231423",
+      "meta": {
+        "tag": "PM",
+        "label": "PM Agent",
+        "color": "#7C3AED",
+        "placeholder": "Message for PM Agent…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-qa",
+      "filename": "nak-agent-qa.md",
+      "path": "commands/nak-agent-qa.md",
+      "hash": "sha256:fa13f9867923226cbff703c46921bec7dcc35930ac19cfed7035b7d05df40e83",
+      "meta": {
+        "tag": "QA",
+        "label": "QA Agent",
+        "color": "#DC2626",
+        "placeholder": "Message for QA Agent…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-sm",
+      "filename": "nak-agent-sm.md",
+      "path": "commands/nak-agent-sm.md",
+      "hash": "sha256:6a0db26e358a10e6bf573ba84157f6b453b8bd7733181d89661e52383cdd0335",
+      "meta": {
+        "tag": "SM",
+        "label": "SM Agent",
+        "color": "#D97706",
+        "placeholder": "Message for SM Agent…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-agent-ux-designer",
+      "filename": "nak-agent-ux-designer.md",
+      "path": "commands/nak-agent-ux-designer.md",
+      "hash": "sha256:905d01a66bd119a3e7c655d8b7a25dc8ab3a81f5814def5a6ddaaa6f78613b0c",
+      "meta": {
+        "tag": "UX",
+        "label": "UX Designer",
+        "color": "#D946EF",
+        "placeholder": "Message for UX Designer…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-brainstorming",
+      "filename": "nak-workflow-brainstorming.md",
+      "path": "commands/nak-workflow-brainstorming.md",
+      "hash": "sha256:f4a08528056698419c89e75035358609dd24e7e57fd292c192d9dd14eb638331",
+      "meta": {
+        "label": "Brainstorming",
+        "placeholder": "Describe what you want to brainstorm…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-check-implementation-readiness",
+      "filename": "nak-workflow-check-implementation-readiness.md",
+      "path": "commands/nak-workflow-check-implementation-readiness.md",
+      "hash": "sha256:aff7e2d0aec1f3602d3bf243e9eb00b6f5e959d96ac68a2d9ccc9e1f928f1f90",
+      "meta": {
+        "label": "Check Readiness",
+        "placeholder": "Check implementation readiness?"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-create-architecture",
+      "filename": "nak-workflow-create-architecture.md",
+      "path": "commands/nak-workflow-create-architecture.md",
+      "hash": "sha256:8baefe59f361743f082403ec8f48fb5b74d6eb73756835094177cbf71e7bb34d",
+      "meta": {
+        "label": "Create Architecture",
+        "placeholder": "Describe the architecture to create…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-create-story",
+      "filename": "nak-workflow-create-story.md",
+      "path": "commands/nak-workflow-create-story.md",
+      "hash": "sha256:e0e3e74006872655b0c10bfb6a30504ccbf99d65afb91155febca9f7e2baab78",
+      "meta": {
+        "label": "Create Story",
+        "placeholder": "Describe the story to create…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-create-ux-design",
+      "filename": "nak-workflow-create-ux-design.md",
+      "path": "commands/nak-workflow-create-ux-design.md",
+      "hash": "sha256:d328757d48c705c852ba447d845a26698285d76f80140f11c90e165b2f275cc0",
+      "meta": {
+        "label": "Create UX Design",
+        "placeholder": "Describe the UX design to create…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-dev-story",
+      "filename": "nak-workflow-dev-story.md",
+      "path": "commands/nak-workflow-dev-story.md",
+      "hash": "sha256:34f48d5358c93ba943a18be40a1cb8a0f273a0126382822cd7b8a54a6f60278d",
+      "meta": {
+        "label": "Dev Story",
+        "placeholder": "Ticket ID (e.g. EX-203)"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-generate-context",
+      "filename": "nak-workflow-generate-context.md",
+      "path": "commands/nak-workflow-generate-context.md",
+      "hash": "sha256:f6b90294011d25cc2be1c7c4f9e622df5fdbf1a14ec5c591dbf626ea15e2ef9d",
+      "meta": {
+        "label": "Generate Context",
+        "placeholder": "Run Generate Context on this workspace?"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-plan-feature",
+      "filename": "nak-workflow-plan-feature.md",
+      "path": "commands/nak-workflow-plan-feature.md",
+      "hash": "sha256:f58af410755b16cf80ab809c77a02cd69d2fcd2c42a8d07c2bd97c315ab0e7e6",
+      "meta": {
+        "label": "Plan Feature",
+        "placeholder": "Describe the feature to plan…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-product-discovery",
+      "filename": "nak-workflow-product-discovery.md",
+      "path": "commands/nak-workflow-product-discovery.md",
+      "hash": "sha256:496bd82d8c67a4ef7aad9f59731c455157fa2e6aa793ee83eac33427665b6e93",
+      "meta": {
+        "label": "Product Discovery",
+        "placeholder": "Describe the product to discover…"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-project-understanding-confidence",
+      "filename": "nak-workflow-project-understanding-confidence.md",
+      "path": "commands/nak-workflow-project-understanding-confidence.md",
+      "hash": "sha256:f59aa809b538d690710f63c09ba548eec02452d26866ae0799e873af426cf5df",
+      "meta": {
+        "label": "Project Confidence",
+        "placeholder": "Evaluate project confidence?"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-qa-review",
+      "filename": "nak-workflow-qa-review.md",
+      "path": "commands/nak-workflow-qa-review.md",
+      "hash": "sha256:c165359f99067d48710c6b3f99287808fcc73b3d1a1450278487cb0c5246a96b",
+      "meta": {
+        "label": "QA Review",
+        "placeholder": "Run QA Review?"
+      }
+    },
+    {
+      "type": "command",
+      "name": "nak-workflow-sprint",
+      "filename": "nak-workflow-sprint.md",
+      "path": "commands/nak-workflow-sprint.md",
+      "hash": "sha256:420d3caec3a2e1f519d615976e33ba5b5bacbbce73c9e9523e28d09fec86b9e2",
+      "meta": {
+        "label": "Sprint Planning",
+        "placeholder": "Run Sprint Planning?"
+      }
+    },
+    {
+      "type": "core",
+      "name": "workflow",
+      "filename": "workflow.xml",
+      "path": "core/tasks/workflow.xml",
+      "hash": "sha256:333686ba8aa7042f3560b57d43ac26c2ef227c7f439745e53e44264274ea065c"
+    },
+    {
+      "type": "workflow",
+      "name": "checklist",
+      "filename": "checklist.md",
+      "path": "workflows/1-discovery/brainstorming/checklist.md",
+      "hash": "sha256:1fcc8e3e371f1c99e5df9822298fdf9af3a6cc29123cee704bae0447c3506929"
+    },
+    {
+      "type": "workflow",
+      "name": "instructions",
+      "filename": "instructions.xml",
+      "path": "workflows/1-discovery/brainstorming/instructions.xml",
+      "hash": "sha256:0b714e9b4576db9dab30655a09329f02e0e68ebcaf3698b1fbf0149af60a8ad8"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/1-discovery/brainstorming/workflow.yaml",
+      "hash": "sha256:7e8d3a100f1a9f4d7de9aae19d4580ea8502d300cb5a1521ffa643028f1a7f72"
+    },
+    {
+      "type": "workflow",
+      "name": "instructions",
+      "filename": "instructions.xml",
+      "path": "workflows/1-discovery/generate-context/instructions.xml",
+      "hash": "sha256:dff9fdb995210334b4a8bd3afec377decf23eea9e6a33423fa926069830f60ab"
+    },
+    {
+      "type": "workflow",
+      "name": "step-01-discovery",
+      "filename": "step-01-discovery.md",
+      "path": "workflows/1-discovery/generate-context/steps/step-01-discovery.md",
+      "hash": "sha256:4b9aceeae8b86bb1012fc08aeab14fcca6bf0d4677e348d92912c301a20eb2b6"
+    },
+    {
+      "type": "workflow",
+      "name": "step-02-arch-agent",
+      "filename": "step-02-arch-agent.md",
+      "path": "workflows/1-discovery/generate-context/steps/step-02-arch-agent.md",
+      "hash": "sha256:fdfe0f300e9e781a32bde008566d5e81dfbf70b1fd59319f034c4bd1966ab842"
+    },
+    {
+      "type": "workflow",
+      "name": "step-02-pm-agent",
+      "filename": "step-02-pm-agent.md",
+      "path": "workflows/1-discovery/generate-context/steps/step-02-pm-agent.md",
+      "hash": "sha256:62030e58356b014534c2e2f4df1d52ec358d405c27cc24ad7ac55096e600465d"
+    },
+    {
+      "type": "workflow",
+      "name": "step-03-analyst-agent",
+      "filename": "step-03-analyst-agent.md",
+      "path": "workflows/1-discovery/generate-context/steps/step-03-analyst-agent.md",
+      "hash": "sha256:cc8b6e0aa6c6fd831fa50571a46c23033df734015f9ae14dd99c5fbf2ad46f9d"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/1-discovery/generate-context/workflow.yaml",
+      "hash": "sha256:98437a86e164fc4b391fb4ebd368604a81d55f2bea6ad6d03164d6cb30d3520b"
+    },
+    {
+      "type": "workflow",
+      "name": "checklist",
+      "filename": "checklist.md",
+      "path": "workflows/1-discovery/product-discovery/checklist.md",
+      "hash": "sha256:580663e173f9a82dae0106d7cf30d6a15de2842bc397531abac1e8ea9801629d"
+    },
+    {
+      "type": "workflow",
+      "name": "instructions",
+      "filename": "instructions.xml",
+      "path": "workflows/1-discovery/product-discovery/instructions.xml",
+      "hash": "sha256:0a18df4bd14f3523d10df8c6e21a4976dbac409ae618af2fe1a5e09afef0eb44"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/1-discovery/product-discovery/workflow.yaml",
+      "hash": "sha256:0bcbc70ff79a0064876ed8e3b8e4c9e20c95b57bb40f896477c3bff1b5d0a11a"
+    },
+    {
+      "type": "workflow",
+      "name": "checklist",
+      "filename": "checklist.md",
+      "path": "workflows/1-discovery/project-understanding-confidence/checklist.md",
+      "hash": "sha256:789bd93c5fa80e3a6322ad3ffef0c071fa99d522de1cbc3ea4b9d9f92172ab5b"
+    },
+    {
+      "type": "workflow",
+      "name": "instructions",
+      "filename": "instructions.xml",
+      "path": "workflows/1-discovery/project-understanding-confidence/instructions.xml",
+      "hash": "sha256:36ecfda6fb71d2685b53d1b0deb67f584dc6d4064ea305406de382a36344a14a"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/1-discovery/project-understanding-confidence/workflow.yaml",
+      "hash": "sha256:709872528bba832d5e3b9279641832b35776ba826551097178648267e458d803"
+    },
+    {
+      "type": "workflow",
+      "name": "step-01-load",
+      "filename": "step-01-load.md",
+      "path": "workflows/2-design/check-implementation-readiness/steps/step-01-load.md",
+      "hash": "sha256:c1f57ff9351b22728785cde3428225414036f5026a4db18b7d0c8f446311e0b7"
+    },
+    {
+      "type": "workflow",
+      "name": "step-02-pm-challenge",
+      "filename": "step-02-pm-challenge.md",
+      "path": "workflows/2-design/check-implementation-readiness/steps/step-02-pm-challenge.md",
+      "hash": "sha256:d81fc35de27df3e768f75e8299baf8e48864cf236b97771356d466d4fe7ac24a"
+    },
+    {
+      "type": "workflow",
+      "name": "step-03-architect-challenge",
+      "filename": "step-03-architect-challenge.md",
+      "path": "workflows/2-design/check-implementation-readiness/steps/step-03-architect-challenge.md",
+      "hash": "sha256:76817d666fb702f59e9d9cc925d64419e3ec4bcfa40d682195950d5b53d0fdad"
+    },
+    {
+      "type": "workflow",
+      "name": "step-04-proposal",
+      "filename": "step-04-proposal.md",
+      "path": "workflows/2-design/check-implementation-readiness/steps/step-04-proposal.md",
+      "hash": "sha256:2cc077c392a573e3eed6f684b3f2936d059b49e56669e3a6a16a6e14824f325b"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.md",
+      "path": "workflows/2-design/check-implementation-readiness/workflow.md",
+      "hash": "sha256:44550e9d48230b57f28228b01f2a2ddd53f8fb60cc24eb34e0ec83b4a32511d7"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/2-design/check-implementation-readiness/workflow.yaml",
+      "hash": "sha256:194d3099003818c763aea0261e30389da2529f48cd73afd429e16849d8e8c13c"
+    },
+    {
+      "type": "workflow",
+      "name": "architecture-decision-template",
+      "filename": "architecture-decision-template.md",
+      "path": "workflows/2-design/create-architecture/architecture-decision-template.md",
+      "hash": "sha256:5d9adf90c28df61031079280fd2e49998ec3b44fb3757c6a202cda353e172e9f"
+    },
+    {
+      "type": "workflow",
+      "name": "domain-complexity",
+      "filename": "domain-complexity.csv",
+      "path": "workflows/2-design/create-architecture/data/domain-complexity.csv",
+      "hash": "sha256:3dc34ed39f1fc79a51f7b8fc92087edb7cd85c4393a891d220f2e8dd5a101c70"
+    },
+    {
+      "type": "workflow",
+      "name": "project-types",
+      "filename": "project-types.csv",
+      "path": "workflows/2-design/create-architecture/data/project-types.csv",
+      "hash": "sha256:12343635a2f11343edb1d46906981d6f5e12b9cad2f612e13b09460b5e5106e7"
+    },
+    {
+      "type": "workflow",
+      "name": "step-01-init",
+      "filename": "step-01-init.md",
+      "path": "workflows/2-design/create-architecture/steps/step-01-init.md",
+      "hash": "sha256:8ef519e213c4c95bd2b9dae0bf79fe45e4764c120291d304e45626f91ab7d1fc"
+    },
+    {
+      "type": "workflow",
+      "name": "step-01b-continue",
+      "filename": "step-01b-continue.md",
+      "path": "workflows/2-design/create-architecture/steps/step-01b-continue.md",
+      "hash": "sha256:0fd0c2cc30bcc8ec8cba396e5ce1e568cba786560c5d41c8d332958ac638a279"
+    },
+    {
+      "type": "workflow",
+      "name": "step-02-context",
+      "filename": "step-02-context.md",
+      "path": "workflows/2-design/create-architecture/steps/step-02-context.md",
+      "hash": "sha256:1b8b37aceb8a3be73186014c973fc0d90c42b481bb99a68d757b5c95ca915248"
+    },
+    {
+      "type": "workflow",
+      "name": "step-03-starter",
+      "filename": "step-03-starter.md",
+      "path": "workflows/2-design/create-architecture/steps/step-03-starter.md",
+      "hash": "sha256:d5482befc5dbeceade51fedbdb53a4c11aa1bd215fe5536c6869e5e8e61d2d18"
+    },
+    {
+      "type": "workflow",
+      "name": "step-04-decisions",
+      "filename": "step-04-decisions.md",
+      "path": "workflows/2-design/create-architecture/steps/step-04-decisions.md",
+      "hash": "sha256:2298db8cf2025aa213266664154c5db327a7d880fbcdde185e7e51ddd918f7dc"
+    },
+    {
+      "type": "workflow",
+      "name": "step-05-patterns",
+      "filename": "step-05-patterns.md",
+      "path": "workflows/2-design/create-architecture/steps/step-05-patterns.md",
+      "hash": "sha256:9f90b1c8aa5b5064fa19148b34640d01a2b6cffbbb4bfd5c8391dd15d7267839"
+    },
+    {
+      "type": "workflow",
+      "name": "step-06-structure",
+      "filename": "step-06-structure.md",
+      "path": "workflows/2-design/create-architecture/steps/step-06-structure.md",
+      "hash": "sha256:ba4ed3de7e7954df7f9d24511a1f833e397b872dc482a818f5083b895d77061c"
+    },
+    {
+      "type": "workflow",
+      "name": "step-07-validation",
+      "filename": "step-07-validation.md",
+      "path": "workflows/2-design/create-architecture/steps/step-07-validation.md",
+      "hash": "sha256:37b14709fcee72ec7893d2c4ebaf60b714a392d31be9b2738f6bc7e76501b98a"
+    },
+    {
+      "type": "workflow",
+      "name": "step-08-complete",
+      "filename": "step-08-complete.md",
+      "path": "workflows/2-design/create-architecture/steps/step-08-complete.md",
+      "hash": "sha256:5cf601538cb5bffbd46de799b79d6c69b21a6e708038e3ad79f1c4c07a0db8ba"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.md",
+      "path": "workflows/2-design/create-architecture/workflow.md",
+      "hash": "sha256:14c7522b206083f3dd217473b15af87eca4460e17355d7106912d96f1c487c5c"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/2-design/create-architecture/workflow.yaml",
+      "hash": "sha256:93f6253cee2cf61d1664ba32982e82d8b89994f944b2aa141a4f7eda37e9dc94"
+    },
+    {
+      "type": "workflow",
+      "name": "step-01-init",
+      "filename": "step-01-init.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-01-init.md",
+      "hash": "sha256:e1c4d5f9d447eb0d28a1196f42fa2d5375b4fb99a74ce3566194a542d16a9a65"
+    },
+    {
+      "type": "workflow",
+      "name": "step-01b-continue",
+      "filename": "step-01b-continue.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-01b-continue.md",
+      "hash": "sha256:8c21d99d3dbecb6f72496fed4c2fd55a12d7cddbdd67e2c625a6abe048406df1"
+    },
+    {
+      "type": "workflow",
+      "name": "step-02-discovery",
+      "filename": "step-02-discovery.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-02-discovery.md",
+      "hash": "sha256:173e89ed886f883765f08dd8e33b76ff00b0ef795e7f46f4c25435b16d490d7a"
+    },
+    {
+      "type": "workflow",
+      "name": "step-03-core-experience",
+      "filename": "step-03-core-experience.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-03-core-experience.md",
+      "hash": "sha256:d5583f652b29a837d519a638061411fdb376366e906d20c97f601bcdf61c5ff6"
+    },
+    {
+      "type": "workflow",
+      "name": "step-04-emotional-response",
+      "filename": "step-04-emotional-response.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-04-emotional-response.md",
+      "hash": "sha256:ba46e3ff6a6bdfeb4453d998abcb97aa4cbee31259799c65c50ad3509cef0202"
+    },
+    {
+      "type": "workflow",
+      "name": "step-05-inspiration",
+      "filename": "step-05-inspiration.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-05-inspiration.md",
+      "hash": "sha256:cb50e2cce4561627c6c899c623d87ea6543f65fb12f79e36fe0af65715095c6c"
+    },
+    {
+      "type": "workflow",
+      "name": "step-06-design-system",
+      "filename": "step-06-design-system.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-06-design-system.md",
+      "hash": "sha256:1e692419ecd6ecb80f74a4565b0a80b948da4039e659d4edddf2ac322499601d"
+    },
+    {
+      "type": "workflow",
+      "name": "step-07-defining-experience",
+      "filename": "step-07-defining-experience.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-07-defining-experience.md",
+      "hash": "sha256:be530ce18b5e93543a602a0cc949d0b5c9708d334ce079d575da124434c87bd6"
+    },
+    {
+      "type": "workflow",
+      "name": "step-08-visual-foundation",
+      "filename": "step-08-visual-foundation.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-08-visual-foundation.md",
+      "hash": "sha256:9e59e8299f437bfbad5eb24c4ef132c33e6a6e91dfd837a107f8a5caeabd25e2"
+    },
+    {
+      "type": "workflow",
+      "name": "step-09-design-directions",
+      "filename": "step-09-design-directions.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-09-design-directions.md",
+      "hash": "sha256:1fae9f22ef0d09097695e4f3d33cdc5c689e74f14396c7340ff67ae720d7bfb5"
+    },
+    {
+      "type": "workflow",
+      "name": "step-10-user-journeys",
+      "filename": "step-10-user-journeys.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-10-user-journeys.md",
+      "hash": "sha256:d4dec29a8222b26571095e9d662a75ba2a0c1b8811e7a902266637c32ab47ea6"
+    },
+    {
+      "type": "workflow",
+      "name": "step-11-component-strategy",
+      "filename": "step-11-component-strategy.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-11-component-strategy.md",
+      "hash": "sha256:3163dd18369260c339f48518bca2e20a535e530328d656bf73f3cabdb9f64882"
+    },
+    {
+      "type": "workflow",
+      "name": "step-12-ux-patterns",
+      "filename": "step-12-ux-patterns.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-12-ux-patterns.md",
+      "hash": "sha256:1cc9868e313eb46b33c5b41c939a373208cdf4cb6c396e6271a7d54413b4f759"
+    },
+    {
+      "type": "workflow",
+      "name": "step-13-responsive-accessibility",
+      "filename": "step-13-responsive-accessibility.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-13-responsive-accessibility.md",
+      "hash": "sha256:bca9ff59c9a60e7568cdd161a1f3d94bece003bad4f1b63dbe9a71e213d08ce2"
+    },
+    {
+      "type": "workflow",
+      "name": "step-14-complete",
+      "filename": "step-14-complete.md",
+      "path": "workflows/2-design/create-ux-design/steps/step-14-complete.md",
+      "hash": "sha256:0869e6b5d4f4fcbe6cd1df0c7c0b4bb7a2817c7c0dd6a5f88062332ab2e1752b"
+    },
+    {
+      "type": "workflow",
+      "name": "ux-design-template",
+      "filename": "ux-design-template.md",
+      "path": "workflows/2-design/create-ux-design/ux-design-template.md",
+      "hash": "sha256:ffa4b89376cd9db6faab682710b7ce755990b1197a8b3e16b17748656d1fca6a"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.md",
+      "path": "workflows/2-design/create-ux-design/workflow.md",
+      "hash": "sha256:a834116fcd5144026faee08bc480486a1dbfe35fb87f0669533122f6b033a690"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/2-design/create-ux-design/workflow.yaml",
+      "hash": "sha256:02f6dd0932659c461abacd95ca21ab980fbf6d3ddc1f6347bb425dd3c7f2f827"
+    },
+    {
+      "type": "workflow",
+      "name": "checklist",
+      "filename": "checklist.md",
+      "path": "workflows/2-pm/create-story/checklist.md",
+      "hash": "sha256:f604a2e08b5f42ed97c568db0213387495dd39da55596557f4023bbcf5e5c59f"
+    },
+    {
+      "type": "workflow",
+      "name": "instructions",
+      "filename": "instructions.xml",
+      "path": "workflows/2-pm/create-story/instructions.xml",
+      "hash": "sha256:f2de2a061dde8c967631940ee4df720e8ae958c31405498f59ddc4df599341a0"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/2-pm/create-story/workflow.yaml",
+      "hash": "sha256:a8467ceca09d1bd856e531a2ffa3ef81872c2d3030aa5426569a7c97d5f3391f"
+    },
+    {
+      "type": "workflow",
+      "name": "instructions",
+      "filename": "instructions.xml",
+      "path": "workflows/2-pm/plan-feature/instructions.xml",
+      "hash": "sha256:bb0713314018ee7bfb176d88f09382659e5a67e35ffecc251125e30136d5abcd"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/2-pm/plan-feature/workflow.yaml",
+      "hash": "sha256:c8f0f3c3477cf80ceaf43413d918ee6d8dcc5e42ee3257988c1cd8b3f0dc0bd5"
+    },
+    {
+      "type": "workflow",
+      "name": "checklist",
+      "filename": "checklist.md",
+      "path": "workflows/3-implementation/dev-story/checklist.md",
+      "hash": "sha256:a04dc47c23504bf0fab94110d9160b041eb1b3e6eceabec8711b405bc3ff7557"
+    },
+    {
+      "type": "workflow",
+      "name": "instructions",
+      "filename": "instructions.xml",
+      "path": "workflows/3-implementation/dev-story/instructions.xml",
+      "hash": "sha256:0b06317cf2692b5956f5fc809ea72171b9d24969feff417e54a8796687fd418e"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/3-implementation/dev-story/workflow.yaml",
+      "hash": "sha256:abaa9d31c98da343a996ded77a8f186d244e6623b780910cd240b2bcc9ca490e"
+    },
+    {
+      "type": "workflow",
+      "name": "instructions",
+      "filename": "instructions.xml",
+      "path": "workflows/4-quality/qa-review/instructions.xml",
+      "hash": "sha256:7cdb630fd75a4c3ae9ae1d7eb22d5c4bca2565038794bca36ee196a5ccd012dd"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/4-quality/qa-review/workflow.yaml",
+      "hash": "sha256:99062a254514b86b89a1ee565abe6933f1fc3bf86adbe80f4ef1edcc404362f6"
+    },
+    {
+      "type": "workflow",
+      "name": "instructions",
+      "filename": "instructions.xml",
+      "path": "workflows/5-reporting/sprint/instructions.xml",
+      "hash": "sha256:11528fc5cb28caf53c04cd84c3331964e650b19d11b4f183469a55c90d0d886f"
+    },
+    {
+      "type": "workflow",
+      "name": "workflow",
+      "filename": "workflow.yaml",
+      "path": "workflows/5-reporting/sprint/workflow.yaml",
+      "hash": "sha256:6e4336c2b19b487d44815531c8754d57bcaab68205c4297f2f2c2ca38e865e36"
+    }
+  ]
+}

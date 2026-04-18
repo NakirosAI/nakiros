@@ -1,0 +1,28 @@
+{
+  "name": "nakiros",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "test": "turbo test",
+    "lint": "turbo lint"
+  },
+  "devDependencies": {
+    "tslib": "^2.8.1",
+    "turbo": "^2.8.15",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.18.3",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "fs-xattr",
+      "macos-alias",
+      "node-pty"
+    ]
+  }
+}

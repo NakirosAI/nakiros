@@ -1,0 +1,18 @@
+name: create-ux-design
+description: "Create UX design specifications using the BMAD workflow adapted to Nakiros local artifacts"
+author: "Nakiros"
+
+config_source: "~/.nakiros/config.yaml"
+date: system-generated
+
+installed_path: "~/.nakiros/workflows/2-design/create-ux-design"
+instructions: "{installed_path}/workflow.md"
+
+workspace_root: "{project-root}/_nakiros"
+planning_artifacts: "{workspace_root}/product"
+output_folder: "{workspace_root}/product"
+product_knowledge: "{workspace_root}/product"
+user_name: "Developer"
+communication_language: "Français"
+document_output_language: "English"
+user_skill_level: "advanced"

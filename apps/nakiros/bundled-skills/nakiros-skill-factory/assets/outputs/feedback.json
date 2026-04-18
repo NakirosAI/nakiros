@@ -1,0 +1,8 @@
+{
+  "iteration": 1,
+  "reviewer": "{name or 'manual'}",
+  "reviewed_at": "{ISO8601}",
+  "per_eval": {
+    "{eval-name}": "{Specific actionable feedback, or empty string if the output looked fine}"
+  }
+}

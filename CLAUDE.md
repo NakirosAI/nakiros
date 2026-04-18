@@ -1,0 +1,42 @@
+# Nakiros — Claude Entry Point
+
+Canonical project memory is `ARCHITECTURE.md` at the repo root. Read it
+first for layout, runtime, and IPC contract.
+
+## Mandatory constraints
+
+- Use `IPC_CHANNELS` from `@nakiros/shared` everywhere. **No hardcoded
+  channel name strings** in handlers, registry, client, or d.ts.
+- Any IPC change must stay aligned across these 4 files:
+  1. `packages/shared/src/ipc-channels.ts`
+  2. `apps/nakiros/src/daemon/handlers/index.ts` + the `<domain>.ts`
+     implementation
+  3. `apps/frontend/src/lib/nakiros-client.ts`
+  4. `apps/frontend/src/global.d.ts`
+- Tailwind-first styling. No inline `style={{...}}` unless unavoidable and
+  documented.
+- i18n via `useTranslation(namespace)` only. No `isFr` / FR-EN ternaries.
+- Reuse `apps/frontend/src/components/ui/*`, `constants/*`, `utils/*`,
+  `hooks/*` before adding new abstractions.
+- Local-first: no network calls, no telemetry, no secrets in code. Anything
+  the user persists goes under `~/.nakiros/`.
+- Do not edit generated outputs in `dist/` directories.
+
+## Quick pointers
+
+- Runners live in `apps/nakiros/src/services/{audit,eval,fix}-runner.ts`. The
+  tmp_skill pattern (eval/fix/create isolated from the real skill) is
+  load-bearing — do not bypass it.
+- Event broadcasts from runners use `eventBus.broadcast(channel, payload)`
+  from `src/daemon/event-bus.ts`. Never import from `electron`; it's gone.
+- The daemon is a plain Node ESM bundle (tsup). Don't use `require()` — use
+  static `import` from `'fs'`, `'node:fs'`, etc.
+
+## Validation before closing
+
+```bash
+pnpm -F nakiros exec tsc --noEmit
+pnpm -F @nakiros/frontend exec tsc --noEmit
+pnpm -F @nakiros/landing exec tsc --noEmit
+turbo build
+```

@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+  --bg: #080808;
+  --bg-soft: #111111;
+  --bg-card: #0d0d0d;
+  --line: #1a1a1a;
+  --line-strong: #2a2a2a;
+  --text: #f0f0f0;
+  --text-muted: rgba(240, 240, 240, 0.7);
+  --accent: #2ecfcf;
+  --accent-strong: #0d9e9e;
+  --accent-soft: rgba(46, 207, 207, 0.12);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+* {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent);
+}

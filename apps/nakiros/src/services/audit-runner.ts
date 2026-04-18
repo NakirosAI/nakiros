@@ -18,6 +18,8 @@ interface AuditEntry {
   run: AuditRun;
   child: ChildProcess | null;
   killed: boolean;
+  /** Absolute path to the real skill directory — used to archive the audit report. */
+  skillDir: string;
 }
 
 const audits = new Map<string, AuditEntry>();
@@ -35,6 +37,12 @@ function isoSafeTimestamp(): string {
 // ─── Setup helpers ──────────────────────────────────────────────────────────
 
 function prepareWorkdir(skillDir: string, skillName: string): string {
+  if (!existsSync(skillDir)) {
+    throw new Error(
+      `Skill directory not found: ${skillDir}. If this is a Nakiros bundled skill, restart the daemon to re-sync ~/.nakiros/skills.`,
+    );
+  }
+
   const workdir = mkdtempSync(join(tmpdir(), 'nakiros-audit-'));
   mkdirSync(join(workdir, 'outputs'), { recursive: true });
 
@@ -59,15 +67,14 @@ function prepareWorkdir(skillDir: string, skillName: string): string {
   // Symlink the skill being audited so /nakiros-skill-factory can find it via cwd
   const skillsDir = join(claudeDir, 'skills');
   mkdirSync(skillsDir, { recursive: true });
-  try {
-    const linkPath = join(skillsDir, skillName);
-    if (!existsSync(linkPath)) {
-      // Use `ln -s` semantics via fs
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('fs').symlinkSync(skillDir, linkPath, 'dir');
-    }
-  } catch {
-    // ignore — fallback would be copy but not critical for audits
+  const linkPath = join(skillsDir, skillName);
+  if (!existsSync(linkPath)) {
+    // Follow any symlinks on skillDir so the link points at a stable absolute path
+    // (avoids resolution issues later for claude-global skills that are themselves symlinks).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs');
+    const resolved = fs.realpathSync(skillDir);
+    fs.symlinkSync(resolved, linkPath, 'dir');
   }
 
   return workdir;
@@ -204,7 +211,7 @@ export function startAudit(request: StartAuditRequest, opts: RunOpts): AuditRun 
     error: null,
   };
 
-  const entry: AuditEntry = { run, child: null, killed: false };
+  const entry: AuditEntry = { run, child: null, killed: false, skillDir: opts.skillDir };
   audits.set(run.runId, entry);
   persistRunJson(run);
 
@@ -353,7 +360,7 @@ function finalizeRun(entry: AuditEntry, opts: RunOpts): void {
   }
 
   // Archive into {actualSkillDir}/audits/audit-{ISO}.md
-  const skillDir = resolveActualSkillDir(run);
+  const skillDir = entry.skillDir ?? resolveActualSkillDir(run);
   if (!skillDir) {
     run.status = 'failed';
     run.error = 'Could not resolve skill directory to archive the audit';

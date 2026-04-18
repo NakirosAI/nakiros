@@ -8,6 +8,7 @@ import { buildHandlerRegistry } from './handlers/index.js';
 import { eventBus } from './event-bus.js';
 import { restoreOrCleanupTempWorkdirs } from '../services/fix-runner.js';
 import { cleanupEvalArtifacts } from '../services/eval-artifact-cleanup.js';
+import { syncBundledSkills } from '../services/bundled-skills-sync.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -47,12 +48,21 @@ function findFrontendDir(override?: string): string | null {
 
 /**
  * One-shot runtime initialization called at daemon boot.
+ * - Syncs bundled skills from the ROM to ~/.nakiros/skills/ (+ symlinks them
+ *   under ~/.claude/skills/) so runners can resolve them.
  * - Rehydrates in-flight fix/create runs from `~/.nakiros/tmp-skills/` or cleans
  *   up orphan temp workdirs.
  * - Sweeps stray `nakiros-eval-*` skills produced by previous eval sessions.
  * Safe to call multiple times.
  */
 export function bootstrapDaemonRuntime(): void {
+  try {
+    syncBundledSkills();
+  } catch (err) {
+    // Non-fatal: the daemon still serves the UI; bundled-skills calls will fail
+    // until the user re-runs onboarding. Surface the error for debugging.
+    console.warn('[nakiros] syncBundledSkills failed:', err instanceof Error ? err.message : err);
+  }
   restoreOrCleanupTempWorkdirs();
   cleanupEvalArtifacts();
 }

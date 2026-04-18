@@ -6,9 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "cf:deploy": "npm run build && npx wrangler pages deploy dist --project-name nakiros-landing-page",
-    "cf:deploy:prod": "npm run build && npx wrangler pages deploy dist --project-name nakiros-landing-page --branch main"
+    "preview": "vite preview"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
@@ -25,7 +23,6 @@
     "@vitejs/plugin-react": "^4",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.0",
-    "vite": "^6",
-    "wrangler": "^4.0.0"
+    "vite": "^6"
   }
 }

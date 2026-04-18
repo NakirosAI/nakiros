@@ -1,0 +1,50 @@
+name: Release nakiros to npm
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance (signed attestation).
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          PKG_VERSION=$(node -p "require('./apps/nakiros/package.json').version")
+          EXPECTED="v${PKG_VERSION}"
+          if [ "${TAG}" != "${EXPECTED}" ]; then
+            echo "::error::Release tag '${TAG}' does not match apps/nakiros package version '${EXPECTED}'. Bump the version in apps/nakiros/package.json and re-tag."
+            exit 1
+          fi
+          echo "Tag ${TAG} matches package version — ok."
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm turbo build --filter nakiros
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        working-directory: apps/nakiros
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

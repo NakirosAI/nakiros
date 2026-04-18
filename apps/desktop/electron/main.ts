@@ -1,22 +1,10 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeImage, Notification } from 'electron';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import chokidar, { type FSWatcher } from 'chokidar';
+import { app, BrowserWindow, ipcMain, shell, clipboard, nativeImage, Notification } from 'electron';
+import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 
-const execFileAsync = promisify(execFile);
 import { startServer, stopServer } from '@nakiros/server';
 import { DEFAULT_MCP_SERVER_URL, IPC_CHANNELS } from '@nakiros/shared';
-import { getAll, save, remove, getNakirosWorkspaceDir, resolveWorkspaceSlug } from './services/workspace.js';
-import { syncWorkspaceSymlinks } from './services/workspace-symlinks.js';
-import { syncWorkspaceYaml } from './services/workspace-yaml.js';
-import { resetWorkspace } from './services/workspace-reset.js';
-import { detectProfile } from './services/profile-detector.js';
-import { syncToRepos } from './services/workspace-sync.js';
-import { createWorkspaceRoot, copyRepoToDirectory, initGitRepo } from './services/workspace-bootstrap.js';
-import { scanWorkspaceDocs } from './services/doc-scanner.js';
 import { getPreferences, savePreferences } from './services/preferences.js';
 import {
   getAgentInstallStatus,
@@ -24,52 +12,19 @@ import {
   getInstalledCommands,
   installAgents,
   installAgentsGlobally,
-  ensureCommandsInRepo,
 } from './services/agent-installer.js';
 import { detectEditors, nakirosConfigExists, installNakiros } from './services/onboarding-installer.js';
 import { getAgentCliStatus } from './services/agent-cli.js';
-import {
-  getTickets, saveTicket, removeTicket,
-  getEpics, saveEpic, removeEpic,
-  toWorkspaceSlug,
-} from './services/ticket-storage.js';
-import { getGettingStartedContext, saveGettingStartedState } from './services/getting-started-state.js';
-import { generateContext } from './services/agent-context.js';
-import { createTerminal, writeToTerminal, resizeTerminal, destroyTerminal } from './services/terminal.js';
-import { runAgentCommand, cancelAgentRun, resolveAgentCwd } from './services/agent-runner-bridge.js';
-import { getConversations, deleteConversationEntry } from './services/conversation-reader.js';
-import {
-  readArtifactFile,
-  listContextArtifactFiles,
-  listContextArtifactFilesWithSizes,
-  getArtifactFilePath,
-  getContextArtifactTotalBytes,
-} from './services/artifact-service.js';
-import {
-  takeSnapshot,
-  diffSnapshot,
-  revertSnapshot,
-  resolveSnapshot,
-  listPendingSnapshots,
-} from './services/snapshot-service.js';
-import { checkPendingPreview, applyPreview, applyPreviewFile, discardPreview } from './services/preview-service.js';
-import { getAgentTabsState, saveAgentTabsState, clearAgentTabsState } from './services/agent-tabs-store.js';
 import type {
-  AgentRunRequest,
-  StoredWorkspace,
-  LocalTicket,
-  LocalEpic,
   AppPreferences,
   AgentInstallRequest,
   AgentProvider,
-  StoredAgentTabsState,
 } from '@nakiros/shared';
 import {
   scan as scanProjects,
   listProjects,
   getProject,
   dismissProject,
-  hasProjects,
 } from './services/project-scanner.js';
 import { listConversations, getConversationMessages } from './services/conversation-parser.js';
 import { listSkills, getSkill, saveSkill, readSkillFile, saveSkillFile } from './services/skill-reader.js';
@@ -127,7 +82,6 @@ import {
 } from './services/fix-runner.js';
 import { readLatestIterationBenchmark } from './services/eval-benchmark.js';
 import { cleanupEvalArtifacts } from './services/eval-artifact-cleanup.js';
-import { existsSync as fsExistsSync } from 'fs';
 
 // ─── Single-instance lock ─────────────────────────────────────────────────────
 
@@ -177,7 +131,7 @@ function createWindow(): void {
   }
 
   // macOS convention: close button hides the app window but keeps app/process alive.
-  // This preserves renderer state (opened workspaces, running chats) when reopening from Dock.
+  // This preserves renderer state when reopening from Dock.
   win.on('close', (event) => {
     if (process.platform !== 'darwin') return;
     if (isQuitting) return;
@@ -248,145 +202,22 @@ app.on('second-instance', () => {
   }
 });
 
-// ─── IPC: Workspace ───────────────────────────────────────────────────────────
+// ─── IPC: Shell + clipboard ──────────────────────────────────────────────────
 
-ipcMain.handle(IPC_CHANNELS['dialog:selectDirectory'], async () => {
-  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-  return result.canceled ? null : (result.filePaths[0] ?? null);
-});
-ipcMain.handle(IPC_CHANNELS['dialog:openFile'], async () => {
-  const result = await dialog.showOpenDialog({ properties: ['openFile'] });
-  return result.canceled ? null : (result.filePaths[0] ?? null);
-});
-ipcMain.handle(IPC_CHANNELS['workspace:getAll'], () => getAll());
-ipcMain.handle(IPC_CHANNELS['workspace:save'], (_, w: StoredWorkspace) => save(w));
-ipcMain.handle(IPC_CHANNELS['workspace:delete'], (_, id: string) => remove(id));
-ipcMain.handle(IPC_CHANNELS['workspace:createRoot'], (_, parentDir: string, workspaceName: string) =>
-  createWorkspaceRoot(parentDir, workspaceName));
-ipcMain.handle(IPC_CHANNELS['repo:detectProfile'], (_, path: string) => detectProfile(path));
-ipcMain.handle(IPC_CHANNELS['repo:copyLocal'], (_, sourcePath: string, targetParentDir: string) =>
-  copyRepoToDirectory(sourcePath, targetParentDir));
-ipcMain.handle(IPC_CHANNELS['workspace:syncYaml'], (_, w: StoredWorkspace) => syncWorkspaceYaml(w));
-ipcMain.handle(IPC_CHANNELS['workspace:getStartedContext'], (_, w: StoredWorkspace) =>
-  getGettingStartedContext(w.name, w.repos.map((r) => r.localPath)));
-ipcMain.handle(IPC_CHANNELS['workspace:saveStartedState'], (_, workspaceName: string, state: unknown) =>
-  saveGettingStartedState(workspaceName, state as Parameters<typeof saveGettingStartedState>[1]));
-ipcMain.handle(IPC_CHANNELS['workspace:reset'], (_, w: StoredWorkspace) => resetWorkspace(w));
-ipcMain.handle(IPC_CHANNELS['workspace:sync'], (_, w: StoredWorkspace) => {
-  const prefs = getPreferences();
-  syncToRepos(w, prefs.mcpServerUrl || DEFAULT_MCP_SERVER_URL);
-});
-ipcMain.handle(IPC_CHANNELS['artifact:listContextFiles'], async (_event, workspace: StoredWorkspace) => {
-  return listContextArtifactFiles(workspace);
-});
-
-ipcMain.handle(IPC_CHANNELS['artifact:readFile'], async (_event, workspace: StoredWorkspace, artifactPath: string) => {
-  return readArtifactFile(workspace, artifactPath);
-});
-
-ipcMain.handle(IPC_CHANNELS['artifact:getFilePath'], (_event, workspace: StoredWorkspace, artifactPath: string) => {
-  return getArtifactFilePath(workspace, artifactPath);
-});
-
-ipcMain.handle(IPC_CHANNELS['artifact:getContextTotalBytes'], async (_event, workspace: StoredWorkspace) => {
-  return getContextArtifactTotalBytes(workspace);
-});
-
-ipcMain.handle(IPC_CHANNELS['artifact:listContextFilesWithSizes'], async (_event, workspace: StoredWorkspace) => {
-  return listContextArtifactFilesWithSizes(workspace);
-});
-
-ipcMain.handle(IPC_CHANNELS['snapshot:take'], (_event, workspaceSlug: string, runId: string) => {
-  return takeSnapshot(workspaceSlug, runId);
-});
-
-ipcMain.handle(IPC_CHANNELS['snapshot:diff'], (_event, workspaceSlug: string, runId: string) => {
-  return diffSnapshot(workspaceSlug, runId);
-});
-
-ipcMain.handle(IPC_CHANNELS['snapshot:revert'], (_event, workspaceSlug: string, runId: string, relativePaths?: string[]) => {
-  return revertSnapshot(workspaceSlug, runId, relativePaths);
-});
-
-ipcMain.handle(IPC_CHANNELS['snapshot:resolve'], (_event, workspaceSlug: string, runId: string) => {
-  return resolveSnapshot(workspaceSlug, runId);
-});
-
-ipcMain.handle(IPC_CHANNELS['snapshot:listPending'], (_event, workspaceSlug: string) => {
-  return listPendingSnapshots(workspaceSlug);
-});
-
-ipcMain.handle(IPC_CHANNELS['preview:check'], (_event, workspaceSlug: string) => {
-  return checkPendingPreview(workspaceSlug);
-});
-ipcMain.handle(IPC_CHANNELS['preview:apply'], async (_event, previewRoot: string, workspaceSlug: string) => {
-  return applyPreview(previewRoot, workspaceSlug);
-});
-ipcMain.handle(IPC_CHANNELS['preview:apply-file'], async (_event, previewRoot: string, filePath: string, workspaceSlug: string) => {
-  return applyPreviewFile(previewRoot, filePath, workspaceSlug);
-});
-ipcMain.handle(IPC_CHANNELS['preview:discard'], (_event, previewRoot: string) => {
-  discardPreview(previewRoot);
-});
-ipcMain.handle(IPC_CHANNELS['docs:scan'], (_, w: StoredWorkspace) => scanWorkspaceDocs(w));
-ipcMain.handle(IPC_CHANNELS['docs:read'], (_, absolutePath: string) => readFileSync(absolutePath, 'utf-8'));
-ipcMain.handle(IPC_CHANNELS['docs:write'], (_, absolutePath: string, content: string) => {
-  writeFileSync(absolutePath, content, 'utf-8');
-});
-
-// File watchers per path (for doc editor yolo mode)
-const docWatchers = new Map<string, FSWatcher>();
-ipcMain.handle(IPC_CHANNELS['docs:watch'], (event, absolutePath: string) => {
-  if (docWatchers.has(absolutePath)) return;
-  const watcher = chokidar.watch(absolutePath, { ignoreInitial: true });
-  watcher.on('change', () => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    win?.webContents.send(IPC_CHANNELS['docs:changed'], absolutePath);
-  });
-  docWatchers.set(absolutePath, watcher);
-});
-ipcMain.handle(IPC_CHANNELS['docs:unwatch'], async (_, absolutePath: string) => {
-  const watcher = docWatchers.get(absolutePath);
-  if (watcher) {
-    await watcher.close();
-    docWatchers.delete(absolutePath);
-  }
-});
 ipcMain.handle(IPC_CHANNELS['shell:openPath'], (_, path: string) => shell.openPath(path));
-ipcMain.handle(IPC_CHANNELS['git:remoteUrl'], async (_, repoPath: string) => {
-  try {
-    const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], { cwd: repoPath });
-    return stdout.trim() || null;
-  } catch {
-    return null;
-  }
-});
-ipcMain.handle(IPC_CHANNELS['git:clone'], async (_, url: string, parentDir: string) => {
-  try {
-    mkdirSync(parentDir, { recursive: true });
-    await execFileAsync('git', ['clone', url], { cwd: parentDir });
-    const repoName = url.split('/').pop()?.replace(/\.git$/, '') ?? 'repo';
-    return { success: true, repoPath: join(parentDir, repoName), repoName };
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    return { success: false, repoPath: '', repoName: '', error };
-  }
-});
-ipcMain.handle(IPC_CHANNELS['git:init'], async (_, repoPath: string) => {
-  try {
-    await initGitRepo(repoPath);
-    return { success: true };
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    return { success: false, error };
-  }
-});
+ipcMain.handle(IPC_CHANNELS['clipboard:write'], (_, text: string) => clipboard.writeText(text));
+
+// ─── IPC: Preferences ────────────────────────────────────────────────────────
+
 ipcMain.handle(IPC_CHANNELS['preferences:get'], () => getPreferences());
 ipcMain.handle(IPC_CHANNELS['preferences:getSystemLanguage'], () => {
   const locale = app.getPreferredSystemLanguages()[0] ?? app.getLocale() ?? 'en';
   return locale.toLowerCase().startsWith('fr') ? 'fr' : 'en';
 });
 ipcMain.handle(IPC_CHANNELS['preferences:save'], (_, prefs: AppPreferences) => savePreferences(prefs));
+
+// ─── IPC: Agent installer ────────────────────────────────────────────────────
+
 ipcMain.handle(IPC_CHANNELS['agents:status'], (_, repoPath: string) => getAgentInstallStatus(repoPath));
 ipcMain.handle(IPC_CHANNELS['agents:install'], (_, request: AgentInstallRequest) => installAgents(request));
 ipcMain.handle(IPC_CHANNELS['agents:global-status'], () => getGlobalInstallStatus());
@@ -404,31 +235,8 @@ ipcMain.handle(IPC_CHANNELS['onboarding:install'], async (event, editors: unknow
   return installNakiros(editors as Parameters<typeof installNakiros>[0], win);
 });
 
-// ─── IPC: Auth (removed — open-source local-first) ──────────────────────────
+// ─── IPC: Notifications ──────────────────────────────────────────────────────
 
-
-// ─── IPC: Tickets ─────────────────────────────────────────────────────────────
-
-function resolveSlug(wsId: string): string {
-  const ws = getAll().find((w) => w.id === wsId);
-  return ws ? toWorkspaceSlug(ws.name) : wsId;
-}
-
-ipcMain.handle(IPC_CHANNELS['ticket:getAll'], (_, wsId: string) => getTickets(resolveSlug(wsId)));
-ipcMain.handle(IPC_CHANNELS['ticket:save'], (_, wsId: string, t: LocalTicket) => saveTicket(resolveSlug(wsId), t));
-ipcMain.handle(IPC_CHANNELS['ticket:remove'], (_, wsId: string, id: string) => removeTicket(resolveSlug(wsId), id));
-
-// ─── IPC: Epics ───────────────────────────────────────────────────────────────
-
-ipcMain.handle(IPC_CHANNELS['epic:getAll'], (_, wsId: string) => getEpics(resolveSlug(wsId)));
-ipcMain.handle(IPC_CHANNELS['epic:save'], (_, wsId: string, e: LocalEpic) => saveEpic(resolveSlug(wsId), e));
-ipcMain.handle(IPC_CHANNELS['epic:remove'], (_, wsId: string, id: string) => removeEpic(resolveSlug(wsId), id));
-
-// ─── IPC: Agent context + clipboard ──────────────────────────────────────────
-
-ipcMain.handle(IPC_CHANNELS['agent:context'], (_, wsId: string, ticketId: string, ws: StoredWorkspace) =>
-  generateContext(resolveSlug(wsId), ticketId, ws));
-ipcMain.handle(IPC_CHANNELS['clipboard:write'], (_, text: string) => clipboard.writeText(text));
 ipcMain.handle(IPC_CHANNELS['notification:showAgentRun'], (_, payload: AgentRunNotificationRequest) => {
   if (!Notification.isSupported()) return;
 
@@ -462,112 +270,6 @@ ipcMain.handle(IPC_CHANNELS['notification:showAgentRun'], (_, payload: AgentRunN
   });
   notification.show();
 });
-
-// ─── IPC: Terminal (node-pty) ─────────────────────────────────────────────────
-
-ipcMain.handle(IPC_CHANNELS['terminal:create'], (event, repoPath: string) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  const terminalId = createTerminal(
-    repoPath,
-    (data) => win?.webContents.send(IPC_CHANNELS['terminal:data'], { terminalId, data }),
-    (code) => win?.webContents.send(IPC_CHANNELS['terminal:exit'], { terminalId, code }),
-  );
-  return terminalId;
-});
-
-ipcMain.handle(IPC_CHANNELS['terminal:write'], (_, terminalId: string, data: string) => {
-  writeToTerminal(terminalId, data);
-});
-
-ipcMain.handle(IPC_CHANNELS['terminal:resize'], (_, terminalId: string, cols: number, rows: number) => {
-  resizeTerminal(terminalId, cols, rows);
-});
-
-ipcMain.handle(IPC_CHANNELS['terminal:destroy'], (_, terminalId: string) => {
-  destroyTerminal(terminalId);
-});
-
-// ─── IPC: Agent runner (provider: claude/codex/cursor) ───────────────────────
-
-ipcMain.handle(
-  IPC_CHANNELS['agent:run'],
-  async (
-    event,
-    request: AgentRunRequest,
-  ) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    const prefs = getPreferences();
-    const repoPath = request.anchorRepoPath;
-    const additionalDirs = request.additionalDirs ?? request.activeRepoPaths;
-    const requestedProvider = request.provider;
-    const provider = (
-      requestedProvider === 'claude'
-      || requestedProvider === 'codex'
-      || requestedProvider === 'cursor'
-    )
-      ? requestedProvider
-      : (prefs.agentProvider ?? 'claude');
-    // Sync workspace symlinks so ~/.nakiros/workspaces/{slug}/ is up to date before the run.
-    const allWorkspaces = getAll();
-    const workspace = allWorkspaces.find((w) => w.id === request.workspaceId);
-    const workspaceSlug = workspace ? resolveWorkspaceSlug(workspace.id, workspace.name) : '';
-    if (workspace) {
-      try { syncWorkspaceSymlinks(workspace); } catch (err) {
-        console.warn(`[agent:run] Unable to sync workspace symlinks: ${String(err)}`);
-      }
-    }
-    const nakirosWorkspaceDir = workspaceSlug ? getNakirosWorkspaceDir(workspaceSlug) : resolve(homedir(), '.nakiros');
-    const effectiveAgentCwd = resolveAgentCwd(repoPath, additionalDirs, nakirosWorkspaceDir);
-
-    try {
-      ensureCommandsInRepo(nakirosWorkspaceDir, provider);
-    } catch (err) {
-      console.warn(`[agent:run] Unable to ensure command templates in workspace dir: ${String(err)}`);
-    }
-    if (effectiveAgentCwd !== nakirosWorkspaceDir) {
-      try {
-        ensureCommandsInRepo(effectiveAgentCwd, provider);
-      } catch (err) {
-        console.warn(`[agent:run] Unable to ensure command templates in effective cwd ${effectiveAgentCwd}: ${String(err)}`);
-      }
-    }
-
-    const rawLines: unknown[] = [];
-    let runId = '';
-    runId = runAgentCommand(
-      provider,
-      request,
-      (info) => {
-        runId = info.runId;
-        win?.webContents.send(IPC_CHANNELS['agent:start'], info);
-      },
-      (evt) => win?.webContents.send(IPC_CHANNELS['agent:event'], { runId, event: evt }),
-      (exitCode, error, lines) => win?.webContents.send(IPC_CHANNELS['agent:done'], { runId, exitCode, error, rawLines: lines ?? [] }),
-      (raw) => rawLines.push(raw),
-    );
-    return runId;
-  },
-);
-
-ipcMain.handle(IPC_CHANNELS['agent:cancel'], (_, runId: string) => {
-  cancelAgentRun(runId);
-});
-
-
-// ─── IPC: Conversations ───────────────────────────────────────────────────────
-
-ipcMain.handle(IPC_CHANNELS['conversation:getAll'], (_, workspaceId: string) => getConversations(resolveSlug(workspaceId), workspaceId));
-ipcMain.handle(IPC_CHANNELS['conversation:save'], () => {
-  // Sessions are now persisted by the orchestrator — no-op from Desktop side.
-});
-ipcMain.handle(IPC_CHANNELS['conversation:delete'], (_, id: string, workspaceId: string) => deleteConversationEntry(id, resolveSlug(workspaceId)));
-
-// ─── IPC: Agent tabs (multi-conversations state) ────────────────────────────
-
-ipcMain.handle(IPC_CHANNELS['agentTabs:get'], (_, workspaceId: string) => getAgentTabsState(resolveSlug(workspaceId)));
-ipcMain.handle(IPC_CHANNELS['agentTabs:save'], (_, workspaceId: string, state: StoredAgentTabsState) =>
-  saveAgentTabsState(resolveSlug(workspaceId), state));
-ipcMain.handle(IPC_CHANNELS['agentTabs:clear'], (_, workspaceId: string) => clearAgentTabsState(resolveSlug(workspaceId)));
 
 // ─── MCP Server ───────────────────────────────────────────────────────────────
 
@@ -747,7 +449,7 @@ ipcMain.handle(
     const skillDir = resolveEvalSkillDir(request as import('@nakiros/shared').StartEvalRunRequest);
     const abs = resolve(skillDir, request.relativePath);
     if (!abs.startsWith(skillDir + '/') && abs !== skillDir) return null;
-    if (!fsExistsSync(abs)) return null;
+    if (!existsSync(abs)) return null;
     const ext = request.relativePath.split('.').pop()?.toLowerCase() ?? '';
     const mime = DATA_URL_MIME_BY_EXT[ext];
     if (!mime) return null;
@@ -762,9 +464,6 @@ ipcMain.handle(
 
 // ─── Eval runner ────────────────────────────────────────────────────────────
 
-import { join as joinPath } from 'path';
-import { homedir as getHomedir } from 'os';
-
 function resolveEvalSkillDir(request: import('@nakiros/shared').StartEvalRunRequest): string {
   // skillDirOverride takes precedence — used by fix runs to evaluate the temp workdir copy.
   if (request.skillDirOverride) {
@@ -772,16 +471,16 @@ function resolveEvalSkillDir(request: import('@nakiros/shared').StartEvalRunRequ
   }
   if (request.scope === 'nakiros-bundled') {
     // Canonical location is ~/.nakiros/skills/{skillName}. Claude sees it via symlink in ~/.claude/skills/.
-    return joinPath(getHomedir(), '.nakiros', 'skills', request.skillName);
+    return join(homedir(), '.nakiros', 'skills', request.skillName);
   }
   if (request.scope === 'claude-global') {
-    return joinPath(getClaudeGlobalSkillsDir(), request.skillName);
+    return join(getClaudeGlobalSkillsDir(), request.skillName);
   }
   const projectId = request.projectId;
   if (!projectId) throw new Error('projectId required for project scope');
   const project = getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
-  return joinPath(project.projectPath, '.claude', 'skills', request.skillName);
+  return join(project.projectPath, '.claude', 'skills', request.skillName);
 }
 
 ipcMain.handle(IPC_CHANNELS['eval:startRuns'], async (_, request: import('@nakiros/shared').StartEvalRunRequest) => {
@@ -815,7 +514,7 @@ function getDefinitionForRun(run: import('@nakiros/shared').SkillEvalRun): {
   if (idx === -1) throw new Error(`Cannot derive skill dir from workdir: ${run.workdir}`);
   const skillDir = run.workdir.slice(0, idx);
 
-  const evalsJsonPath = joinPath(skillDir, 'evals', 'evals.json');
+  const evalsJsonPath = join(skillDir, 'evals', 'evals.json');
   const rawEvals = JSON.parse(readFileSync(evalsJsonPath, 'utf8')) as {
     evals: Array<Record<string, unknown>>;
   };
@@ -867,7 +566,7 @@ ipcMain.handle(IPC_CHANNELS['eval:saveFeedback'], (_, request: { scope: 'project
 ipcMain.handle(IPC_CHANNELS['eval:listOutputs'], (_, runId: string): import('@nakiros/shared').EvalRunOutputEntry[] => {
   const run = getEvalRun(runId);
   if (!run) throw new Error(`Run not found: ${runId}`);
-  const outputsDir = joinPath(run.workdir, 'outputs');
+  const outputsDir = join(run.workdir, 'outputs');
   if (!existsSync(outputsDir)) return [];
 
   const { readdirSync, statSync } = require('fs') as typeof import('fs');
@@ -881,7 +580,7 @@ ipcMain.handle(IPC_CHANNELS['eval:listOutputs'], (_, runId: string): import('@na
       return;
     }
     for (const item of items) {
-      const full = joinPath(dir, item.name);
+      const full = join(dir, item.name);
       if (item.isDirectory()) {
         walk(full);
       } else if (item.isFile()) {
@@ -907,7 +606,7 @@ ipcMain.handle(IPC_CHANNELS['eval:listOutputs'], (_, runId: string): import('@na
 ipcMain.handle(IPC_CHANNELS['eval:readOutput'], (_, runId: string, relativePath: string): string | null => {
   const run = getEvalRun(runId);
   if (!run) throw new Error(`Run not found: ${runId}`);
-  const outputsDir = joinPath(run.workdir, 'outputs');
+  const outputsDir = join(run.workdir, 'outputs');
   const abs = resolve(outputsDir, relativePath);
   if (!abs.startsWith(outputsDir + '/') && abs !== outputsDir) {
     throw new Error('Path escapes outputs directory');
@@ -1105,7 +804,7 @@ ipcMain.handle(
   IPC_CHANNELS['skillAgent:listTempFiles'],
   (_, runId: string): import('@nakiros/shared').SkillAgentTempFileEntry[] => {
     const tempDir = getFixTempWorkdir(runId);
-    if (!tempDir || !fsExistsSync(tempDir)) return [];
+    if (!tempDir || !existsSync(tempDir)) return [];
 
     const { readdirSync, statSync } = require('fs') as typeof import('fs');
     const entries: import('@nakiros/shared').SkillAgentTempFileEntry[] = [];
@@ -1118,7 +817,7 @@ ipcMain.handle(
         return;
       }
       for (const item of items) {
-        const full = joinPath(dir, item.name);
+        const full = join(dir, item.name);
         const rel = full.slice(tempDir.length + 1);
         if (shouldHideTempEntry(rel)) continue;
         if (item.isDirectory()) {
@@ -1162,7 +861,7 @@ ipcMain.handle(
     const abs = resolve(tempDir, relativePath);
     if (!abs.startsWith(tempDir + '/') && abs !== tempDir) return { kind: 'missing' };
     if (shouldHideTempEntry(relativePath)) return { kind: 'missing' };
-    if (!fsExistsSync(abs)) return { kind: 'missing' };
+    if (!existsSync(abs)) return { kind: 'missing' };
 
     const ext = relativePath.split('.').pop()?.toLowerCase() ?? '';
     const imgMime = TEMP_FILE_IMAGE_MIME[ext];

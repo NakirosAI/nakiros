@@ -60,10 +60,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm turbo build --filter nakiros
+        run: pnpm turbo build --filter @nakirosai/nakiros
 
       # Auth is handled by npm Trusted Publishing (OIDC) — no NPM_TOKEN needed.
-      # Requires a trusted publisher configured for the `nakiros` package on npmjs.com:
+      # Requires a trusted publisher configured for the `@nakirosai/nakiros`
+      # package on npmjs.com:
       #   Settings → Trusted publishers → Add → GitHub Actions
       #   Owner: NakirosAI / Repo: nakiros / Workflow: release.yml
       - name: Publish to npm

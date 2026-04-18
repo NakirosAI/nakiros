@@ -13,7 +13,7 @@
     "titleLine2": "utile ?",
     "description": "Beaucoup de skills n'apportent rien. Certains dégradent même les réponses de Claude. Nakiros les audite, lance des évals avec et sans, et te dit lesquels garder, améliorer, ou jeter.",
     "installLabel": "Installer globalement",
-    "installCommand": "npm i -g nakiros",
+    "installCommand": "npm i -g @nakirosai/nakiros",
     "installHint": "Puis tape `nakiros` — ton navigateur s'ouvre sur localhost.",
     "secondaryCta": "Voir comment ça marche"
   },
@@ -88,7 +88,7 @@
   "cta": {
     "title": "Essaie Nakiros tout de suite.",
     "description": "Pas de waitlist, pas d'inscription. Installe et c'est parti.",
-    "command": "npm i -g nakiros",
+    "command": "npm i -g @nakirosai/nakiros",
     "then": "puis",
     "then2": "nakiros",
     "github": "Star sur GitHub"

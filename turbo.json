@@ -5,7 +5,7 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "nakiros#build": {
+    "@nakirosai/nakiros#build": {
       "dependsOn": ["^build", "@nakiros/frontend#build"],
       "outputs": ["dist/**"]
     },

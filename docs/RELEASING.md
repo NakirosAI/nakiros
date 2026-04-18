@@ -17,8 +17,11 @@ One-time setup on [npmjs.com](https://npmjs.com):
    the package to already exist so you can configure its trusted publishers).
    From a machine where you're logged in with `npm login`:
    ```bash
+   # Log in as a member of the nakirosai npm org
+   npm login
    cd apps/nakiros
    pnpm build
+   # Scoped packages require --access public to be visible publicly.
    npm publish --access public --tag beta
    ```
 2. Go to the package page → **Settings** → **Trusted publishers** → **Add**:
@@ -51,14 +54,14 @@ The project uses [semver](https://semver.org) pre-releases to differentiate
 unstable dev builds from stable releases. The publish workflow picks the npm
 **dist-tag** automatically based on the version string:
 
-| Version shape      | dist-tag  | Install command                   |
-|--------------------|-----------|-----------------------------------|
-| `0.1.0-beta.N`     | `beta`    | `npm i -g nakiros@beta`           |
-| `0.1.0-alpha.N`    | `alpha`   | `npm i -g nakiros@alpha`          |
-| `0.1.0-rc.N`       | `rc`      | `npm i -g nakiros@rc`             |
-| `0.1.0` (no suffix)| `latest`  | `npm i -g nakiros`                |
+| Version shape      | dist-tag  | Install command                        |
+|--------------------|-----------|----------------------------------------|
+| `0.1.0-beta.N`     | `beta`    | `npm i -g @nakirosai/nakiros@beta`     |
+| `0.1.0-alpha.N`    | `alpha`   | `npm i -g @nakirosai/nakiros@alpha`    |
+| `0.1.0-rc.N`       | `rc`      | `npm i -g @nakirosai/nakiros@rc`       |
+| `0.1.0` (no suffix)| `latest`  | `npm i -g @nakirosai/nakiros`          |
 
-`latest` is what `npm i -g nakiros` grabs by default. Pre-release dist-tags
+`latest` is what `npm i -g @nakirosai/nakiros` grabs by default. Pre-release dist-tags
 require explicit opt-in, so a broken `beta` release never hits casual users.
 
 ## Cutting a release
@@ -92,8 +95,8 @@ npm doesn't allow overwriting a published version. If a broken release ships:
 
 - Publish a patch (`0.1.0-beta.2`, `0.1.1`, etc.) with the fix.
 - If within 72h and the version was never downloaded, you can
-  `npm unpublish nakiros@0.1.0-beta.1`. Otherwise
-  `npm deprecate nakiros@0.1.0-beta.1 "Broken release, use 0.1.0-beta.2"`.
+  `npm unpublish @nakirosai/nakiros@0.1.0-beta.1`. Otherwise
+  `npm deprecate @nakirosai/nakiros@0.1.0-beta.1 "Broken release, use 0.1.0-beta.2"`.
 
 ## Provenance
 

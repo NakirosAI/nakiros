@@ -12,7 +12,7 @@ export function FinalCta() {
         <p className="mt-5 leading-relaxed text-[#F0F0F0]/70">{messages.cta.description}</p>
 
         <div className="mt-10 flex flex-col items-center gap-4">
-          <InstallCommand command={messages.cta.command} packageName="nakiros" />
+          <InstallCommand command={messages.cta.command} packageName="@nakirosai/nakiros" />
 
           <div className="flex items-center gap-3 font-mono text-sm text-[#F0F0F0]/60">
             <span className="text-[#F0F0F0]/30">{messages.cta.then}</span>

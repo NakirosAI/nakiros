@@ -22,7 +22,7 @@ All data stays on your machine — Nakiros is local-first and open source.
 ## Install
 
 ```bash
-npm i -g nakiros
+npm i -g @nakirosai/nakiros
 ```
 
 Then anywhere:

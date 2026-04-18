@@ -1,8 +1,29 @@
 {
-  "name": "nakiros",
+  "name": "@nakirosai/nakiros",
   "version": "0.1.0-beta.2",
   "description": "Local daemon that observes Claude Code usage and lets you inspect, audit, evaluate and improve skills from your browser.",
   "license": "MIT",
+  "homepage": "https://nakiros.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NakirosAI/nakiros.git",
+    "directory": "apps/nakiros"
+  },
+  "bugs": {
+    "url": "https://github.com/NakirosAI/nakiros/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "claude-skills",
+    "skills",
+    "audit",
+    "evals",
+    "anthropic",
+    "cli",
+    "local-first"
+  ],
+  "author": "NakirosAI",
   "type": "module",
   "bin": {
     "nakiros": "./dist/bin/nakiros.js"

@@ -17,7 +17,7 @@ export function InstallCommand({ command, className, label, packageName }: Props
   const isPrerelease = info ? info.tag !== 'latest' : false;
 
   // If the package only exists as a pre-release on npm, suffix the command
-  // with @<tag> so users actually install it (e.g. `npm i -g nakiros@beta`).
+  // with @<tag> so users actually install it (e.g. `npm i -g @nakirosai/nakiros@beta`).
   const displayCommand =
     isPrerelease && packageName && command.includes(packageName)
       ? command.replace(packageName, `${packageName}@${info!.tag}`)

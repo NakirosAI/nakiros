@@ -29,7 +29,7 @@ export function Navbar() {
         <div className="flex items-center gap-3">
           <LanguageSwitcher />
           <a
-            href="https://github.com/"
+            href="https://github.com/NakirosAI/nakiros"
             target="_blank"
             rel="noreferrer"
             aria-label="GitHub"

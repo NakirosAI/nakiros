@@ -16,7 +16,7 @@ export function OpenSource() {
               {messages.openSource.description}
             </p>
             <a
-              href="https://github.com/"
+              href="https://github.com/NakirosAI/nakiros"
               target="_blank"
               rel="noreferrer"
               className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#1A1A1A] bg-[#111111] px-5 py-2.5 text-sm text-[#F0F0F0] transition-all hover:border-[#0D9E9E] hover:bg-[#1A1A1A]"

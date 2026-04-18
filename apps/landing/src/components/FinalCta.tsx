@@ -24,7 +24,7 @@ export function FinalCta() {
 
         <div className="mt-10">
           <a
-            href="https://github.com/"
+            href="https://github.com/NakirosAI/nakiros"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 text-sm text-[#F0F0F0]/60 transition-colors hover:text-[#F0F0F0]"

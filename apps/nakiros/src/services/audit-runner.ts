@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'fs';
 import { join, basename } from 'path';
 import { tmpdir } from 'os';
 
@@ -71,10 +71,7 @@ function prepareWorkdir(skillDir: string, skillName: string): string {
   if (!existsSync(linkPath)) {
     // Follow any symlinks on skillDir so the link points at a stable absolute path
     // (avoids resolution issues later for claude-global skills that are themselves symlinks).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('fs') as typeof import('fs');
-    const resolved = fs.realpathSync(skillDir);
-    fs.symlinkSync(resolved, linkPath, 'dir');
+    symlinkSync(realpathSync(skillDir), linkPath, 'dir');
   }
 
   return workdir;
@@ -401,9 +398,7 @@ function resolveActualSkillDir(_run: AuditRun): string | null {
   // Workdir has .claude/skills/{skillName} → real skill dir.
   const symlink = join(_run.workdir, '.claude', 'skills', _run.skillName);
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const realPath = require('fs').realpathSync(symlink);
-    return realPath as string;
+    return realpathSync(symlink);
   } catch {
     return null;
   }

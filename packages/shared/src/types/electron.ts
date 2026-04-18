@@ -29,5 +29,4 @@ export interface StoredWorkspace {
   branchPattern?: string;
   pmBoardId?: string;
   context?: WorkspaceContext;
-  ownerId?: string;
 }

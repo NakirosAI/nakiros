@@ -11,7 +11,6 @@ export * from './types/workspace-settings.js';
 export * from './types/conversation.js';
 export * from './types/collab.js';
 export * from './types/provider-credentials.js';
-export * from './types/workspace-membership.js';
 export * from './types/getting-started.js';
 export * from './types/nakiros-action.js';
 export * from './types/artifact-review.js';

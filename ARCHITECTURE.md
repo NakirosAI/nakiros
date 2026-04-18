@@ -1,226 +1,157 @@
-# Desktop App - Architecture & Conventions (Reference)
+# Nakiros — Architecture
 
-## Purpose
-This document is the long-term memory for `apps/desktop`.
-Use it as the single reference during future vibe-coding sessions.
+## What Nakiros is
 
-## Stack
-- Electron + `electron-vite`
-- React 19 + TypeScript strict
-- Tailwind CSS v4 + CSS variables
-- i18next + react-i18next
-- Shared contracts/types in `@nakiros/shared`
+A local daemon + web UI that observes Claude Code usage and gives you a
+workshop to audit, evaluate, fix, and create **skills**. Local-first, open
+source, distributed as a single npm package (`nakiros`). No cloud, no
+account, no telemetry.
 
-## High-Level Architecture
+## Monorepo layout
 
-### 1) Electron Main Process
-- File: `electron/main.ts`
-- Owns native capabilities and business services:
-  - filesystem, shell, clipboard, dialogs
-  - git bootstrap/sync
-  - ticket/epic storage
-  - agent runner + terminal
-  - docs scan/read
-  - onboarding/install
-  - update checks/apply
-  - preferences persistence
-- Registers IPC handlers with `ipcMain.handle(...)`.
+```
+apps/
+  nakiros/        # Published npm package: Fastify daemon + CLI entry + bundled React UI
+  frontend/      # React SPA (private workspace dep of nakiros, bundled into dist/ui/)
+  landing/       # Marketing site (Cloudflare Pages, independent deploy)
+packages/
+  shared/        # @nakiros/shared — cross-package types + IPC channel constants
+  agents-bundle/ # @nakiros/agents-bundle — team agents (PM, architect, dev, …)
+```
 
-### 2) Electron Preload Bridge
-- File: `electron/preload.ts`
-- Exposes a typed API via `window.nakiros`.
-- No business logic here; bridge only:
-  - `ipcRenderer.invoke(...)`
-  - event subscriptions + unsubscribe cleanup.
+Only `apps/nakiros` is published on npm. `apps/frontend` is a build-time
+dependency (its `dist/` gets copied into `apps/nakiros/dist/ui/`).
 
-### 3) Renderer (React)
-- Entry: `src/main.tsx`, root orchestration: `src/App.tsx`.
-- Views in `src/views/`.
-- Feature components in `src/components/`.
-- Shared UI kit in `src/components/ui/`.
-- State split:
-  - app/workspace orchestration in `App.tsx`
-  - shared context for preferences/workspace
-  - feature hooks (tickets, forms, debounce, IPC listener).
+## Runtime architecture
 
-### 4) Shared Package
-- `packages/shared/src/types/*` for cross-process types.
-- `packages/shared/src/ipc-channels.ts` for IPC channel constants.
+### Daemon (`apps/nakiros/src/daemon/`)
 
-## Source Tree (Important Areas)
+- **Fastify** server on `127.0.0.1:<port>` (default `4242`, fallback if taken).
+- **`POST /ipc/:channel`** — generic IPC dispatcher that looks up the channel
+  in the handler registry and invokes it with `request.body.args`.
+- **`GET /ws`** — WebSocket connection that broadcasts all events from the
+  event bus as `{channel, payload}` JSON frames.
+- **`GET /*`** — static serving of the bundled React UI (`dist/ui/` in prod,
+  `apps/frontend/dist/` in dev). SPA fallback to `index.html`.
+- **Bootstrap** (`bootstrapDaemonRuntime`): called at boot by `bin/nakiros.ts`.
+  Syncs bundled skills → `~/.nakiros/skills/`, restores in-flight runs, sweeps
+  stray eval artifacts.
 
-### Desktop app
-- `apps/desktop/electron/`
-  - `main.ts`
-  - `preload.ts`
-  - `services/*.ts` (domain services)
-- `apps/desktop/src/`
-  - `views/` page-level screens
-  - `components/` feature UI
-  - `components/ui/` reusable primitives
-  - `components/settings/` split sections for project settings
-  - `components/ticket/` split tabs for ticket detail
-  - `components/context/` split display parts for context panel
-  - `components/dashboard/DashboardRouter.tsx` tab routing layer
-  - `hooks/` custom hooks
-  - `constants/` central UI/app constants
-  - `utils/` reusable pure utilities
-  - `i18n/` i18next setup + namespaces
-  - `global.d.ts` typed `window.nakiros` contract
+### Frontend (`apps/frontend/src/`)
 
-### Shared package
-- `packages/shared/src/index.ts` exports shared public API
-- `packages/shared/src/ipc-channels.ts` source of truth for channel names
+- React 19 + Vite + Tailwind 4 + lucide-react.
+- Entry: `main.tsx` imports `lib/nakiros-client.ts` **first**, which installs
+  `window.nakiros` backed by HTTP (`fetch`) and WebSocket (subscribe to
+  channels). Everything else calls `window.nakiros.*` as if it were native.
+- Views orchestrated by `App.tsx` → `Home` → `NakirosSkillsView` /
+  `GlobalSkillsView` / `Dashboard(project)`. Dashboard has sidebar tabs
+  (ProjectOverview, SkillsView, ConversationsView, RecommendationsView).
+- Skill views embed `EvalRunsView`, `AuditView`, `FixView`, `SkillAuditsTab`.
 
-## Current State Management Model
+### Landing (`apps/landing/src/`)
 
-### Global state (kept intentionally small)
-- `usePreferences` context (`src/hooks/usePreferences.tsx`)
-- `useWorkspace` context (`src/hooks/useWorkspace.tsx`)
+- Same stack, standalone. Sections: Navbar, Hero, Etymology, Features,
+  HowItWorks, OpenSource, FinalCta, Footer.
+- Version badge fetches `registry.npmjs.org/nakiros` at runtime — no redeploy
+  needed when a new npm version ships. Handles pre-release dist-tags (shows
+  `v0.1.0-beta.1 · beta` with amber styling when no stable is out).
 
-### Feature state
-- `useTickets(workspaceId)` for tickets/epics lifecycle
-- local component state for per-screen interactions
-- `useIpcListener` for typed/clean event subscriptions
+## IPC contract
 
-### Decision on Zustand
-- Evaluated and intentionally not adopted (for now).
-- Rationale:
-  - global state scope is limited
-  - context usage is still readable and controlled
-  - no strong pain point requiring store migration.
+### Channels
+- Source of truth: `packages/shared/src/ipc-channels.ts` (constant object
+  `IPC_CHANNELS`). Every channel name is a key — **no hardcoded strings**
+  anywhere else.
+- 4 layers must stay aligned when adding a channel:
+  1. `packages/shared/src/ipc-channels.ts`
+  2. `apps/nakiros/src/daemon/handlers/<domain>.ts` (implementation)
+  3. `apps/nakiros/src/daemon/handlers/index.ts` (registry)
+  4. `apps/frontend/src/lib/nakiros-client.ts` + `src/global.d.ts` (client)
 
-## Renderer Composition (Post-Refactor)
+### Dispatch
+- Request: `POST /ipc/:channel` with `{ "args": [...] }`
+- Response: `{ "ok": true, "result": <value> }` on success,
+  `{ "ok": false, "error": "<message>" }` on throw, `404 Not Found` if the
+  channel isn't registered.
 
-### App shell
-- `App.tsx`:
-  - bootstraps workspaces/preferences/server status
-  - controls top-level view state (`home`, `setup`, `dashboard`, etc.)
-  - hosts `PreferencesProvider` + `WorkspaceProvider`.
+### Event stream
+- Handlers and services can push events via `eventBus.broadcast(channel, payload)`
+  (`src/daemon/event-bus.ts`). Every connected WebSocket receives the event
+  as `{channel, payload}` JSON. Client subscribes via `subscribe(channel, cb)`
+  in `nakiros-client.ts`.
 
-### Dashboard
-- `views/Dashboard.tsx`:
-  - shell/header/sidebar orchestration
-  - delegates page body routing to `DashboardRouter`.
-- `components/dashboard/DashboardRouter.tsx`:
-  - routes tab content (`overview`, `product`, `delivery`, `chat`, `settings`).
+## Runners (skill operations)
 
-### Project settings
-- `components/ProjectSettings.tsx` is orchestration only.
-- Sections in `components/settings/`:
-  - `SettingsGeneral`
-  - `SettingsGit`
-  - `SettingsPM`
-  - `SettingsMCP`
-  - `SettingsDanger` (wired through section usage where needed).
+Four runners live in `apps/nakiros/src/services/`:
 
-### Ticket detail
-- `components/TicketDetail.tsx` is shell/state coordinator.
-- Tab components in `components/ticket/`:
-  - `TicketTabDefinition`
-  - `TicketTabContext`
-  - `TicketTabExecution`
-  - `TicketTabArtifacts`.
+| Runner | Operates on | Notes |
+|---|---|---|
+| **Audit** (`audit-runner.ts`) | The real skill dir (`.claude/skills/{name}` or `~/.claude/skills/{name}`) | Read-only. Output archived in `{skillDir}/audits/audit-{iso}.md`. |
+| **Eval** (`eval-runner.ts`) | A `tmp_skill` (copy of the real skill in a temp workdir) | Isolated to avoid Claude permission prompts on the real skill. |
+| **Fix** (`fix-runner.ts`) | A `tmp_skill` (workdir of in-progress modifications) | Evals can run against this tmp via `fix:runEvalsInTemp`, comparing before/after. Deployed back to real skill at `fix:finish`. |
+| **Create** | A `tmp_skill` (new skill being crafted) | Same shape as fix. Deployed at `create:finish`. |
 
-### Context panel
-- `components/ContextPanel.tsx` focuses on scan/preview orchestration.
-- Display parts extracted to `components/context/ContextPanelParts.tsx`.
+Temp workdir lifecycle: `~/.nakiros/tmp-skills/{runId}/`. Survives daemon
+restart (`restoreOrCleanupTempWorkdirs` at boot).
 
-### Global settings
-- `components/GlobalSettings.tsx` uses section helpers from
-  `components/settings/GlobalSettingsSections.tsx`.
+## Storage conventions
 
-## IPC Contract Rules
+Everything under `~/.nakiros/`:
 
-### Single source of truth
-- Always use `IPC_CHANNELS[...]` from `@nakiros/shared`.
-- Do not introduce string channel literals in `main.ts` or `preload.ts`.
+- `preferences.json` — app preferences (lang, theme)
+- `projects.json` — discovered Claude projects + dismissed state
+- `skills/{name}/` — writable copies of bundled Nakiros skills (synced at boot
+  from `apps/nakiros/bundled-skills/` in dev or the packaged tarball in prod).
+  Symlinked into `~/.claude/skills/` so Claude Code picks them up.
+- `runs/{runId}/` — event log + state for audit/eval/fix/create runs
+- `tmp-skills/{runId}/` — temp workdirs for fix/create runs
 
-### Type alignment rule
-- Any API change must stay aligned across:
-  1. `electron/main.ts` handlers
-  2. `electron/preload.ts` bridge signatures
-  3. `src/global.d.ts` `window.nakiros` contract
-  4. shared types in `@nakiros/shared` when cross-process payloads exist.
+**Claude-managed**:
+- `~/.claude/projects/` — Claude Code project dirs (read by `project-scanner`)
+- `~/.claude/skills/` — user-global skills (including symlinks to Nakiros-managed ones)
 
-### Unknown/any policy
-- No new `any`.
-- `unknown` only when truly unavoidable and explicitly narrowed.
+## Build & publish
 
-## UI & Styling Conventions
+- **Dev** (monorepo root): `turbo dev` → runs `@nakiros/frontend` (Vite HMR on
+  5173) and `nakiros` (`tsx bin/nakiros.ts`) in parallel. Daemon picks up the
+  frontend build from `apps/frontend/dist/`.
+- **Prod build** (`turbo build`):
+  1. `@nakiros/shared` → `dist/` (tsup)
+  2. `@nakiros/frontend` → `dist/` (vite)
+  3. `nakiros` → `tsup` bundles `bin/nakiros.ts` (inlining `@nakiros/shared`
+     and `@nakiros/agents-bundle`) into `dist/bin/nakiros.js`, then
+     `scripts/copy-frontend.mjs` copies `../frontend/dist/` into `dist/ui/`.
+- **Publish** (GitHub Release → `.github/workflows/release.yml`):
+  - Verifies tag (`v0.1.0-beta.1`) matches `apps/nakiros/package.json` version.
+  - Detects pre-release suffix (`-beta`/`-alpha`/`-rc`) and publishes with
+    corresponding dist-tag. Stable versions go to `latest`.
+  - `npm publish --provenance --access public`.
+- **Landing deploy**: Cloudflare Pages direct GitHub integration. Auto-builds
+  on push to `main`. Preview URLs for every PR.
 
-### Tailwind-first
-- Use Tailwind utility classes for UI.
-- Avoid inline `style={{...}}` unless strictly required and documented.
+## Conventions
 
-### Design tokens
-- Tokens live in `src/styles.css` as CSS variables.
-- Tailwind mapping lives in `tailwind.config.ts`.
+- **Tailwind-first** styling. Inline `style={{...}}` only when strictly
+  necessary and commented.
+- **i18n** via `useTranslation(namespace)`. No `isFr` or FR/EN ternaries in
+  JSX. Namespaces in `apps/frontend/src/i18n/locales/{fr,en}/*.json`.
+- **TypeScript strict** everywhere. `tsc --noEmit` must be clean before any
+  commit that touches types.
+- **No new `any`**. `unknown` only when unavoidable and narrowed at the
+  boundary.
+- **Reuse primitives first**: `apps/frontend/src/components/ui/*` before
+  creating new widgets; `apps/frontend/src/constants/*`, `utils/*`, `hooks/*`
+  before adding new abstractions.
 
-### Reusable UI primitives first
-- Before creating new UI pieces, check `src/components/ui/`:
-  - `Button`, `Input`, `Select`, `Textarea`, `Modal`, `Card`, `Badge`, `EmptyState`, `FormField`.
+## Adding a new IPC channel — checklist
 
-### Theme policy
-- Desktop is currently dark-first in practice (runtime forced to dark in app flow).
-- Keep behavior consistent unless a dedicated theme project is reopened.
-
-## i18n Conventions
-- Always use `useTranslation('<namespace>')`.
-- Never use `isFr` checks or hardcoded FR/EN ternaries in JSX.
-- Keep translation keys in:
-  - `src/i18n/locales/fr/*.json`
-  - `src/i18n/locales/en/*.json`
-- Namespaces currently used:
-  - `common`, `home`, `dashboard`, `sidebar`, `board`, `settings`,
-    `onboarding`, `toast`, `feedback`, `context`, `overview`, `ticket`, `agent`.
-
-## Constants & Utilities
-- Centralize hardcoded UI values:
-  - `src/constants/layout.ts`
-  - `src/constants/zIndex.ts`
-  - `src/constants/agents.ts`
-- Reusable helpers:
-  - `src/utils/dates.ts`
-  - `src/utils/strings.ts`
-  - `src/utils/ids.ts`
-  - `src/utils/language.ts`
-  - `src/utils/workflow-capabilities.ts`
-  - `src/utils/profiles.ts`
-
-## Guardrails for Future Sessions
-
-### Do not edit generated output
-- Never manually edit `apps/desktop/dist-electron/*`.
-
-### Keep components focused
-- Favor orchestrator + subcomponents for complex screens.
-- Keep responsibilities narrow and files reasonably small.
-
-### Prefer extension over duplication
-- Reuse existing hooks, constants, and UI primitives first.
-- If duplicate logic appears in 2 places, extract.
-
-### Keep IPC stable
-- Add/rename channels in shared first.
-- Then propagate to main/preload/global typing.
-
-## New Feature Checklist
-1. Define payload types in `@nakiros/shared` if cross-process.
-2. Add/extend `IPC_CHANNELS` if a new channel is needed.
-3. Implement handler in `electron/main.ts`.
-4. Expose bridge method/listener in `electron/preload.ts`.
-5. Update `src/global.d.ts`.
-6. Use/update hooks in renderer (`useIpcListener`, contexts, feature hooks).
-7. Add i18n keys in FR/EN namespaces.
-8. Use UI kit + constants (no ad-hoc styling duplication).
-9. Validate with `pnpm tsc --noEmit` and `pnpm dev`.
-
-## Session Start Checklist (Vibe Coding)
-1. Read this file (`ARCHITECTURE.md`) first.
-2. Identify affected layer(s): renderer, preload, main, shared.
-3. Confirm existing reusable components/hooks/constants before coding.
-4. If touching IPC, update all 4 contract layers (shared/main/preload/global).
-5. Keep changes incremental and composable (orchestrator + leaf components).
-6. Run strict typing before closing a session.
-
+1. Add the channel in `packages/shared/src/ipc-channels.ts`.
+2. If payloads are non-trivial, type them in `packages/shared/src/types/`.
+3. Implement the handler in `apps/nakiros/src/daemon/handlers/<domain>.ts`.
+4. Register the handler in `apps/nakiros/src/daemon/handlers/index.ts`.
+5. Add the method on `window.nakiros` in
+   `apps/frontend/src/lib/nakiros-client.ts`.
+6. Type the method in `apps/frontend/src/global.d.ts`.
+7. Add i18n keys (FR + EN) if UI-facing.
+8. `pnpm -F nakiros exec tsc --noEmit && pnpm -F @nakiros/frontend exec tsc --noEmit`
+   before commit.

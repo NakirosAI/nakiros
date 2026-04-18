@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHandlerRegistry } from './handlers/index.js';
+import { eventBus } from './event-bus.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -72,6 +73,11 @@ export async function createDaemonServer(opts: DaemonServerOptions = {}): Promis
   // ── WebSocket ───────────────────────────────────────────────────────────────
   await app.register(async (scope) => {
     scope.get('/ws', { websocket: true }, (socket) => {
+      const unsubscribe = eventBus.onBroadcast((msg) => {
+        if (socket.readyState !== socket.OPEN) return;
+        socket.send(JSON.stringify(msg));
+      });
+
       socket.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
       socket.on('message', (raw: Buffer) => {
         let msg: unknown;
@@ -86,6 +92,7 @@ export async function createDaemonServer(opts: DaemonServerOptions = {}): Promis
           socket.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
         }
       });
+      socket.on('close', unsubscribe);
     });
   });
 

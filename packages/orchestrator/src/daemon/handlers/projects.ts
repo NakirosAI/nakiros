@@ -12,10 +12,19 @@ import {
   readSkillFile,
   saveSkillFile,
 } from '../../services/skill-reader.js';
+import { eventBus } from '../event-bus.js';
 import type { HandlerRegistry } from './index.js';
 
 export const projectHandlers: HandlerRegistry = {
-  'project:scan': () => scanProjects(),
+  'project:scan': () =>
+    scanProjects((current, total, projectName) => {
+      eventBus.broadcast('project:scanProgress', {
+        provider: 'claude',
+        current,
+        total,
+        projectName,
+      });
+    }),
   'project:list': () => listProjects(),
   'project:get': (args) => getProject(args[0] as string),
   'project:dismiss': (args) => {

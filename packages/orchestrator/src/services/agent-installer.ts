@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 
@@ -14,7 +14,9 @@ export interface CommandMeta {
 import type {
   AgentEnvironmentId,
   AgentEnvironmentStatus,
+  AgentInstallRequest,
   AgentInstallStatus,
+  AgentInstallSummary,
 } from '@nakiros/shared';
 
 /** Workflow runtime — installed once globally at ~/.nakiros/ */
@@ -119,6 +121,100 @@ export function getInstalledCommands(): InstalledCommand[] {
     })
     .filter((entry): entry is InstalledCommand => entry != null)
     .sort((a, b) => a.command.localeCompare(b.command));
+}
+
+export interface GlobalInstallSummary {
+  environments: Array<{
+    id: AgentEnvironmentId;
+    label: string;
+    targetDir: string;
+    commandFilesCopied: number;
+    commandFilesOverwritten: number;
+  }>;
+  commandFilesCopied: number;
+  commandFilesOverwritten: number;
+}
+
+export function installAgentsGlobally(): GlobalInstallSummary {
+  const home = homedir();
+  const ids: AgentEnvironmentId[] = ['claude', 'codex', 'cursor'];
+
+  const environments: GlobalInstallSummary['environments'] = [];
+  let commandFilesCopied = 0;
+  let commandFilesOverwritten = 0;
+
+  for (const id of ids) {
+    const env = ENVIRONMENTS[id];
+    const targetDir = resolve(home, env.targetRelativePath);
+    mkdirSync(targetDir, { recursive: true });
+
+    let copiedForEnv = 0;
+    let overwrittenForEnv = 0;
+
+    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
+      const targetPath = resolve(targetDir, fileName);
+      const targetExists = existsSync(targetPath);
+      writeFileSync(targetPath, content, 'utf8');
+      if (targetExists) {
+        overwrittenForEnv += 1;
+        commandFilesOverwritten += 1;
+      } else {
+        copiedForEnv += 1;
+        commandFilesCopied += 1;
+      }
+    }
+
+    environments.push({
+      id,
+      label: env.label,
+      targetDir,
+      commandFilesCopied: copiedForEnv,
+      commandFilesOverwritten: overwrittenForEnv,
+    });
+  }
+
+  return { environments, commandFilesCopied, commandFilesOverwritten };
+}
+
+export function installAgents(request: AgentInstallRequest): AgentInstallSummary {
+  const repoPath = resolve(request.repoPath);
+  if (!existsSync(repoPath) || !lstatSync(repoPath).isDirectory()) {
+    throw new Error(`Répertoire invalide: ${repoPath}`);
+  }
+  if (!request.targets.length) {
+    throw new Error('Sélectionne au moins un environnement cible.');
+  }
+
+  const force = request.force ?? true;
+
+  let commandFilesCopied = 0;
+  let commandFilesOverwritten = 0;
+
+  for (const target of request.targets) {
+    const env = ENVIRONMENTS[target];
+    const envTargetPath = resolve(repoPath, env.targetRelativePath);
+    mkdirSync(envTargetPath, { recursive: true });
+
+    for (const [fileName, content] of Object.entries(readCommandTemplates())) {
+      const targetPath = resolve(envTargetPath, fileName);
+      const targetExists = existsSync(targetPath);
+      if (targetExists && !force) continue;
+      writeFileSync(targetPath, content, 'utf8');
+      if (targetExists) commandFilesOverwritten += 1;
+      else commandFilesCopied += 1;
+    }
+  }
+
+  return {
+    repoPath,
+    targets: request.targets,
+    commandFilesCopied,
+    commandFilesOverwritten,
+    runtimeFilesCopied: 0,
+    runtimeFilesOverwritten: 0,
+    workspaceDirsCreated: 0,
+    gitignorePatched: false,
+  };
 }
 
 export function getGlobalInstallStatus(): GlobalInstallStatus {

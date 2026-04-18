@@ -1,6 +1,6 @@
 {
   "name": "nakiros",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "Local daemon that observes Claude Code usage and lets you inspect, audit, evaluate and improve skills from your browser.",
   "license": "MIT",
   "type": "module",

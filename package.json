@@ -5,15 +5,7 @@
     "build": "turbo build",
     "dev": "turbo dev",
     "test": "turbo test",
-    "lint": "turbo lint",
-    "desktop:package": "pnpm --filter @nakiros/desktop package",
-    "desktop:make": "pnpm --filter @nakiros/desktop make",
-    "desktop:make:all": "pnpm --filter @nakiros/desktop make:all",
-    "desktop:make:dmg": "pnpm --filter @nakiros/desktop make:dmg",
-    "desktop:make:dmg:arm64": "pnpm --filter @nakiros/desktop make:dmg:arm64",
-    "desktop:make:dmg:x64": "pnpm --filter @nakiros/desktop make:dmg:x64",
-    "desktop:make:zip:arm64": "pnpm --filter @nakiros/desktop make:zip:arm64",
-    "desktop:make:zip:x64": "pnpm --filter @nakiros/desktop make:zip:x64"
+    "lint": "turbo lint"
   },
   "devDependencies": {
     "tslib": "^2.8.1",

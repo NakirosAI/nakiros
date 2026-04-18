@@ -1,5 +1,6 @@
 import type { IpcChannel } from '@nakiros/shared';
 import { preferencesHandlers } from './preferences.js';
+import { shellHandlers } from './shell.js';
 import { projectHandlers } from './projects.js';
 import { bundledSkillsHandlers } from './bundled-skills.js';
 import { claudeGlobalHandlers } from './claude-global.js';
@@ -19,6 +20,7 @@ export type HandlerRegistry = Partial<Record<IpcChannel, IpcHandler>>;
 export function buildHandlerRegistry(): HandlerRegistry {
   return {
     ...preferencesHandlers,
+    ...shellHandlers,
     ...projectHandlers,
     ...bundledSkillsHandlers,
     ...claudeGlobalHandlers,

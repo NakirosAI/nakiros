@@ -1,16 +1,11 @@
 export const IPC_CHANNELS = {
   // Generic
-  'clipboard:write': 'clipboard:write',
   'shell:openPath': 'shell:openPath',
 
   // Preferences
   'preferences:get': 'preferences:get',
   'preferences:getSystemLanguage': 'preferences:getSystemLanguage',
   'preferences:save': 'preferences:save',
-
-  // Notifications
-  'notification:openAgentChat': 'notification:openAgentChat',
-  'notification:showAgentRun': 'notification:showAgentRun',
 
   // Onboarding
   'onboarding:detectEditors': 'onboarding:detectEditors',

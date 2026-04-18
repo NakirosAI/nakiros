@@ -80,10 +80,53 @@ async function invoke<T = unknown>(channel: string, ...args: unknown[]): Promise
 }
 
 // ── Public `window.nakiros` surface ────────────────────────────────────────
+// ── Native browser APIs ────────────────────────────────────────────────────
+interface OpenAgentChatPayload {
+  workspaceId?: string;
+  conversationId?: string | null;
+  tabId?: string | null;
+  eventId?: string;
+}
+
+type NotifClickListener = (payload: OpenAgentChatPayload) => void;
+const notifClickListeners = new Set<NotifClickListener>();
+
+async function ensureNotificationPermission(): Promise<boolean> {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+  const result = await Notification.requestPermission();
+  return result === 'granted';
+}
+
+function emitNotifClick(payload: OpenAgentChatPayload): void {
+  for (const fn of notifClickListeners) {
+    try {
+      fn(payload);
+    } catch (err) {
+      console.error('[nakiros-client] notif click listener threw', err);
+    }
+  }
+}
+
 const client = {
-  // Generic shell / clipboard
+  // Shell (daemon) / clipboard (native)
   openPath: (path: string) => invoke('shell:openPath', path),
-  writeClipboard: (text: string) => invoke('clipboard:write', text),
+  writeClipboard: async (text: string): Promise<void> => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    // Fallback for non-secure contexts — rare but not zero.
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.position = 'fixed';
+    el.style.opacity = '0';
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+  },
 
   // Preferences
   getPreferences: () => invoke('preferences:get'),
@@ -98,9 +141,46 @@ const client = {
   installAgentsGlobal: () => invoke('agents:install-global'),
   getAgentCliStatus: () => invoke('agents:cli-status'),
 
-  // Notifications
-  showAgentRunNotification: (payload: unknown) => invoke('notification:showAgentRun', payload),
-  onOpenAgentRunChat: (cb: (payload: unknown) => void) => subscribe('notification:openAgentChat', cb),
+  // Notifications (Web Notification API — no daemon roundtrip)
+  showAgentRunNotification: async (payload: {
+    workspaceId?: string;
+    workspaceName?: string;
+    conversationId?: string | null;
+    tabId?: string | null;
+    conversationTitle?: string;
+    durationSeconds?: number;
+  }): Promise<void> => {
+    const allowed = await ensureNotificationPermission();
+    if (!allowed) return;
+    const title = payload.workspaceName ?? 'Nakiros';
+    const suffix =
+      typeof payload.durationSeconds === 'number' && payload.durationSeconds > 0
+        ? ` (${
+            payload.durationSeconds < 60
+              ? `${payload.durationSeconds}s`
+              : `${Math.round(payload.durationSeconds / 60)} min`
+          })`
+        : '';
+    const body = payload.conversationTitle
+      ? `${payload.conversationTitle} — terminé${suffix}`
+      : `Run terminé${suffix}`;
+    const notif = new Notification(title, { body });
+    notif.onclick = () => {
+      emitNotifClick({
+        workspaceId: payload.workspaceId,
+        conversationId: payload.conversationId,
+        tabId: payload.tabId,
+      });
+      window.focus();
+      notif.close();
+    };
+  },
+  onOpenAgentRunChat: (cb: (payload: OpenAgentChatPayload) => void): (() => void) => {
+    notifClickListeners.add(cb);
+    return () => {
+      notifClickListeners.delete(cb);
+    };
+  },
 
   // Onboarding
   nakirosConfigExists: () => invoke('onboarding:nakirosConfigExists'),

@@ -5,13 +5,31 @@ the landing page gets deployed.
 
 ## Prerequisites (one-time setup)
 
-### npm publish
+### npm publish (Trusted Publishing / OIDC — no tokens)
 
-1. On [npmjs.com](https://npmjs.com), create an **automation token** with
-   publish rights for the `nakiros` package.
-2. In the GitHub repo settings → Secrets and variables → Actions, add:
-   - `NPM_TOKEN` = the automation token above.
-3. That's it. The workflow `.github/workflows/release.yml` handles the rest.
+Nakiros uses npm **Trusted Publishing**: the workflow authenticates to
+npm via GitHub's OIDC tokens instead of a long-lived `NPM_TOKEN`. More
+secure, less to rotate, automatically scoped to this workflow.
+
+One-time setup on [npmjs.com](https://npmjs.com):
+
+1. **Publish the very first version manually** (Trusted Publishing requires
+   the package to already exist so you can configure its trusted publishers).
+   From a machine where you're logged in with `npm login`:
+   ```bash
+   cd apps/nakiros
+   pnpm build
+   npm publish --access public --tag beta
+   ```
+2. Go to the package page → **Settings** → **Trusted publishers** → **Add**:
+   - Publisher: **GitHub Actions**
+   - Organization or user: `NakirosAI`
+   - Repository: `nakiros`
+   - Workflow filename: `release.yml`
+   - Environment name: *(leave blank)*
+3. From now on, every GitHub Release triggers the workflow, and publishes
+   without needing any secret. You can also revoke/rotate the trusted
+   publisher anytime without touching GitHub.
 
 ### Landing page (Cloudflare Pages)
 

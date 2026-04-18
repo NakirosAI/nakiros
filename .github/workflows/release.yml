@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Required for npm provenance (signed attestation).
+      # Required for npm Trusted Publishing + provenance attestation (OIDC).
       id-token: write
 
     steps:
@@ -25,6 +25,10 @@ jobs:
           node-version: 20
           cache: pnpm
           registry-url: https://registry.npmjs.org
+
+      # npm Trusted Publishing requires npm >= 11.5.1 (Node 20 ships with 10.x).
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Verify tag matches package version
         run: |
@@ -51,7 +55,6 @@ jobs:
           else
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
-          echo "Publishing ${VERSION} with dist-tag ${tag}"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -59,8 +62,10 @@ jobs:
       - name: Build
         run: pnpm turbo build --filter nakiros
 
+      # Auth is handled by npm Trusted Publishing (OIDC) — no NPM_TOKEN needed.
+      # Requires a trusted publisher configured for the `nakiros` package on npmjs.com:
+      #   Settings → Trusted publishers → Add → GitHub Actions
+      #   Owner: NakirosAI / Repo: nakiros / Workflow: release.yml
       - name: Publish to npm
         run: npm publish --provenance --access public --tag ${{ steps.dist_tag.outputs.tag }}
         working-directory: apps/nakiros
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

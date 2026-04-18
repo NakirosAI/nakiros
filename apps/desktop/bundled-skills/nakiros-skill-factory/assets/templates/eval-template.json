@@ -1,0 +1,59 @@
+{
+  "skill_name": "{skill-name}",
+  "evals": [
+    {
+      "id": 1,
+      "name": "{test-name-happy-path}",
+      "prompt": "{Realistic user message — standard use case}",
+      "expected_output": "{Human-readable description of what success looks like}",
+      "files": ["{optional/fixture/file.ext}"],
+      "output_files": ["{expected-output-file.ext}"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Output file exists",
+          "script": "test -f outputs/{expected-output-file.ext}"
+        },
+        {
+          "type": "script",
+          "text": "Output contains required section",
+          "script": "grep -q '## Required Section' outputs/{expected-output-file.ext}"
+        },
+        {
+          "type": "llm",
+          "text": "The output addresses the user's intent and provides actionable content (semantic check)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "{test-name-edge-case}",
+      "prompt": "{Edge case or tricky request that tests boundaries}",
+      "expected_output": "{What success looks like for this edge case}",
+      "files": [],
+      "output_files": [],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "{Assertion specific to this edge case, verifiable by code}",
+          "script": "{shell command that exits 0 on pass}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "{test-name-variation}",
+      "prompt": "{Different phrasing or level of detail than test 1}",
+      "expected_output": "{Expected output with different input style}",
+      "files": [],
+      "output_files": [],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "{Assertion that tests the skill handles varied inputs}",
+          "script": "{shell command}"
+        }
+      ]
+    }
+  ]
+}

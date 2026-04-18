@@ -37,6 +37,36 @@ function MermaidDiagram({ code }: { code: string }) {
   return <div ref={containerRef} className="flex justify-center my-4" />;
 }
 
+// ── Diff block renderer ───────────────────────────────────────────────────────
+
+function DiffBlock({ code }: { code: string }) {
+  const lines = code.split('\n');
+  return (
+    <pre className="my-3 overflow-x-auto rounded border border-[var(--line)] bg-[var(--bg-soft)] py-2 text-xs font-mono">
+      {lines.map((line, i) => {
+        let lineClass = 'text-[var(--text)]';
+        let prefix = ' ';
+        if (line.startsWith('+')) {
+          lineClass = 'bg-emerald-500/10 text-emerald-400';
+          prefix = '+';
+        } else if (line.startsWith('-')) {
+          lineClass = 'bg-red-500/10 text-red-400';
+          prefix = '-';
+        } else if (line.startsWith('@@')) {
+          lineClass = 'bg-blue-500/10 text-blue-400';
+          prefix = '@';
+        }
+        return (
+          <div key={i} className={clsx('px-4 py-px', lineClass)}>
+            <span className="select-none opacity-50 mr-2">{prefix === ' ' ? ' ' : prefix}</span>
+            {line.startsWith('+') || line.startsWith('-') || line.startsWith('@@') ? line.slice(1) : line}
+          </div>
+        );
+      })}
+    </pre>
+  );
+}
+
 // ── Markdown components ───────────────────────────────────────────────────────
 
 const components: Components = {
@@ -47,6 +77,10 @@ const components: Components = {
     if (el?.props?.className?.includes('language-mermaid')) {
       const code = String(el.props.children ?? '').replace(/\n$/, '');
       return <MermaidDiagram code={code} />;
+    }
+    if (el?.props?.className?.includes('language-diff')) {
+      const code = String(el.props.children ?? '').replace(/\n$/, '');
+      return <DiffBlock code={code} />;
     }
     return (
       <pre

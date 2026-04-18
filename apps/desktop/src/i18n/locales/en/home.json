@@ -1,6 +1,6 @@
 {
   "title": "Nakiros",
-  "subtitle": "Multi-repo orchestration with a fast local workflow. Workspaces are synced through Nakiros Cloud and cached locally for offline access.",
+  "subtitle": "Analyze and improve your AI agent teams",
   "createWorkspace": "Create workspace",
   "createWorkspaceHint": "Configure a new guided project",
   "recent": "Recent workspaces",

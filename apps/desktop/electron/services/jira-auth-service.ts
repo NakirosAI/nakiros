@@ -34,7 +34,9 @@ interface StoredJiraTokenEntry {
 type JiraTokenStore = Record<string, StoredJiraTokenEntry>;
 type JiraBoardType = JiraBoardSelection['boardType'];
 
-const TOKEN_STORE_PATH = join(app.getPath('userData'), 'jira-tokens.json');
+function getTokenStorePath(): string {
+  return join(app.getPath('userData'), 'jira-tokens.json');
+}
 const TOKEN_REFRESH_SAFETY_WINDOW_MS = 5 * 60 * 1000;
 
 function getSecureStorageBackend(): string | undefined {
@@ -56,16 +58,16 @@ function assertSecureStorageAvailable(): void {
 }
 
 function readTokenStore(): JiraTokenStore {
-  if (!existsSync(TOKEN_STORE_PATH)) return {};
+  if (!existsSync(getTokenStorePath())) return {};
   try {
-    return JSON.parse(readFileSync(TOKEN_STORE_PATH, 'utf-8')) as JiraTokenStore;
+    return JSON.parse(readFileSync(getTokenStorePath(), 'utf-8')) as JiraTokenStore;
   } catch {
     return {};
   }
 }
 
 function writeTokenStore(store: JiraTokenStore): void {
-  writeFileSync(TOKEN_STORE_PATH, JSON.stringify(store, null, 2), 'utf-8');
+  writeFileSync(getTokenStorePath(), JSON.stringify(store, null, 2), 'utf-8');
 }
 
 function encryptSecret(value: string): string {

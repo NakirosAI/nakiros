@@ -24895,9 +24895,9 @@ const $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) 
     };
     doc.write(`const input = payload.value;`);
     const ids = /* @__PURE__ */ Object.create(null);
-    let counter = 0;
+    let counter2 = 0;
     for (const key of normalized.keys) {
-      ids[key] = `key_${counter++}`;
+      ids[key] = `key_${counter2++}`;
     }
     doc.write(`const newResult = {};`);
     for (const key of normalized.keys) {
@@ -46056,6 +46056,19 @@ const workspaces = sqliteTable("workspaces", {
   data: text("data").notNull(),
   updatedAt: text("updated_at").notNull()
 });
+const projects = sqliteTable("projects", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  projectPath: text("project_path").notNull(),
+  provider: text("provider").notNull().default("claude"),
+  providerProjectDir: text("provider_project_dir").notNull(),
+  lastActivityAt: text("last_activity_at"),
+  sessionCount: integer("session_count").notNull().default(0),
+  skillCount: integer("skill_count").notNull().default(0),
+  status: text("status").notNull().default("active"),
+  lastScannedAt: text("last_scanned_at").notNull(),
+  createdAt: text("created_at").notNull()
+});
 const collabSessions = sqliteTable("collab_sessions", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull(),
@@ -46068,6 +46081,7 @@ const collabSessions = sqliteTable("collab_sessions", {
 const schema$3 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   collabSessions,
+  projects,
   workspaces
 }, Symbol.toStringTag, { value: "Module" }));
 function getDataPath() {
@@ -46098,6 +46112,19 @@ function getDb() {
       data TEXT NOT NULL,
       created_at TEXT NOT NULL,
       resolved_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      project_path TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT 'claude',
+      provider_project_dir TEXT NOT NULL,
+      last_activity_at TEXT,
+      session_count INTEGER NOT NULL DEFAULT 0,
+      skill_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      last_scanned_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
   `);
   const count = sqlite.prepare("SELECT COUNT(*) as n FROM workspaces").get().n;
@@ -53757,7 +53784,81 @@ const IPC_CHANNELS = {
   "preview:check": "preview:check",
   "preview:apply": "preview:apply",
   "preview:apply-file": "preview:apply-file",
-  "preview:discard": "preview:discard"
+  "preview:discard": "preview:discard",
+  // Nakiros Agent Team — Project management
+  "project:scan": "project:scan",
+  "project:scanProgress": "project:scanProgress",
+  "project:dismiss": "project:dismiss",
+  "project:list": "project:list",
+  "project:get": "project:get",
+  "project:getStats": "project:getStats",
+  "project:getGlobalStats": "project:getGlobalStats",
+  "project:listConversations": "project:listConversations",
+  "project:getConversation": "project:getConversation",
+  "project:getConversationMessages": "project:getConversationMessages",
+  "project:listSkills": "project:listSkills",
+  "project:getSkill": "project:getSkill",
+  "project:saveSkill": "project:saveSkill",
+  "project:readSkillFile": "project:readSkillFile",
+  "project:saveSkillFile": "project:saveSkillFile",
+  "project:getRecommendations": "project:getRecommendations",
+  // Nakiros bundled skills
+  "nakiros:listBundledSkills": "nakiros:listBundledSkills",
+  "nakiros:getBundledSkill": "nakiros:getBundledSkill",
+  "nakiros:readBundledSkillFile": "nakiros:readBundledSkillFile",
+  "nakiros:saveBundledSkillFile": "nakiros:saveBundledSkillFile",
+  "nakiros:promoteBundledSkill": "nakiros:promoteBundledSkill",
+  // Unified binary/asset file reader (works across project/nakiros-bundled/claude-global scopes)
+  "skill:readFileAsDataUrl": "skill:readFileAsDataUrl",
+  // User-global skills (~/.claude/skills/, excluding our symlinks)
+  "claudeGlobal:listSkills": "claudeGlobal:listSkills",
+  "claudeGlobal:getSkill": "claudeGlobal:getSkill",
+  "claudeGlobal:readSkillFile": "claudeGlobal:readSkillFile",
+  "claudeGlobal:saveSkillFile": "claudeGlobal:saveSkillFile",
+  // Eval runner
+  "eval:startRuns": "eval:startRuns",
+  "eval:stopRun": "eval:stopRun",
+  "eval:listRuns": "eval:listRuns",
+  "eval:loadPersisted": "eval:loadPersisted",
+  "eval:event": "eval:event",
+  "eval:sendUserMessage": "eval:sendUserMessage",
+  "eval:finishRun": "eval:finishRun",
+  "eval:getFeedback": "eval:getFeedback",
+  "eval:saveFeedback": "eval:saveFeedback",
+  "eval:listOutputs": "eval:listOutputs",
+  "eval:readOutput": "eval:readOutput",
+  // Audit runner
+  "audit:start": "audit:start",
+  "audit:stopRun": "audit:stopRun",
+  "audit:getRun": "audit:getRun",
+  "audit:sendUserMessage": "audit:sendUserMessage",
+  "audit:listHistory": "audit:listHistory",
+  "audit:readReport": "audit:readReport",
+  "audit:event": "audit:event",
+  "audit:listActive": "audit:listActive",
+  // Fix runner
+  "fix:start": "fix:start",
+  "fix:stopRun": "fix:stopRun",
+  "fix:getRun": "fix:getRun",
+  "fix:sendUserMessage": "fix:sendUserMessage",
+  "fix:finish": "fix:finish",
+  "fix:event": "fix:event",
+  "fix:runEvalsInTemp": "fix:runEvalsInTemp",
+  "fix:getBenchmarks": "fix:getBenchmarks",
+  "fix:listActive": "fix:listActive",
+  "fix:getBufferedEvents": "fix:getBufferedEvents",
+  // Create runner — thin mirror of fix:* with different temp-workdir seeding and sync-back policy.
+  "create:start": "create:start",
+  "create:stopRun": "create:stopRun",
+  "create:getRun": "create:getRun",
+  "create:sendUserMessage": "create:sendUserMessage",
+  "create:finish": "create:finish",
+  "create:event": "create:event",
+  "create:listActive": "create:listActive",
+  "create:getBufferedEvents": "create:getBufferedEvents",
+  // Draft files (shared by fix + create — reads from the run's temp workdir)
+  "skillAgent:listTempFiles": "skillAgent:listTempFiles",
+  "skillAgent:readTempFile": "skillAgent:readTempFile"
 };
 function toWorkspaceSlug$2(name) {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "workspace";
@@ -54026,7 +54127,7 @@ function syncToRepos(workspace, mcpServerUrl) {
     writeClaudeJson(repo.localPath, workspace.id, mcpServerUrl);
   }
 }
-const execFileAsync$1 = require$$1$1.promisify(child_process.execFile);
+const execFileAsync$2 = require$$1$1.promisify(child_process.execFile);
 function slugifyWorkspaceName(name) {
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return slug || "workspace";
@@ -54053,7 +54154,7 @@ function copyRepoToDirectory(sourcePath, targetParentDir) {
   return { repoPath: targetPath, repoName: require$$0$3.basename(targetPath) };
 }
 async function initGitRepo(repoPath) {
-  await execFileAsync$1("git", ["init"], { cwd: repoPath });
+  await execFileAsync$2("git", ["init"], { cwd: repoPath });
 }
 const EXCLUDED_DIRS = /* @__PURE__ */ new Set([
   ".git",
@@ -54657,7 +54758,7 @@ function detectEditors() {
 function nakirosConfigExists() {
   return require$$1$2.existsSync(require$$0$3.join(GLOBAL_DIR, "config.yaml"));
 }
-function emit(win, event) {
+function emit$1(win, event) {
   win.webContents.send("onboarding:progress", event);
 }
 async function installNakiros(editors, win) {
@@ -54668,11 +54769,11 @@ async function installNakiros(editors, win) {
     require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR, "commands"), { recursive: true });
     require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR, "core"), { recursive: true });
     require$$1$2.mkdirSync(require$$0$3.join(GLOBAL_DIR, "workspaces"), { recursive: true });
-    emit(win, { label: "~/.nakiros/ créé", done: true });
+    emit$1(win, { label: "~/.nakiros/ créé", done: true });
   } catch (err) {
     const msg = `Création ~/.nakiros/ : ${err.message}`;
     errors2.push(msg);
-    emit(win, { label: msg, done: false, error: msg });
+    emit$1(win, { label: msg, done: false, error: msg });
   }
   try {
     const configPath = require$$0$3.join(GLOBAL_DIR, "config.yaml");
@@ -54688,11 +54789,11 @@ async function installNakiros(editors, win) {
         "utf-8"
       );
     }
-    emit(win, { label: "config.yaml créé", done: true });
+    emit$1(win, { label: "config.yaml créé", done: true });
   } catch (err) {
     const msg = `config.yaml : ${err.message}`;
     errors2.push(msg);
-    emit(win, { label: msg, done: false, error: msg });
+    emit$1(win, { label: msg, done: false, error: msg });
   }
   try {
     const versionPath = require$$0$3.join(GLOBAL_DIR, "version.json");
@@ -54714,14 +54815,14 @@ async function installNakiros(editors, win) {
         "utf-8"
       );
     }
-    emit(win, { label: "version.json créé", done: true });
+    emit$1(win, { label: "version.json créé", done: true });
   } catch (err) {
     const msg = `version.json : ${err.message}`;
     errors2.push(msg);
-    emit(win, { label: msg, done: false, error: msg });
+    emit$1(win, { label: msg, done: false, error: msg });
   }
   for (const editor of editors.filter((e) => e.detected)) {
-    emit(win, { label: `${editor.label} : détecté`, done: true });
+    emit$1(win, { label: `${editor.label} : détecté`, done: true });
   }
   return { success: errors2.length === 0, errors: errors2 };
 }
@@ -55140,10 +55241,10 @@ function resolveNakirosBin() {
   if (require$$1$2.existsSync(devBin)) return devBin;
   return "nakiros";
 }
-const runs = /* @__PURE__ */ new Map();
-let runCounter = 0;
+const runs$1 = /* @__PURE__ */ new Map();
+let runCounter$1 = 0;
 function runAgentCommand(provider, request2, onStart, onEvent, onDone, _onRawLine) {
-  const bridgeRunId = `run-${++runCounter}`;
+  const bridgeRunId = `run-${++runCounter$1}`;
   const nakirosBin = resolveNakirosBin();
   const additionalDirs = request2.additionalDirs ?? request2.activeRepoPaths ?? [];
   const agentId = request2.agentId ?? "default";
@@ -55238,7 +55339,7 @@ ${text2}`.trim().slice(-4e3);
     }
   });
   child.on("close", (code2) => {
-    runs.delete(bridgeRunId);
+    runs$1.delete(bridgeRunId);
     const exitCode = code2 ?? 0;
     console.log(`[bridge] Process closed with code ${exitCode} (run: ${bridgeRunId})`);
     if (!startCalled) {
@@ -55252,20 +55353,20 @@ ${text2}`.trim().slice(-4e3);
   });
   child.on("error", (err) => {
     console.error(`[bridge] Process error: ${err.message}`);
-    runs.delete(bridgeRunId);
+    runs$1.delete(bridgeRunId);
     if (!startCalled) {
       onStart({ runId: bridgeRunId, conversationId: bridgeRunId, agentId, command: "", cwd: "" });
     }
     const hint = err.message.includes("ENOENT") || err.message.includes("not found") ? "nakiros CLI not found. Run `pnpm build` in the monorepo root." : err.message;
     callDoneOnce(1, hint);
   });
-  runs.set(bridgeRunId, { kill: () => child.kill("SIGTERM") });
+  runs$1.set(bridgeRunId, { kill: () => child.kill("SIGTERM") });
   return bridgeRunId;
 }
 function cancelAgentRun(runId) {
   console.log(`[bridge] Cancelling run ${runId}`);
-  runs.get(runId)?.kill();
-  runs.delete(runId);
+  runs$1.get(runId)?.kill();
+  runs$1.delete(runId);
 }
 function conversationDir(workspaceSlug, conversationId) {
   return require$$0$3.join(os.homedir(), ".nakiros", "workspaces", workspaceSlug, "conversations", conversationId);
@@ -56096,7 +56197,9 @@ async function syncJiraTickets(args) {
     epicsImported: epicResult.created + epicResult.updated
   };
 }
-const TOKEN_STORE_PATH = require$$0$3.join(electron.app.getPath("userData"), "jira-tokens.json");
+function getTokenStorePath() {
+  return require$$0$3.join(electron.app.getPath("userData"), "jira-tokens.json");
+}
 const TOKEN_REFRESH_SAFETY_WINDOW_MS = 5 * 60 * 1e3;
 function getSecureStorageBackend() {
   if (!("getSelectedStorageBackend" in electron.safeStorage)) return void 0;
@@ -56113,15 +56216,15 @@ function assertSecureStorageAvailable() {
   throw new Error("Secure storage is unavailable on this device. Jira requires OS-backed encryption.");
 }
 function readTokenStore() {
-  if (!require$$1$2.existsSync(TOKEN_STORE_PATH)) return {};
+  if (!require$$1$2.existsSync(getTokenStorePath())) return {};
   try {
-    return JSON.parse(require$$1$2.readFileSync(TOKEN_STORE_PATH, "utf-8"));
+    return JSON.parse(require$$1$2.readFileSync(getTokenStorePath(), "utf-8"));
   } catch {
     return {};
   }
 }
 function writeTokenStore(store) {
-  require$$1$2.writeFileSync(TOKEN_STORE_PATH, JSON.stringify(store, null, 2), "utf-8");
+  require$$1$2.writeFileSync(getTokenStorePath(), JSON.stringify(store, null, 2), "utf-8");
 }
 function encryptSecret(value) {
   assertSecureStorageAvailable();
@@ -56267,6 +56370,2876 @@ async function syncWorkspaceJiraTickets(wsId, workspace) {
     accessToken,
     cloudId: resolveCloudId(wsId, workspace)
   });
+}
+const CLAUDE_PROJECTS_DIR = require$$0$3.join(os.homedir(), ".claude", "projects");
+const INACTIVITY_THRESHOLD_DAYS = 30;
+function decodeProjectPath(encoded) {
+  const parts = encoded.split("-").filter(Boolean);
+  return "/" + parts.join("/");
+}
+function projectNameFromPath(projectPath) {
+  return require$$0$3.basename(projectPath) || projectPath;
+}
+function getLastConversationInfo(projectDir) {
+  let jsonlFiles;
+  try {
+    jsonlFiles = require$$1$2.readdirSync(projectDir).filter((f) => f.endsWith(".jsonl"));
+  } catch {
+    return { cwd: null, timestamp: null };
+  }
+  if (jsonlFiles.length === 0) return { cwd: null, timestamp: null };
+  const sorted = jsonlFiles.map((f) => {
+    const full = require$$0$3.join(projectDir, f);
+    try {
+      return { file: full, mtime: require$$1$2.statSync(full).mtime.getTime() };
+    } catch {
+      return null;
+    }
+  }).filter(Boolean).sort((a, b) => b.mtime - a.mtime);
+  if (sorted.length === 0) return { cwd: null, timestamp: null };
+  const latestFile = sorted[0].file;
+  const timestamp2 = new Date(sorted[0].mtime).toISOString();
+  try {
+    const raw = require$$1$2.readFileSync(latestFile, "utf8");
+    const firstLines = raw.split("\n").slice(0, 10);
+    for (const line of firstLines) {
+      if (!line.trim()) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry["cwd"] && typeof entry["cwd"] === "string") {
+          return { cwd: entry["cwd"], timestamp: timestamp2 };
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+  }
+  return { cwd: null, timestamp: timestamp2 };
+}
+function countSessions(projectDir) {
+  try {
+    return require$$1$2.readdirSync(projectDir).filter((f) => f.endsWith(".jsonl")).length;
+  } catch {
+    return 0;
+  }
+}
+function isEvalWorkspaceArtifact(projectPath) {
+  return /\/evals\/workspace\/iteration-\d+\/eval-[^/]+\/(with_skill|without_skill)\/?$/.test(projectPath);
+}
+function countSkills(projectPath) {
+  const skillsDir = require$$0$3.join(projectPath, ".claude", "skills");
+  if (!require$$1$2.existsSync(skillsDir)) return 0;
+  try {
+    return require$$1$2.readdirSync(skillsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).length;
+  } catch {
+    return 0;
+  }
+}
+function scanClaudeProjects(onProgress) {
+  if (!require$$1$2.existsSync(CLAUDE_PROJECTS_DIR)) return [];
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+  const projects2 = [];
+  const total = entries.length;
+  for (let i = 0; i < entries.length; i++) {
+    const encoded = entries[i];
+    const projectDir = require$$0$3.join(CLAUDE_PROJECTS_DIR, encoded);
+    onProgress?.(i + 1, total, encoded);
+    const { cwd, timestamp: timestamp2 } = getLastConversationInfo(projectDir);
+    const projectPath = cwd ?? decodeProjectPath(encoded);
+    if (!require$$1$2.existsSync(projectPath)) continue;
+    if (isEvalWorkspaceArtifact(projectPath)) continue;
+    const sessionCount = countSessions(projectDir);
+    const skillCount = countSkills(projectPath);
+    if (sessionCount === 0 && skillCount === 0) continue;
+    let status = "active";
+    if (timestamp2) {
+      const daysSinceActivity = (Date.now() - new Date(timestamp2).getTime()) / (1e3 * 60 * 60 * 24);
+      if (daysSinceActivity > INACTIVITY_THRESHOLD_DAYS) {
+        status = "inactive";
+      }
+    }
+    projects2.push({
+      id: encoded,
+      name: projectNameFromPath(projectPath),
+      projectPath,
+      provider: "claude",
+      providerProjectDir: projectDir,
+      lastActivityAt: timestamp2,
+      sessionCount,
+      skillCount,
+      status
+    });
+  }
+  projects2.sort((a, b) => {
+    if (!a.lastActivityAt && !b.lastActivityAt) return 0;
+    if (!a.lastActivityAt) return 1;
+    if (!b.lastActivityAt) return -1;
+    return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
+  });
+  return projects2;
+}
+const PURGE_PATH_PATTERNS = [
+  /\/evals\/workspace\/iteration-\d+\/eval-[^/]+\/(with_skill|without_skill)\/?$/
+];
+function isObsoletePath(projectPath) {
+  return PURGE_PATH_PATTERNS.some((re) => re.test(projectPath));
+}
+function scan(onProgress) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const db = getDb();
+  const allRows = db.select({ id: projects.id, projectPath: projects.projectPath }).from(projects).all();
+  for (const row of allRows) {
+    if (isObsoletePath(row.projectPath)) {
+      db.delete(projects).where(eq(projects.id, row.id)).run();
+    }
+  }
+  const dismissedRows = db.select({ id: projects.id }).from(projects).where(eq(projects.status, "dismissed")).all();
+  const dismissedIds = new Set(dismissedRows.map((r) => r.id));
+  const detected = scanClaudeProjects(onProgress);
+  const validProjects = detected.filter((p) => !dismissedIds.has(p.id));
+  for (const p of validProjects) {
+    db.insert(projects).values({
+      id: p.id,
+      name: p.name,
+      projectPath: p.projectPath,
+      provider: p.provider,
+      providerProjectDir: p.providerProjectDir,
+      lastActivityAt: p.lastActivityAt,
+      sessionCount: p.sessionCount,
+      skillCount: p.skillCount,
+      status: p.status,
+      lastScannedAt: now,
+      createdAt: now
+    }).onConflictDoUpdate({
+      target: projects.id,
+      set: {
+        name: p.name,
+        projectPath: p.projectPath,
+        lastActivityAt: p.lastActivityAt,
+        sessionCount: p.sessionCount,
+        skillCount: p.skillCount,
+        status: p.status,
+        lastScannedAt: now
+      }
+    }).run();
+  }
+  return listProjects();
+}
+function listProjects() {
+  const rows = getDb().select().from(projects).where(ne(projects.status, "dismissed")).all();
+  return rows.map(rowToProject);
+}
+function getProject(id2) {
+  const rows = getDb().select().from(projects).where(eq(projects.id, id2)).all();
+  return rows[0] ? rowToProject(rows[0]) : null;
+}
+function dismissProject(id2) {
+  getDb().update(projects).set({ status: "dismissed" }).where(eq(projects.id, id2)).run();
+}
+function rowToProject(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    projectPath: row.projectPath,
+    provider: row.provider,
+    providerProjectDir: row.providerProjectDir,
+    lastActivityAt: row.lastActivityAt,
+    sessionCount: row.sessionCount,
+    skillCount: row.skillCount,
+    status: row.status,
+    lastScannedAt: row.lastScannedAt,
+    createdAt: row.createdAt
+  };
+}
+function listConversations(providerProjectDir, projectId) {
+  let files;
+  try {
+    files = require$$1$2.readdirSync(providerProjectDir).filter((f) => f.endsWith(".jsonl"));
+  } catch {
+    return [];
+  }
+  const conversations = [];
+  for (const file of files) {
+    const fullPath = require$$0$3.join(providerProjectDir, file);
+    const sessionId = file.replace(".jsonl", "");
+    try {
+      const stat = require$$1$2.statSync(fullPath);
+      const raw = require$$1$2.readFileSync(fullPath, "utf8");
+      const lines = raw.split("\n").filter(Boolean);
+      if (lines.length === 0) continue;
+      let startedAt = "";
+      let lastMessageAt = "";
+      let gitBranch = null;
+      let cwd = "";
+      let claudeVersion = null;
+      let summary = "";
+      let messageCount = 0;
+      const toolsUsed = /* @__PURE__ */ new Set();
+      for (const line of lines) {
+        let entry;
+        try {
+          entry = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        const timestamp2 = entry["timestamp"];
+        if (timestamp2) {
+          if (!startedAt) startedAt = timestamp2;
+          lastMessageAt = timestamp2;
+        }
+        if (!cwd && entry["cwd"]) cwd = entry["cwd"];
+        if (!gitBranch && entry["gitBranch"]) gitBranch = entry["gitBranch"];
+        if (!claudeVersion && entry["version"]) claudeVersion = entry["version"];
+        const type2 = entry["type"];
+        if (type2 === "user" && !entry["isMeta"]) {
+          messageCount++;
+          if (!summary) {
+            const msg = entry["message"];
+            if (msg?.content) {
+              if (typeof msg.content === "string") {
+                summary = msg.content.slice(0, 200);
+              } else if (Array.isArray(msg.content)) {
+                const textBlock = msg.content.find((c) => c.type === "text");
+                if (textBlock && "text" in textBlock) {
+                  summary = textBlock.text.slice(0, 200);
+                }
+              }
+            }
+            if (summary.includes("<command-name>") || summary.includes("<command-message>")) {
+              summary = "";
+            }
+          }
+        }
+        if (type2 === "assistant") {
+          messageCount++;
+          const msg = entry["message"];
+          if (Array.isArray(msg?.content)) {
+            for (const block of msg.content) {
+              const b = block;
+              if (b.type === "tool_use" && b.name) {
+                toolsUsed.add(b.name);
+              }
+            }
+          }
+        }
+      }
+      if (!startedAt) startedAt = stat.birthtime.toISOString();
+      if (!lastMessageAt) lastMessageAt = stat.mtime.toISOString();
+      conversations.push({
+        sessionId,
+        projectId,
+        startedAt,
+        lastMessageAt,
+        messageCount,
+        toolsUsed: Array.from(toolsUsed),
+        gitBranch,
+        cwd,
+        claudeVersion,
+        summary: summary || "(no summary)"
+      });
+    } catch {
+      continue;
+    }
+  }
+  conversations.sort(
+    (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+  );
+  return conversations;
+}
+function getConversationMessages(providerProjectDir, sessionId) {
+  const filePath = require$$0$3.join(providerProjectDir, `${sessionId}.jsonl`);
+  let raw;
+  try {
+    raw = require$$1$2.readFileSync(filePath, "utf8");
+  } catch {
+    return [];
+  }
+  const lines = raw.split("\n").filter(Boolean);
+  const messages = [];
+  for (const line of lines) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const type2 = entry["type"];
+    if (type2 !== "user" && type2 !== "assistant" && type2 !== "system") continue;
+    if (entry["isMeta"]) continue;
+    const uuid2 = entry["uuid"] ?? "";
+    const parentUuid = entry["parentUuid"] ?? null;
+    const timestamp2 = entry["timestamp"] ?? "";
+    const isSidechain = entry["isSidechain"] ?? false;
+    let content = "";
+    const toolUse = [];
+    const msg = entry["message"];
+    if (msg?.content) {
+      if (typeof msg.content === "string") {
+        content = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        const textParts = [];
+        for (const block of msg.content) {
+          const b = block;
+          if (b.type === "text" && b.text) {
+            textParts.push(b.text);
+          } else if (b.type === "tool_use" && b.name) {
+            toolUse.push({ name: b.name, input: b.input ?? {} });
+          }
+        }
+        content = textParts.join("");
+      }
+    }
+    if (!content.trim() && toolUse.length === 0) continue;
+    if (content.includes("<command-name>") || content.includes("<local-command-")) continue;
+    messages.push({
+      uuid: uuid2,
+      parentUuid,
+      type: type2,
+      content,
+      timestamp: timestamp2,
+      isSidechain,
+      toolUse: toolUse.length > 0 ? toolUse : void 0
+    });
+  }
+  return messages;
+}
+function parseSkillEvals(skillDir, skillName) {
+  const evalsDir = require$$0$3.join(skillDir, "evals");
+  const evalsJsonPath = require$$0$3.join(evalsDir, "evals.json");
+  if (!require$$1$2.existsSync(evalsJsonPath)) return null;
+  let rawDefs;
+  try {
+    rawDefs = JSON.parse(require$$1$2.readFileSync(evalsJsonPath, "utf8"));
+  } catch {
+    return null;
+  }
+  const rawEvals = rawDefs["evals"];
+  if (!Array.isArray(rawEvals)) return null;
+  const definitions2 = rawEvals.map((e) => ({
+    id: e["id"] ?? 0,
+    name: e["name"] ?? "",
+    prompt: e["prompt"] ?? "",
+    expectedOutput: e["expected_output"] ?? "",
+    assertions: e["assertions"] ?? []
+  }));
+  const workspaceDir = require$$0$3.join(evalsDir, "workspace");
+  const iterations = [];
+  if (require$$1$2.existsSync(workspaceDir)) {
+    let iterDirs;
+    try {
+      iterDirs = require$$1$2.readdirSync(workspaceDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.startsWith("iteration-")).map((e) => e.name).sort((a, b) => {
+        const numA = parseInt(a.replace("iteration-", ""), 10);
+        const numB = parseInt(b.replace("iteration-", ""), 10);
+        return numA - numB;
+      });
+    } catch {
+      iterDirs = [];
+    }
+    for (const iterDir of iterDirs) {
+      const iterNum = parseInt(iterDir.replace("iteration-", ""), 10);
+      const iterPath = require$$0$3.join(workspaceDir, iterDir);
+      const iteration = parseIteration(iterPath, iterNum, definitions2);
+      if (iteration) {
+        if (iterations.length > 0) {
+          const prev = iterations[iterations.length - 1];
+          iteration.deltaVsPreviousIteration = iteration.withSkill.passRate - prev.withSkill.passRate;
+        }
+        iterations.push(iteration);
+      }
+    }
+  }
+  const latest = iterations.length > 0 ? iterations[iterations.length - 1] : null;
+  return {
+    skillName,
+    definitions: definitions2,
+    iterations,
+    latestPassRate: latest ? latest.withSkill.passRate : null,
+    latestDelta: latest ? latest.delta.passRate : null
+  };
+}
+function parseIteration(iterPath, iterNum, definitions2) {
+  const benchmarkPath = require$$0$3.join(iterPath, "benchmark.json");
+  let benchmark = null;
+  if (require$$1$2.existsSync(benchmarkPath)) {
+    try {
+      benchmark = JSON.parse(require$$1$2.readFileSync(benchmarkPath, "utf8"));
+    } catch {
+    }
+  }
+  const feedbackPath2 = require$$0$3.join(iterPath, "feedback.json");
+  let feedback = null;
+  if (require$$1$2.existsSync(feedbackPath2)) {
+    try {
+      feedback = JSON.parse(require$$1$2.readFileSync(feedbackPath2, "utf8"));
+    } catch {
+    }
+  }
+  const perEvalFeedback = feedback?.["per_eval"] ?? {};
+  const gradings = [];
+  let withSkillTotalPassed = 0;
+  let withSkillTotalAssertions = 0;
+  let withSkillTotalTokens = 0;
+  let withSkillTotalDuration = 0;
+  let withoutSkillTotalPassed = 0;
+  let withoutSkillTotalAssertions = 0;
+  let withoutSkillTotalTokens = 0;
+  let withoutSkillTotalDuration = 0;
+  let hasWithoutSkill = false;
+  for (const def of definitions2) {
+    const evalDir = require$$0$3.join(iterPath, `eval-${def.name}`);
+    const withSkillRun = parseGradingRun(evalDir, "with_skill");
+    const withoutSkillRun = parseGradingRun(evalDir, "without_skill");
+    if (!withSkillRun) continue;
+    withSkillTotalPassed += withSkillRun.passed;
+    withSkillTotalAssertions += withSkillRun.total;
+    if (withSkillRun.timing) {
+      withSkillTotalTokens += withSkillRun.timing.totalTokens;
+      withSkillTotalDuration += withSkillRun.timing.durationMs;
+    }
+    if (withoutSkillRun) {
+      hasWithoutSkill = true;
+      withoutSkillTotalPassed += withoutSkillRun.passed;
+      withoutSkillTotalAssertions += withoutSkillRun.total;
+      if (withoutSkillRun.timing) {
+        withoutSkillTotalTokens += withoutSkillRun.timing.totalTokens;
+        withoutSkillTotalDuration += withoutSkillRun.timing.durationMs;
+      }
+    }
+    const deltaPassRate = withoutSkillRun ? withSkillRun.passRate - withoutSkillRun.passRate : null;
+    const deltaTokens = withSkillRun.timing && withoutSkillRun?.timing ? withSkillRun.timing.totalTokens - withoutSkillRun.timing.totalTokens : null;
+    const deltaDurationMs = withSkillRun.timing && withoutSkillRun?.timing ? withSkillRun.timing.durationMs - withoutSkillRun.timing.durationMs : null;
+    gradings.push({
+      evalName: def.name,
+      withSkill: withSkillRun,
+      withoutSkill: withoutSkillRun,
+      deltaPassRate,
+      deltaTokens,
+      deltaDurationMs,
+      humanFeedback: perEvalFeedback[def.name] ?? null
+    });
+  }
+  if (gradings.length === 0) return null;
+  const withSkillSummary = {
+    passRate: withSkillTotalAssertions > 0 ? withSkillTotalPassed / withSkillTotalAssertions : 0,
+    totalAssertions: withSkillTotalAssertions,
+    passedAssertions: withSkillTotalPassed,
+    failedAssertions: withSkillTotalAssertions - withSkillTotalPassed,
+    tokens: withSkillTotalTokens,
+    durationMs: withSkillTotalDuration
+  };
+  const withoutSkillSummary = hasWithoutSkill ? {
+    passRate: withoutSkillTotalAssertions > 0 ? withoutSkillTotalPassed / withoutSkillTotalAssertions : 0,
+    totalAssertions: withoutSkillTotalAssertions,
+    passedAssertions: withoutSkillTotalPassed,
+    failedAssertions: withoutSkillTotalAssertions - withoutSkillTotalPassed,
+    tokens: withoutSkillTotalTokens,
+    durationMs: withoutSkillTotalDuration
+  } : null;
+  const delta = {
+    passRate: withoutSkillSummary ? withSkillSummary.passRate - withoutSkillSummary.passRate : null,
+    tokens: withoutSkillSummary ? withSkillSummary.tokens - withoutSkillSummary.tokens : null,
+    durationMs: withoutSkillSummary ? withSkillSummary.durationMs - withoutSkillSummary.durationMs : null
+  };
+  const timestamp2 = benchmark?.["timestamp"] ?? null;
+  return {
+    number: iterNum,
+    timestamp: timestamp2,
+    withSkill: withSkillSummary,
+    withoutSkill: withoutSkillSummary,
+    delta,
+    deltaVsPreviousIteration: null,
+    gradings
+  };
+}
+function parseGradingRun(evalDir, config2) {
+  const configDir = require$$0$3.join(evalDir, config2);
+  const gradingPath = require$$0$3.join(configDir, "grading.json");
+  if (!require$$1$2.existsSync(gradingPath)) return null;
+  let raw;
+  try {
+    raw = JSON.parse(require$$1$2.readFileSync(gradingPath, "utf8"));
+  } catch {
+    return null;
+  }
+  const assertionResults = raw["assertion_results"] ?? [];
+  const summary = raw["summary"] ?? {};
+  const assertions = assertionResults.map((a) => ({
+    type: a["type"] ?? void 0,
+    text: a["text"] ?? "",
+    passed: a["passed"] ?? false,
+    evidence: a["evidence"] ?? ""
+  }));
+  const passed = summary["passed"] ?? assertions.filter((a) => a.passed).length;
+  const failed = summary["failed"] ?? assertions.filter((a) => !a.passed).length;
+  const total = summary["total"] ?? assertions.length;
+  const passRate = summary["pass_rate"] ?? (total > 0 ? passed / total : 0);
+  const timing = parseTiming(configDir);
+  const graderModel = raw["grader_model"] ?? null;
+  return {
+    config: config2,
+    passed,
+    failed,
+    total,
+    passRate,
+    assertions,
+    notes: raw["notes"] ?? "",
+    timing,
+    graderModel
+  };
+}
+function parseTiming(configDir) {
+  const timingPath = require$$0$3.join(configDir, "timing.json");
+  if (!require$$1$2.existsSync(timingPath)) return null;
+  try {
+    const raw = JSON.parse(require$$1$2.readFileSync(timingPath, "utf8"));
+    return {
+      totalTokens: raw["total_tokens"] ?? 0,
+      durationMs: raw["duration_ms"] ?? 0,
+      inputTokens: raw["input_tokens"],
+      outputTokens: raw["output_tokens"],
+      model: raw["model"]
+    };
+  } catch {
+    return null;
+  }
+}
+function countAudits$2(skillDir) {
+  const auditsDir = require$$0$3.join(skillDir, "audits");
+  if (!require$$1$2.existsSync(auditsDir)) return 0;
+  try {
+    return require$$1$2.readdirSync(auditsDir).filter((f) => f.startsWith("audit-") && f.endsWith(".md")).length;
+  } catch {
+    return 0;
+  }
+}
+const HIDDEN_PATHS$2 = /* @__PURE__ */ new Set(["evals/workspace"]);
+function shouldHide$2(relativePath) {
+  for (const hidden of HIDDEN_PATHS$2) {
+    if (relativePath === hidden || relativePath.startsWith(hidden + "/")) return true;
+  }
+  return false;
+}
+function scanDirectory$2(dirPath, basePath) {
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const result = [];
+  for (const entry of entries) {
+    const fullPath = require$$0$3.join(dirPath, entry.name);
+    const relPath = require$$0$3.relative(basePath, fullPath);
+    if (shouldHide$2(relPath)) continue;
+    if (entry.isDirectory()) {
+      result.push({
+        name: entry.name,
+        relativePath: relPath,
+        isDirectory: true,
+        children: scanDirectory$2(fullPath, basePath)
+      });
+    } else {
+      let sizeBytes = 0;
+      try {
+        sizeBytes = require$$1$2.statSync(fullPath).size;
+      } catch {
+      }
+      result.push({
+        name: entry.name,
+        relativePath: relPath,
+        isDirectory: false,
+        sizeBytes
+      });
+    }
+  }
+  result.sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return result;
+}
+function listSkills(projectPath, projectId) {
+  const skillsDir = require$$0$3.join(projectPath, ".claude", "skills");
+  if (!require$$1$2.existsSync(skillsDir)) return [];
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(skillsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+  const skills = [];
+  for (const name of entries) {
+    const skillDir = require$$0$3.join(skillsDir, name);
+    const skillMdPath = require$$0$3.join(skillDir, "SKILL.md");
+    let content = "";
+    if (require$$1$2.existsSync(skillMdPath)) {
+      try {
+        content = require$$1$2.readFileSync(skillMdPath, "utf8");
+      } catch {
+      }
+    }
+    skills.push({
+      name,
+      projectId,
+      skillPath: skillDir,
+      content,
+      hasEvals: require$$1$2.existsSync(require$$0$3.join(skillDir, "evals")),
+      hasReferences: require$$1$2.existsSync(require$$0$3.join(skillDir, "references")),
+      hasTemplates: require$$1$2.existsSync(require$$0$3.join(skillDir, "templates")),
+      files: scanDirectory$2(skillDir, skillDir),
+      evals: parseSkillEvals(skillDir, name),
+      auditCount: countAudits$2(skillDir)
+    });
+  }
+  skills.sort((a, b) => a.name.localeCompare(b.name));
+  return skills;
+}
+function getSkill(projectPath, projectId, skillName) {
+  const skillDir = require$$0$3.join(projectPath, ".claude", "skills", skillName);
+  if (!require$$1$2.existsSync(skillDir)) return null;
+  const skillMdPath = require$$0$3.join(skillDir, "SKILL.md");
+  let content = "";
+  if (require$$1$2.existsSync(skillMdPath)) {
+    try {
+      content = require$$1$2.readFileSync(skillMdPath, "utf8");
+    } catch {
+    }
+  }
+  return {
+    name: skillName,
+    projectId,
+    skillPath: skillDir,
+    content,
+    hasEvals: require$$1$2.existsSync(require$$0$3.join(skillDir, "evals")),
+    hasReferences: require$$1$2.existsSync(require$$0$3.join(skillDir, "references")),
+    hasTemplates: require$$1$2.existsSync(require$$0$3.join(skillDir, "templates")),
+    files: scanDirectory$2(skillDir, skillDir),
+    evals: parseSkillEvals(skillDir, skillName),
+    auditCount: countAudits$2(skillDir)
+  };
+}
+function saveSkill(projectPath, skillName, content) {
+  const skillMdPath = require$$0$3.join(projectPath, ".claude", "skills", skillName, "SKILL.md");
+  require$$1$2.writeFileSync(skillMdPath, content, "utf8");
+}
+function readSkillFile(projectPath, skillName, relativePath) {
+  const filePath = require$$0$3.join(projectPath, ".claude", "skills", skillName, relativePath);
+  const skillDir = require$$0$3.join(projectPath, ".claude", "skills", skillName);
+  if (!filePath.startsWith(skillDir)) return null;
+  if (!require$$1$2.existsSync(filePath)) return null;
+  try {
+    return require$$1$2.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+function saveSkillFile(projectPath, skillName, relativePath, content) {
+  const filePath = require$$0$3.join(projectPath, ".claude", "skills", skillName, relativePath);
+  const skillDir = require$$0$3.join(projectPath, ".claude", "skills", skillName);
+  if (!filePath.startsWith(skillDir)) return;
+  require$$1$2.writeFileSync(filePath, content, "utf8");
+}
+const NAKIROS_SKILLS_DIR$1 = require$$0$3.join(os.homedir(), ".nakiros", "skills");
+const CLAUDE_SKILLS_DIR = require$$0$3.join(os.homedir(), ".claude", "skills");
+function getBundledSkillsRomDir() {
+  const candidates = [
+    require$$0$3.join(__dirname, "../../bundled-skills"),
+    require$$0$3.join(process.resourcesPath ?? "", "bundled-skills"),
+    require$$0$3.join(process.cwd(), "apps/desktop/bundled-skills")
+  ];
+  for (const candidate of candidates) {
+    if (require$$1$2.existsSync(candidate)) return candidate;
+  }
+  return candidates[0];
+}
+function copyDirSync(src2, dest) {
+  require$$1$2.mkdirSync(dest, { recursive: true });
+  const entries = require$$1$2.readdirSync(src2, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = require$$0$3.join(src2, entry.name);
+    const destPath = require$$0$3.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirSync(srcPath, destPath);
+    } else {
+      require$$1$2.writeFileSync(destPath, require$$1$2.readFileSync(srcPath));
+    }
+  }
+}
+function syncBundledSkills() {
+  const romDir = getBundledSkillsRomDir();
+  if (!require$$1$2.existsSync(romDir)) return [];
+  require$$1$2.mkdirSync(NAKIROS_SKILLS_DIR$1, { recursive: true });
+  require$$1$2.mkdirSync(CLAUDE_SKILLS_DIR, { recursive: true });
+  const available = [];
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(romDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+  for (const skillName of entries) {
+    const romSkill = require$$0$3.join(romDir, skillName);
+    const nakirosSkill = require$$0$3.join(NAKIROS_SKILLS_DIR$1, skillName);
+    const claudeSkillLink = require$$0$3.join(CLAUDE_SKILLS_DIR, skillName);
+    if (!require$$1$2.existsSync(nakirosSkill)) {
+      try {
+        copyDirSync(romSkill, nakirosSkill);
+        console.log(`[Nakiros] Seeded bundled skill "${skillName}" → ${nakirosSkill}`);
+      } catch (err) {
+        console.error(`[Nakiros] Failed to seed skill "${skillName}":`, err);
+        continue;
+      }
+    }
+    try {
+      if (require$$1$2.existsSync(claudeSkillLink)) {
+        const stat = require$$1$2.lstatSync(claudeSkillLink);
+        if (stat.isSymbolicLink()) {
+        } else {
+          console.warn(`[Nakiros] ~/.claude/skills/${skillName} is a real directory; skipping symlink.`);
+          available.push(skillName);
+          continue;
+        }
+      } else {
+        require$$1$2.symlinkSync(nakirosSkill, claudeSkillLink, "dir");
+        console.log(`[Nakiros] Linked ${claudeSkillLink} → ${nakirosSkill}`);
+      }
+      available.push(skillName);
+    } catch (err) {
+      console.error(`[Nakiros] Failed to link skill "${skillName}" into ~/.claude/skills/:`, err);
+    }
+  }
+  return available;
+}
+function getNakirosSkillsDir() {
+  return NAKIROS_SKILLS_DIR$1;
+}
+function promoteBundledSkill(skillName) {
+  const src2 = require$$0$3.join(NAKIROS_SKILLS_DIR$1, skillName);
+  const dest = require$$0$3.join(getBundledSkillsRomDir(), skillName);
+  if (!require$$1$2.existsSync(src2)) {
+    throw new Error(`Cannot promote: ${src2} does not exist`);
+  }
+  if (!require$$1$2.existsSync(getBundledSkillsRomDir())) {
+    throw new Error(
+      `Cannot promote: bundled-skills ROM directory not found. This action only works in dev (the ROM is read-only in production builds).`
+    );
+  }
+  require$$1$2.mkdirSync(dest, { recursive: true });
+  copyDirSelective(src2, dest);
+  return dest;
+}
+function copyDirSelective(src2, dest) {
+  const skipNames = /* @__PURE__ */ new Set(["audits", "workspace"]);
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(src2, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  require$$1$2.mkdirSync(dest, { recursive: true });
+  for (const entry of entries) {
+    if (skipNames.has(entry.name)) continue;
+    const srcPath = require$$0$3.join(src2, entry.name);
+    const destPath = require$$0$3.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirSelective(srcPath, destPath);
+    } else if (entry.isFile()) {
+      require$$1$2.writeFileSync(destPath, require$$1$2.readFileSync(srcPath));
+    }
+  }
+}
+const HIDDEN_PATHS$1 = /* @__PURE__ */ new Set(["evals/workspace"]);
+function shouldHide$1(relativePath) {
+  for (const hidden of HIDDEN_PATHS$1) {
+    if (relativePath === hidden || relativePath.startsWith(hidden + "/")) return true;
+  }
+  return false;
+}
+function getBundledSkillsDir() {
+  return getNakirosSkillsDir();
+}
+function scanDirectory$1(dirPath, basePath) {
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const result = [];
+  for (const entry of entries) {
+    const fullPath = require$$0$3.join(dirPath, entry.name);
+    const relPath = require$$0$3.relative(basePath, fullPath);
+    if (shouldHide$1(relPath)) continue;
+    if (entry.isDirectory()) {
+      result.push({
+        name: entry.name,
+        relativePath: relPath,
+        isDirectory: true,
+        children: scanDirectory$1(fullPath, basePath)
+      });
+    } else {
+      let sizeBytes = 0;
+      try {
+        sizeBytes = require$$1$2.statSync(fullPath).size;
+      } catch {
+      }
+      result.push({
+        name: entry.name,
+        relativePath: relPath,
+        isDirectory: false,
+        sizeBytes
+      });
+    }
+  }
+  result.sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return result;
+}
+function buildSkill$1(skillDir, skillName) {
+  const skillMdPath = require$$0$3.join(skillDir, "SKILL.md");
+  let content = "";
+  if (require$$1$2.existsSync(skillMdPath)) {
+    try {
+      content = require$$1$2.readFileSync(skillMdPath, "utf8");
+    } catch {
+    }
+  }
+  return {
+    name: skillName,
+    projectId: "nakiros-bundled",
+    skillPath: skillDir,
+    content,
+    hasEvals: require$$1$2.existsSync(require$$0$3.join(skillDir, "evals")),
+    hasReferences: require$$1$2.existsSync(require$$0$3.join(skillDir, "references")),
+    hasTemplates: require$$1$2.existsSync(require$$0$3.join(skillDir, "templates")),
+    files: scanDirectory$1(skillDir, skillDir),
+    evals: parseSkillEvals(skillDir, skillName),
+    auditCount: countAudits$1(skillDir)
+  };
+}
+function countAudits$1(skillDir) {
+  const auditsDir = require$$0$3.join(skillDir, "audits");
+  if (!require$$1$2.existsSync(auditsDir)) return 0;
+  try {
+    return require$$1$2.readdirSync(auditsDir).filter((f) => f.startsWith("audit-") && f.endsWith(".md")).length;
+  } catch {
+    return 0;
+  }
+}
+function listBundledSkills() {
+  const dir = getBundledSkillsDir();
+  if (!require$$1$2.existsSync(dir)) return [];
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+  const skills = entries.map((name) => buildSkill$1(require$$0$3.join(dir, name), name));
+  skills.sort((a, b) => a.name.localeCompare(b.name));
+  return skills;
+}
+function readBundledSkill(skillName) {
+  const dir = getBundledSkillsDir();
+  const skillDir = require$$0$3.join(dir, skillName);
+  if (!require$$1$2.existsSync(skillDir)) return null;
+  return buildSkill$1(skillDir, skillName);
+}
+function readBundledSkillFile(skillName, relativePath) {
+  const dir = getBundledSkillsDir();
+  const filePath = require$$0$3.join(dir, skillName, relativePath);
+  const skillDir = require$$0$3.join(dir, skillName);
+  if (!filePath.startsWith(skillDir)) return null;
+  if (!require$$1$2.existsSync(filePath)) return null;
+  try {
+    return require$$1$2.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+function saveBundledSkillFile(skillName, relativePath, content) {
+  const dir = getBundledSkillsDir();
+  const filePath = require$$0$3.join(dir, skillName, relativePath);
+  const skillDir = require$$0$3.join(dir, skillName);
+  if (!filePath.startsWith(skillDir)) return;
+  require$$1$2.writeFileSync(filePath, content, "utf8");
+}
+const HIDDEN_PATHS = /* @__PURE__ */ new Set(["evals/workspace"]);
+function shouldHide(relativePath) {
+  for (const hidden of HIDDEN_PATHS) {
+    if (relativePath === hidden || relativePath.startsWith(hidden + "/")) return true;
+  }
+  return false;
+}
+function getClaudeGlobalSkillsDir() {
+  return require$$0$3.join(os.homedir(), ".claude", "skills");
+}
+const NAKIROS_SKILLS_DIR = require$$0$3.join(os.homedir(), ".nakiros", "skills");
+function isNakirosManagedSymlink(path) {
+  try {
+    const stat = require$$1$2.lstatSync(path);
+    if (!stat.isSymbolicLink()) return false;
+    const resolved = require$$1$2.realpathSync(path);
+    return resolved === NAKIROS_SKILLS_DIR || resolved.startsWith(NAKIROS_SKILLS_DIR + "/");
+  } catch {
+    return false;
+  }
+}
+function scanDirectory(dirPath, basePath) {
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const result = [];
+  for (const entry of entries) {
+    const fullPath = require$$0$3.join(dirPath, entry.name);
+    const relPath = require$$0$3.relative(basePath, fullPath);
+    if (shouldHide(relPath)) continue;
+    if (entry.isDirectory()) {
+      result.push({
+        name: entry.name,
+        relativePath: relPath,
+        isDirectory: true,
+        children: scanDirectory(fullPath, basePath)
+      });
+    } else {
+      let sizeBytes = 0;
+      try {
+        sizeBytes = require$$1$2.statSync(fullPath).size;
+      } catch {
+      }
+      result.push({
+        name: entry.name,
+        relativePath: relPath,
+        isDirectory: false,
+        sizeBytes
+      });
+    }
+  }
+  result.sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return result;
+}
+function countAudits(skillDir) {
+  const auditsDir = require$$0$3.join(skillDir, "audits");
+  if (!require$$1$2.existsSync(auditsDir)) return 0;
+  try {
+    return require$$1$2.readdirSync(auditsDir).filter((f) => f.startsWith("audit-") && f.endsWith(".md")).length;
+  } catch {
+    return 0;
+  }
+}
+function buildSkill(skillDir, skillName) {
+  const skillMdPath = require$$0$3.join(skillDir, "SKILL.md");
+  let content = "";
+  if (require$$1$2.existsSync(skillMdPath)) {
+    try {
+      content = require$$1$2.readFileSync(skillMdPath, "utf8");
+    } catch {
+    }
+  }
+  return {
+    name: skillName,
+    projectId: "claude-global",
+    skillPath: skillDir,
+    content,
+    hasEvals: require$$1$2.existsSync(require$$0$3.join(skillDir, "evals")),
+    hasReferences: require$$1$2.existsSync(require$$0$3.join(skillDir, "references")),
+    hasTemplates: require$$1$2.existsSync(require$$0$3.join(skillDir, "templates")),
+    files: scanDirectory(skillDir, skillDir),
+    evals: parseSkillEvals(skillDir, skillName),
+    auditCount: countAudits(skillDir)
+  };
+}
+function listClaudeGlobalSkills() {
+  const dir = getClaudeGlobalSkillsDir();
+  if (!require$$1$2.existsSync(dir)) return [];
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const skills = [];
+  for (const entry of entries) {
+    const fullPath = require$$0$3.join(dir, entry.name);
+    let isSkillDir = false;
+    try {
+      isSkillDir = require$$1$2.statSync(fullPath).isDirectory();
+    } catch {
+      continue;
+    }
+    if (!isSkillDir) continue;
+    if (isNakirosManagedSymlink(fullPath)) continue;
+    skills.push(buildSkill(fullPath, entry.name));
+  }
+  skills.sort((a, b) => a.name.localeCompare(b.name));
+  return skills;
+}
+function readClaudeGlobalSkill(skillName) {
+  const dir = getClaudeGlobalSkillsDir();
+  const skillDir = require$$0$3.join(dir, skillName);
+  if (!require$$1$2.existsSync(skillDir)) return null;
+  if (isNakirosManagedSymlink(skillDir)) return null;
+  return buildSkill(skillDir, skillName);
+}
+function readClaudeGlobalSkillFile(skillName, relativePath) {
+  const dir = getClaudeGlobalSkillsDir();
+  const filePath = require$$0$3.join(dir, skillName, relativePath);
+  const skillDir = require$$0$3.join(dir, skillName);
+  if (!filePath.startsWith(skillDir)) return null;
+  if (!require$$1$2.existsSync(filePath)) return null;
+  try {
+    return require$$1$2.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+function saveClaudeGlobalSkillFile(skillName, relativePath, content) {
+  const dir = getClaudeGlobalSkillsDir();
+  const filePath = require$$0$3.join(dir, skillName, relativePath);
+  const skillDir = require$$0$3.join(dir, skillName);
+  if (!filePath.startsWith(skillDir)) return;
+  require$$1$2.writeFileSync(filePath, content, "utf8");
+}
+const MAX_OUTPUT_FILE_BYTES = 6e4;
+const MAX_TOTAL_OUTPUTS_BYTES = 12e4;
+const JUDGE_MODEL = "sonnet";
+function readOutputsDigest(workdir) {
+  const outputsDir = require$$0$3.join(workdir, "outputs");
+  if (!require$$1$2.existsSync(outputsDir)) return "(no outputs/ directory — agent produced nothing)";
+  let total = 0;
+  const parts = [];
+  const collect = (dir, prefix) => {
+    let entries;
+    try {
+      entries = require$$1$2.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const fullPath = require$$0$3.join(dir, e.name);
+      const relPath = `${prefix}${e.name}`;
+      if (e.isDirectory()) {
+        collect(fullPath, `${relPath}/`);
+        continue;
+      }
+      try {
+        const size = require$$1$2.statSync(fullPath).size;
+        if (total + Math.min(size, MAX_OUTPUT_FILE_BYTES) > MAX_TOTAL_OUTPUTS_BYTES) {
+          parts.push(`
+--- ${relPath} (skipped, total digest size exceeded) ---`);
+          continue;
+        }
+        const raw = require$$1$2.readFileSync(fullPath, "utf8");
+        const content = raw.length > MAX_OUTPUT_FILE_BYTES ? raw.slice(0, MAX_OUTPUT_FILE_BYTES) + "\n...[truncated]" : raw;
+        parts.push(`
+--- ${relPath} ---
+${content}`);
+        total += content.length;
+      } catch {
+        parts.push(`
+--- ${relPath} (read error) ---`);
+      }
+    }
+  };
+  collect(outputsDir, "");
+  if (parts.length === 0) return "(outputs/ directory is empty)";
+  return parts.join("\n");
+}
+function buildBatchJudgePrompt(args) {
+  const assertionList = args.assertions.map((a, i) => `${i + 1}. ${a.text}`).join("\n");
+  return [
+    "You are a strict evaluation judge. You will grade several assertions against the outputs of a single run.",
+    "",
+    "ASSERTIONS TO GRADE (in order):",
+    assertionList,
+    "",
+    "AGENT FINAL ASSISTANT MESSAGE (may contain the result when the agent did not write files):",
+    args.assistantText || "(no assistant text available)",
+    "",
+    "FILES PRODUCED IN outputs/ DIRECTORY:",
+    args.outputsDigest,
+    "",
+    "Grading rules:",
+    "- Grade each assertion independently.",
+    "- Require concrete evidence for PASS — quote or reference a specific fragment.",
+    "- If evidence is missing, partial, or ambiguous, mark FAIL.",
+    "- Do not invent content that is not in the outputs or assistant message.",
+    "",
+    "Respond ONLY with a JSON array (one object per assertion, same order, no prose around it):",
+    "[",
+    '  {"passed": true, "evidence": "short quote or explanation, max 400 chars"},',
+    '  {"passed": false, "evidence": "..."},',
+    "  ...",
+    "]"
+  ].join("\n");
+}
+function parseBatchJudgeResponse(raw, expectedCount) {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/\[[\s\S]*\]/);
+  const fallback = (reason) => Array.from({ length: expectedCount }, () => ({ passed: false, evidence: reason }));
+  if (!match) return fallback(`Could not parse judge response: ${trimmed.slice(0, 300)}`);
+  let arr;
+  try {
+    arr = JSON.parse(match[0]);
+  } catch (err) {
+    return fallback(`JSON parse failed: ${err.message}`);
+  }
+  if (!Array.isArray(arr)) return fallback("Judge did not return an array");
+  const results = [];
+  for (let i = 0; i < expectedCount; i++) {
+    const item = arr[i];
+    if (!item) {
+      results.push({ passed: false, evidence: "Judge returned fewer items than assertions" });
+      continue;
+    }
+    results.push({
+      passed: item.passed === true,
+      evidence: typeof item.evidence === "string" ? item.evidence.slice(0, 400) : ""
+    });
+  }
+  return results;
+}
+async function gradeLlmAssertionsBatch(workdir, assertions, assistantText) {
+  if (assertions.length === 0) return [];
+  const outputsDigest = readOutputsDigest(workdir);
+  const prompt = buildBatchJudgePrompt({ assertions, assistantText, outputsDigest });
+  return new Promise((resolve2) => {
+    let stdout = "";
+    let stderr = "";
+    const child = child_process.spawn("claude", ["--model", JUDGE_MODEL, "--output-format", "text", "--print", prompt], {
+      cwd: workdir,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("close", (code2) => {
+      if (code2 !== 0) {
+        const reason = `Judge exited with code ${code2}: ${stderr.slice(-200)}`;
+        resolve2(Array.from({ length: assertions.length }, () => ({ passed: false, evidence: reason })));
+        return;
+      }
+      resolve2(parseBatchJudgeResponse(stdout, assertions.length));
+    });
+    child.on("error", (err) => {
+      const reason = `Failed to spawn judge: ${err.message}`;
+      resolve2(Array.from({ length: assertions.length }, () => ({ passed: false, evidence: reason })));
+    });
+  });
+}
+function readJson(path) {
+  if (!require$$1$2.existsSync(path)) return null;
+  try {
+    return JSON.parse(require$$1$2.readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+function collectConfigStats(evalDir, config2) {
+  const configDir = require$$0$3.join(evalDir, config2);
+  if (!require$$1$2.existsSync(configDir)) return void 0;
+  const grading = readJson(require$$0$3.join(configDir, "grading.json"));
+  const timing = readJson(require$$0$3.join(configDir, "timing.json"));
+  if (!grading) return void 0;
+  return {
+    passed: grading.summary.passed,
+    failed: grading.summary.failed,
+    total: grading.summary.total,
+    pass_rate: grading.summary.pass_rate,
+    tokens: timing?.total_tokens ?? 0,
+    duration_ms: timing?.duration_ms ?? 0
+  };
+}
+function aggregateRunSummary(evals, key) {
+  const configs = Object.values(evals).map((e) => e[key]).filter((c) => Boolean(c));
+  if (configs.length === 0) {
+    return {
+      pass_rate: { mean: 0 },
+      total_assertions: 0,
+      passed_assertions: 0,
+      failed_assertions: 0,
+      tokens: { mean: 0 },
+      duration_ms: { mean: 0 }
+    };
+  }
+  const total = configs.reduce((s, c) => s + c.total, 0);
+  const passed = configs.reduce((s, c) => s + c.passed, 0);
+  const failed = configs.reduce((s, c) => s + c.failed, 0);
+  const tokens = configs.reduce((s, c) => s + c.tokens, 0);
+  const duration2 = configs.reduce((s, c) => s + c.duration_ms, 0);
+  return {
+    pass_rate: { mean: total > 0 ? passed / total : 0 },
+    total_assertions: total,
+    passed_assertions: passed,
+    failed_assertions: failed,
+    tokens: { mean: Math.round(tokens / configs.length) },
+    duration_ms: { mean: Math.round(duration2 / configs.length) }
+  };
+}
+function writeIterationBenchmark(skillDir, skillName, iteration) {
+  const iterDir = require$$0$3.join(skillDir, "evals", "workspace", `iteration-${iteration}`);
+  if (!require$$1$2.existsSync(iterDir)) return;
+  let evalDirs;
+  try {
+    evalDirs = require$$1$2.readdirSync(iterDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.startsWith("eval-")).map((e) => e.name);
+  } catch {
+    return;
+  }
+  const perEval = {};
+  for (const evalDirName of evalDirs) {
+    const evalName = evalDirName.replace(/^eval-/, "");
+    const evalDir = require$$0$3.join(iterDir, evalDirName);
+    const withSkill = collectConfigStats(evalDir, "with_skill");
+    const withoutSkill = collectConfigStats(evalDir, "without_skill");
+    const stats = {};
+    if (withSkill) stats.with_skill = withSkill;
+    if (withoutSkill) stats.without_skill = withoutSkill;
+    if (withSkill && withoutSkill) {
+      stats.delta = {
+        pass_rate: withSkill.pass_rate - withoutSkill.pass_rate,
+        tokens: withSkill.tokens - withoutSkill.tokens,
+        duration_ms: withSkill.duration_ms - withoutSkill.duration_ms
+      };
+    }
+    perEval[evalName] = stats;
+  }
+  const withAgg = aggregateRunSummary(perEval, "with_skill");
+  const withoutAgg = aggregateRunSummary(perEval, "without_skill");
+  const delta = {
+    pass_rate: withAgg.pass_rate.mean - withoutAgg.pass_rate.mean,
+    tokens: withAgg.tokens.mean - withoutAgg.tokens.mean,
+    duration_ms: withAgg.duration_ms.mean - withoutAgg.duration_ms.mean
+  };
+  const benchmark = {
+    skill_name: skillName,
+    iteration,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    run_summary: {
+      with_skill: withAgg,
+      without_skill: withoutAgg,
+      delta
+    },
+    per_eval: perEval
+  };
+  require$$1$2.writeFileSync(require$$0$3.join(iterDir, "benchmark.json"), JSON.stringify(benchmark, null, 2), "utf8");
+}
+function readLatestIterationBenchmark(skillDir) {
+  const workspaceDir = require$$0$3.join(skillDir, "evals", "workspace");
+  if (!require$$1$2.existsSync(workspaceDir)) return null;
+  let iterNums;
+  try {
+    iterNums = require$$1$2.readdirSync(workspaceDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.startsWith("iteration-")).map((e) => parseInt(e.name.replace("iteration-", ""), 10)).filter((n) => !Number.isNaN(n)).sort((a, b) => b - a);
+  } catch {
+    return null;
+  }
+  for (const iteration of iterNums) {
+    const benchmarkPath = require$$0$3.join(workspaceDir, `iteration-${iteration}`, "benchmark.json");
+    if (!require$$1$2.existsSync(benchmarkPath)) continue;
+    let raw;
+    try {
+      raw = JSON.parse(require$$1$2.readFileSync(benchmarkPath, "utf8"));
+    } catch {
+      continue;
+    }
+    const toSummary = (agg) => {
+      if (!agg) return null;
+      const passRate = agg.pass_rate?.mean ?? 0;
+      const total = agg.total_assertions ?? 0;
+      const passed = agg.passed_assertions ?? 0;
+      return {
+        passRate,
+        totalAssertions: total,
+        passedAssertions: passed,
+        failedAssertions: agg.failed_assertions ?? total - passed,
+        tokens: agg.tokens?.mean ?? 0,
+        durationMs: agg.duration_ms?.mean ?? 0
+      };
+    };
+    const withSkill = toSummary(raw.run_summary?.with_skill);
+    if (!withSkill) continue;
+    return {
+      iteration,
+      timestamp: raw.timestamp ?? null,
+      withSkill,
+      withoutSkill: toSummary(raw.run_summary?.without_skill)
+    };
+  }
+  return null;
+}
+const EVAL_SKILL_PREFIX = "nakiros-eval-";
+function getScanRoots() {
+  return [
+    require$$0$3.join(os.homedir(), ".claude", "skills"),
+    require$$0$3.join(os.homedir(), ".nakiros", "skills")
+  ];
+}
+function removeIfDirectory(path) {
+  if (!require$$1$2.existsSync(path)) return false;
+  try {
+    const stat = require$$1$2.lstatSync(path);
+    if (stat.isSymbolicLink()) return false;
+    if (!stat.isDirectory()) return false;
+    require$$1$2.rmSync(path, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function cleanupEvalArtifacts() {
+  const removed = [];
+  for (const root of getScanRoots()) {
+    if (!require$$1$2.existsSync(root)) continue;
+    let entries;
+    try {
+      entries = require$$1$2.readdirSync(root);
+    } catch {
+      continue;
+    }
+    for (const name of entries) {
+      if (!name.startsWith(EVAL_SKILL_PREFIX)) continue;
+      const full = require$$0$3.join(root, name);
+      if (removeIfDirectory(full)) {
+        removed.push(full);
+      }
+    }
+  }
+  if (removed.length > 0) {
+    console.log(`[eval-artifact-cleanup] Removed ${removed.length} stray eval skill(s):`, removed);
+  }
+  return removed;
+}
+const execFileAsync$1 = require$$1$1.promisify(child_process.execFile);
+const runs = /* @__PURE__ */ new Map();
+let runCounter = 0;
+const DEFAULT_MAX_CONCURRENT = 4;
+function generateRunId$2() {
+  return `run_${Date.now().toString(36)}_${(++runCounter).toString(36)}`;
+}
+function getSkillDir(request2, resolveSkillDir) {
+  return resolveSkillDir(request2);
+}
+function computeNextIteration(skillDir) {
+  const workspaceDir = require$$0$3.join(skillDir, "evals", "workspace");
+  if (!require$$1$2.existsSync(workspaceDir)) return 1;
+  try {
+    const dirs = require$$1$2.readdirSync(workspaceDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.startsWith("iteration-")).map((e) => parseInt(e.name.replace("iteration-", ""), 10)).filter((n) => !Number.isNaN(n));
+    return dirs.length > 0 ? Math.max(...dirs) + 1 : 1;
+  } catch {
+    return 1;
+  }
+}
+function prepareEvalWorkdir(skillDir, iteration, evalName, config2) {
+  const workdir = require$$0$3.join(skillDir, "evals", "workspace", `iteration-${iteration}`, `eval-${evalName}`, config2);
+  require$$1$2.mkdirSync(require$$0$3.join(workdir, "outputs"), { recursive: true });
+  const claudeDir = require$$0$3.join(workdir, ".claude");
+  require$$1$2.mkdirSync(claudeDir, { recursive: true });
+  const settingsPath = require$$0$3.join(claudeDir, "settings.local.json");
+  if (!require$$1$2.existsSync(settingsPath)) {
+    const settings = {
+      permissions: {
+        defaultMode: "acceptEdits",
+        allow: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+      }
+    };
+    if (config2 === "without_skill") {
+      settings.permissions.deny = ["Skill"];
+    }
+    require$$1$2.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+  }
+  return workdir;
+}
+function copyFixtures(skillDir, workdir, fixtureRelPaths) {
+  for (const relPath of fixtureRelPaths) {
+    const src2 = require$$0$3.join(skillDir, relPath);
+    if (!require$$1$2.existsSync(src2)) continue;
+    const dest = require$$0$3.join(workdir, relPath);
+    require$$1$2.mkdirSync(require$$0$3.join(dest, ".."), { recursive: true });
+    try {
+      require$$1$2.cpSync(src2, dest);
+    } catch {
+    }
+  }
+}
+function buildClaudeArgs$2(args) {
+  const cliArgs = ["--output-format", "stream-json", "--verbose"];
+  for (const d of args.addDirs) {
+    cliArgs.push("--add-dir", d);
+  }
+  if (args.resumeSessionId) {
+    cliArgs.push("--resume", args.resumeSessionId);
+  }
+  cliArgs.push("--print", args.prompt);
+  return cliArgs;
+}
+function persistRunJson$2(run) {
+  const runJsonPath = require$$0$3.join(run.workdir, "run.json");
+  require$$1$2.writeFileSync(runJsonPath, JSON.stringify(run, null, 2), "utf8");
+}
+function saveTimingJson(run) {
+  const timingPath = require$$0$3.join(run.workdir, "timing.json");
+  const payload = {
+    total_tokens: run.tokensUsed,
+    duration_ms: run.durationMs
+  };
+  require$$1$2.writeFileSync(timingPath, JSON.stringify(payload, null, 2), "utf8");
+}
+async function gradeScriptAssertion(workdir, assertion) {
+  if (!assertion.script) {
+    return { type: "script", text: assertion.text, passed: false, evidence: "Missing script command" };
+  }
+  try {
+    const { stdout } = await execFileAsync$1("sh", ["-c", assertion.script], { cwd: workdir });
+    return {
+      type: "script",
+      text: assertion.text,
+      passed: true,
+      evidence: stdout.trim().slice(0, 400) || "Exit code 0"
+    };
+  } catch (err) {
+    const error = err;
+    return {
+      type: "script",
+      text: assertion.text,
+      passed: false,
+      evidence: `Exit code ${error.code ?? 1}: ${(error.stderr ?? "").trim().slice(0, 300)}`
+    };
+  }
+}
+async function gradeRun(run, definition) {
+  const assertionDefs = normalizeAssertions(definition.assertions);
+  const lastAssistantText = run.turns.filter((t) => t.role === "assistant").map((t) => t.content).join("\n\n").slice(-8e3);
+  const scriptIndices = [];
+  const llmIndices = [];
+  const manualIndices = [];
+  for (let i = 0; i < assertionDefs.length; i++) {
+    const t = assertionDefs[i].type;
+    if (t === "script") scriptIndices.push(i);
+    else if (t === "llm") llmIndices.push(i);
+    else manualIndices.push(i);
+  }
+  const results = new Array(assertionDefs.length);
+  for (const i of scriptIndices) {
+    results[i] = await gradeScriptAssertion(run.workdir, assertionDefs[i]);
+  }
+  if (llmIndices.length > 0) {
+    const llmAssertions = llmIndices.map((i) => assertionDefs[i]);
+    const llmResults = await gradeLlmAssertionsBatch(run.workdir, llmAssertions, lastAssistantText);
+    for (let j = 0; j < llmIndices.length; j++) {
+      const i = llmIndices[j];
+      results[i] = {
+        type: "llm",
+        text: assertionDefs[i].text,
+        passed: llmResults[j].passed,
+        evidence: llmResults[j].evidence
+      };
+    }
+  }
+  for (const i of manualIndices) {
+    results[i] = {
+      type: assertionDefs[i].type,
+      text: assertionDefs[i].text,
+      passed: false,
+      evidence: "Manual review required"
+    };
+  }
+  const passed = results.filter((r) => r.passed).length;
+  const failed = results.length - passed;
+  const total = results.length;
+  const passRate = total > 0 ? passed / total : 0;
+  const hasLlm = results.some((r) => r.type === "llm");
+  const hasScript = results.some((r) => r.type === "script");
+  const judgeLabel = `claude-judge (${JUDGE_MODEL})`;
+  const graderModel = hasLlm && hasScript ? `script + ${judgeLabel}` : hasLlm ? judgeLabel : "script";
+  const grading = {
+    eval_id: String(definition.id),
+    eval_name: definition.name,
+    skill_name: run.skillName,
+    iteration: String(run.iteration),
+    config: run.config,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    grader_model: graderModel,
+    assertion_results: results.map((r) => ({
+      type: r.type,
+      text: r.text,
+      passed: r.passed,
+      evidence: r.evidence
+    })),
+    summary: { passed, failed, total, pass_rate: passRate }
+  };
+  const gradingPath = require$$0$3.join(run.workdir, "grading.json");
+  require$$1$2.writeFileSync(gradingPath, JSON.stringify(grading, null, 2), "utf8");
+}
+function normalizeAssertions(assertions) {
+  return assertions.map((a) => {
+    if (typeof a === "string") {
+      return { type: "llm", text: a };
+    }
+    return a;
+  });
+}
+async function startEvalRuns(request2, options) {
+  const skillDir = getSkillDir(request2, options.resolveSkillDir);
+  if (!require$$1$2.existsSync(skillDir)) {
+    throw new Error(`Skill directory not found: ${skillDir}`);
+  }
+  const evalsJsonPath = require$$0$3.join(skillDir, "evals", "evals.json");
+  if (!require$$1$2.existsSync(evalsJsonPath)) {
+    throw new Error(`No evals.json for skill at ${skillDir}`);
+  }
+  const evalsFile = JSON.parse(require$$1$2.readFileSync(evalsJsonPath, "utf8"));
+  const filterNames = new Set(request2.evalNames ?? []);
+  const selectedDefs = evalsFile.evals.filter((e) => filterNames.size === 0 || filterNames.has(e.name)).map((e) => ({
+    id: e.id,
+    name: e.name,
+    prompt: e.prompt,
+    expectedOutput: e.expected_output ?? "",
+    mode: e.mode ?? "autonomous",
+    assertions: e.assertions,
+    files: e.files ?? [],
+    outputFiles: e.output_files ?? []
+  }));
+  if (selectedDefs.length === 0) {
+    throw new Error("No matching evals to run");
+  }
+  const iteration = computeNextIteration(skillDir);
+  const includeBaseline = request2.includeBaseline === true;
+  const configs = includeBaseline ? ["with_skill", "without_skill"] : ["with_skill"];
+  const createdRuns = [];
+  for (const def of selectedDefs) {
+    for (const config2 of configs) {
+      const workdir = prepareEvalWorkdir(skillDir, iteration, def.name, config2);
+      copyFixtures(skillDir, workdir, def.files);
+      const run = {
+        runId: generateRunId$2(),
+        skillName: request2.skillName,
+        evalName: def.name,
+        iteration,
+        config: config2,
+        status: "queued",
+        sessionId: null,
+        scope: request2.scope,
+        workdir,
+        prompt: def.prompt,
+        mode: def.mode ?? "autonomous",
+        outputFiles: def.outputFiles,
+        isolatedHome: null,
+        turns: [],
+        tokensUsed: 0,
+        durationMs: 0,
+        startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        finishedAt: null,
+        error: null
+      };
+      runs.set(run.runId, {
+        run,
+        child: null,
+        onEvent: options.onEvent,
+        killed: false
+      });
+      persistRunJson$2(run);
+      createdRuns.push(run);
+    }
+  }
+  const maxConcurrent = request2.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
+  void (async () => {
+    const queue = [...createdRuns];
+    const workers = [];
+    const worker = async () => {
+      while (queue.length > 0) {
+        const run = queue.shift();
+        if (!run) break;
+        const entry = runs.get(run.runId);
+        if (!entry || entry.killed) continue;
+        try {
+          await executeRun(entry, selectedDefs.find((d) => d.name === run.evalName), skillDir);
+        } catch (err) {
+          const msg = err.message ?? String(err);
+          entry.run.status = "failed";
+          entry.run.error = msg;
+          entry.run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+          persistRunJson$2(entry.run);
+          options.onEvent({ runId: entry.run.runId, event: { type: "done", exitCode: 1, error: msg } });
+        }
+      }
+    };
+    for (let i = 0; i < Math.min(maxConcurrent, createdRuns.length); i++) {
+      workers.push(worker());
+    }
+    await Promise.all(workers);
+    try {
+      writeIterationBenchmark(skillDir, request2.skillName, iteration);
+    } catch (err) {
+      console.error("[eval-runner] Failed to write benchmark.json:", err);
+    }
+    cleanupEvalArtifacts();
+  })();
+  return {
+    iteration,
+    runIds: createdRuns.map((r) => r.runId)
+  };
+}
+async function executeRun(entry, definition, skillDir) {
+  const { run, onEvent } = entry;
+  const firstTurnPrompt = run.config === "with_skill" ? `/${run.skillName} ${definition.prompt}` : definition.prompt;
+  await executeTurn$2(
+    entry,
+    skillDir,
+    firstTurnPrompt,
+    /* isFirstTurn */
+    true
+  );
+  if (entry.killed || run.status === "failed" || run.status === "stopped") {
+    return;
+  }
+  if (run.mode === "interactive") {
+    if (!allOutputFilesExist(run)) {
+      run.status = "waiting_for_input";
+      persistRunJson$2(run);
+      const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? "";
+      onEvent({ runId: run.runId, event: { type: "status", status: "waiting_for_input" } });
+      onEvent({ runId: run.runId, event: { type: "waiting_for_input", lastAssistantText } });
+      return;
+    }
+  }
+  await finalizeRun$1(entry, definition);
+}
+async function executeTurn$2(entry, skillDir, userMessage, isFirstTurn) {
+  const { run, onEvent } = entry;
+  run.status = "starting";
+  persistRunJson$2(run);
+  onEvent({ runId: run.runId, event: { type: "status", status: "starting" } });
+  const addDirs = [];
+  if (run.config === "with_skill") addDirs.push(skillDir);
+  const cliArgs = buildClaudeArgs$2({
+    prompt: userMessage,
+    workdir: run.workdir,
+    addDirs,
+    resumeSessionId: isFirstTurn ? void 0 : run.sessionId ?? void 0
+  });
+  const started = Date.now();
+  run.turns.push({
+    role: "user",
+    content: userMessage,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  let assistantText = "";
+  const tools = [];
+  let capturedSessionId = run.sessionId;
+  let exitCode = 0;
+  let errorMessage = null;
+  await new Promise((resolve2) => {
+    const child = child_process.spawn("claude", cliArgs, {
+      cwd: run.workdir,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    entry.child = child;
+    run.status = "running";
+    persistRunJson$2(run);
+    onEvent({ runId: run.runId, event: { type: "status", status: "running" } });
+    let buffer = "";
+    let stderrBuffer = "";
+    child.stdout?.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const event = JSON.parse(trimmed);
+          handleClaudeEvent$2(event, {
+            onSession: (id2) => {
+              capturedSessionId = id2;
+              run.sessionId = id2;
+            },
+            onText: (text2) => {
+              assistantText += text2;
+              onEvent({ runId: run.runId, event: { type: "text", text: text2 } });
+            },
+            onTool: (name, display) => {
+              tools.push({ name, display });
+              onEvent({ runId: run.runId, event: { type: "tool", name, display } });
+            },
+            onUsage: (tokens) => {
+              run.tokensUsed += tokens;
+              onEvent({ runId: run.runId, event: { type: "tokens", tokensUsed: run.tokensUsed } });
+            }
+          });
+        } catch {
+        }
+      }
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderrBuffer += chunk.toString("utf8");
+    });
+    child.on("close", (code2) => {
+      exitCode = code2 ?? 0;
+      if (exitCode !== 0 && stderrBuffer.trim()) {
+        errorMessage = stderrBuffer.trim().slice(-500);
+      }
+      resolve2();
+    });
+    child.on("error", (err) => {
+      exitCode = 1;
+      errorMessage = err.message.includes("ENOENT") ? "`claude` CLI not found. Make sure Claude Code is installed and on PATH." : err.message;
+      resolve2();
+    });
+  });
+  const ended = Date.now();
+  run.durationMs += ended - started;
+  run.sessionId = capturedSessionId;
+  run.turns.push({
+    role: "assistant",
+    content: assistantText,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    tools
+  });
+  entry.child = null;
+  if (exitCode !== 0 || errorMessage) {
+    run.status = "failed";
+    run.error = errorMessage;
+    run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson$2(run);
+    saveTimingJson(run);
+    onEvent({ runId: run.runId, event: { type: "done", exitCode, error: errorMessage ?? void 0 } });
+  }
+}
+function allOutputFilesExist(run) {
+  if (run.outputFiles.length === 0) return false;
+  for (const file of run.outputFiles) {
+    if (!require$$1$2.existsSync(require$$0$3.join(run.workdir, "outputs", file))) return false;
+  }
+  return true;
+}
+async function finalizeRun$1(entry, definition) {
+  const { run, onEvent } = entry;
+  run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+  run.status = "grading";
+  persistRunJson$2(run);
+  onEvent({ runId: run.runId, event: { type: "status", status: "grading" } });
+  await gradeRun(run, definition);
+  run.status = "completed";
+  persistRunJson$2(run);
+  saveTimingJson(run);
+  onEvent({ runId: run.runId, event: { type: "status", status: "completed" } });
+  onEvent({ runId: run.runId, event: { type: "done", exitCode: 0 } });
+  try {
+    const iterDir = deriveIterDir(run);
+    if (iterDir) writeIterationBenchmark(iterDir.skillDir, run.skillName, run.iteration);
+  } catch (err) {
+    console.error("[eval-runner] Failed to refresh benchmark.json:", err);
+  }
+  cleanupEvalArtifacts();
+}
+function deriveIterDir(run) {
+  const marker = "/evals/workspace/";
+  const idx = run.workdir.indexOf(marker);
+  if (idx === -1) return null;
+  const skillDir = run.workdir.slice(0, idx);
+  const iterDir = require$$0$3.join(skillDir, "evals", "workspace", `iteration-${run.iteration}`);
+  return { skillDir, iterDir };
+}
+async function sendUserMessage(runId, message, skillDir, definition) {
+  const entry = runs.get(runId);
+  if (!entry) throw new Error(`Run not found: ${runId}`);
+  const { run } = entry;
+  if (run.status !== "waiting_for_input") {
+    throw new Error(`Run ${runId} is not waiting for input (status=${run.status})`);
+  }
+  await executeTurn$2(
+    entry,
+    skillDir,
+    message,
+    /* isFirstTurn */
+    false
+  );
+  const currentStatus = run.status;
+  if (entry.killed || currentStatus === "failed" || currentStatus === "stopped") return;
+  if (run.mode === "interactive" && !allOutputFilesExist(run)) {
+    run.status = "waiting_for_input";
+    persistRunJson$2(run);
+    const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? "";
+    entry.onEvent({ runId, event: { type: "status", status: "waiting_for_input" } });
+    entry.onEvent({ runId, event: { type: "waiting_for_input", lastAssistantText } });
+    return;
+  }
+  await finalizeRun$1(entry, definition);
+}
+async function finishWaitingRun(runId, definition) {
+  const entry = runs.get(runId);
+  if (!entry) throw new Error(`Run not found: ${runId}`);
+  if (entry.run.status !== "waiting_for_input") return;
+  await finalizeRun$1(entry, definition);
+}
+function handleClaudeEvent$2(event, handlers) {
+  const type2 = event["type"];
+  if (type2 === "system") {
+    const sessionId = event["session_id"];
+    if (sessionId) handlers.onSession(sessionId);
+    return;
+  }
+  if (type2 === "assistant") {
+    const sessionId = event["session_id"];
+    if (sessionId) handlers.onSession(sessionId);
+    const message = event["message"];
+    if (!Array.isArray(message?.content)) return;
+    for (const block of message.content) {
+      const b = block;
+      if (b.type === "text" && b.text) {
+        handlers.onText(b.text);
+      } else if (b.type === "tool_use" && b.name) {
+        handlers.onTool(b.name, formatTool$2(b.name, b.input ?? {}));
+      }
+    }
+    return;
+  }
+  if (type2 === "result") {
+    const usage = event["usage"];
+    if (usage) {
+      const total = usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
+      handlers.onUsage(total);
+    }
+    const sessionId = event["session_id"];
+    if (sessionId) handlers.onSession(sessionId);
+    return;
+  }
+}
+function formatTool$2(name, input) {
+  const s = (v) => String(v ?? "");
+  const truncate = (str, max2 = 72) => str.length > max2 ? str.slice(0, max2) + "…" : str;
+  switch (name) {
+    case "Read":
+      return `Reading ${s(input["file_path"])}`;
+    case "Write":
+      return `Writing ${s(input["file_path"])}`;
+    case "Edit":
+    case "MultiEdit":
+      return `Editing ${s(input["file_path"])}`;
+    case "Bash":
+      return `$ ${truncate(s(input["command"]))}`;
+    case "Glob":
+      return `Glob: ${s(input["pattern"])}`;
+    case "Grep":
+      return `Grep: ${s(input["pattern"])}`;
+    default:
+      return name;
+  }
+}
+function listRuns() {
+  return Array.from(runs.values()).map((e) => e.run);
+}
+function getRun(runId) {
+  return runs.get(runId)?.run ?? null;
+}
+function stopRun(runId) {
+  const entry = runs.get(runId);
+  if (!entry) return;
+  entry.killed = true;
+  if (entry.child) {
+    entry.child.kill("SIGTERM");
+  }
+  if (entry.run.status === "running" || entry.run.status === "starting" || entry.run.status === "queued") {
+    entry.run.status = "stopped";
+    entry.run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson$2(entry.run);
+    entry.onEvent({ runId, event: { type: "status", status: "stopped" } });
+  }
+}
+function loadPersistedRuns(skillDir) {
+  const workspaceDir = require$$0$3.join(skillDir, "evals", "workspace");
+  if (!require$$1$2.existsSync(workspaceDir)) return [];
+  const result = [];
+  try {
+    const iterDirs = require$$1$2.readdirSync(workspaceDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.startsWith("iteration-"));
+    for (const iterDir of iterDirs) {
+      const iterPath = require$$0$3.join(workspaceDir, iterDir.name);
+      const evalDirs = require$$1$2.readdirSync(iterPath, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.startsWith("eval-"));
+      for (const evalDir of evalDirs) {
+        for (const config2 of ["with_skill", "without_skill"]) {
+          const runJsonPath = require$$0$3.join(iterPath, evalDir.name, config2, "run.json");
+          if (!require$$1$2.existsSync(runJsonPath)) continue;
+          try {
+            const run = JSON.parse(require$$1$2.readFileSync(runJsonPath, "utf8"));
+            result.push(run);
+          } catch {
+          }
+        }
+      }
+    }
+  } catch {
+  }
+  return result;
+}
+function readIterationFeedback(skillDir, iteration) {
+  const path = feedbackPath(skillDir, iteration);
+  if (!require$$1$2.existsSync(path)) return {};
+  try {
+    const raw = JSON.parse(require$$1$2.readFileSync(path, "utf8"));
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const result = {};
+      for (const [evalName, value] of Object.entries(raw)) {
+        if (typeof value === "string") result[evalName] = value;
+      }
+      return result;
+    }
+  } catch {
+  }
+  return {};
+}
+function saveEvalFeedback(skillDir, iteration, evalName, feedback) {
+  const current = readIterationFeedback(skillDir, iteration);
+  current[evalName] = feedback;
+  require$$1$2.writeFileSync(feedbackPath(skillDir, iteration), JSON.stringify(current, null, 2), "utf8");
+}
+function feedbackPath(skillDir, iteration) {
+  return require$$0$3.join(skillDir, "evals", "workspace", `iteration-${iteration}`, "feedback.json");
+}
+const FACTORY_SKILL_NAME$1 = "nakiros-skill-factory";
+const audits = /* @__PURE__ */ new Map();
+let counter$1 = 0;
+function generateRunId$1() {
+  return `audit_${Date.now().toString(36)}_${(++counter$1).toString(36)}`;
+}
+function isoSafeTimestamp() {
+  return (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+}
+function prepareWorkdir$1(skillDir, skillName) {
+  const workdir = require$$1$2.mkdtempSync(require$$0$3.join(os.tmpdir(), "nakiros-audit-"));
+  require$$1$2.mkdirSync(require$$0$3.join(workdir, "outputs"), { recursive: true });
+  const claudeDir = require$$0$3.join(workdir, ".claude");
+  require$$1$2.mkdirSync(claudeDir, { recursive: true });
+  require$$1$2.writeFileSync(
+    require$$0$3.join(claudeDir, "settings.local.json"),
+    JSON.stringify(
+      {
+        permissions: {
+          defaultMode: "acceptEdits",
+          allow: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+        }
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  const skillsDir = require$$0$3.join(claudeDir, "skills");
+  require$$1$2.mkdirSync(skillsDir, { recursive: true });
+  try {
+    const linkPath = require$$0$3.join(skillsDir, skillName);
+    if (!require$$1$2.existsSync(linkPath)) {
+      require("fs").symlinkSync(skillDir, linkPath, "dir");
+    }
+  } catch {
+  }
+  return workdir;
+}
+function buildClaudeArgs$1(prompt, resumeSessionId) {
+  const args = ["--output-format", "stream-json", "--verbose"];
+  if (resumeSessionId) args.push("--resume", resumeSessionId);
+  args.push("--print", prompt);
+  return args;
+}
+function persistRunJson$1(run) {
+  try {
+    require$$1$2.writeFileSync(require$$0$3.join(run.workdir, "run.json"), JSON.stringify(run, null, 2), "utf8");
+  } catch {
+  }
+}
+function handleClaudeEvent$1(event, h) {
+  const type2 = event["type"];
+  if (type2 === "system") {
+    const sid = event["session_id"];
+    if (sid) h.onSession(sid);
+    return;
+  }
+  if (type2 === "assistant") {
+    const sid = event["session_id"];
+    if (sid) h.onSession(sid);
+    const message = event["message"];
+    if (!Array.isArray(message?.content)) return;
+    for (const block of message.content) {
+      const b = block;
+      if (b.type === "text" && b.text) h.onText(b.text);
+      else if (b.type === "tool_use" && b.name) h.onTool(b.name, formatTool$1(b.name, b.input ?? {}));
+    }
+    return;
+  }
+  if (type2 === "result") {
+    const usage = event["usage"];
+    if (usage) {
+      const total = usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
+      h.onUsage(total);
+    }
+  }
+}
+function formatTool$1(name, input) {
+  const s = (v) => String(v ?? "");
+  const truncate = (str, max2 = 72) => str.length > max2 ? str.slice(0, max2) + "…" : str;
+  switch (name) {
+    case "Read":
+      return `Reading ${s(input["file_path"])}`;
+    case "Write":
+      return `Writing ${s(input["file_path"])}`;
+    case "Edit":
+    case "MultiEdit":
+      return `Editing ${s(input["file_path"])}`;
+    case "Bash":
+      return `$ ${truncate(s(input["command"]))}`;
+    case "Glob":
+      return `Glob: ${s(input["pattern"])}`;
+    case "Grep":
+      return `Grep: ${s(input["pattern"])}`;
+    default:
+      return name;
+  }
+}
+function findActiveAuditForSkill(scope2, projectId, skillName) {
+  for (const entry of audits.values()) {
+    const { run } = entry;
+    if (run.scope !== scope2) continue;
+    if (run.projectId !== projectId) continue;
+    if (run.skillName !== skillName) continue;
+    if (run.status === "starting" || run.status === "running" || run.status === "waiting_for_input") {
+      return entry;
+    }
+  }
+  return null;
+}
+function listActiveAuditRuns() {
+  const out = [];
+  for (const entry of audits.values()) {
+    const s = entry.run.status;
+    if (s === "starting" || s === "running" || s === "waiting_for_input") {
+      out.push(entry.run);
+    }
+  }
+  return out;
+}
+function startAudit(request2, opts) {
+  const existing = findActiveAuditForSkill(request2.scope, request2.projectId, request2.skillName);
+  if (existing) {
+    console.log(`[audit-runner] Resuming active audit ${existing.run.runId} for ${request2.skillName} (status=${existing.run.status})`);
+    return existing.run;
+  }
+  const workdir = prepareWorkdir$1(opts.skillDir, request2.skillName);
+  const run = {
+    runId: generateRunId$1(),
+    scope: request2.scope,
+    projectId: request2.projectId,
+    skillName: request2.skillName,
+    status: "starting",
+    sessionId: null,
+    workdir,
+    reportPath: null,
+    turns: [],
+    tokensUsed: 0,
+    durationMs: 0,
+    startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    finishedAt: null,
+    error: null
+  };
+  const entry = { run, child: null, killed: false };
+  audits.set(run.runId, entry);
+  persistRunJson$1(run);
+  const firstPrompt = `/${FACTORY_SKILL_NAME$1} audit ${request2.skillName}`;
+  void executeTurn$1(entry, firstPrompt, true, opts).then(() => maybeFinalize(entry, opts));
+  return run;
+}
+async function executeTurn$1(entry, userMessage, isFirstTurn, opts) {
+  const { run } = entry;
+  if (entry.killed) return;
+  run.status = "starting";
+  persistRunJson$1(run);
+  opts.onEvent({ runId: run.runId, event: { type: "status", status: "starting" } });
+  const cliArgs = buildClaudeArgs$1(userMessage, isFirstTurn ? void 0 : run.sessionId ?? void 0);
+  const started = Date.now();
+  run.turns.push({ role: "user", content: userMessage, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+  let assistantText = "";
+  const tools = [];
+  let exitCode = 0;
+  let errorMessage = null;
+  await new Promise((resolve2) => {
+    const child = child_process.spawn("claude", cliArgs, {
+      cwd: run.workdir,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    entry.child = child;
+    run.status = "running";
+    persistRunJson$1(run);
+    opts.onEvent({ runId: run.runId, event: { type: "status", status: "running" } });
+    let buffer = "";
+    let stderrBuffer = "";
+    child.stdout?.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const event = JSON.parse(trimmed);
+          handleClaudeEvent$1(event, {
+            onSession: (id2) => {
+              run.sessionId = id2;
+            },
+            onText: (text2) => {
+              assistantText += text2;
+              opts.onEvent({ runId: run.runId, event: { type: "text", text: text2 } });
+            },
+            onTool: (name, display) => {
+              tools.push({ name, display });
+              opts.onEvent({ runId: run.runId, event: { type: "tool", name, display } });
+            },
+            onUsage: (tokens) => {
+              run.tokensUsed += tokens;
+              opts.onEvent({ runId: run.runId, event: { type: "tokens", tokensUsed: run.tokensUsed } });
+            }
+          });
+        } catch {
+        }
+      }
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderrBuffer += chunk.toString("utf8");
+    });
+    child.on("close", (code2) => {
+      exitCode = code2 ?? 0;
+      if (exitCode !== 0 && stderrBuffer.trim()) {
+        errorMessage = stderrBuffer.trim().slice(-500);
+      }
+      resolve2();
+    });
+    child.on("error", (err) => {
+      exitCode = 1;
+      errorMessage = err.message.includes("ENOENT") ? "`claude` CLI not found. Make sure Claude Code is installed and on PATH." : err.message;
+      resolve2();
+    });
+  });
+  run.durationMs += Date.now() - started;
+  run.turns.push({ role: "assistant", content: assistantText, timestamp: (/* @__PURE__ */ new Date()).toISOString(), tools });
+  entry.child = null;
+  if (exitCode !== 0 || errorMessage) {
+    run.status = "failed";
+    run.error = errorMessage;
+    run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson$1(run);
+    opts.onEvent({ runId: run.runId, event: { type: "done", exitCode, error: errorMessage ?? void 0 } });
+  }
+}
+function maybeFinalize(entry, opts) {
+  const { run } = entry;
+  if (run.status === "failed" || run.status === "stopped") return;
+  const reportSrc = require$$0$3.join(run.workdir, "outputs", "audit-report.md");
+  if (require$$1$2.existsSync(reportSrc)) {
+    finalizeRun(entry, opts);
+    return;
+  }
+  run.status = "waiting_for_input";
+  persistRunJson$1(run);
+  const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? "";
+  opts.onEvent({ runId: run.runId, event: { type: "status", status: "waiting_for_input" } });
+  opts.onEvent({ runId: run.runId, event: { type: "waiting_for_input", lastAssistantText } });
+}
+function finalizeRun(entry, opts) {
+  const { run } = entry;
+  const reportSrc = require$$0$3.join(run.workdir, "outputs", "audit-report.md");
+  if (!require$$1$2.existsSync(reportSrc)) {
+    run.status = "failed";
+    run.error = "No audit-report.md was produced";
+    run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson$1(run);
+    opts.onEvent({ runId: run.runId, event: { type: "done", exitCode: 1, error: run.error } });
+    return;
+  }
+  const skillDir = resolveActualSkillDir(run);
+  if (!skillDir) {
+    run.status = "failed";
+    run.error = "Could not resolve skill directory to archive the audit";
+    run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson$1(run);
+    opts.onEvent({ runId: run.runId, event: { type: "done", exitCode: 1, error: run.error } });
+    return;
+  }
+  const auditsDir = require$$0$3.join(skillDir, "audits");
+  require$$1$2.mkdirSync(auditsDir, { recursive: true });
+  const dest = require$$0$3.join(auditsDir, `audit-${isoSafeTimestamp()}.md`);
+  try {
+    require$$1$2.copyFileSync(reportSrc, dest);
+    run.reportPath = dest;
+  } catch (err) {
+    run.status = "failed";
+    run.error = `Failed to archive report: ${err.message}`;
+    run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson$1(run);
+    opts.onEvent({ runId: run.runId, event: { type: "done", exitCode: 1, error: run.error } });
+    return;
+  }
+  run.status = "completed";
+  run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+  persistRunJson$1(run);
+  opts.onEvent({ runId: run.runId, event: { type: "status", status: "completed" } });
+  opts.onEvent({ runId: run.runId, event: { type: "done", exitCode: 0, reportPath: dest } });
+}
+function resolveActualSkillDir(_run) {
+  const symlink = require$$0$3.join(_run.workdir, ".claude", "skills", _run.skillName);
+  try {
+    const realPath = require("fs").realpathSync(symlink);
+    return realPath;
+  } catch {
+    return null;
+  }
+}
+async function sendAuditUserMessage(runId, message, opts) {
+  const entry = audits.get(runId);
+  if (!entry) throw new Error(`Audit run not found: ${runId}`);
+  if (entry.run.status !== "waiting_for_input") {
+    throw new Error(`Audit run ${runId} is not waiting for input (status=${entry.run.status})`);
+  }
+  await executeTurn$1(entry, message, false, opts);
+  maybeFinalize(entry, opts);
+}
+function stopAudit(runId) {
+  const entry = audits.get(runId);
+  if (!entry) return;
+  entry.killed = true;
+  entry.child?.kill("SIGTERM");
+  if (entry.run.status !== "completed" && entry.run.status !== "failed") {
+    entry.run.status = "stopped";
+    entry.run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson$1(entry.run);
+  }
+}
+function getAuditRun(runId) {
+  return audits.get(runId)?.run ?? null;
+}
+function listAuditHistory(skillDir) {
+  const auditsDir = require$$0$3.join(skillDir, "audits");
+  if (!require$$1$2.existsSync(auditsDir)) return [];
+  let files;
+  try {
+    files = require$$1$2.readdirSync(auditsDir).filter((f) => f.startsWith("audit-") && f.endsWith(".md"));
+  } catch {
+    return [];
+  }
+  const result = files.map((fileName) => {
+    const path = require$$0$3.join(auditsDir, fileName);
+    let sizeBytes = 0;
+    let timestamp2 = "";
+    try {
+      const stat = require$$1$2.statSync(path);
+      sizeBytes = stat.size;
+      const m = require$$0$3.basename(fileName).match(/^audit-(.+)\.md$/);
+      if (m) {
+        const isoLike = m[1].replace(/(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/, "$1T$2:$3:$4");
+        timestamp2 = new Date(isoLike).toISOString();
+      } else {
+        timestamp2 = stat.mtime.toISOString();
+      }
+    } catch {
+    }
+    return { fileName, path, timestamp: timestamp2, sizeBytes };
+  });
+  result.sort((a, b) => a.timestamp < b.timestamp ? 1 : -1);
+  return result;
+}
+function readAuditReport(path) {
+  try {
+    return require$$1$2.readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+const FACTORY_SKILL_NAME = "nakiros-skill-factory";
+const MAX_BUFFERED_EVENTS_PER_TURN = 500;
+function copyDirRecursive(src2, dest) {
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(src2, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  require$$1$2.mkdirSync(dest, { recursive: true });
+  for (const entry of entries) {
+    const srcPath = require$$0$3.join(src2, entry.name);
+    const destPath = require$$0$3.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else if (entry.isFile()) {
+      require$$1$2.writeFileSync(destPath, require$$1$2.readFileSync(srcPath));
+    }
+  }
+}
+function copySkillSourceForFix(src2, dest) {
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(src2, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  require$$1$2.mkdirSync(dest, { recursive: true });
+  for (const entry of entries) {
+    if (entry.name === "audits") continue;
+    const srcPath = require$$0$3.join(src2, entry.name);
+    const destPath = require$$0$3.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "evals") {
+        copyEvalsWithoutWorkspace(srcPath, destPath);
+      } else {
+        copyDirRecursive(srcPath, destPath);
+      }
+    } else if (entry.isFile()) {
+      require$$1$2.writeFileSync(destPath, require$$1$2.readFileSync(srcPath));
+    }
+  }
+}
+function copyEvalsWithoutWorkspace(src2, dest) {
+  let entries;
+  try {
+    entries = require$$1$2.readdirSync(src2, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  require$$1$2.mkdirSync(dest, { recursive: true });
+  for (const entry of entries) {
+    if (entry.name === "workspace") continue;
+    const srcPath = require$$0$3.join(src2, entry.name);
+    const destPath = require$$0$3.join(dest, entry.name);
+    if (entry.isDirectory()) copyDirRecursive(srcPath, destPath);
+    else if (entry.isFile()) require$$1$2.writeFileSync(destPath, require$$1$2.readFileSync(srcPath));
+  }
+}
+function copyLatestAudit(realSkillDir, destSkillDir) {
+  const auditsDir = require$$0$3.join(realSkillDir, "audits");
+  if (!require$$1$2.existsSync(auditsDir)) return null;
+  let names2;
+  try {
+    names2 = require$$1$2.readdirSync(auditsDir).filter((n) => n.startsWith("audit-") && n.endsWith(".md"));
+  } catch {
+    return null;
+  }
+  if (names2.length === 0) return null;
+  names2.sort();
+  const latest = names2[names2.length - 1];
+  const destAuditsDir = require$$0$3.join(destSkillDir, "audits");
+  require$$1$2.mkdirSync(destAuditsDir, { recursive: true });
+  require$$1$2.writeFileSync(require$$0$3.join(destAuditsDir, latest), require$$1$2.readFileSync(require$$0$3.join(auditsDir, latest)));
+  return latest;
+}
+function copyLatestIteration(realSkillDir, destSkillDir) {
+  const workspaceDir = require$$0$3.join(realSkillDir, "evals", "workspace");
+  if (!require$$1$2.existsSync(workspaceDir)) return null;
+  let iterNums;
+  try {
+    iterNums = require$$1$2.readdirSync(workspaceDir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name.startsWith("iteration-")).map((e) => parseInt(e.name.replace("iteration-", ""), 10)).filter((n) => !Number.isNaN(n));
+  } catch {
+    return null;
+  }
+  if (iterNums.length === 0) return null;
+  const latest = Math.max(...iterNums);
+  const src2 = require$$0$3.join(workspaceDir, `iteration-${latest}`);
+  const dest = require$$0$3.join(destSkillDir, "evals", "workspace", `iteration-${latest}`);
+  copyDirRecursive(src2, dest);
+  return latest;
+}
+function isRuntimeOnlyPath(rel) {
+  if (rel === "run.json") return true;
+  if (rel === "audits" || rel.startsWith("audits/")) return true;
+  if (rel === ".claude" || rel.startsWith(".claude/")) return true;
+  if (rel.startsWith("evals/workspace/") || rel === "evals/workspace") return true;
+  return false;
+}
+function syncBackToSkill(tempDir, realSkillDir) {
+  let filesCopied = 0;
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = require$$1$2.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = require$$0$3.join(dir, entry.name);
+      const rel = require$$0$3.relative(tempDir, fullPath);
+      if (isRuntimeOnlyPath(rel)) continue;
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        const destPath = require$$0$3.join(realSkillDir, rel);
+        require$$1$2.mkdirSync(require$$0$3.join(destPath, ".."), { recursive: true });
+        require$$1$2.writeFileSync(destPath, require$$1$2.readFileSync(fullPath));
+        filesCopied++;
+      }
+    }
+  };
+  walk(tempDir);
+  return { filesCopied };
+}
+function cleanupTempWorkdir(tempDir) {
+  try {
+    require$$1$2.rmSync(tempDir, { recursive: true, force: true });
+  } catch {
+  }
+}
+function restoreOrCleanupTempWorkdirs() {
+  const tempRoot = require$$0$3.join(os.homedir(), ".nakiros", "tmp-skills");
+  if (!require$$1$2.existsSync(tempRoot)) return;
+  let dirs;
+  try {
+    dirs = require$$1$2.readdirSync(tempRoot);
+  } catch {
+    return;
+  }
+  for (const name of dirs) {
+    const workdir = require$$0$3.join(tempRoot, name);
+    const runJsonPath = require$$0$3.join(workdir, "run.json");
+    if (!require$$1$2.existsSync(runJsonPath)) {
+      cleanupTempWorkdir(workdir);
+      continue;
+    }
+    let blob2 = null;
+    try {
+      blob2 = JSON.parse(require$$1$2.readFileSync(runJsonPath, "utf8"));
+    } catch {
+      cleanupTempWorkdir(workdir);
+      continue;
+    }
+    if (!blob2 || !blob2.runId || !blob2._mode || !blob2._realSkillDir) {
+      cleanupTempWorkdir(workdir);
+      continue;
+    }
+    if (blob2.status === "completed" || blob2.status === "failed" || blob2.status === "stopped") {
+      cleanupTempWorkdir(workdir);
+      continue;
+    }
+    const restoredRun = {
+      runId: blob2.runId,
+      scope: blob2.scope,
+      projectId: blob2.projectId,
+      skillName: blob2.skillName,
+      status: "waiting_for_input",
+      sessionId: blob2.sessionId ?? null,
+      workdir: blob2.workdir ?? workdir,
+      reportPath: blob2.reportPath ?? null,
+      turns: Array.isArray(blob2.turns) ? blob2.turns : [],
+      tokensUsed: typeof blob2.tokensUsed === "number" ? blob2.tokensUsed : 0,
+      durationMs: typeof blob2.durationMs === "number" ? blob2.durationMs : 0,
+      startedAt: blob2.startedAt ?? (/* @__PURE__ */ new Date()).toISOString(),
+      finishedAt: null,
+      error: null
+    };
+    const entry = {
+      mode: blob2._mode,
+      run: restoredRun,
+      child: null,
+      killed: false,
+      realSkillDir: blob2._realSkillDir,
+      tempWorkdir: workdir,
+      currentTurnEvents: []
+      // buffered events are lost across restarts — acceptable
+    };
+    fixes.set(restoredRun.runId, entry);
+    persistRunJson(entry);
+    console.log(`[skill-agent-runner] Restored ${entry.mode} run ${restoredRun.runId} for "${restoredRun.skillName}" (sessionId=${restoredRun.sessionId ?? "none"})`);
+  }
+}
+const fixes = /* @__PURE__ */ new Map();
+let counter = 0;
+function generateRunId() {
+  return `fix_${Date.now().toString(36)}_${(++counter).toString(36)}`;
+}
+function prepareWorkdir(mode, realSkillDir, runId) {
+  const tempRoot = require$$0$3.join(os.homedir(), ".nakiros", "tmp-skills");
+  require$$1$2.mkdirSync(tempRoot, { recursive: true });
+  const workdir = require$$0$3.join(tempRoot, runId);
+  require$$1$2.mkdirSync(workdir, { recursive: true });
+  let latestAuditFile = null;
+  let latestIteration = null;
+  if (mode === "fix") {
+    copySkillSourceForFix(realSkillDir, workdir);
+    latestAuditFile = copyLatestAudit(realSkillDir, workdir);
+    latestIteration = copyLatestIteration(realSkillDir, workdir);
+  }
+  const claudeDir = require$$0$3.join(workdir, ".claude");
+  require$$1$2.mkdirSync(claudeDir, { recursive: true });
+  require$$1$2.writeFileSync(
+    require$$0$3.join(claudeDir, "settings.local.json"),
+    JSON.stringify(
+      { permissions: { defaultMode: "acceptEdits", allow: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] } },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  return { workdir, latestAuditFile, latestIteration };
+}
+function buildClaudeArgs(prompt, resumeSessionId) {
+  const args = [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--dangerously-skip-permissions"
+  ];
+  if (resumeSessionId) args.push("--resume", resumeSessionId);
+  args.push("--print", prompt);
+  return args;
+}
+function persistRunJson(entry) {
+  const blob2 = {
+    ...entry.run,
+    _mode: entry.mode,
+    _realSkillDir: entry.realSkillDir
+  };
+  try {
+    require$$1$2.writeFileSync(require$$0$3.join(entry.run.workdir, "run.json"), JSON.stringify(blob2, null, 2), "utf8");
+  } catch {
+  }
+}
+function handleClaudeEvent(event, h) {
+  const type2 = event["type"];
+  if (type2 === "system") {
+    const sid = event["session_id"];
+    if (sid) h.onSession(sid);
+    return;
+  }
+  if (type2 === "assistant") {
+    const sid = event["session_id"];
+    if (sid) h.onSession(sid);
+    const message = event["message"];
+    if (!Array.isArray(message?.content)) return;
+    for (const block of message.content) {
+      const b = block;
+      if (b.type === "text" && b.text) h.onText(b.text);
+      else if (b.type === "tool_use" && b.name) h.onTool(b.name, formatTool(b.name, b.input ?? {}));
+    }
+    return;
+  }
+  if (type2 === "result") {
+    const usage = event["usage"];
+    if (usage) {
+      const total = usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
+      h.onUsage(total);
+    }
+  }
+}
+function formatTool(name, input) {
+  const s = (v) => String(v ?? "");
+  const truncate = (str, max2 = 72) => str.length > max2 ? str.slice(0, max2) + "…" : str;
+  switch (name) {
+    case "Read":
+      return `Reading ${s(input["file_path"])}`;
+    case "Write":
+      return `Writing ${s(input["file_path"])}`;
+    case "Edit":
+    case "MultiEdit":
+      return `Editing ${s(input["file_path"])}`;
+    case "Bash":
+      return `$ ${truncate(s(input["command"]))}`;
+    case "Glob":
+      return `Glob: ${s(input["pattern"])}`;
+    case "Grep":
+      return `Grep: ${s(input["pattern"])}`;
+    default:
+      return name;
+  }
+}
+function findActiveForSkill(mode, scope2, projectId, skillName) {
+  for (const entry of fixes.values()) {
+    if (entry.mode !== mode) continue;
+    const { run } = entry;
+    if (run.scope !== scope2) continue;
+    if (run.projectId !== projectId) continue;
+    if (run.skillName !== skillName) continue;
+    if (run.status === "starting" || run.status === "running" || run.status === "waiting_for_input") {
+      return entry;
+    }
+  }
+  return null;
+}
+function startSkillAgent(mode, request2, opts) {
+  const existing = findActiveForSkill(mode, request2.scope, request2.projectId, request2.skillName);
+  if (existing) {
+    console.log(`[skill-agent-runner] Resuming active ${mode} ${existing.run.runId} for ${request2.skillName} (status=${existing.run.status})`);
+    return existing.run;
+  }
+  if (mode === "create" && require$$1$2.existsSync(opts.skillDir)) {
+    throw new Error(
+      `Cannot create skill "${request2.skillName}": target directory already exists (${opts.skillDir}). Pick a different name or run "fix" on the existing skill instead.`
+    );
+  }
+  const runId = generateRunId();
+  const ctx = prepareWorkdir(mode, opts.skillDir, runId);
+  const run = {
+    runId,
+    scope: request2.scope,
+    projectId: request2.projectId,
+    skillName: request2.skillName,
+    status: "starting",
+    sessionId: null,
+    workdir: ctx.workdir,
+    reportPath: null,
+    turns: [],
+    tokensUsed: 0,
+    durationMs: 0,
+    startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    finishedAt: null,
+    error: null
+  };
+  const entry = {
+    mode,
+    run,
+    child: null,
+    killed: false,
+    realSkillDir: opts.skillDir,
+    tempWorkdir: ctx.workdir,
+    currentTurnEvents: []
+  };
+  fixes.set(run.runId, entry);
+  persistRunJson(entry);
+  const firstPrompt = buildFirstPrompt(mode, request2, ctx, opts.skillDir);
+  void executeTurn(entry, firstPrompt, true, opts).then(() => maybeWait(entry, opts));
+  return run;
+}
+function buildFirstPrompt(mode, request2, ctx, realSkillDir) {
+  if (mode === "fix") {
+    const auditLine = ctx.latestAuditFile ? `- Latest audit was copied to \`./audits/${ctx.latestAuditFile}\` — read it first.` : "- No prior audit for this skill — Nakiros did not copy any `./audits/` file.";
+    const iterLine = ctx.latestIteration !== null ? `- Latest eval iteration was copied to \`./evals/workspace/iteration-${ctx.latestIteration}/\`. Read its \`benchmark.json\` and \`feedback.json\` for signals. Older iterations were intentionally NOT copied.` : "- No prior eval iteration — Nakiros did not copy any `./evals/workspace/`.";
+    return `/${FACTORY_SKILL_NAME} fix ${request2.skillName}
+
+You are working on a TEMPORARY copy of the skill, located at your current working directory (\`${ctx.workdir}\`).
+- Edit files here freely — all changes are synced back to the real skill (\`${realSkillDir}\`) when the user clicks "Sync to skill". If the user clicks "Discard", your changes are thrown away.
+- All paths are relative to cwd: \`SKILL.md\`, \`references/\`, \`assets/\`, \`evals/\`, etc.
+- IMPORTANT: before declaring any file missing, run \`ls -la <dir>/\` (or Glob) RECURSIVELY. Empty-looking subdirs usually just weren't inspected. Do not overwrite existing files without reading them first — the copy of the skill is complete.
+${auditLine}
+${iterLine}
+- Between your turns, the user may click "Run evals" to re-run the eval suite against your in-progress edits. New iterations will appear in \`./evals/workspace/iteration-{N+1}/\`. Before you declare the fix ready, suggest running evals and then read the latest benchmark.json to confirm the delta is positive (no regression).
+- Do not modify \`.claude/settings.local.json\` in this workdir — it's Nakiros's runtime config.`;
+  }
+  return `/${FACTORY_SKILL_NAME} create ${request2.skillName}
+
+You are creating a NEW skill from scratch. Your current working directory is a TEMPORARY workdir (\`${ctx.workdir}\`).
+- Write every file of the skill here: \`SKILL.md\`, \`references/\`, \`assets/\`, \`scripts/\`, \`templates/\`, \`evals/evals.json\`, etc.
+- All paths are relative to cwd. Do NOT try to write to \`${realSkillDir}\` directly — Nakiros will copy the whole workdir there when the user clicks "Create skill".
+- If the user clicks "Discard", everything is thrown away.
+- Follow your own \`create\` procedure: ASK the user the design questions first, then write using \`assets/templates/skill-template.md\` as the skeleton.
+- Do not modify \`.claude/settings.local.json\` in this workdir — it's Nakiros's runtime config.`;
+}
+function startFix(request2, opts) {
+  return startSkillAgent("fix", request2, opts);
+}
+function startCreate(request2, opts) {
+  return startSkillAgent("create", request2, opts);
+}
+function emit(entry, opts, event) {
+  if (event.type === "status" && event.status === "starting") {
+    entry.currentTurnEvents = [];
+  }
+  if (event.type === "text" || event.type === "tool") {
+    entry.currentTurnEvents.push(event);
+    if (entry.currentTurnEvents.length > MAX_BUFFERED_EVENTS_PER_TURN) {
+      entry.currentTurnEvents.shift();
+    }
+  }
+  opts.onEvent({ runId: entry.run.runId, event });
+}
+async function executeTurn(entry, userMessage, isFirstTurn, opts) {
+  const { run } = entry;
+  if (entry.killed) return;
+  run.status = "starting";
+  persistRunJson(entry);
+  emit(entry, opts, { type: "status", status: "starting" });
+  const cliArgs = buildClaudeArgs(userMessage, isFirstTurn ? void 0 : run.sessionId ?? void 0);
+  const started = Date.now();
+  run.turns.push({ role: "user", content: userMessage, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+  let assistantText = "";
+  const tools = [];
+  let exitCode = 0;
+  let errorMessage = null;
+  await new Promise((resolve2) => {
+    const child = child_process.spawn("claude", cliArgs, {
+      cwd: run.workdir,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    entry.child = child;
+    run.status = "running";
+    persistRunJson(entry);
+    emit(entry, opts, { type: "status", status: "running" });
+    let buffer = "";
+    let stderrBuffer = "";
+    child.stdout?.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const event = JSON.parse(trimmed);
+          handleClaudeEvent(event, {
+            onSession: (id2) => {
+              run.sessionId = id2;
+            },
+            onText: (text2) => {
+              assistantText += text2;
+              emit(entry, opts, { type: "text", text: text2 });
+            },
+            onTool: (name, display) => {
+              tools.push({ name, display });
+              emit(entry, opts, { type: "tool", name, display });
+            },
+            onUsage: (tokens) => {
+              run.tokensUsed += tokens;
+              emit(entry, opts, { type: "tokens", tokensUsed: run.tokensUsed });
+            }
+          });
+        } catch {
+        }
+      }
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderrBuffer += chunk.toString("utf8");
+    });
+    child.on("close", (code2) => {
+      exitCode = code2 ?? 0;
+      if (exitCode !== 0 && stderrBuffer.trim()) {
+        errorMessage = stderrBuffer.trim().slice(-500);
+      }
+      resolve2();
+    });
+    child.on("error", (err) => {
+      exitCode = 1;
+      errorMessage = err.message.includes("ENOENT") ? "`claude` CLI not found. Make sure Claude Code is installed and on PATH." : err.message;
+      resolve2();
+    });
+  });
+  run.durationMs += Date.now() - started;
+  run.turns.push({ role: "assistant", content: assistantText, timestamp: (/* @__PURE__ */ new Date()).toISOString(), tools });
+  entry.child = null;
+  if (exitCode !== 0 || errorMessage) {
+    run.status = "failed";
+    run.error = errorMessage;
+    run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    cleanupTempWorkdir(entry.tempWorkdir);
+    persistRunJson(entry);
+    emit(entry, opts, { type: "done", exitCode, error: errorMessage ?? void 0 });
+  }
+}
+function maybeWait(entry, opts) {
+  const { run } = entry;
+  if (run.status === "failed" || run.status === "stopped") return;
+  run.status = "waiting_for_input";
+  persistRunJson(entry);
+  const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? "";
+  emit(entry, opts, { type: "status", status: "waiting_for_input" });
+  emit(entry, opts, { type: "waiting_for_input", lastAssistantText });
+}
+async function sendFixUserMessage(runId, message, opts) {
+  const entry = fixes.get(runId);
+  if (!entry) throw new Error(`Fix run not found: ${runId}`);
+  if (entry.run.status !== "waiting_for_input") {
+    throw new Error(`Fix run ${runId} is not waiting for input (status=${entry.run.status})`);
+  }
+  await executeTurn(entry, message, false, opts);
+  maybeWait(entry, opts);
+}
+function finishFix(runId, opts) {
+  const entry = fixes.get(runId);
+  if (!entry) return;
+  if (entry.run.status === "completed" || entry.run.status === "failed") return;
+  if (entry.mode === "create" && require$$1$2.existsSync(entry.realSkillDir)) {
+    entry.run.status = "failed";
+    entry.run.error = `Cannot finalize create: "${entry.realSkillDir}" already exists. Discard this run and pick a different skill name.`;
+    entry.run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson(entry);
+    opts.onEvent({ runId, event: { type: "done", exitCode: 1, error: entry.run.error } });
+    return;
+  }
+  let syncInfo = "";
+  try {
+    const result = syncBackToSkill(entry.tempWorkdir, entry.realSkillDir);
+    syncInfo = ` (${result.filesCopied} file${result.filesCopied === 1 ? "" : "s"} synced)`;
+  } catch (err) {
+    entry.run.status = "failed";
+    entry.run.error = `Sync-back failed: ${err.message}`;
+    entry.run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson(entry);
+    opts.onEvent({ runId, event: { type: "done", exitCode: 1, error: entry.run.error } });
+    return;
+  }
+  cleanupTempWorkdir(entry.tempWorkdir);
+  entry.run.status = "completed";
+  entry.run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+  entry.run.error = null;
+  persistRunJson(entry);
+  console.log(`[skill-agent-runner] ${entry.mode} ${runId} completed${syncInfo}`);
+  opts.onEvent({ runId, event: { type: "status", status: "completed" } });
+  opts.onEvent({ runId, event: { type: "done", exitCode: 0 } });
+}
+const finishCreate = finishFix;
+const stopCreate = stopFix;
+const sendCreateUserMessage = sendFixUserMessage;
+const getCreateRun = getFixRun;
+function stopFix(runId) {
+  const entry = fixes.get(runId);
+  if (!entry) return;
+  entry.killed = true;
+  entry.child?.kill("SIGTERM");
+  cleanupTempWorkdir(entry.tempWorkdir);
+  if (entry.run.status !== "completed" && entry.run.status !== "failed") {
+    entry.run.status = "stopped";
+    entry.run.finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    persistRunJson(entry);
+  }
+}
+function getFixRun(runId) {
+  return fixes.get(runId)?.run ?? null;
+}
+function getFixTempWorkdir(runId) {
+  return fixes.get(runId)?.tempWorkdir ?? null;
+}
+function getFixRealSkillDir(runId) {
+  return fixes.get(runId)?.realSkillDir ?? null;
+}
+function getFixBufferedEvents(runId) {
+  return fixes.get(runId)?.currentTurnEvents.slice() ?? [];
+}
+const getCreateBufferedEvents = getFixBufferedEvents;
+function listActive(mode) {
+  const out = [];
+  for (const entry of fixes.values()) {
+    if (entry.mode !== mode) continue;
+    const s = entry.run.status;
+    if (s === "starting" || s === "running" || s === "waiting_for_input") {
+      out.push(entry.run);
+    }
+  }
+  return out;
+}
+function listActiveFixRuns() {
+  return listActive("fix");
+}
+function listActiveCreateRuns() {
+  return listActive("create");
 }
 const execFileAsync = require$$1$1.promisify(child_process.execFile);
 const gotTheLock = electron.app.requestSingleInstanceLock();
@@ -56720,6 +59693,9 @@ async function ensureMcpServer(port) {
 }
 electron.app.whenReady().then(() => {
   createWindow();
+  syncBundledSkills();
+  restoreOrCleanupTempWorkdirs();
+  cleanupEvalArtifacts();
   void ensureMcpServer(3737);
   if (pendingProtocolUrl) {
     const urlToProcess = pendingProtocolUrl;
@@ -56732,6 +59708,435 @@ electron.app.whenReady().then(() => {
     }
   }
 });
+electron.ipcMain.handle(IPC_CHANNELS["project:scan"], () => {
+  return scan((current, total, name) => {
+    const win = electron.BrowserWindow.getAllWindows()[0];
+    if (win) {
+      win.webContents.send(IPC_CHANNELS["project:scanProgress"], { provider: "claude", current, total, projectName: name });
+    }
+  });
+});
+electron.ipcMain.handle(IPC_CHANNELS["project:list"], () => listProjects());
+electron.ipcMain.handle(IPC_CHANNELS["project:get"], (_, id2) => getProject(id2));
+electron.ipcMain.handle(IPC_CHANNELS["project:dismiss"], (_, id2) => dismissProject(id2));
+electron.ipcMain.handle(IPC_CHANNELS["project:listConversations"], (_, projectId) => {
+  const project = getProject(projectId);
+  if (!project) return [];
+  return listConversations(project.providerProjectDir, projectId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["project:getConversationMessages"], (_, projectId, sessionId) => {
+  const project = getProject(projectId);
+  if (!project) return [];
+  return getConversationMessages(project.providerProjectDir, sessionId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["project:listSkills"], (_, projectId) => {
+  const project = getProject(projectId);
+  if (!project) return [];
+  return listSkills(project.projectPath, projectId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["project:getSkill"], (_, projectId, skillName) => {
+  const project = getProject(projectId);
+  if (!project) return null;
+  return getSkill(project.projectPath, projectId, skillName);
+});
+electron.ipcMain.handle(IPC_CHANNELS["project:saveSkill"], (_, projectId, skillName, content) => {
+  const project = getProject(projectId);
+  if (!project) return;
+  saveSkill(project.projectPath, skillName, content);
+});
+electron.ipcMain.handle(IPC_CHANNELS["project:readSkillFile"], (_, projectId, skillName, relativePath) => {
+  const project = getProject(projectId);
+  if (!project) return null;
+  return readSkillFile(project.projectPath, skillName, relativePath);
+});
+electron.ipcMain.handle(IPC_CHANNELS["project:saveSkillFile"], (_, projectId, skillName, relativePath, content) => {
+  const project = getProject(projectId);
+  if (!project) return;
+  saveSkillFile(project.projectPath, skillName, relativePath, content);
+});
+electron.ipcMain.handle(IPC_CHANNELS["nakiros:listBundledSkills"], () => listBundledSkills());
+electron.ipcMain.handle(IPC_CHANNELS["nakiros:getBundledSkill"], (_, skillName) => readBundledSkill(skillName));
+electron.ipcMain.handle(
+  IPC_CHANNELS["nakiros:readBundledSkillFile"],
+  (_, skillName, relativePath) => readBundledSkillFile(skillName, relativePath)
+);
+electron.ipcMain.handle(
+  IPC_CHANNELS["nakiros:saveBundledSkillFile"],
+  (_, skillName, relativePath, content) => saveBundledSkillFile(skillName, relativePath, content)
+);
+electron.ipcMain.handle(
+  IPC_CHANNELS["nakiros:promoteBundledSkill"],
+  (_, skillName) => promoteBundledSkill(skillName)
+);
+electron.ipcMain.handle(IPC_CHANNELS["claudeGlobal:listSkills"], () => listClaudeGlobalSkills());
+electron.ipcMain.handle(IPC_CHANNELS["claudeGlobal:getSkill"], (_, skillName) => readClaudeGlobalSkill(skillName));
+electron.ipcMain.handle(
+  IPC_CHANNELS["claudeGlobal:readSkillFile"],
+  (_, skillName, relativePath) => readClaudeGlobalSkillFile(skillName, relativePath)
+);
+electron.ipcMain.handle(
+  IPC_CHANNELS["claudeGlobal:saveSkillFile"],
+  (_, skillName, relativePath, content) => saveClaudeGlobalSkillFile(skillName, relativePath, content)
+);
+const DATA_URL_MIME_BY_EXT = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  ico: "image/x-icon",
+  bmp: "image/bmp",
+  avif: "image/avif"
+};
+electron.ipcMain.handle(
+  IPC_CHANNELS["skill:readFileAsDataUrl"],
+  (_, request2) => {
+    const skillDir = resolveEvalSkillDir(request2);
+    const abs2 = require$$0$3.resolve(skillDir, request2.relativePath);
+    if (!abs2.startsWith(skillDir + "/") && abs2 !== skillDir) return null;
+    if (!require$$1$2.existsSync(abs2)) return null;
+    const ext = request2.relativePath.split(".").pop()?.toLowerCase() ?? "";
+    const mime = DATA_URL_MIME_BY_EXT[ext];
+    if (!mime) return null;
+    try {
+      const buf = require$$1$2.readFileSync(abs2);
+      return `data:${mime};base64,${buf.toString("base64")}`;
+    } catch {
+      return null;
+    }
+  }
+);
+function resolveEvalSkillDir(request2) {
+  if (request2.skillDirOverride) {
+    return request2.skillDirOverride;
+  }
+  if (request2.scope === "nakiros-bundled") {
+    return require$$0$3.join(os.homedir(), ".nakiros", "skills", request2.skillName);
+  }
+  if (request2.scope === "claude-global") {
+    return require$$0$3.join(getClaudeGlobalSkillsDir(), request2.skillName);
+  }
+  const projectId = request2.projectId;
+  if (!projectId) throw new Error("projectId required for project scope");
+  const project = getProject(projectId);
+  if (!project) throw new Error(`Project not found: ${projectId}`);
+  return require$$0$3.join(project.projectPath, ".claude", "skills", request2.skillName);
+}
+electron.ipcMain.handle(IPC_CHANNELS["eval:startRuns"], async (_, request2) => {
+  return startEvalRuns(request2, {
+    resolveSkillDir: resolveEvalSkillDir,
+    onEvent: (event) => {
+      const win = electron.BrowserWindow.getAllWindows()[0];
+      if (win) win.webContents.send(IPC_CHANNELS["eval:event"], event);
+    }
+  });
+});
+electron.ipcMain.handle(IPC_CHANNELS["eval:stopRun"], (_, runId) => {
+  stopRun(runId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["eval:listRuns"], () => listRuns());
+electron.ipcMain.handle(IPC_CHANNELS["eval:loadPersisted"], (_, request2) => {
+  const skillDir = resolveEvalSkillDir(request2);
+  return loadPersistedRuns(skillDir);
+});
+function getDefinitionForRun(run) {
+  const marker = "/evals/workspace/";
+  const idx = run.workdir.indexOf(marker);
+  if (idx === -1) throw new Error(`Cannot derive skill dir from workdir: ${run.workdir}`);
+  const skillDir = run.workdir.slice(0, idx);
+  const evalsJsonPath = require$$0$3.join(skillDir, "evals", "evals.json");
+  const rawEvals = JSON.parse(require$$1$2.readFileSync(evalsJsonPath, "utf8"));
+  const match = rawEvals.evals.find((e) => e["name"] === run.evalName);
+  if (!match) throw new Error(`Eval definition not found: ${run.evalName}`);
+  const definition = {
+    id: match["id"] ?? 0,
+    name: match["name"] ?? "",
+    prompt: match["prompt"] ?? "",
+    expectedOutput: match["expected_output"] ?? "",
+    mode: match["mode"] ?? "autonomous",
+    outputFiles: match["output_files"] ?? [],
+    assertions: match["assertions"] ?? []
+  };
+  return { skillDir, definition };
+}
+electron.ipcMain.handle(IPC_CHANNELS["eval:sendUserMessage"], async (_, runId, message) => {
+  const run = getRun(runId);
+  if (!run) throw new Error(`Run not found: ${runId}`);
+  const { skillDir, definition } = getDefinitionForRun(run);
+  await sendUserMessage(runId, message, skillDir, definition);
+});
+electron.ipcMain.handle(IPC_CHANNELS["eval:finishRun"], async (_, runId) => {
+  const run = getRun(runId);
+  if (!run) throw new Error(`Run not found: ${runId}`);
+  const { definition } = getDefinitionForRun(run);
+  await finishWaitingRun(runId, definition);
+});
+electron.ipcMain.handle(IPC_CHANNELS["eval:getFeedback"], (_, request2) => {
+  const skillDir = resolveEvalSkillDir(request2);
+  return readIterationFeedback(skillDir, request2.iteration);
+});
+electron.ipcMain.handle(IPC_CHANNELS["eval:saveFeedback"], (_, request2) => {
+  const skillDir = resolveEvalSkillDir(request2);
+  saveEvalFeedback(skillDir, request2.iteration, request2.evalName, request2.feedback);
+});
+electron.ipcMain.handle(IPC_CHANNELS["eval:listOutputs"], (_, runId) => {
+  const run = getRun(runId);
+  if (!run) throw new Error(`Run not found: ${runId}`);
+  const outputsDir = require$$0$3.join(run.workdir, "outputs");
+  if (!require$$1$2.existsSync(outputsDir)) return [];
+  const { readdirSync, statSync } = require("fs");
+  const entries = [];
+  const walk = (dir) => {
+    let items2;
+    try {
+      items2 = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const item of items2) {
+      const full = require$$0$3.join(dir, item.name);
+      if (item.isDirectory()) {
+        walk(full);
+      } else if (item.isFile()) {
+        try {
+          const s = statSync(full);
+          entries.push({
+            relativePath: full.slice(outputsDir.length + 1),
+            sizeBytes: s.size,
+            modifiedAt: s.mtime.toISOString()
+          });
+        } catch {
+        }
+      }
+    }
+  };
+  walk(outputsDir);
+  entries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  return entries;
+});
+electron.ipcMain.handle(IPC_CHANNELS["eval:readOutput"], (_, runId, relativePath) => {
+  const run = getRun(runId);
+  if (!run) throw new Error(`Run not found: ${runId}`);
+  const outputsDir = require$$0$3.join(run.workdir, "outputs");
+  const abs2 = require$$0$3.resolve(outputsDir, relativePath);
+  if (!abs2.startsWith(outputsDir + "/") && abs2 !== outputsDir) {
+    throw new Error("Path escapes outputs directory");
+  }
+  if (!require$$1$2.existsSync(abs2)) return null;
+  try {
+    return require$$1$2.readFileSync(abs2, "utf8");
+  } catch {
+    return null;
+  }
+});
+function broadcastAuditEvent(event) {
+  const win = electron.BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send(IPC_CHANNELS["audit:event"], event);
+}
+electron.ipcMain.handle(IPC_CHANNELS["audit:start"], (_, request2) => {
+  const skillDir = resolveEvalSkillDir(request2);
+  return startAudit(request2, { skillDir, onEvent: broadcastAuditEvent });
+});
+electron.ipcMain.handle(IPC_CHANNELS["audit:stopRun"], (_, runId) => {
+  stopAudit(runId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["audit:getRun"], (_, runId) => getAuditRun(runId));
+electron.ipcMain.handle(IPC_CHANNELS["audit:sendUserMessage"], async (_, runId, message) => {
+  const run = getAuditRun(runId);
+  if (!run) throw new Error(`Audit run not found: ${runId}`);
+  const skillDir = resolveEvalSkillDir({
+    scope: run.scope,
+    projectId: run.projectId,
+    skillName: run.skillName
+  });
+  await sendAuditUserMessage(runId, message, { skillDir, onEvent: broadcastAuditEvent });
+});
+electron.ipcMain.handle(IPC_CHANNELS["audit:listHistory"], (_, request2) => {
+  const skillDir = resolveEvalSkillDir(request2);
+  return listAuditHistory(skillDir);
+});
+electron.ipcMain.handle(IPC_CHANNELS["audit:readReport"], (_, path) => readAuditReport(path));
+electron.ipcMain.handle(IPC_CHANNELS["audit:listActive"], () => listActiveAuditRuns());
+function broadcastFixEvent(event) {
+  const win = electron.BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send(IPC_CHANNELS["fix:event"], event);
+}
+electron.ipcMain.handle(IPC_CHANNELS["fix:start"], (_, request2) => {
+  const skillDir = resolveEvalSkillDir(request2);
+  return startFix(request2, { skillDir, onEvent: broadcastFixEvent });
+});
+electron.ipcMain.handle(IPC_CHANNELS["fix:stopRun"], (_, runId) => {
+  stopFix(runId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["fix:getRun"], (_, runId) => getFixRun(runId));
+electron.ipcMain.handle(IPC_CHANNELS["fix:sendUserMessage"], async (_, runId, message) => {
+  const run = getFixRun(runId);
+  if (!run) throw new Error(`Fix run not found: ${runId}`);
+  const skillDir = resolveEvalSkillDir({
+    scope: run.scope,
+    projectId: run.projectId,
+    skillName: run.skillName
+  });
+  await sendFixUserMessage(runId, message, { skillDir, onEvent: broadcastFixEvent });
+});
+electron.ipcMain.handle(IPC_CHANNELS["fix:finish"], (_, runId) => {
+  const run = getFixRun(runId);
+  if (!run) throw new Error(`Fix run not found: ${runId}`);
+  const skillDir = resolveEvalSkillDir({
+    scope: run.scope,
+    projectId: run.projectId,
+    skillName: run.skillName
+  });
+  finishFix(runId, { skillDir, onEvent: broadcastFixEvent });
+});
+electron.ipcMain.handle(IPC_CHANNELS["fix:runEvalsInTemp"], async (_, request2) => {
+  const run = getFixRun(request2.runId);
+  if (!run) throw new Error(`Fix run not found: ${request2.runId}`);
+  const tempDir = getFixTempWorkdir(request2.runId);
+  if (!tempDir) throw new Error(`No temp workdir for fix ${request2.runId}`);
+  return startEvalRuns(
+    {
+      scope: run.scope,
+      projectId: run.projectId,
+      skillName: run.skillName,
+      evalNames: request2.evalNames,
+      includeBaseline: request2.includeBaseline,
+      skillDirOverride: tempDir
+    },
+    {
+      resolveSkillDir: resolveEvalSkillDir,
+      onEvent: (event) => {
+        const win = electron.BrowserWindow.getAllWindows()[0];
+        if (win) win.webContents.send(IPC_CHANNELS["eval:event"], event);
+      }
+    }
+  );
+});
+electron.ipcMain.handle(IPC_CHANNELS["fix:listActive"], () => listActiveFixRuns());
+electron.ipcMain.handle(IPC_CHANNELS["fix:getBufferedEvents"], (_, runId) => getFixBufferedEvents(runId));
+electron.ipcMain.handle(IPC_CHANNELS["fix:getBenchmarks"], (_, runId) => {
+  const realDir = getFixRealSkillDir(runId);
+  const tempDir = getFixTempWorkdir(runId);
+  return {
+    real: realDir ? readLatestIterationBenchmark(realDir) : null,
+    temp: tempDir ? readLatestIterationBenchmark(tempDir) : null
+  };
+});
+function broadcastCreateEvent(event) {
+  const win = electron.BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send(IPC_CHANNELS["create:event"], event);
+}
+electron.ipcMain.handle(IPC_CHANNELS["create:start"], (_, request2) => {
+  const skillDir = resolveEvalSkillDir(request2);
+  return startCreate(request2, { skillDir, onEvent: broadcastCreateEvent });
+});
+electron.ipcMain.handle(IPC_CHANNELS["create:stopRun"], (_, runId) => {
+  stopCreate(runId);
+});
+electron.ipcMain.handle(IPC_CHANNELS["create:getRun"], (_, runId) => getCreateRun(runId));
+electron.ipcMain.handle(IPC_CHANNELS["create:sendUserMessage"], async (_, runId, message) => {
+  const run = getCreateRun(runId);
+  if (!run) throw new Error(`Create run not found: ${runId}`);
+  const skillDir = resolveEvalSkillDir({
+    scope: run.scope,
+    projectId: run.projectId,
+    skillName: run.skillName
+  });
+  await sendCreateUserMessage(runId, message, { skillDir, onEvent: broadcastCreateEvent });
+});
+electron.ipcMain.handle(IPC_CHANNELS["create:finish"], (_, runId) => {
+  const run = getCreateRun(runId);
+  if (!run) throw new Error(`Create run not found: ${runId}`);
+  const skillDir = resolveEvalSkillDir({
+    scope: run.scope,
+    projectId: run.projectId,
+    skillName: run.skillName
+  });
+  finishCreate(runId, { skillDir, onEvent: broadcastCreateEvent });
+});
+electron.ipcMain.handle(IPC_CHANNELS["create:listActive"], () => listActiveCreateRuns());
+electron.ipcMain.handle(IPC_CHANNELS["create:getBufferedEvents"], (_, runId) => getCreateBufferedEvents(runId));
+const TEMP_HIDDEN_PATHS = /* @__PURE__ */ new Set([".claude", "run.json"]);
+function shouldHideTempEntry(rel) {
+  for (const hidden of TEMP_HIDDEN_PATHS) {
+    if (rel === hidden || rel.startsWith(hidden + "/")) return true;
+  }
+  if (rel.startsWith("evals/workspace/")) return true;
+  return false;
+}
+electron.ipcMain.handle(
+  IPC_CHANNELS["skillAgent:listTempFiles"],
+  (_, runId) => {
+    const tempDir = getFixTempWorkdir(runId);
+    if (!tempDir || !require$$1$2.existsSync(tempDir)) return [];
+    const { readdirSync, statSync } = require("fs");
+    const entries = [];
+    const walk = (dir) => {
+      let items2;
+      try {
+        items2 = readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const item of items2) {
+        const full = require$$0$3.join(dir, item.name);
+        const rel = full.slice(tempDir.length + 1);
+        if (shouldHideTempEntry(rel)) continue;
+        if (item.isDirectory()) {
+          walk(full);
+        } else if (item.isFile()) {
+          try {
+            const s = statSync(full);
+            entries.push({ relativePath: rel, sizeBytes: s.size, modifiedAt: s.mtime.toISOString() });
+          } catch {
+          }
+        }
+      }
+    };
+    walk(tempDir);
+    entries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+    return entries;
+  }
+);
+const TEMP_FILE_IMAGE_MIME = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  ico: "image/x-icon",
+  bmp: "image/bmp",
+  avif: "image/avif"
+};
+const MAX_TEMP_TEXT_BYTES = 1e6;
+electron.ipcMain.handle(
+  IPC_CHANNELS["skillAgent:readTempFile"],
+  (_, runId, relativePath) => {
+    const tempDir = getFixTempWorkdir(runId);
+    if (!tempDir) return { kind: "missing" };
+    const abs2 = require$$0$3.resolve(tempDir, relativePath);
+    if (!abs2.startsWith(tempDir + "/") && abs2 !== tempDir) return { kind: "missing" };
+    if (shouldHideTempEntry(relativePath)) return { kind: "missing" };
+    if (!require$$1$2.existsSync(abs2)) return { kind: "missing" };
+    const ext = relativePath.split(".").pop()?.toLowerCase() ?? "";
+    const imgMime = TEMP_FILE_IMAGE_MIME[ext];
+    try {
+      const stat = require("fs").statSync(abs2);
+      if (imgMime) {
+        const buf = require$$1$2.readFileSync(abs2);
+        return { kind: "image", dataUrl: `data:${imgMime};base64,${buf.toString("base64")}` };
+      }
+      if (stat.size > MAX_TEMP_TEXT_BYTES) {
+        return { kind: "binary", sizeBytes: stat.size };
+      }
+      return { kind: "text", content: require$$1$2.readFileSync(abs2, "utf8") };
+    } catch {
+      return { kind: "missing" };
+    }
+  }
+);
 electron.app.on("before-quit", () => {
   isQuitting = true;
   broadcastServerStatus("stopped");

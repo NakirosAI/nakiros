@@ -1,21 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type {
-  OnboardingChatLaunchRequest,
-  StoredWorkspace,
-  AppPreferences,
-} from '@nakiros/shared';
+import type { Project, AppPreferences } from '@nakiros/shared';
 import Home from './views/Home';
-import Onboarding from './views/Onboarding';
-import WorkspaceSetup from './views/WorkspaceSetup';
-import WorkspaceGettingStarted from './views/WorkspaceGettingStarted';
+import ScanView from './views/ScanView';
 import Dashboard from './views/Dashboard';
+import NakirosSkillsView from './views/NakirosSkillsView';
+import GlobalSkillsView from './views/GlobalSkillsView';
 import { resolveLanguage } from './utils/language';
-import { syncWorkspaceArtifacts } from './utils/workspace-sync';
 import i18n from './i18n/index';
-import { useIpcListener } from './hooks/useIpcListener';
 import { PreferencesProvider } from './hooks/usePreferences';
-import { WorkspaceProvider } from './hooks/useWorkspace';
+import { ProjectProvider } from './hooks/useProject';
 
 const FALLBACK_PREFERENCES: AppPreferences = {
   theme: 'dark',
@@ -29,33 +23,24 @@ const FALLBACK_PREFERENCES: AppPreferences = {
 
 type View =
   | { name: 'loading' }
-  | { name: 'onboarding' }
-  | { name: 'getting-started'; workspaceId: string }
+  | { name: 'scan' }
   | { name: 'home' }
-  | { name: 'setup'; initialDirectory?: string }
-  | { name: 'dashboard' };
+  | { name: 'dashboard' }
+  | { name: 'nakiros-skills' }
+  | { name: 'global-skills' };
 
 export default function App() {
   const { t } = useTranslation('common');
   const [view, setView] = useState<View>({ name: 'loading' });
-  const [workspaces, setWorkspaces] = useState<StoredWorkspace[]>([]);
-  const [openedWorkspaceIds, setOpenedWorkspaceIds] = useState<string[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [openedProjectIds, setOpenedProjectIds] = useState<string[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<AppPreferences>(FALLBACK_PREFERENCES);
-  const [serverStatus, setServerStatus] = useState<'starting' | 'running' | 'stopped'>('starting');
-  const [openAgentRunChatTarget, setOpenAgentRunChatTarget] = useState<OpenAgentRunChatPayload | null>(null);
-  const [pendingLaunchRequest, setPendingLaunchRequest] = useState<OnboardingChatLaunchRequest | null>(null);
 
-  async function bootWorkspaces() {
+  async function boot() {
     try {
-      const [ws, prefs, status, configExists] = await Promise.all([
-        window.nakiros.getWorkspaces(),
-        window.nakiros.getPreferences(),
-        window.nakiros.getServerStatus(),
-        window.nakiros.nakirosConfigExists(),
-      ]);
-      setWorkspaces(ws);
+      const prefs = await window.nakiros.getPreferences();
       const resolvedPrefs: AppPreferences = {
         theme: 'dark',
         language: prefs.language ?? 'system',
@@ -68,119 +53,69 @@ export default function App() {
       };
       setPreferences(resolvedPrefs);
       void i18n.changeLanguage(resolveLanguage(resolvedPrefs.language));
-      setServerStatus(status);
+
+      // Try loading projects from SQLite
+      const savedProjects = await window.nakiros.listProjects();
+      if (savedProjects.length > 0) {
+        setProjects(savedProjects);
+        setView({ name: 'home' });
+      } else {
+        // First launch or no projects yet — go to scan
+        setView({ name: 'scan' });
+      }
       setBootError(null);
-      if (!configExists) {
-        setView({ name: 'onboarding' });
-        return;
-      }
-      // Restore last opened workspace so the user lands back where they left off
-      const lastOpened = ws.length > 0
-        ? [...ws].sort((a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime())[0]!
-        : null;
-      if (lastOpened) {
-        setOpenedWorkspaceIds([lastOpened.id]);
-        setActiveWorkspaceId(lastOpened.id);
-        setView({ name: 'dashboard' });
-        return;
-      }
     } catch (err) {
       setBootError(t('workspaceLoadError'));
-    } finally {
-      setView((current) => (
-        current.name === 'loading'
-          ? { name: 'home' }
-          : current
-      ));
+      setView({ name: 'home' });
     }
   }
 
   useEffect(() => {
-    void bootWorkspaces();
+    void boot();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useIpcListener(window.nakiros.onServerStatusChange, setServerStatus);
-  useIpcListener(window.nakiros.onOpenAgentRunChat, (payload) => {
-    const target: OpenAgentRunChatPayload = {
-      ...payload,
-      eventId: payload.eventId ?? `notif-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
-    };
-    const workspaceExists = workspaces.some((item) => item.id === target.workspaceId);
-    if (!workspaceExists) return;
-    setOpenAgentRunChatTarget(target);
-    setOpenedWorkspaceIds((prev) => (prev.includes(target.workspaceId) ? prev : [...prev, target.workspaceId]));
-    setActiveWorkspaceId(target.workspaceId);
-    setView({ name: 'dashboard' });
-  }, [workspaces]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = 'dark';
     document.documentElement.style.colorScheme = 'dark';
   }, []);
 
+  // Sync opened project tabs with available projects
   useEffect(() => {
     if (view.name !== 'dashboard') return;
 
-    const existingIds = openedWorkspaceIds.filter((id) => workspaces.some((w) => w.id === id));
-    if (existingIds.length !== openedWorkspaceIds.length) {
-      setOpenedWorkspaceIds(existingIds);
+    const existingIds = openedProjectIds.filter((id) => projects.some((p) => p.id === id));
+    if (existingIds.length !== openedProjectIds.length) {
+      setOpenedProjectIds(existingIds);
       return;
     }
 
-    if (activeWorkspaceId && existingIds.includes(activeWorkspaceId)) return;
+    if (activeProjectId && existingIds.includes(activeProjectId)) return;
     if (existingIds.length > 0) {
-      setActiveWorkspaceId(existingIds[0]!);
+      setActiveProjectId(existingIds[0]!);
       return;
     }
 
-    setActiveWorkspaceId(null);
+    setActiveProjectId(null);
     setView({ name: 'home' });
-  }, [view, openedWorkspaceIds, activeWorkspaceId, workspaces]);
+  }, [view, openedProjectIds, activeProjectId, projects]);
 
-  async function openWorkspace(ws: StoredWorkspace) {
-    const workspacePath = ws.workspacePath ?? ws.repos[0]?.localPath;
-    const updated: StoredWorkspace = {
-      ...ws,
-      workspacePath,
-      lastOpenedAt: new Date().toISOString(),
-    };
-    try {
-      await window.nakiros.saveWorkspace(updated);
-    } catch {
-      // Offline workspace access should still succeed
-    }
-    setWorkspaces((prev) => {
-      const found = prev.some((w) => w.id === updated.id);
-      if (!found) return [...prev, updated];
-      return prev.map((w) => (w.id === updated.id ? updated : w));
-    });
-    setOpenedWorkspaceIds((prev) => (prev.includes(updated.id) ? prev : [...prev, updated.id]));
-    setActiveWorkspaceId(updated.id);
+  function openProject(project: Project) {
+    setOpenedProjectIds((prev) => (prev.includes(project.id) ? prev : [...prev, project.id]));
+    setActiveProjectId(project.id);
     setView({ name: 'dashboard' });
   }
 
-  async function handleWorkspaceCreated(workspace: StoredWorkspace) {
-    const updated = await window.nakiros.getWorkspaces();
-    setWorkspaces(updated);
-    setOpenedWorkspaceIds((prev) => (prev.includes(workspace.id) ? prev : [...prev, workspace.id]));
-    setActiveWorkspaceId(workspace.id);
-    setView({ name: 'getting-started', workspaceId: workspace.id });
+  function handleOpenProjectTab(id: string) {
+    const project = projects.find((p) => p.id === id);
+    if (!project) return;
+    openProject(project);
   }
 
-  function handleOpenWorkspaceTab(id: string) {
-    const ws = workspaces.find((w) => w.id === id);
-    if (!ws) return;
-    setOpenedWorkspaceIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    setActiveWorkspaceId(id);
-    setView({ name: 'dashboard' });
-    void openWorkspace(ws);
-  }
-
-  function handleCloseWorkspaceTab(id: string) {
-    setOpenedWorkspaceIds((prev) => {
-      const next = prev.filter((workspaceId) => workspaceId !== id);
-      setActiveWorkspaceId((current) => {
+  function handleCloseProjectTab(id: string) {
+    setOpenedProjectIds((prev) => {
+      const next = prev.filter((pid) => pid !== id);
+      setActiveProjectId((current) => {
         if (current !== id) return current;
         return next.length > 0 ? next[next.length - 1]! : null;
       });
@@ -196,16 +131,25 @@ export default function App() {
     void i18n.changeLanguage(resolveLanguage(withTimestamp.language));
   }
 
-  async function handleUpdateWorkspace(updated: StoredWorkspace) {
-    await window.nakiros.saveWorkspace(updated);
-    await syncWorkspaceArtifacts(updated);
-    const fresh = await window.nakiros.getWorkspaces();
-    setWorkspaces(fresh);
-    setOpenedWorkspaceIds((prev) => prev.filter((id) => fresh.some((workspace) => workspace.id === id)));
-    if (activeWorkspaceId === updated.id && !fresh.some((workspace) => workspace.id === updated.id)) {
-      setActiveWorkspaceId(null);
+  function handleScanComplete(scannedProjects: Project[]) {
+    setProjects(scannedProjects);
+    setView({ name: 'home' });
+  }
+
+  async function handleRescan() {
+    setView({ name: 'scan' });
+  }
+
+  async function handleDismissProject(id: string) {
+    await window.nakiros.dismissProject(id);
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+    setOpenedProjectIds((prev) => prev.filter((pid) => pid !== id));
+    if (activeProjectId === id) {
+      setActiveProjectId(null);
     }
   }
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   if (view.name === 'loading') {
     return (
@@ -218,70 +162,43 @@ export default function App() {
     );
   }
 
-  if (view.name === 'onboarding') {
-    return (
-      <Onboarding
-        onDone={() => setView({ name: 'setup' })}
-      />
-    );
-  }
-
-  if (view.name === 'getting-started') {
-    const createdWorkspace = workspaces.find((workspace) => workspace.id === view.workspaceId);
-    if (!createdWorkspace) {
-      return <div className="p-5 text-[var(--text-muted)]">{t('loadingWorkspace')}</div>;
-    }
-
-    return (
-      <WorkspaceGettingStarted
-        workspace={createdWorkspace}
-        onLaunchChat={(request) => {
-          setPendingLaunchRequest(request);
-          void openWorkspace(createdWorkspace);
-        }}
-        onContinue={() => {
-          void openWorkspace(createdWorkspace);
-        }}
-        onBackHome={() => setView({ name: 'home' })}
-      />
-    );
+  if (view.name === 'scan') {
+    return <ScanView onComplete={handleScanComplete} />;
   }
 
   if (view.name === 'home') {
-    const sorted = [...workspaces].sort(
-      (a, b) => new Date(b.lastOpenedAt).getTime() - new Date(a.lastOpenedAt).getTime(),
-    );
     return (
       <Home
-        recentWorkspaces={sorted}
+        projects={projects}
         bootError={bootError ?? undefined}
-        onNewWorkspace={() => setView({ name: 'setup' })}
-        onOpenWorkspace={(id) => {
-          const ws = workspaces.find((w) => w.id === id);
-          if (ws) void openWorkspace(ws);
+        onOpenProject={(id) => {
+          const project = projects.find((p) => p.id === id);
+          if (project) openProject(project);
         }}
+        onRescan={handleRescan}
+        onDismissProject={handleDismissProject}
+        onOpenNakirosSkills={() => setView({ name: 'nakiros-skills' })}
+        onOpenGlobalSkills={() => setView({ name: 'global-skills' })}
       />
     );
   }
 
-  if (view.name === 'setup') {
-    return (
-      <WorkspaceSetup
-        initialDirectory={view.initialDirectory}
-        onCreated={handleWorkspaceCreated}
-        onCancel={() => setView({ name: 'home' })}
-      />
-    );
+  if (view.name === 'nakiros-skills') {
+    return <NakirosSkillsView onBack={() => setView({ name: 'home' })} />;
   }
 
-  const workspace = activeWorkspaceId
-    ? workspaces.find((w) => w.id === activeWorkspaceId)
+  if (view.name === 'global-skills') {
+    return <GlobalSkillsView onBack={() => setView({ name: 'home' })} />;
+  }
+
+  const project = activeProjectId
+    ? projects.find((p) => p.id === activeProjectId)
     : undefined;
-  const openedWorkspaces = openedWorkspaceIds
-    .map((id) => workspaces.find((w) => w.id === id))
-    .filter((w): w is StoredWorkspace => Boolean(w));
+  const openedProjects = openedProjectIds
+    .map((id) => projects.find((p) => p.id === id))
+    .filter((p): p is Project => Boolean(p));
 
-  if (!workspace) {
+  if (!project) {
     return <div className="p-5 text-[var(--text-muted)]">{t('loadingWorkspace')}</div>;
   }
 
@@ -290,33 +207,24 @@ export default function App() {
       preferences={preferences}
       updatePreferences={handlePreferencesChange}
     >
-      <WorkspaceProvider
-        workspace={workspace}
-        openWorkspaces={openedWorkspaces}
-        activeWorkspaceId={workspace.id}
-        allWorkspaces={workspaces}
-        openWorkspaceTab={handleOpenWorkspaceTab}
-        closeWorkspaceTab={handleCloseWorkspaceTab}
+      <ProjectProvider
+        project={project}
+        openProjects={openedProjects}
+        activeProjectId={project.id}
+        allProjects={projects}
+        openProjectTab={handleOpenProjectTab}
+        closeProjectTab={handleCloseProjectTab}
       >
         <Dashboard
-          serverStatus={serverStatus}
-          openAgentRunChatTarget={openAgentRunChatTarget}
-          launchChatRequest={pendingLaunchRequest}
-          onUpdateWorkspace={handleUpdateWorkspace}
-          onNewWorkspace={() => setView({ name: 'setup' })}
           onGoHome={() => {
-            void window.nakiros.getWorkspaces().then((fresh) => {
-              setWorkspaces(fresh);
-              setOpenedWorkspaceIds((prev) => prev.filter((id) => fresh.some((w) => w.id === id)));
+            void window.nakiros.listProjects().then((fresh) => {
+              setProjects(fresh);
+              setOpenedProjectIds((prev) => prev.filter((id) => fresh.some((p) => p.id === id)));
             });
             setView({ name: 'home' });
           }}
-          onGoGettingStarted={(workspaceId) => {
-            setPendingLaunchRequest(null);
-            setView({ name: 'getting-started', workspaceId });
-          }}
         />
-      </WorkspaceProvider>
+      </ProjectProvider>
     </PreferencesProvider>
   );
 }

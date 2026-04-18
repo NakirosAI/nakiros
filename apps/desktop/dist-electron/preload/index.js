@@ -148,7 +148,81 @@ const IPC_CHANNELS = {
   "preview:check": "preview:check",
   "preview:apply": "preview:apply",
   "preview:apply-file": "preview:apply-file",
-  "preview:discard": "preview:discard"
+  "preview:discard": "preview:discard",
+  // Nakiros Agent Team — Project management
+  "project:scan": "project:scan",
+  "project:scanProgress": "project:scanProgress",
+  "project:dismiss": "project:dismiss",
+  "project:list": "project:list",
+  "project:get": "project:get",
+  "project:getStats": "project:getStats",
+  "project:getGlobalStats": "project:getGlobalStats",
+  "project:listConversations": "project:listConversations",
+  "project:getConversation": "project:getConversation",
+  "project:getConversationMessages": "project:getConversationMessages",
+  "project:listSkills": "project:listSkills",
+  "project:getSkill": "project:getSkill",
+  "project:saveSkill": "project:saveSkill",
+  "project:readSkillFile": "project:readSkillFile",
+  "project:saveSkillFile": "project:saveSkillFile",
+  "project:getRecommendations": "project:getRecommendations",
+  // Nakiros bundled skills
+  "nakiros:listBundledSkills": "nakiros:listBundledSkills",
+  "nakiros:getBundledSkill": "nakiros:getBundledSkill",
+  "nakiros:readBundledSkillFile": "nakiros:readBundledSkillFile",
+  "nakiros:saveBundledSkillFile": "nakiros:saveBundledSkillFile",
+  "nakiros:promoteBundledSkill": "nakiros:promoteBundledSkill",
+  // Unified binary/asset file reader (works across project/nakiros-bundled/claude-global scopes)
+  "skill:readFileAsDataUrl": "skill:readFileAsDataUrl",
+  // User-global skills (~/.claude/skills/, excluding our symlinks)
+  "claudeGlobal:listSkills": "claudeGlobal:listSkills",
+  "claudeGlobal:getSkill": "claudeGlobal:getSkill",
+  "claudeGlobal:readSkillFile": "claudeGlobal:readSkillFile",
+  "claudeGlobal:saveSkillFile": "claudeGlobal:saveSkillFile",
+  // Eval runner
+  "eval:startRuns": "eval:startRuns",
+  "eval:stopRun": "eval:stopRun",
+  "eval:listRuns": "eval:listRuns",
+  "eval:loadPersisted": "eval:loadPersisted",
+  "eval:event": "eval:event",
+  "eval:sendUserMessage": "eval:sendUserMessage",
+  "eval:finishRun": "eval:finishRun",
+  "eval:getFeedback": "eval:getFeedback",
+  "eval:saveFeedback": "eval:saveFeedback",
+  "eval:listOutputs": "eval:listOutputs",
+  "eval:readOutput": "eval:readOutput",
+  // Audit runner
+  "audit:start": "audit:start",
+  "audit:stopRun": "audit:stopRun",
+  "audit:getRun": "audit:getRun",
+  "audit:sendUserMessage": "audit:sendUserMessage",
+  "audit:listHistory": "audit:listHistory",
+  "audit:readReport": "audit:readReport",
+  "audit:event": "audit:event",
+  "audit:listActive": "audit:listActive",
+  // Fix runner
+  "fix:start": "fix:start",
+  "fix:stopRun": "fix:stopRun",
+  "fix:getRun": "fix:getRun",
+  "fix:sendUserMessage": "fix:sendUserMessage",
+  "fix:finish": "fix:finish",
+  "fix:event": "fix:event",
+  "fix:runEvalsInTemp": "fix:runEvalsInTemp",
+  "fix:getBenchmarks": "fix:getBenchmarks",
+  "fix:listActive": "fix:listActive",
+  "fix:getBufferedEvents": "fix:getBufferedEvents",
+  // Create runner — thin mirror of fix:* with different temp-workdir seeding and sync-back policy.
+  "create:start": "create:start",
+  "create:stopRun": "create:stopRun",
+  "create:getRun": "create:getRun",
+  "create:sendUserMessage": "create:sendUserMessage",
+  "create:finish": "create:finish",
+  "create:event": "create:event",
+  "create:listActive": "create:listActive",
+  "create:getBufferedEvents": "create:getBufferedEvents",
+  // Draft files (shared by fix + create — reads from the run's temp workdir)
+  "skillAgent:listTempFiles": "skillAgent:listTempFiles",
+  "skillAgent:readTempFile": "skillAgent:readTempFile"
 };
 function isMissingHandlerError(err, channel) {
   if (!(err instanceof Error)) return false;
@@ -321,5 +395,94 @@ electron.contextBridge.exposeInMainWorld("nakiros", {
     const listener = (_, payload) => cb(payload);
     electron.ipcRenderer.on(IPC_CHANNELS["onboarding:progress"], listener);
     return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["onboarding:progress"], listener);
-  }
+  },
+  // ─── Nakiros Agent Team — Projects ───────────────────────────────────────────
+  scanProjects: () => electron.ipcRenderer.invoke(IPC_CHANNELS["project:scan"]),
+  listProjects: () => electron.ipcRenderer.invoke(IPC_CHANNELS["project:list"]),
+  getProject: (id) => electron.ipcRenderer.invoke(IPC_CHANNELS["project:get"], id),
+  dismissProject: (id) => electron.ipcRenderer.invoke(IPC_CHANNELS["project:dismiss"], id),
+  listProjectConversations: (projectId) => electron.ipcRenderer.invoke(IPC_CHANNELS["project:listConversations"], projectId),
+  getProjectConversationMessages: (projectId, sessionId) => electron.ipcRenderer.invoke(IPC_CHANNELS["project:getConversationMessages"], projectId, sessionId),
+  listProjectSkills: (projectId) => electron.ipcRenderer.invoke(IPC_CHANNELS["project:listSkills"], projectId),
+  getProjectSkill: (projectId, skillName) => electron.ipcRenderer.invoke(IPC_CHANNELS["project:getSkill"], projectId, skillName),
+  saveProjectSkill: (projectId, skillName, content) => electron.ipcRenderer.invoke(IPC_CHANNELS["project:saveSkill"], projectId, skillName, content),
+  readSkillFile: (projectId, skillName, relativePath) => electron.ipcRenderer.invoke(IPC_CHANNELS["project:readSkillFile"], projectId, skillName, relativePath),
+  saveSkillFile: (projectId, skillName, relativePath, content) => electron.ipcRenderer.invoke(IPC_CHANNELS["project:saveSkillFile"], projectId, skillName, relativePath, content),
+  // Nakiros bundled skills
+  listBundledSkills: () => electron.ipcRenderer.invoke(IPC_CHANNELS["nakiros:listBundledSkills"]),
+  getBundledSkill: (skillName) => electron.ipcRenderer.invoke(IPC_CHANNELS["nakiros:getBundledSkill"], skillName),
+  readBundledSkillFile: (skillName, relativePath) => electron.ipcRenderer.invoke(IPC_CHANNELS["nakiros:readBundledSkillFile"], skillName, relativePath),
+  saveBundledSkillFile: (skillName, relativePath, content) => electron.ipcRenderer.invoke(IPC_CHANNELS["nakiros:saveBundledSkillFile"], skillName, relativePath, content),
+  promoteBundledSkill: (skillName) => electron.ipcRenderer.invoke(IPC_CHANNELS["nakiros:promoteBundledSkill"], skillName),
+  // User-global skills (~/.claude/skills/, excluding our symlinks)
+  listClaudeGlobalSkills: () => electron.ipcRenderer.invoke(IPC_CHANNELS["claudeGlobal:listSkills"]),
+  getClaudeGlobalSkill: (skillName) => electron.ipcRenderer.invoke(IPC_CHANNELS["claudeGlobal:getSkill"], skillName),
+  readClaudeGlobalSkillFile: (skillName, relativePath) => electron.ipcRenderer.invoke(IPC_CHANNELS["claudeGlobal:readSkillFile"], skillName, relativePath),
+  readSkillFileAsDataUrl: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["skill:readFileAsDataUrl"], request),
+  saveClaudeGlobalSkillFile: (skillName, relativePath, content) => electron.ipcRenderer.invoke(IPC_CHANNELS["claudeGlobal:saveSkillFile"], skillName, relativePath, content),
+  onScanProgress: (cb) => {
+    const listener = (_, payload) => cb(payload);
+    electron.ipcRenderer.on(IPC_CHANNELS["project:scanProgress"], listener);
+    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["project:scanProgress"], listener);
+  },
+  // Eval runner
+  startEvalRuns: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:startRuns"], request),
+  stopEvalRun: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:stopRun"], runId),
+  listEvalRuns: () => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:listRuns"]),
+  loadPersistedEvalRuns: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:loadPersisted"], request),
+  onEvalEvent: (cb) => {
+    const listener = (_, payload) => cb(payload);
+    electron.ipcRenderer.on(IPC_CHANNELS["eval:event"], listener);
+    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["eval:event"], listener);
+  },
+  sendEvalUserMessage: (runId, message) => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:sendUserMessage"], runId, message),
+  finishEvalRun: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:finishRun"], runId),
+  getEvalFeedback: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:getFeedback"], request),
+  saveEvalFeedback: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:saveFeedback"], request),
+  listEvalRunOutputs: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:listOutputs"], runId),
+  readEvalRunOutput: (runId, relativePath) => electron.ipcRenderer.invoke(IPC_CHANNELS["eval:readOutput"], runId, relativePath),
+  // Audit
+  startAudit: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["audit:start"], request),
+  stopAudit: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["audit:stopRun"], runId),
+  getAuditRun: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["audit:getRun"], runId),
+  sendAuditUserMessage: (runId, message) => electron.ipcRenderer.invoke(IPC_CHANNELS["audit:sendUserMessage"], runId, message),
+  listAuditHistory: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["audit:listHistory"], request),
+  readAuditReport: (path) => electron.ipcRenderer.invoke(IPC_CHANNELS["audit:readReport"], path),
+  listActiveAuditRuns: () => electron.ipcRenderer.invoke(IPC_CHANNELS["audit:listActive"]),
+  onAuditEvent: (cb) => {
+    const listener = (_, payload) => cb(payload);
+    electron.ipcRenderer.on(IPC_CHANNELS["audit:event"], listener);
+    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["audit:event"], listener);
+  },
+  // Fix
+  startFix: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["fix:start"], request),
+  stopFix: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["fix:stopRun"], runId),
+  getFixRun: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["fix:getRun"], runId),
+  sendFixUserMessage: (runId, message) => electron.ipcRenderer.invoke(IPC_CHANNELS["fix:sendUserMessage"], runId, message),
+  finishFix: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["fix:finish"], runId),
+  runFixEvalsInTemp: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["fix:runEvalsInTemp"], request),
+  getFixBenchmarks: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["fix:getBenchmarks"], runId),
+  listActiveFixRuns: () => electron.ipcRenderer.invoke(IPC_CHANNELS["fix:listActive"]),
+  getFixBufferedEvents: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["fix:getBufferedEvents"], runId),
+  onFixEvent: (cb) => {
+    const listener = (_, payload) => cb(payload);
+    electron.ipcRenderer.on(IPC_CHANNELS["fix:event"], listener);
+    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["fix:event"], listener);
+  },
+  // Create (skill-factory "create" command)
+  startCreate: (request) => electron.ipcRenderer.invoke(IPC_CHANNELS["create:start"], request),
+  stopCreate: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["create:stopRun"], runId),
+  getCreateRun: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["create:getRun"], runId),
+  sendCreateUserMessage: (runId, message) => electron.ipcRenderer.invoke(IPC_CHANNELS["create:sendUserMessage"], runId, message),
+  finishCreate: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["create:finish"], runId),
+  listActiveCreateRuns: () => electron.ipcRenderer.invoke(IPC_CHANNELS["create:listActive"]),
+  getCreateBufferedEvents: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["create:getBufferedEvents"], runId),
+  onCreateEvent: (cb) => {
+    const listener = (_, payload) => cb(payload);
+    electron.ipcRenderer.on(IPC_CHANNELS["create:event"], listener);
+    return () => electron.ipcRenderer.removeListener(IPC_CHANNELS["create:event"], listener);
+  },
+  // Draft files (shared by fix + create — previews what's in the temp workdir)
+  listSkillAgentTempFiles: (runId) => electron.ipcRenderer.invoke(IPC_CHANNELS["skillAgent:listTempFiles"], runId),
+  readSkillAgentTempFile: (runId, relativePath) => electron.ipcRenderer.invoke(IPC_CHANNELS["skillAgent:readTempFile"], runId, relativePath)
 });

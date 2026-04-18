@@ -46,6 +46,19 @@ export function getDb(): DrizzleDb {
       created_at TEXT NOT NULL,
       resolved_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      project_path TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT 'claude',
+      provider_project_dir TEXT NOT NULL,
+      last_activity_at TEXT,
+      session_count INTEGER NOT NULL DEFAULT 0,
+      skill_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      last_scanned_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // Migrate from legacy workspaces.json if DB is empty

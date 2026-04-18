@@ -37,6 +37,21 @@ jobs:
           fi
           echo "Tag ${TAG} matches package version — ok."
 
+      - name: Determine npm dist-tag
+        id: dist_tag
+        run: |
+          VERSION=$(node -p "require('./apps/nakiros/package.json').version")
+          if [[ "${VERSION}" == *"-beta"* ]]; then
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+          elif [[ "${VERSION}" == *"-alpha"* ]]; then
+            echo "tag=alpha" >> "$GITHUB_OUTPUT"
+          elif [[ "${VERSION}" == *"-rc"* ]]; then
+            echo "tag=rc" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Publishing ${VERSION} with dist-tag ${tag}"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -44,7 +59,7 @@ jobs:
         run: pnpm turbo build --filter nakiros
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --tag ${{ steps.dist_tag.outputs.tag }}
         working-directory: apps/nakiros
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

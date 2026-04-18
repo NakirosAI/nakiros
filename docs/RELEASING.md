@@ -27,38 +27,55 @@ the landing page gets deployed.
 4. Done. CF auto-rebuilds on push to `main`, and creates **preview URLs** for
    every PR that touches `apps/landing/**`.
 
-## Cutting an npm release
+## Release flavors
+
+The project uses [semver](https://semver.org) pre-releases to differentiate
+unstable dev builds from stable releases. The publish workflow picks the npm
+**dist-tag** automatically based on the version string:
+
+| Version shape      | dist-tag  | Install command                   |
+|--------------------|-----------|-----------------------------------|
+| `0.1.0-beta.N`     | `beta`    | `npm i -g nakiros@beta`           |
+| `0.1.0-alpha.N`    | `alpha`   | `npm i -g nakiros@alpha`          |
+| `0.1.0-rc.N`       | `rc`      | `npm i -g nakiros@rc`             |
+| `0.1.0` (no suffix)| `latest`  | `npm i -g nakiros`                |
+
+`latest` is what `npm i -g nakiros` grabs by default. Pre-release dist-tags
+require explicit opt-in, so a broken `beta` release never hits casual users.
+
+## Cutting a release
 
 1. Make sure `main` is green and you're at the right commit.
-2. Bump `apps/nakiros/package.json` `"version"` field. Follow semver:
-   - `0.x.y` for pre-1.0 (current).
-   - Breaking change → bump minor while in 0.x.
-   - Patch → bump patch.
+2. Bump `apps/nakiros/package.json` `"version"` field. Examples:
+   - `0.1.0-beta.1` → `0.1.0-beta.2` (next beta iteration)
+   - `0.1.0-beta.4` → `0.1.0` (first stable)
+   - `0.1.0` → `0.2.0-beta.1` (breaking change, back to beta)
+   - `0.1.0` → `0.1.1` (stable patch)
 3. Commit:
    ```bash
-   git commit -am "chore(nakiros): bump to v0.2.0"
+   git commit -am "chore(nakiros): bump to v0.2.0-beta.1"
    git push
    ```
-4. Create a **GitHub Release** with tag `v0.2.0` (must match the version in
-   `apps/nakiros/package.json` exactly — the workflow refuses to publish
-   otherwise).
+4. Create a **GitHub Release** with tag `v0.2.0-beta.1` (the `v` prefix must
+   match the version in `apps/nakiros/package.json` exactly — the workflow
+   refuses to publish otherwise).
 5. The workflow runs automatically:
    - Verifies tag ↔ package version alignment
-   - Installs deps with frozen lockfile
+   - Detects dist-tag from version string
    - Runs `pnpm turbo build --filter nakiros`
-   - Publishes to npm with `--provenance --access public`
-6. Within a few minutes, `npm i -g nakiros@0.2.0` works, and the landing page
-   will pick up the new version on its next page load (the badge fetches
-   `registry.npmjs.org/nakiros/latest`).
+   - Publishes to npm with `--provenance --access public --tag <dist-tag>`
+6. Within a few minutes, the install command shown on the landing page
+   updates automatically (the badge fetches `registry.npmjs.org/nakiros` and
+   shows whichever pre-release tag is active when no `latest` exists).
 
 ## Rolling back
 
 npm doesn't allow overwriting a published version. If a broken release ships:
 
-- Publish a patch (`0.2.1`) with the fix.
-- If within 72h and the version was never downloaded, you can `npm unpublish
-  nakiros@0.2.0`. Otherwise `npm deprecate nakiros@0.2.0 "Use 0.2.1 — broken
-  release"`.
+- Publish a patch (`0.1.0-beta.2`, `0.1.1`, etc.) with the fix.
+- If within 72h and the version was never downloaded, you can
+  `npm unpublish nakiros@0.1.0-beta.1`. Otherwise
+  `npm deprecate nakiros@0.1.0-beta.1 "Broken release, use 0.1.0-beta.2"`.
 
 ## Provenance
 

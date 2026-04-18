@@ -13,11 +13,19 @@ interface Props {
 
 export function InstallCommand({ command, className, label, packageName }: Props) {
   const [copied, setCopied] = useState(false);
-  const version = useNpmVersion(packageName ?? '');
+  const info = useNpmVersion(packageName ?? '');
+  const isPrerelease = info ? info.tag !== 'latest' : false;
+
+  // If the package only exists as a pre-release on npm, suffix the command
+  // with @<tag> so users actually install it (e.g. `npm i -g nakiros@beta`).
+  const displayCommand =
+    isPrerelease && packageName && command.includes(packageName)
+      ? command.replace(packageName, `${packageName}@${info!.tag}`)
+      : command;
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(command);
+      await navigator.clipboard.writeText(displayCommand);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -34,7 +42,7 @@ export function InstallCommand({ command, className, label, packageName }: Props
       )}
       <div className="group inline-flex items-center gap-3 rounded-lg border border-[#1A1A1A] bg-[#0D0D0D] px-4 py-3 font-mono text-sm text-[#F0F0F0] transition-colors hover:border-[#2ECFCF]/40">
         <span className="text-[#2ECFCF]">$</span>
-        <span>{command}</span>
+        <span>{displayCommand}</span>
         <button
           type="button"
           onClick={copy}
@@ -43,12 +51,17 @@ export function InstallCommand({ command, className, label, packageName }: Props
         >
           {copied ? <Check className="h-3.5 w-3.5 text-[#2ECFCF]" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
-        {packageName && version && (
+        {packageName && info && (
           <span
-            className="ml-1 rounded-full border border-[#2ECFCF]/30 bg-[#2ECFCF]/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[#2ECFCF]"
-            title={`Latest on npm`}
+            className={cn(
+              'ml-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em]',
+              isPrerelease
+                ? 'border-[#F0B429]/40 bg-[#F0B429]/5 text-[#F0B429]'
+                : 'border-[#2ECFCF]/30 bg-[#2ECFCF]/5 text-[#2ECFCF]',
+            )}
+            title={isPrerelease ? `Pre-release on npm (${info.tag})` : 'Latest on npm'}
           >
-            v{version}
+            v{info.version}{isPrerelease ? ` · ${info.tag}` : ''}
           </span>
         )}
       </div>

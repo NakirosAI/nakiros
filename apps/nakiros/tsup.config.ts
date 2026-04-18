@@ -1,21 +1,19 @@
 import { defineConfig } from 'tsup';
 
-export default defineConfig([
-  // Library entry — imported by Desktop and other consumers
-  {
-    entry: { index: 'src/index.ts' },
-    format: ['cjs', 'esm'],
-    dts: true,
-    clean: true,
-    sourcemap: true,
+export default defineConfig({
+  entry: {
+    'bin/nakiros': 'bin/nakiros.ts',
   },
-  // CLI binary — standalone nakiros executable
-  {
-    entry: { 'bin/nakiros': 'bin/nakiros.ts' },
-    format: ['esm'],
-    dts: false,
-    clean: false,
-    sourcemap: false,
-    banner: { js: '#!/usr/bin/env node' },
-  },
-]);
+  format: ['esm'],
+  outDir: 'dist',
+  target: 'node20',
+  platform: 'node',
+  sourcemap: false,
+  clean: true,
+  dts: false,
+  splitting: false,
+  bundle: true,
+  // Keep node_modules externalized so npm install pulls them; we only bundle our workspace sources.
+  noExternal: ['@nakiros/shared', '@nakiros/agents-bundle'],
+  banner: { js: '#!/usr/bin/env node' },
+});

@@ -8,7 +8,8 @@
     "nakiros": "./dist/bin/nakiros.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "bundled-skills"
   ],
   "engines": {
     "node": ">=20"

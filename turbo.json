@@ -3,7 +3,11 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "out/**"]
+      "outputs": ["dist/**"]
+    },
+    "nakiros#build": {
+      "dependsOn": ["^build", "@nakiros/frontend#build"],
+      "outputs": ["dist/**"]
     },
     "dev": {
       "cache": false,

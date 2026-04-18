@@ -54,20 +54,6 @@ import {
 } from './services/snapshot-service.js';
 import { checkPendingPreview, applyPreview, applyPreviewFile, discardPreview } from './services/preview-service.js';
 import { getAgentTabsState, saveAgentTabsState, clearAgentTabsState } from './services/agent-tabs-store.js';
-import {
-  generatePKCE,
-  generateState,
-  openAuthUrl,
-} from './services/jira-oauth.js';
-import {
-  completeJiraOAuth,
-  countJiraTickets,
-  disconnectJira,
-  getJiraBoardSelection,
-  getJiraProjects,
-  getJiraStatus,
-  syncWorkspaceJiraTickets,
-} from './services/jira-auth-service.js';
 import type {
   AgentRunRequest,
   StoredWorkspace,
@@ -76,9 +62,6 @@ import type {
   AppPreferences,
   AgentInstallRequest,
   AgentProvider,
-  JiraAuthCompletePayload,
-  JiraAuthErrorPayload,
-  JiraSyncFilter,
   StoredAgentTabsState,
 } from '@nakiros/shared';
 import {
@@ -146,85 +129,13 @@ import { readLatestIterationBenchmark } from './services/eval-benchmark.js';
 import { cleanupEvalArtifacts } from './services/eval-artifact-cleanup.js';
 import { existsSync as fsExistsSync } from 'fs';
 
-// ─── Single-instance lock (required for protocol handling on Windows/Linux) ───
+// ─── Single-instance lock ─────────────────────────────────────────────────────
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 }
 let isQuitting = false;
-
-// ─── Protocol registration ────────────────────────────────────────────────────
-
-if (process.defaultApp) {
-  // Development mode: register with explicit executable path
-  if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient('nakiros', process.execPath, [resolve(process.argv[1] ?? '')]);
-  }
-} else {
-  app.setAsDefaultProtocolClient('nakiros');
-}
-
-// ─── OAuth state store ────────────────────────────────────────────────────────
-
-interface PendingOAuth {
-  codeVerifier: string;
-  wsId: string;
-  jiraUrl?: string;
-}
-
-const pendingOAuth = new Map<string, PendingOAuth>();
-
-async function handleOAuthCallback(url: string): Promise<void> {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return;
-  }
-
-  if (parsed.protocol !== 'nakiros:') return;
-
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win) {
-    if (win.isMinimized()) win.restore();
-    win.focus();
-  }
-
-  // ── Jira OAuth callback ───────────────────────────────────────────────
-  if (parsed.hostname !== 'oauth') return;
-
-  const code = parsed.searchParams.get('code');
-  const state = parsed.searchParams.get('state');
-  const errorParam = parsed.searchParams.get('error');
-
-  if (errorParam || !code || !state) {
-    win.webContents.send(IPC_CHANNELS['jira:auth-error'], {
-      wsId: '',
-      error: errorParam ?? 'Missing code or state in OAuth callback',
-    });
-    return;
-  }
-
-  const pending = pendingOAuth.get(state);
-  if (!pending) {
-    win.webContents.send(IPC_CHANNELS['jira:auth-error'], { wsId: '', error: 'Invalid OAuth state (expired or unknown)' });
-    return;
-  }
-  pendingOAuth.delete(state);
-
-  const { codeVerifier, wsId } = pending;
-
-  try {
-    const payload = await completeJiraOAuth(wsId, code, codeVerifier, pending.jiraUrl);
-    win.webContents.send(IPC_CHANNELS['jira:auth-complete'], payload satisfies JiraAuthCompletePayload);
-  } catch (err) {
-    win.webContents.send(IPC_CHANNELS['jira:auth-error'], {
-      wsId,
-      error: err instanceof Error ? err.message : String(err),
-    } satisfies JiraAuthErrorPayload);
-  }
-}
 
 // ─── Icon loader ──────────────────────────────────────────────────────────────
 
@@ -327,27 +238,9 @@ function formatDuration(seconds: number): string {
   return `${minutes} min`;
 }
 
-// ─── macOS: open-url event (protocol handler) ─────────────────────────────────
-
-// Buffer URL if it arrives before the app is ready
-let pendingProtocolUrl: string | null = null;
-
-app.on('open-url', (event, url) => {
-  event.preventDefault();
-  if (app.isReady()) {
-    void handleOAuthCallback(url);
-  } else {
-    pendingProtocolUrl = url;
-  }
-});
-
 // ─── Windows/Linux: second-instance (single-instance lock) ───────────────────
 
-app.on('second-instance', (_, argv) => {
-  const url = argv.find((arg) => arg.startsWith('nakiros://'));
-  if (url) void handleOAuthCallback(url);
-
-  // Focus existing window
+app.on('second-instance', () => {
   const win = BrowserWindow.getAllWindows()[0];
   if (win) {
     if (win.isMinimized()) win.restore();
@@ -676,33 +569,6 @@ ipcMain.handle(IPC_CHANNELS['agentTabs:save'], (_, workspaceId: string, state: S
   saveAgentTabsState(resolveSlug(workspaceId), state));
 ipcMain.handle(IPC_CHANNELS['agentTabs:clear'], (_, workspaceId: string) => clearAgentTabsState(resolveSlug(workspaceId)));
 
-// ─── IPC: Jira OAuth ─────────────────────────────────────────────────────────
-
-ipcMain.handle(IPC_CHANNELS['jira:startAuth'], (_, wsId: string, jiraUrl?: string) => {
-  const state = generateState();
-  const { codeVerifier, codeChallenge } = generatePKCE();
-  pendingOAuth.set(state, { codeVerifier, wsId, jiraUrl: jiraUrl?.trim() || undefined });
-  openAuthUrl(state, codeChallenge);
-});
-
-ipcMain.handle(IPC_CHANNELS['jira:disconnect'], (_, wsId: string) => disconnectJira(wsId));
-
-ipcMain.handle(IPC_CHANNELS['jira:getStatus'], (_, wsId: string) => getJiraStatus(wsId));
-
-ipcMain.handle(IPC_CHANNELS['jira:syncTickets'], async (_, wsId: string, workspace: StoredWorkspace) => {
-  // Ensure we use the persisted cloudId (workspace from renderer may be stale)
-  const persisted = getAll().find((w) => w.id === wsId) ?? workspace;
-  return syncWorkspaceJiraTickets(wsId, persisted);
-});
-
-ipcMain.handle(IPC_CHANNELS['jira:getProjects'], async (_, wsId: string) => getJiraProjects(wsId));
-
-ipcMain.handle(IPC_CHANNELS['jira:countTickets'], async (_, wsId: string, projectKey: string, syncFilter: string, boardType: string) =>
-  countJiraTickets(wsId, projectKey, syncFilter as JiraSyncFilter, boardType as 'scrum' | 'kanban' | 'unknown'));
-
-ipcMain.handle(IPC_CHANNELS['jira:getBoardType'], async (_, wsId: string, projectKey: string) =>
-  getJiraBoardSelection(wsId, projectKey));
-
 // ─── MCP Server ───────────────────────────────────────────────────────────────
 
 type McpServerStatus = 'starting' | 'running' | 'stopped';
@@ -777,19 +643,6 @@ app.whenReady().then(() => {
   cleanupEvalArtifacts();
 
   void ensureMcpServer(3737);
-
-  // Process any URL that arrived before the app was ready (macOS)
-  if (pendingProtocolUrl) {
-    const urlToProcess = pendingProtocolUrl;
-    pendingProtocolUrl = null;
-    // Wait for the renderer to load before sending events
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.webContents.once('did-finish-load', () => {
-        void handleOAuthCallback(urlToProcess);
-      });
-    }
-  }
 });
 
 // ─── Nakiros Agent Team — Project IPC handlers ──────────────────────────────

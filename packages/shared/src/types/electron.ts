@@ -16,7 +16,7 @@ export interface StoredWorkspace {
   name: string;
   workspacePath?: string;
   repos: StoredRepo[];
-  pmTool?: 'jira' | 'github' | 'gitlab' | 'linear';
+  pmTool?: 'github' | 'gitlab' | 'linear';
   projectKey?: string;
   createdAt: string;
   lastOpenedAt: string;
@@ -27,13 +27,7 @@ export interface StoredWorkspace {
   projectDocs?: WorkspaceDoc[];
   documentLanguage?: string;
   branchPattern?: string;
-  jiraUrl?: string;
   pmBoardId?: string;
-  jiraConnected?: boolean;
-  jiraCloudId?: string;
-  jiraCloudUrl?: string;
   context?: WorkspaceContext;
-  boardType?: 'scrum' | 'kanban' | 'unknown';
-  syncFilter?: 'sprint_active' | 'last_3_months' | 'all';
   ownerId?: string;
 }

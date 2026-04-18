@@ -3,13 +3,6 @@ import { IPC_CHANNELS } from '@nakiros/shared';
 import type {
   AgentRunRequest,
   AgentProvider,
-  JiraAuthCompletePayload,
-  JiraAuthErrorPayload,
-  JiraBoardSelection,
-  JiraProject,
-  JiraStatus,
-  JiraSyncResult,
-  JiraTicketCount,
   ResolvedLanguage,
   StoredWorkspace,
   StoredConversation,
@@ -174,28 +167,6 @@ contextBridge.exposeInMainWorld('nakiros', {
       if (isMissingHandlerError(err, IPC_CHANNELS['agentTabs:clear'])) return;
       throw err;
     }
-  },
-
-  // Jira OAuth
-  jiraStartAuth: (wsId: string, jiraUrl?: string) => ipcRenderer.invoke(IPC_CHANNELS['jira:startAuth'], wsId, jiraUrl),
-  jiraDisconnect: (wsId: string) => ipcRenderer.invoke(IPC_CHANNELS['jira:disconnect'], wsId),
-  jiraGetStatus: (wsId: string) => ipcRenderer.invoke(IPC_CHANNELS['jira:getStatus'], wsId) as Promise<JiraStatus>,
-  jiraSyncTickets: (wsId: string, ws: StoredWorkspace) => ipcRenderer.invoke(IPC_CHANNELS['jira:syncTickets'], wsId, ws) as Promise<JiraSyncResult>,
-  jiraGetProjects: (wsId: string) => ipcRenderer.invoke(IPC_CHANNELS['jira:getProjects'], wsId) as Promise<JiraProject[]>,
-  jiraGetBoardType: (wsId: string, projectKey: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS['jira:getBoardType'], wsId, projectKey) as Promise<JiraBoardSelection>,
-  jiraCountTickets: (wsId: string, projectKey: string, syncFilter: string, boardType: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS['jira:countTickets'], wsId, projectKey, syncFilter, boardType) as Promise<JiraTicketCount>,
-
-  onJiraAuthComplete: (cb: (data: JiraAuthCompletePayload) => void) => {
-    const listener = (_: unknown, data: JiraAuthCompletePayload) => cb(data);
-    ipcRenderer.on(IPC_CHANNELS['jira:auth-complete'], listener);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS['jira:auth-complete'], listener);
-  },
-  onJiraAuthError: (cb: (data: JiraAuthErrorPayload) => void) => {
-    const listener = (_: unknown, data: JiraAuthErrorPayload) => cb(data);
-    ipcRenderer.on(IPC_CHANNELS['jira:auth-error'], listener);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS['jira:auth-error'], listener);
   },
 
   // Docs

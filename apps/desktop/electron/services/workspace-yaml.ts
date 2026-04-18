@@ -73,16 +73,10 @@ export function buildWorkspaceYaml(workspace: StoredWorkspace): string {
   ];
 
   if (canonical.pmTool) lines.push(`  pm_tool: ${quoteYaml(canonical.pmTool)}`);
+  if (canonical.projectKey) lines.push(`  project_key: ${quoteYaml(canonical.projectKey)}`);
+  if (canonical.pmBoardId) lines.push(`  pm_board_id: ${quoteYaml(canonical.pmBoardId)}`);
   if (canonical.documentLanguage) lines.push(`  document_language: ${quoteYaml(canonical.documentLanguage)}`);
   if (canonical.branchPattern) lines.push(`  branch_pattern: ${quoteYaml(canonical.branchPattern)}`);
-
-  if (canonical.pmTool === 'jira' && canonical.projectKey) {
-    lines.push('  jira:');
-    lines.push(`    project_key: ${quoteYaml(canonical.projectKey)}`);
-    if (canonical.pmBoardId) lines.push(`    board_id: ${quoteYaml(canonical.pmBoardId)}`);
-    if (canonical.boardType) lines.push(`    board_type: ${quoteYaml(canonical.boardType)}`);
-    if (canonical.syncFilter) lines.push(`    sync_filter: ${quoteYaml(canonical.syncFilter)}`);
-  }
 
   lines.push('  repos:');
   for (const repo of canonical.repos) {
@@ -109,14 +103,11 @@ export function parseCanonicalWorkspaceYaml(
   let documentLanguage: string | undefined;
   let branchPattern: string | undefined;
   let projectKey: string | undefined;
-  let boardType: CanonicalWorkspaceYaml['boardType'];
-  let syncFilter: CanonicalWorkspaceYaml['syncFilter'];
   let pmBoardId: string | undefined;
   const repos: WorkspaceYamlRepo[] = [];
 
   let inWorkspace = false;
   let inRepos = false;
-  let inJira = false;
   let currentRepo: Partial<WorkspaceYamlRepo> | null = null;
 
   const flushRepo = () => {
@@ -140,37 +131,26 @@ export function parseCanonicalWorkspaceYaml(
     if (trimmed === 'workspace:') {
       inWorkspace = true;
       inRepos = false;
-      inJira = false;
       flushRepo();
       continue;
     }
 
     if (!inWorkspace) continue;
 
-    if (indent === 2 && trimmed === 'repos:') { inRepos = true; inJira = false; flushRepo(); continue; }
-    if (indent === 2 && trimmed === 'jira:')  { inJira = true; inRepos = false; flushRepo(); continue; }
+    if (indent === 2 && trimmed === 'repos:') { inRepos = true; flushRepo(); continue; }
 
     if (indent === 2) {
       inRepos = false;
-      inJira = false;
       flushRepo();
       const pair = parseKeyValue(trimmed);
       if (!pair) continue;
       if (pair.key === 'name') name = pair.value;
       else if (pair.key === 'structure') structure = pair.value === 'multi-repo' ? 'multi-repo' : 'mono-repo';
       else if (pair.key === 'pm_tool') pmTool = pair.value as CanonicalWorkspaceYaml['pmTool'];
+      else if (pair.key === 'project_key') projectKey = pair.value;
+      else if (pair.key === 'pm_board_id') pmBoardId = pair.value;
       else if (pair.key === 'document_language') documentLanguage = pair.value;
       else if (pair.key === 'branch_pattern') branchPattern = pair.value;
-      continue;
-    }
-
-    if (inJira && indent === 4) {
-      const pair = parseKeyValue(trimmed);
-      if (!pair) continue;
-      if (pair.key === 'project_key') projectKey = pair.value;
-      else if (pair.key === 'board_id') pmBoardId = pair.value;
-      else if (pair.key === 'board_type') boardType = pair.value as CanonicalWorkspaceYaml['boardType'];
-      else if (pair.key === 'sync_filter') syncFilter = pair.value as CanonicalWorkspaceYaml['syncFilter'];
       continue;
     }
 
@@ -197,7 +177,7 @@ export function parseCanonicalWorkspaceYaml(
   if (!name) throw new Error('Invalid workspace.yaml: missing workspace.name');
   if (repos.length === 0) throw new Error('Invalid workspace.yaml: missing workspace.repos');
 
-  return { name, slug: workspaceSlug, structure, repos, pmTool, projectKey, documentLanguage, branchPattern, boardType, syncFilter, pmBoardId };
+  return { name, slug: workspaceSlug, structure, repos, pmTool, projectKey, documentLanguage, branchPattern, pmBoardId };
 }
 
 // ---------------------------------------------------------------------------

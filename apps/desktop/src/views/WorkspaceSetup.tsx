@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { StoredWorkspace, AgentProfile, JiraSyncFilter } from '@nakiros/shared';
-import clsx from 'clsx';
+import type { StoredWorkspace, AgentProfile } from '@nakiros/shared';
 import { Button } from '../components/ui';
 import { PROFILE_LABELS } from '../utils/profiles';
-import { useJiraConnection } from '../hooks/useJiraConnection';
-import { useJiraProjectInsights } from '../hooks/useJiraProjectInsights';
-import { formatJiraError } from '../utils/jira-errors';
 import { syncWorkspaceArtifacts } from '../utils/workspace-sync';
 
 interface Props {
@@ -74,7 +70,6 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
   const [ticketPrefixModeTouched, setTicketPrefixModeTouched] = useState(false);
   const [pmTool, setPmTool] = useState<StoredWorkspace['pmTool'] | ''>('');
   const [projectKey, setProjectKey] = useState('');
-  const [jiraUrl, setJiraUrl] = useState('');
 
   const [monoSource, setMonoSource] = useState<MonoSource>('local');
   const [monoRepo, setMonoRepo] = useState<StoredWorkspace['repos'][number] | null>(null);
@@ -87,18 +82,6 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [syncFilter, setSyncFilter] = useState<JiraSyncFilter>('sprint_active');
-
-  const jiraConnection = useJiraConnection({
-    workspaceId: workspaceDraftId,
-    enabled: pmTool === 'jira',
-  });
-  const jiraInsights = useJiraProjectInsights({
-    workspaceId: workspaceDraftId,
-    enabled: pmTool === 'jira' && jiraConnection.status?.connected === true,
-    projectKey: normalizeTicketPrefix(projectKey) || undefined,
-    syncFilter,
-  });
 
   const totalSteps = 4;
 
@@ -243,41 +226,6 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
     }
   }, [pmTool, normalizedProjectKey, ticketPrefixModeTouched, ticketPrefixMode]);
 
-  useEffect(() => {
-    if (pmTool === 'jira') return;
-    void window.nakiros.jiraDisconnect(workspaceDraftId).catch(() => undefined);
-  }, [pmTool, workspaceDraftId]);
-
-  async function handleJiraConnect() {
-    await jiraConnection.connect(jiraUrl);
-  }
-
-  async function handleJiraDisconnect() {
-    await jiraConnection.disconnect();
-  }
-
-  useEffect(() => () => {
-    if (createdWorkspaceRef.current) return;
-    void window.nakiros.jiraDisconnect(workspaceDraftId).catch(() => undefined);
-  }, [workspaceDraftId]);
-
-  useEffect(() => {
-    if (pmTool !== 'jira' || jiraUrl.trim() || !jiraConnection.status?.cloudUrl) return;
-    setJiraUrl(jiraConnection.status.cloudUrl);
-  }, [jiraConnection.status?.cloudUrl, jiraUrl, pmTool]);
-
-  const boardType = jiraInsights.boardType;
-  const jiraBoardId = jiraInsights.boardId;
-  const boardDetecting = jiraInsights.boardDetecting;
-  const ticketCount = jiraInsights.ticketCount;
-  const ticketCountLoading = jiraInsights.ticketCountLoading;
-  const jiraStatus = jiraConnection.status;
-  const jiraStatusLoading = jiraConnection.statusLoading;
-  const jiraConnecting = jiraConnection.connecting;
-  const jiraProjects = jiraConnection.projects;
-  const jiraProjectsLoading = jiraConnection.projectsLoading;
-  const jiraAuthError = formatJiraError(t, jiraConnection.error);
-
   async function prepareMonoRepo(): Promise<{ workspacePath: string; repos: StoredWorkspace['repos'] }> {
     if (monoSource === 'local') {
       if (!monoRepo) throw new Error('Sélectionne un repo local.');
@@ -373,27 +321,12 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
         ticketCounter: 0,
         pmTool: pmTool || undefined,
         projectKey: projectKey || undefined,
-        jiraUrl: jiraUrl.trim() || undefined,
-        jiraConnected: jiraStatus?.connected || undefined,
-        jiraCloudId: jiraStatus?.cloudId,
-        jiraCloudUrl: jiraStatus?.cloudUrl,
-        pmBoardId: jiraBoardId ?? undefined,
-        boardType: boardType ?? undefined,
-        syncFilter,
         createdAt: new Date().toISOString(),
         lastOpenedAt: new Date().toISOString(),
       };
 
       await window.nakiros.saveWorkspace(workspace);
       await syncWorkspaceArtifacts(workspace);
-
-      if (workspace.pmTool === 'jira' && workspace.projectKey && jiraStatus?.connected) {
-        setStatus('Synchronisation Jira en cours…');
-        const result = await window.nakiros.jiraSyncTickets(workspace.id, workspace);
-        if (result.error) {
-          setError(`Sync Jira échouée: ${result.error}`);
-        }
-      }
 
       createdWorkspaceRef.current = true;
       await onCreated(workspace);
@@ -644,11 +577,10 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                 className={INPUT_CLASS}
               >
                 <option value="">— aucun —</option>
-                <option value="jira">Jira</option>
               </select>
             </label>
 
-            {pmTool && pmTool !== 'jira' && (
+            {pmTool && (
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-[var(--text)]">Clé de projet (ex: PROJ)</span>
                 <input
@@ -658,151 +590,6 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                   className={INPUT_CLASS}
                 />
               </label>
-            )}
-
-            {pmTool === 'jira' && (
-              <div className={CARD_CLASS}>
-                <p className="mb-2 mt-0 text-sm font-bold">{t('jiraAuthSection')}</p>
-                <label className="mb-3 flex flex-col gap-1">
-                  <span className="text-sm font-medium text-[var(--text)]">{t('jiraUrl')}</span>
-                  <input
-                    value={jiraUrl}
-                    onChange={(event) => setJiraUrl(event.target.value)}
-                    placeholder="https://my-team.atlassian.net"
-                    className={INPUT_CLASS}
-                  />
-                </label>
-                <p className="mb-3 mt-0 text-xs text-[var(--text-muted)]">{t('jiraUrlHint')}</p>
-                {jiraStatusLoading ? (
-                  <p className={MUTED_TEXT_CLASS}>{t('jiraStatusChecking')}</p>
-                ) : jiraStatus?.connected ? (
-                  <div className="flex flex-col gap-2.5">
-                    <p className={MUTED_TEXT_CLASS}>
-                      {t('jiraConnectedAs', {
-                        name: jiraStatus.displayName ?? '',
-                        url: jiraStatus.cloudUrl ?? '',
-                      })}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="secondary" onClick={() => void handleJiraDisconnect()}>
-                        {t('jiraDisconnect')}
-                      </Button>
-                      <Button variant="secondary" onClick={() => void jiraConnection.loadProjects()}>
-                        {t('jiraRefreshProjects')}
-                      </Button>
-                    </div>
-                    {jiraProjectsLoading ? (
-                      <p className={MUTED_TEXT_CLASS}>{t('jiraProjectLoading')}</p>
-                    ) : (
-                      <>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-sm font-medium text-[var(--text)]">{t('jiraProjectLabel')}</span>
-                          <select
-                            value={projectKey}
-                            onChange={(e) => setProjectKey(e.target.value)}
-                            className={INPUT_CLASS}
-                          >
-                            <option value="">{t('jiraProjectPlaceholder')}</option>
-                            {jiraProjects.map((project) => (
-                              <option key={project.id} value={project.key}>
-                                {project.name} ({project.key})
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        {normalizedProjectKey && (
-                          <div className="mt-1 flex items-center gap-2">
-                            {boardDetecting && (
-                              <span className={MUTED_TEXT_CLASS}>{t('jiraBoardDetecting')}</span>
-                            )}
-                            {!boardDetecting && boardType && boardType !== 'unknown' && (
-                              <span className="rounded-md bg-[var(--primary-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--primary)]">
-                                {t('jiraBoardDetected', { boardType })}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2.5">
-                    <p className={MUTED_TEXT_CLASS}>
-                      {t('jiraSetupConnectHint')}
-                    </p>
-                    <div>
-                      <Button
-                        onClick={() => void handleJiraConnect()}
-                        loading={jiraConnecting}
-                      >
-                        {jiraConnecting ? t('jiraConnecting') : t('jiraConnectBtn')}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {jiraAuthError && (
-                  <div className="mt-2.5 flex flex-col gap-1.5">
-                    <p className="m-0 text-xs text-[var(--danger)]">{jiraAuthError}</p>
-                    <p className="m-0 text-xs text-[var(--text-muted)]">{t('jiraRetryHint')}</p>
-                    <Button
-                      onClick={() => void handleJiraConnect()}
-                      variant="secondary"
-                      size="sm"
-                      className="self-start"
-                    >
-                      {t('jiraRetry')}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {pmTool === 'jira' && jiraStatus?.connected && normalizedProjectKey && (
-              <div className={CARD_CLASS}>
-                <p className="mb-2.5 mt-0 text-sm font-bold">{t('jiraSyncSection')}</p>
-                {([
-                  { value: 'sprint_active', label: boardType === 'scrum' ? t('jiraSyncFilterSprint') : t('jiraSyncFilterSprintKanban'), desc: t('jiraSyncFilterSprintDescription') },
-                  { value: 'last_3_months', label: t('jiraSyncFilterRecent'), desc: t('jiraSyncFilterRecentDescription') },
-                  { value: 'all', label: t('jiraSyncFilterAll'), desc: t('jiraSyncFilterAllDescription') },
-                ] as { value: JiraSyncFilter; label: string; desc: string }[]).map((opt) => (
-                  <label
-                    key={opt.value}
-                    className="mb-2.5 flex cursor-pointer items-start gap-2.5"
-                  >
-                    <input
-                      type="radio"
-                      name="syncFilter"
-                      value={opt.value}
-                      checked={syncFilter === opt.value}
-                      onChange={() => setSyncFilter(opt.value)}
-                      className="mt-0.5 shrink-0 accent-[var(--primary)]"
-                    />
-                    <span className="flex flex-1 items-start justify-between gap-2">
-                      <span>
-                        <strong className="text-[13px]">{opt.label}</strong>
-                        <br />
-                        <span className={MUTED_TEXT_CLASS}>{opt.desc}</span>
-                      </span>
-                      {syncFilter === opt.value && (
-                        <span
-                          className={clsx(
-                            'ml-2 mt-0.5 shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold',
-                            ticketCountLoading
-                              ? 'bg-[var(--bg-muted)] text-[var(--text-muted)]'
-                              : 'bg-[var(--primary-soft)] text-[var(--primary)]',
-                          )}
-                        >
-                          {ticketCountLoading
-                            ? t('jiraTicketEstimateLoading')
-                            : ticketCount !== null
-                              ? t('jiraTicketEstimate', { count: ticketCount.count, suffix: ticketCount.hasMore ? '+' : '' })
-                              : ''}
-                        </span>
-                      )}
-                    </span>
-                  </label>
-                ))}
-              </div>
             )}
 
             <div className={CARD_CLASS}>
@@ -915,20 +702,7 @@ export default function WorkspaceSetup({ initialDirectory, onCreated, onCancel }
                 <p className="mb-1 mt-0">
                   <strong>PM Tool:</strong>{' '}
                   {pmTool}
-                  {projectKey ? ` — ${jiraProjects.find(p => p.key === projectKey)?.name ?? projectKey} (${projectKey})` : ''}
-                  {boardType && boardType !== 'unknown' ? ` — ${boardType.charAt(0).toUpperCase() + boardType.slice(1)}` : ''}
-                </p>
-              )}
-
-              {pmTool === 'jira' && jiraStatus?.connected && normalizedProjectKey && (
-                <p className="mb-1 mt-0">
-                  <strong>Synchronisation:</strong>{' '}
-                  {syncFilter === 'sprint_active' ? 'Sprint actif uniquement' : syncFilter === 'last_3_months' ? '3 derniers mois' : 'Tout le projet'}
-                  {ticketCount !== null && !ticketCountLoading && (
-                    <span className="ml-2 rounded-md bg-[var(--primary-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--primary)]">
-                      {ticketCount.count}{ticketCount.hasMore ? '+' : ''} tickets
-                    </span>
-                  )}
+                  {projectKey ? ` — ${projectKey}` : ''}
                 </p>
               )}
 

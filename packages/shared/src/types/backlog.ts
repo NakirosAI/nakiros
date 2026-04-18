@@ -3,7 +3,7 @@ export type BacklogStoryStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review
 export type BacklogEpicStatus = 'backlog' | 'in_progress' | 'done';
 export type BacklogTaskType = 'backend' | 'frontend' | 'test' | 'other';
 export type BacklogTaskStatus = 'todo' | 'in_progress' | 'done';
-export type BacklogExternalSource = 'jira' | 'linear' | 'github' | 'gitlab' | null;
+export type BacklogExternalSource = 'linear' | 'github' | 'gitlab' | null;
 
 export interface CreateStoryPayload {
   title: string;

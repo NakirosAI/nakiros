@@ -124,10 +124,7 @@ export default function WorkspaceGettingStarted({ workspace, onLaunchChat, onCon
   const allComplete = step1Complete && step2Complete && step3Complete;
   const brownfield = ctx?.brownfieldMode ?? false;
 
-  const hasJiraConnection = Boolean(workspace.jiraConnected && workspace.projectKey);
-
-  // Step 3 PM prerequisite: needs Jira + step 2 done
-  const step3PmReady = hasJiraConnection;
+  const step3PmReady = Boolean(workspace.pmTool && workspace.projectKey);
 
   if (!ctx) {
     return (

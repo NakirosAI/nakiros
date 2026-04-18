@@ -78,36 +78,3 @@ export function removeEpic(workspaceSlug: string, id: string): void {
   if (existsSync(filePath)) unlinkSync(filePath);
 }
 
-// ─── Bulk operations (used by Jira sync) ─────────────────────────────────────
-
-export function bulkSaveTickets(
-  workspaceSlug: string,
-  tickets: LocalTicket[],
-): { created: number; updated: number } {
-  const dir = ensureTicketsDir(workspaceSlug);
-  let created = 0;
-  let updated = 0;
-  for (const ticket of tickets) {
-    const filePath = join(dir, `${ticket.id}.json`);
-    const isUpdate = existsSync(filePath);
-    writeFileSync(filePath, JSON.stringify(ticket, null, 2), 'utf-8');
-    if (isUpdate) updated++; else created++;
-  }
-  return { created, updated };
-}
-
-export function bulkSaveEpics(
-  workspaceSlug: string,
-  epics: LocalEpic[],
-): { created: number; updated: number } {
-  const dir = ensureEpicsDir(workspaceSlug);
-  let created = 0;
-  let updated = 0;
-  for (const epic of epics) {
-    const filePath = join(dir, `${epic.id}.json`);
-    const isUpdate = existsSync(filePath);
-    writeFileSync(filePath, JSON.stringify(epic, null, 2), 'utf-8');
-    if (isUpdate) updated++; else created++;
-  }
-  return { created, updated };
-}

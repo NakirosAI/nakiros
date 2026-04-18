@@ -26,7 +26,7 @@ const sampleWorkspace: StoredWorkspace = {
       llmDocs: [],
     },
   ],
-  pmTool: 'jira',
+  pmTool: 'github',
   projectKey: 'EXP',
   createdAt: '2026-03-25T00:00:00.000Z',
   lastOpenedAt: '2026-03-25T00:00:00.000Z',
@@ -34,8 +34,6 @@ const sampleWorkspace: StoredWorkspace = {
   documentLanguage: 'English',
   branchPattern: 'feature/{id}',
   pmBoardId: '42',
-  boardType: 'scrum',
-  syncFilter: 'sprint_active',
 };
 
 test('canonical workspace yaml parsing preserves repos and workspace metadata', () => {
@@ -44,7 +42,7 @@ test('canonical workspace yaml parsing preserves repos and workspace metadata', 
   assert.equal(parsed.name, 'Exploitation');
   assert.equal(parsed.slug, 'exploitation');
   assert.equal(parsed.structure, 'multi-repo');
-  assert.equal(parsed.pmTool, 'jira');
+  assert.equal(parsed.pmTool, 'github');
   assert.equal(parsed.projectKey, 'EXP');
   assert.equal(parsed.documentLanguage, 'English');
   assert.equal(parsed.branchPattern, 'feature/{id}');

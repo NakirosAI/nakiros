@@ -12,13 +12,6 @@ import type {
   ResolvedLanguage,
   StoredConversation,
   StoredAgentTabsState,
-  JiraAuthCompletePayload,
-  JiraAuthErrorPayload,
-  JiraBoardSelection,
-  JiraProject,
-  JiraStatus,
-  JiraSyncResult,
-  JiraTicketCount,
   WorkspaceGettingStartedContext,
   WorkspaceGettingStartedState,
   FileChangesReviewSession,
@@ -214,17 +207,6 @@ declare global {
       getAgentTabs(workspaceId: string): Promise<StoredAgentTabsState | null>;
       saveAgentTabs(workspaceId: string, state: StoredAgentTabsState): Promise<void>;
       clearAgentTabs(workspaceId: string): Promise<void>;
-
-      // Jira OAuth
-      jiraStartAuth(wsId: string, jiraUrl?: string): Promise<void>;
-      jiraDisconnect(wsId: string): Promise<StoredWorkspace | null>;
-      jiraGetStatus(wsId: string): Promise<JiraStatus>;
-      jiraSyncTickets(wsId: string, workspace: StoredWorkspace): Promise<JiraSyncResult>;
-      onJiraAuthComplete(cb: (data: JiraAuthCompletePayload) => void): () => void;
-      onJiraAuthError(cb: (data: JiraAuthErrorPayload) => void): () => void;
-      jiraGetProjects(wsId: string): Promise<JiraProject[]>;
-      jiraGetBoardType(wsId: string, projectKey: string): Promise<JiraBoardSelection>;
-      jiraCountTickets(wsId: string, projectKey: string, syncFilter: string, boardType: string): Promise<JiraTicketCount>;
 
       // Docs
       scanDocs(workspace: StoredWorkspace): Promise<ScanResult>;

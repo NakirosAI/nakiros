@@ -21,7 +21,7 @@ export interface RepoConfig {
 export interface WorkspaceConfig {
   name: string;
   repos: RepoConfig[];
-  pmTool?: 'jira' | 'github' | 'gitlab' | 'linear';
+  pmTool?: 'github' | 'gitlab' | 'linear';
   projectKey?: string;
 }
 
@@ -40,11 +40,9 @@ export interface CanonicalWorkspaceYaml {
   slug: string;
   structure: WorkspaceStructure;
   repos: WorkspaceYamlRepo[];
-  pmTool?: 'jira' | 'github' | 'gitlab' | 'linear';
+  pmTool?: 'github' | 'gitlab' | 'linear';
   projectKey?: string;
   documentLanguage?: string;
   branchPattern?: string;
-  boardType?: 'scrum' | 'kanban' | 'unknown';
-  syncFilter?: 'sprint_active' | 'last_3_months' | 'all';
   pmBoardId?: string;
 }

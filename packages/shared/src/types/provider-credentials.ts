@@ -1,9 +1,4 @@
-export type ProviderCredentialProvider = 'jira' | 'github' | 'gitlab';
-
-export interface JiraProviderCredentialMetadata {
-  baseUrl: string;
-  email?: string;
-}
+export type ProviderCredentialProvider = 'github' | 'gitlab';
 
 export interface GitHubProviderCredentialMetadata {
   baseUrl?: string;
@@ -14,7 +9,6 @@ export interface GitLabProviderCredentialMetadata {
 }
 
 export type ProviderCredentialMetadata =
-  | JiraProviderCredentialMetadata
   | GitHubProviderCredentialMetadata
   | GitLabProviderCredentialMetadata;
 

@@ -136,12 +136,6 @@ importers:
       '@fastify/websocket':
         specifier: ^11.2.0
         version: 11.2.0
-      '@nakiros/agents-bundle':
-        specifier: workspace:*
-        version: link:../../packages/agents-bundle
-      '@nakiros/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
@@ -152,6 +146,12 @@ importers:
         specifier: ^11.0.0
         version: 11.0.0
     devDependencies:
+      '@nakiros/agents-bundle':
+        specifier: workspace:*
+        version: link:../../packages/agents-bundle
+      '@nakiros/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@types/node':
         specifier: ^24.10.13
         version: 24.10.13

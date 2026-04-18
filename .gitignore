@@ -27,6 +27,7 @@ packages/*/node_modules/
 apps/desktop/out/
 apps/desktop/.vite/
 apps/desktop/.generated-icons/
+apps/desktop/dist-electron/
 
 # VS Code Extension
 apps/vscode-extension/*.vsix

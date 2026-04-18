@@ -39,6 +39,7 @@ export function Hero() {
           <InstallCommand
             command={messages.hero.installCommand}
             label={messages.hero.installLabel}
+            packageName="nakiros"
           />
           <p className="font-mono text-xs text-[#F0F0F0]/50">{messages.hero.installHint}</p>
         </div>

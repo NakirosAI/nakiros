@@ -1,15 +1,19 @@
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useNpmVersion } from '@/lib/useNpmVersion';
 
 interface Props {
   command: string;
   className?: string;
   label?: string;
+  /** npm package to fetch latest version for. Omit to hide the version badge. */
+  packageName?: string;
 }
 
-export function InstallCommand({ command, className, label }: Props) {
+export function InstallCommand({ command, className, label, packageName }: Props) {
   const [copied, setCopied] = useState(false);
+  const version = useNpmVersion(packageName ?? '');
 
   async function copy() {
     try {
@@ -39,6 +43,14 @@ export function InstallCommand({ command, className, label }: Props) {
         >
           {copied ? <Check className="h-3.5 w-3.5 text-[#2ECFCF]" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
+        {packageName && version && (
+          <span
+            className="ml-1 rounded-full border border-[#2ECFCF]/30 bg-[#2ECFCF]/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[#2ECFCF]"
+            title={`Latest on npm`}
+          >
+            v{version}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -6,7 +6,8 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "@nakiros/shared": ["../shared/src/index.ts"]
+      "@nakiros/shared": ["../shared/src/index.ts"],
+      "@nakiros/server": ["../server/src/index.ts"]
     }
   },
   "include": ["src", "bin"]

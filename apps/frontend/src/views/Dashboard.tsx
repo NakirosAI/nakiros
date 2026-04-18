@@ -169,7 +169,7 @@ export default function Dashboard({ onGoHome }: Props) {
             settings: tSidebar('settings', 'Settings'),
           }}
         />
-        <DashboardErrorBoundary>
+        <DashboardErrorBoundary resetKey={`${activeProjectId ?? 'none'}:${activeTab}`}>
           <div className="flex min-w-0 flex-1 overflow-hidden">
             <DashboardRouter
               showGlobalSettings={showGlobalSettings}

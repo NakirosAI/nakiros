@@ -30,7 +30,7 @@ import EvalRunsView from './EvalRunsView';
 import { isImagePath } from '../utils/file-types';
 
 interface Props {
-  scope: 'project' | 'nakiros-bundled';
+  scope: 'project' | 'nakiros-bundled' | 'claude-global';
   projectId?: string;
   skillName: string;
   initialRun: AuditRun;
@@ -121,12 +121,12 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
   useEffect(() => {
     return api.onEvent((event: AuditRunEvent) => {
       if (event.runId !== initialRun.runId) return;
-
-      if (event.event.type === 'text') {
-        setLiveEvents((prev) => [...prev, { type: 'text', text: event.event.text, ts: Date.now() }]);
-      } else if (event.event.type === 'tool') {
-        setLiveEvents((prev) => [...prev, { type: 'tool', name: event.event.name, display: event.event.display, ts: Date.now() }]);
-      } else if (event.event.type === 'status' && event.event.status === 'starting') {
+      const inner = event.event;
+      if (inner.type === 'text') {
+        setLiveEvents((prev) => [...prev, { type: 'text', text: inner.text, ts: Date.now() }]);
+      } else if (inner.type === 'tool') {
+        setLiveEvents((prev) => [...prev, { type: 'tool', name: inner.name, display: inner.display, ts: Date.now() }]);
+      } else if (inner.type === 'status' && inner.status === 'starting') {
         setLiveEvents([]);
       }
     });

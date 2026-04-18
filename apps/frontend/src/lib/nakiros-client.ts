@@ -8,10 +8,10 @@
 const HTTP_BASE = typeof window !== 'undefined' ? window.location.origin : '';
 const WS_URL = HTTP_BASE.replace(/^http/, 'ws') + '/ws';
 
-type EventListener = (payload: unknown) => void;
+type ChannelListener = (payload: unknown) => void;
 
 // ── WebSocket hub (singleton) ──────────────────────────────────────────────
-const listeners = new Map<string, Set<EventListener>>();
+const listeners = new Map<string, Set<ChannelListener>>();
 let socket: WebSocket | null = null;
 let reconnectAttempts = 0;
 
@@ -21,7 +21,7 @@ function ensureSocket(): void {
   socket.addEventListener('open', () => {
     reconnectAttempts = 0;
   });
-  socket.addEventListener('message', (ev) => {
+  socket.addEventListener('message', (ev: MessageEvent) => {
     let msg: { channel?: string; payload?: unknown };
     try {
       msg = JSON.parse(String(ev.data));
@@ -48,7 +48,7 @@ function ensureSocket(): void {
   });
 }
 
-function subscribe(channel: string, cb: EventListener): () => void {
+function subscribe(channel: string, cb: ChannelListener): () => void {
   ensureSocket();
   let set = listeners.get(channel);
   if (!set) {

@@ -19,7 +19,7 @@ import { MarkdownViewer } from '../components/ui';
 import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry } from '@nakiros/shared';
 
 interface Props {
-  scope: 'project' | 'nakiros-bundled';
+  scope: 'project' | 'nakiros-bundled' | 'claude-global';
   projectId?: string;
   skillName: string;
   initialRunIds: string[];

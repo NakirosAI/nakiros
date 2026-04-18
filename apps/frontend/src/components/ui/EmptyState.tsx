@@ -1,5 +1,7 @@
-import { type ReactNode } from 'react';
-import { Button, type ButtonVariant } from './Button';
+import { type ReactNode, type ComponentProps } from 'react';
+import { Button } from './Button';
+
+type ButtonVariant = ComponentProps<typeof Button>['variant'];
 
 interface EmptyStateAction {
   label: string;

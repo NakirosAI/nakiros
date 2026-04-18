@@ -16,7 +16,7 @@ import type { AuditRun, AuditRunEvent } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui';
 
 interface Props {
-  scope: 'project' | 'nakiros-bundled';
+  scope: 'project' | 'nakiros-bundled' | 'claude-global';
   projectId?: string;
   skillName: string;
   initialRun: AuditRun;
@@ -59,18 +59,18 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
   useEffect(() => {
     return window.nakiros.onAuditEvent((event: AuditRunEvent) => {
       if (event.runId !== initialRun.runId) return;
-
-      if (event.event.type === 'text') {
-        setLiveEvents((prev) => [...prev, { type: 'text', text: event.event.text, ts: Date.now() }]);
-      } else if (event.event.type === 'tool') {
-        setLiveEvents((prev) => [...prev, { type: 'tool', name: event.event.name, display: event.event.display, ts: Date.now() }]);
-      } else if (event.event.type === 'status') {
+      const inner = event.event;
+      if (inner.type === 'text') {
+        setLiveEvents((prev) => [...prev, { type: 'text', text: inner.text, ts: Date.now() }]);
+      } else if (inner.type === 'tool') {
+        setLiveEvents((prev) => [...prev, { type: 'tool', name: inner.name, display: inner.display, ts: Date.now() }]);
+      } else if (inner.type === 'status') {
         // Reset the live stream when a fresh turn starts (the previous turn is now in run.turns)
-        if (event.event.status === 'starting') {
+        if (inner.status === 'starting') {
           setLiveEvents([]);
         }
-      } else if (event.event.type === 'done' && event.event.reportPath) {
-        void window.nakiros.readAuditReport(event.event.reportPath).then((content) => {
+      } else if (inner.type === 'done' && inner.reportPath) {
+        void window.nakiros.readAuditReport(inner.reportPath).then((content) => {
           if (content !== null) setReportContent(content);
         });
         setTab('report');

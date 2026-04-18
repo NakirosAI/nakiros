@@ -157,12 +157,12 @@ declare global {
       startEvalRuns(request: StartEvalRunRequest): Promise<StartEvalRunResponse>;
       stopEvalRun(runId: string): Promise<void>;
       listEvalRuns(): Promise<SkillEvalRun[]>;
-      loadPersistedEvalRuns(request: { scope: 'project' | 'nakiros-bundled'; projectId?: string; skillName: string }): Promise<SkillEvalRun[]>;
+      loadPersistedEvalRuns(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string }): Promise<SkillEvalRun[]>;
       onEvalEvent(cb: (event: EvalRunEvent) => void): () => void;
       sendEvalUserMessage(runId: string, message: string): Promise<void>;
       finishEvalRun(runId: string): Promise<void>;
-      getEvalFeedback(request: { scope: 'project' | 'nakiros-bundled'; projectId?: string; skillName: string; iteration: number }): Promise<Record<string, string>>;
-      saveEvalFeedback(request: { scope: 'project' | 'nakiros-bundled'; projectId?: string; skillName: string; iteration: number; evalName: string; feedback: string }): Promise<void>;
+      getEvalFeedback(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string; iteration: number }): Promise<Record<string, string>>;
+      saveEvalFeedback(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string; iteration: number; evalName: string; feedback: string }): Promise<void>;
       listEvalRunOutputs(runId: string): Promise<EvalRunOutputEntry[]>;
       readEvalRunOutput(runId: string, relativePath: string): Promise<string | null>;
 
@@ -171,7 +171,7 @@ declare global {
       stopAudit(runId: string): Promise<void>;
       getAuditRun(runId: string): Promise<AuditRun | null>;
       sendAuditUserMessage(runId: string, message: string): Promise<void>;
-      listAuditHistory(request: { scope: 'project' | 'nakiros-bundled'; projectId?: string; skillName: string }): Promise<AuditHistoryEntry[]>;
+      listAuditHistory(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string }): Promise<AuditHistoryEntry[]>;
       readAuditReport(path: string): Promise<string | null>;
       listActiveAuditRuns(): Promise<AuditRun[]>;
       onAuditEvent(cb: (event: AuditRunEvent) => void): () => void;

@@ -6,6 +6,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHandlerRegistry } from './handlers/index.js';
 import { eventBus } from './event-bus.js';
+import { restoreOrCleanupTempWorkdirs } from '../services/fix-runner.js';
+import { cleanupEvalArtifacts } from '../services/eval-artifact-cleanup.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -38,6 +40,18 @@ function findFrontendDir(override?: string): string | null {
     if (existsSync(resolve(dir, 'index.html'))) return dir;
   }
   return null;
+}
+
+/**
+ * One-shot runtime initialization called at daemon boot.
+ * - Rehydrates in-flight fix/create runs from `~/.nakiros/tmp-skills/` or cleans
+ *   up orphan temp workdirs.
+ * - Sweeps stray `nakiros-eval-*` skills produced by previous eval sessions.
+ * Safe to call multiple times.
+ */
+export function bootstrapDaemonRuntime(): void {
+  restoreOrCleanupTempWorkdirs();
+  cleanupEvalArtifacts();
 }
 
 export async function createDaemonServer(opts: DaemonServerOptions = {}): Promise<FastifyInstance> {

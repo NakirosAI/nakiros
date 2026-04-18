@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import open from 'open';
-import { createDaemonServer } from '../src/daemon/server.js';
+import { bootstrapDaemonRuntime, createDaemonServer } from '../src/daemon/server.js';
 import { findFreePort, DEFAULT_PORT } from '../src/daemon/port.js';
 
 const HELP = `
@@ -51,6 +51,11 @@ async function main(): Promise<void> {
 
   const port = await findFreePort(requested);
   const app = await createDaemonServer();
+
+  // Rehydrate in-flight fix/create runs & cleanup stray eval artifacts.
+  // Matches what the old Electron main.ts did at `app.whenReady()`.
+  bootstrapDaemonRuntime();
+
   await app.listen({ port, host: '127.0.0.1' });
 
   const url = `http://localhost:${port}`;

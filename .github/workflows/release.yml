@@ -28,14 +28,15 @@ jobs:
 
       - name: Verify tag matches package version
         run: |
-          TAG="${GITHUB_REF##*/}"
+          RAW_TAG="${GITHUB_REF##*/}"
+          # Accept both `v0.1.0-beta.1` and `0.1.0-beta.1` as valid tag formats.
+          TAG="${RAW_TAG#v}"
           PKG_VERSION=$(node -p "require('./apps/nakiros/package.json').version")
-          EXPECTED="v${PKG_VERSION}"
-          if [ "${TAG}" != "${EXPECTED}" ]; then
-            echo "::error::Release tag '${TAG}' does not match apps/nakiros package version '${EXPECTED}'. Bump the version in apps/nakiros/package.json and re-tag."
+          if [ "${TAG}" != "${PKG_VERSION}" ]; then
+            echo "::error::Release tag '${RAW_TAG}' (normalized '${TAG}') does not match apps/nakiros package version '${PKG_VERSION}'. Bump the version in apps/nakiros/package.json and re-tag."
             exit 1
           fi
-          echo "Tag ${TAG} matches package version — ok."
+          echo "Tag ${RAW_TAG} matches package version ${PKG_VERSION} — ok."
 
       - name: Determine npm dist-tag
         id: dist_tag

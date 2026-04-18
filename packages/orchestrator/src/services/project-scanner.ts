@@ -1,13 +1,15 @@
-import { eq, ne } from 'drizzle-orm';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
-import { getDb, dbSchema } from '@nakiros/server';
 import type { Project } from '@nakiros/shared';
 
+import { nakirosFile } from '../utils/nakiros-dir.js';
 import { scanClaudeProjects } from './providers/claude-scanner.js';
 
+type StoredProject = Project;
+
 /**
- * Patterns of project paths to purge from the registry. These are typically
- * artifacts from Nakiros eval runs that Claude auto-records under ~/.claude/projects/.
+ * Patterns of project paths to purge from the registry. Typically artifacts
+ * from Nakiros eval runs auto-recorded by Claude under ~/.claude/projects/.
  */
 const PURGE_PATH_PATTERNS: RegExp[] = [
   /\/evals\/workspace\/iteration-\d+\/eval-[^/]+\/(with_skill|without_skill)\/?$/,
@@ -17,116 +19,77 @@ function isObsoletePath(projectPath: string): boolean {
   return PURGE_PATH_PATTERNS.some((re) => re.test(projectPath));
 }
 
+function storagePath(): string {
+  return nakirosFile('projects.json');
+}
+
+function readAll(): StoredProject[] {
+  const path = storagePath();
+  if (!existsSync(path)) return [];
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf-8')) as unknown;
+    return Array.isArray(parsed) ? (parsed as StoredProject[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeAll(projects: StoredProject[]): void {
+  writeFileSync(storagePath(), JSON.stringify(projects, null, 2), 'utf-8');
+}
+
+function stripInternal(p: StoredProject): Project {
+  // `status` stays — it's part of the shared Project type
+  return p;
+}
+
 export function scan(
   onProgress?: (current: number, total: number, name: string | null) => void,
 ): Project[] {
   const now = new Date().toISOString();
-  const db = getDb();
+  const existing = readAll();
 
-  const allRows = db
-    .select({ id: dbSchema.projects.id, projectPath: dbSchema.projects.projectPath })
-    .from(dbSchema.projects)
-    .all();
-  for (const row of allRows as Array<{ id: string; projectPath: string }>) {
-    if (isObsoletePath(row.projectPath)) {
-      db.delete(dbSchema.projects).where(eq(dbSchema.projects.id, row.id)).run();
-    }
-  }
-
-  const dismissedRows = db
-    .select({ id: dbSchema.projects.id })
-    .from(dbSchema.projects)
-    .where(eq(dbSchema.projects.status, 'dismissed'))
-    .all();
-  const dismissedIds = new Set(dismissedRows.map((r: { id: string }) => r.id));
+  const kept = existing.filter((p) => !isObsoletePath(p.projectPath));
+  const dismissedIds = new Set(kept.filter((p) => p.status === 'dismissed').map((p) => p.id));
 
   const detected = scanClaudeProjects(onProgress);
 
-  const validProjects = detected.filter((p) => !dismissedIds.has(p.id));
+  const byId = new Map<string, StoredProject>();
+  for (const p of kept) byId.set(p.id, p);
 
-  for (const p of validProjects) {
-    db.insert(dbSchema.projects)
-      .values({
-        id: p.id,
-        name: p.name,
-        projectPath: p.projectPath,
-        provider: p.provider,
-        providerProjectDir: p.providerProjectDir,
-        lastActivityAt: p.lastActivityAt,
-        sessionCount: p.sessionCount,
-        skillCount: p.skillCount,
-        status: p.status,
-        lastScannedAt: now,
-        createdAt: now,
-      })
-      .onConflictDoUpdate({
-        target: dbSchema.projects.id,
-        set: {
-          name: p.name,
-          projectPath: p.projectPath,
-          lastActivityAt: p.lastActivityAt,
-          sessionCount: p.sessionCount,
-          skillCount: p.skillCount,
-          status: p.status,
-          lastScannedAt: now,
-        },
-      })
-      .run();
+  for (const detectedProject of detected) {
+    if (dismissedIds.has(detectedProject.id)) continue;
+    const prior = byId.get(detectedProject.id);
+    byId.set(detectedProject.id, {
+      ...detectedProject,
+      lastScannedAt: now,
+      createdAt: prior?.createdAt ?? now,
+    });
   }
 
-  return listProjects();
+  const all = Array.from(byId.values());
+  writeAll(all);
+
+  return all.filter((p) => p.status !== 'dismissed').map(stripInternal);
 }
 
 export function listProjects(): Project[] {
-  const rows = getDb()
-    .select()
-    .from(dbSchema.projects)
-    .where(ne(dbSchema.projects.status, 'dismissed'))
-    .all();
-
-  return rows.map(rowToProject);
+  return readAll().filter((p) => p.status !== 'dismissed').map(stripInternal);
 }
 
 export function getProject(id: string): Project | null {
-  const rows = getDb()
-    .select()
-    .from(dbSchema.projects)
-    .where(eq(dbSchema.projects.id, id))
-    .all();
-
-  return rows[0] ? rowToProject(rows[0]) : null;
+  const project = readAll().find((p) => p.id === id);
+  return project ? stripInternal(project) : null;
 }
 
 export function dismissProject(id: string): void {
-  getDb()
-    .update(dbSchema.projects)
-    .set({ status: 'dismissed' })
-    .where(eq(dbSchema.projects.id, id))
-    .run();
+  const all = readAll();
+  const idx = all.findIndex((p) => p.id === id);
+  if (idx < 0) return;
+  all[idx] = { ...all[idx], status: 'dismissed' };
+  writeAll(all);
 }
 
 export function hasProjects(): boolean {
-  const rows = getDb()
-    .select({ id: dbSchema.projects.id })
-    .from(dbSchema.projects)
-    .where(ne(dbSchema.projects.status, 'dismissed'))
-    .all();
-  return rows.length > 0;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToProject(row: any): Project {
-  return {
-    id: row.id,
-    name: row.name,
-    projectPath: row.projectPath,
-    provider: row.provider as Project['provider'],
-    providerProjectDir: row.providerProjectDir,
-    lastActivityAt: row.lastActivityAt,
-    sessionCount: row.sessionCount,
-    skillCount: row.skillCount,
-    status: row.status as Project['status'],
-    lastScannedAt: row.lastScannedAt,
-    createdAt: row.createdAt,
-  };
+  return readAll().some((p) => p.status !== 'dismissed');
 }

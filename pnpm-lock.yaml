@@ -116,18 +116,12 @@ importers:
       '@fastify/websocket':
         specifier: ^11.2.0
         version: 11.2.0
-      '@nakiros/server':
-        specifier: workspace:*
-        version: link:../server
       '@nakiros/shared':
         specifier: workspace:*
         version: link:../shared
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
-      drizzle-orm:
-        specifier: ^0.45.1
-        version: 0.45.1(@cloudflare/workers-types@4.20260301.1)(@opentelemetry/api@1.9.0)(@types/better-sqlite3@7.6.13)(@types/sql.js@1.4.9)(better-sqlite3@11.10.0)(sql.js@1.14.1)
       fastify:
         specifier: ^5.8.5
         version: 5.8.5

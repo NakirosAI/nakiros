@@ -26,11 +26,6 @@ export const IPC_CHANNELS = {
   'agents:install-global': 'agents:install-global',
   'agents:status': 'agents:status',
 
-  // MCP Server lifecycle
-  'server:getStatus': 'server:getStatus',
-  'server:restart': 'server:restart',
-  'server:status-change': 'server:status-change',
-
   // Nakiros Agent Team — Project management
   'project:scan': 'project:scan',
   'project:scanProgress': 'project:scanProgress',

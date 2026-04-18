@@ -118,11 +118,6 @@ declare global {
       showAgentRunNotification(payload: AgentRunNotificationPayload): Promise<void>;
       onOpenAgentRunChat(cb: (payload: OpenAgentRunChatPayload) => void): () => void;
 
-      // MCP Server
-      getServerStatus(): Promise<'starting' | 'running' | 'stopped'>;
-      restartServer(): Promise<void>;
-      onServerStatusChange(cb: (status: 'starting' | 'running' | 'stopped') => void): () => void;
-
       // Onboarding
       nakirosConfigExists(): Promise<boolean>;
       onboardingDetectEditors(): Promise<DetectedEditor[]>;

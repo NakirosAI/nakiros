@@ -102,11 +102,6 @@ const client = {
   showAgentRunNotification: (payload: unknown) => invoke('notification:showAgentRun', payload),
   onOpenAgentRunChat: (cb: (payload: unknown) => void) => subscribe('notification:openAgentChat', cb),
 
-  // MCP Server
-  getServerStatus: () => invoke('server:getStatus'),
-  restartServer: () => invoke('server:restart'),
-  onServerStatusChange: (cb: (status: unknown) => void) => subscribe('server:status-change', cb),
-
   // Onboarding
   nakirosConfigExists: () => invoke('onboarding:nakirosConfigExists'),
   onboardingDetectEditors: () => invoke('onboarding:detectEditors'),

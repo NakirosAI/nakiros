@@ -5,18 +5,8 @@
   "private": true,
   "main": "dist-electron/main/index.js",
   "scripts": {
-    "postinstall": "electron-rebuild -f -w better-sqlite3",
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-forge package",
-    "make": "electron-vite build && electron-forge make --targets @electron-forge/maker-zip",
-    "make:zip:arm64": "electron-vite build && electron-forge make --targets @electron-forge/maker-zip --arch=arm64",
-    "make:zip:x64": "electron-vite build && electron-forge make --targets @electron-forge/maker-zip --arch=x64",
-    "make:all": "electron-vite build && electron-forge make",
-    "make:dmg": "electron-vite build && electron-forge make --targets @electron-forge/maker-dmg",
-    "make:dmg:arm64": "electron-vite build && electron-forge make --targets @electron-forge/maker-dmg --arch=arm64",
-    "make:dmg:x64": "electron-vite build && electron-forge make --targets @electron-forge/maker-dmg --arch=x64"
+    "dev": "vite",
+    "build": "vite build"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

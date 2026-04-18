@@ -7,6 +7,7 @@ const sharedEntry = resolve(__dirname, '../../packages/shared/src/index.ts');
 
 export default defineConfig({
   root: 'src',
+  publicDir: resolve(__dirname, 'public'),
   resolve: {
     alias: {
       '@nakiros/shared': sharedEntry,

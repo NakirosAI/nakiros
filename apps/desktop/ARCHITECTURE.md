@@ -20,7 +20,6 @@ Use it as the single reference during future vibe-coding sessions.
   - git bootstrap/sync
   - ticket/epic storage
   - agent runner + terminal
-  - Jira OAuth/sync
   - docs scan/read
   - onboarding/install
   - update checks/apply

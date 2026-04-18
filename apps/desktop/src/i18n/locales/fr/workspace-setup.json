@@ -23,7 +23,7 @@
   "step3Description": "Passe en revue le périmètre de livraison avant de démarrer le développement pour que le workspace soit opérationnel de bout en bout.",
   "step3ChatTitle": "PM Challenge · {{workspace}}",
   "step3NoPmTitle": "Connexion PM requise",
-  "step3NoPmDescription": "Connecte un outil PM (Jira) et synchronise les tickets d'abord pour lancer le PM Challenge.",
+  "step3NoPmDescription": "Connecte un outil PM d'abord pour lancer le PM Challenge.",
 
   "readyTitle": "Ton workspace est prêt",
   "readyDescription": "Les 3 étapes d'onboarding sont terminées. Tes agents ont maintenant tout le contexte nécessaire.",

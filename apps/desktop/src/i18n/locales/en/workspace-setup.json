@@ -23,7 +23,7 @@
   "step3Description": "Review the current delivery scope before development starts so the workspace is operational end to end.",
   "step3ChatTitle": "PM Challenge · {{workspace}}",
   "step3NoPmTitle": "PM connection required",
-  "step3NoPmDescription": "Connect a PM tool (Jira) and sync tickets first to run the PM Challenge.",
+  "step3NoPmDescription": "Connect a PM tool first to run the PM Challenge.",
 
   "readyTitle": "Your workspace is ready",
   "readyDescription": "All 3 onboarding steps are complete. Your agents now have the context they need.",

@@ -189,7 +189,7 @@ Does this look right? Anything you want to change before we create it?
   </step>
 
   <step n="7" goal="Create story in PM tool">
-    <critical>Use the Nakiros PM action layer to create the story in the configured PM tool. Do not hardcode Jira-specific behavior when the workspace may be connected to another PM tool.</critical>
+    <critical>Use the Nakiros PM action layer to create the story in the configured PM tool. Do not hardcode provider-specific behavior; the workspace may be connected to any supported PM tool.</critical>
 
     <check if="pm_tool is none">
       <action>Skip MCP creation (pm_tool is "none").</action>

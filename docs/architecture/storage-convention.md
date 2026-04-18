@@ -25,14 +25,14 @@ Dossier caché dans le home de l'utilisateur. Contient tout ce qui est global à
 
   workspaces/
     {workspace-name-slug}/
-      workspace.yaml                   # Source de vérité locale du workspace (repos, PM tool, Jira, structure)
+      workspace.yaml                   # Source de vérité locale du workspace (repos, PM tool, structure)
 
-      tickets/                         # Tickets synchronisés depuis Jira/Linear/GitHub
+      tickets/                         # Tickets synchronisés depuis l'issue tracker
         EX-197.json
         EX-198.json
         ...
 
-      epics/                           # Epics synchronisés depuis Jira
+      epics/                           # Epics synchronisés depuis l'issue tracker
         EX-EPIC-1.json
         ...
 
@@ -90,7 +90,7 @@ Ce slug est utilisé partout dans le code pour identifier le dossier du workspac
 
 ### Responsabilités de ce dossier
 
-- **Tickets / Epics** : synchronisés depuis Jira/Linear/GitHub, mis à jour par les agents, lus par le MCP server
+- **Tickets / Epics** : synchronisés depuis l'issue tracker configuré, mis à jour par les agents, lus par le MCP server
 - **Contexte global** : généré par l'agent Architect sur l'ensemble du workspace multi-repo
 - **Architecture globale** : carte légère du système complet, des domaines transverses et des relations inter-repos
 - **Reports** : dailies et rétros générés automatiquement, affichés dans le Morning Briefing
@@ -200,8 +200,8 @@ Quand un agent doit écrire un fichier, il suit cette règle :
 
 | Type de fichier | Où écrire |
 |---|---|
-| Ticket synchronisé depuis Jira | `~/.nakiros/workspaces/{slug}/tickets/` |
-| Epic synchronisé depuis Jira | `~/.nakiros/workspaces/{slug}/epics/` |
+| Ticket synchronisé depuis l'issue tracker | `~/.nakiros/workspaces/{slug}/tickets/` |
+| Epic synchronisé depuis l'issue tracker | `~/.nakiros/workspaces/{slug}/epics/` |
 | Brainstorming workspace | `~/.nakiros/workspaces/{slug}/context/brainstorming.md` |
 | Contexte global multi-repo | `~/.nakiros/workspaces/{slug}/context/global-context.md` |
 | Contexte produit (finalité, workflows) | `~/.nakiros/workspaces/{slug}/context/product-context.md` |

@@ -88,9 +88,6 @@ Hub organisationnel. PM, PO, Architecte, Support, DevOps, QA — tout le monde q
 ### VS Code Extension (devs uniquement)
 Même contexte, mêmes agents, dans l'environnement naturel du dev. Il ne quitte jamais son éditeur.
 
-### Web App (admin organisationnel — temps 2)
-Back-office : créer l'org, gérer les membres, configurer les rôles, gérer les abonnements.
-
 ---
 
 ## Desktop — Navigation
@@ -160,19 +157,9 @@ Quand ton agent propose un diff et que tu le valides → ça s'écrit dans Conte
 
 ## Onboarding
 
-### Admin (web app)
-1. Crée l'organisation
-2. Définit les rôles (agents, MCPs)
-3. Crée le workspace
-4. Invite les membres → email d'invitation
-
-### Nouveau membre (desktop)
-1. Reçoit l'invitation → télécharge le desktop
-2. Login → org détectée → workspace sync automatique
-3. Arrive sur Home avec ses stats, ses agents prêts, ses MCPs configurés
-4. Même app que tout le monde — le contenu s'adapte à son rôle
-
-**Principe :** zéro configuration pour le nouveau membre. L'admin a tout préparé en amont.
+1. L'utilisateur installe le desktop et ouvre son premier workspace local
+2. Il configure ses rôles, agents et MCPs localement
+3. Arrive sur Home avec ses agents prêts
 
 ---
 
@@ -200,9 +187,9 @@ Le dev adopte Nakiros parce que son agent est meilleur. Le PM adopte parce que s
 ## Roadmap
 
 ### V1 — Desktop + gouvernance + personnalisation (maintenant)
-Le produit de base. Desktop pour tous les rôles, contexte partagé synchronisé via Cloudflare. Gouvernance par scope, protections de fichiers, contributions.
+Le produit de base. Desktop pour tous les rôles, contexte partagé local-first. Gouvernance par scope, protections de fichiers, contributions.
 
-**Ce qui est déjà là :** Desktop shell, 10 agents, Chat IA avec diffs, Backlog complet, Auth + Orgs, Worker Cloudflare, Orchestrateur multi-provider.
+**Ce qui est déjà là :** Desktop shell, 10 agents, Chat IA avec diffs, Backlog complet, Orchestrateur multi-provider.
 
 **Ce qu'il reste à construire :**
 - Protection fichiers/dossiers (UI + backend)
@@ -217,7 +204,7 @@ La personnalisation est critique — c'est ce qui fait que l'outil est une plate
 
 **Objectif :** valider l'adoption — 5 équipes, mesurer rétention à 30 jours. Est-ce que le PM ET le dev utilisent encore ?
 
-**Infra :** Cloudflare Workers + D1. Coût : ~5€/mois. Le SaaS sync est déjà en place.
+**Infra :** local-first, pas de backend. Le contexte vit dans le workspace de l'utilisateur.
 
 ### V1b — Mode automatique progressif
 Les utilisateurs connaissent leurs agents, ils voient qu'ils ne font pas de bêtises. On déverrouille le mode auto — action par action, pas globalement.
@@ -229,28 +216,11 @@ C'est déjà dans l'éditeur de workflow : chaque nœud Write a un switch "Diff 
 **Mais c'est un choix par équipe, pas un mode par défaut.** Nakiros démarre en mode validation. L'auto se déverrouille progressivement quand la confiance est là. Chaque équipe va à son rythme.
 
 ### V1.5 — RAG workspace
-Le contexte est là (V1 l'a produit). On ajoute une recherche sémantique dessus : Cloudflare Vectorize + Workers AI. Les agents ne chargent plus des fichiers markdown entiers — ils query ce dont ils ont besoin. Le coût token baisse, la pertinence monte.
+Le contexte est là (V1 l'a produit). On ajoute une recherche sémantique dessus (embeddings locaux). Les agents ne chargent plus des fichiers markdown entiers — ils query ce dont ils ont besoin. Le coût token baisse, la pertinence monte.
 
 **Ce que ça change :** passage de 5-20KB de contexte injecté à des requêtes ciblées. Le contexte peut scaler à des centaines de fichiers sans exploser les tokens.
 
 **C'est un sprint, pas un projet.** Le RAG consomme ce que la V1 a déjà produit.
-
-### V2 — Full SaaS, pay-per-token
-Zéro install. Pas besoin de Node, pas de CLI, pas de config locale. Le PM ouvre le navigateur, il a ses agents, il paye au token.
-
-**Ce que ça change :** plus de friction d'adoption. L'argument "faut que mon dev configure le MCP" disparaît. L'acquisition passe de bottom-up dev à top-down — le Head of Product peut s'inscrire et inviter son équipe en 5 minutes.
-
-### Pricing (à affiner)
-
-| Plan | Ce qu'il inclut | Prix |
-|---|---|---|
-| **Free** | 1 workspace, 2 membres, contexte local | 0€ |
-| **Team** | Workspaces illimités, sync cloud, rôles, protections | 8€/user/mois |
-| **Enterprise** | + RAG, + SSO, + audit log | Sur devis |
-
-Le Free c'est l'acquisition. Le Team c'est le revenu. L'Enterprise c'est l'upsell avec le RAG.
-
-8€/user/mois — moins que Linear (10€), moins que Notion (10€), plus de valeur (contexte + agents + gouvernance).
 
 ---
 

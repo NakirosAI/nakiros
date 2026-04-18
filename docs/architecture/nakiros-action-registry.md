@@ -9,15 +9,15 @@
 
 ## 1. Objectif
 
-Les agents Nakiros ne doivent pas appeler Jira, Linear, GitHub ou d'autres systèmes externes comme primitives métier directes.
+Les agents Nakiros ne doivent pas appeler l'issue tracker, le repo host ou d'autres systèmes externes comme primitives métier directes.
 
 Ils doivent demander des **Nakiros Actions**.
 
-Le backend SaaS Nakiros est responsable de :
+Le runtime local Nakiros est responsable de :
 
 - router l'action vers le bon système
 - appliquer les règles du workspace
-- gérer l'authentification et les tokens
+- gérer l'authentification et les tokens locaux
 - normaliser la réponse
 
 Principe :
@@ -56,10 +56,10 @@ Agent
   -> émet une nakiros-action
 Desktop / Orchestrateur
   -> parse et valide
-Backend SaaS Nakiros
+Runtime local Nakiros
   -> résout le handler d'action
   -> route vers le système réel
-    -> PM tool / context store / review engine / backlog / sync
+    -> PM tool / context store / review engine / backlog
 Résultat
   -> normalisé
   -> réinjecté dans la conversation
@@ -180,7 +180,7 @@ Exemples :
 
 Important :
 
-- l'agent ne sait pas si le backend route vers Jira, Linear ou GitHub
+- l'agent ne sait pas quel PM tool le runtime route derrière
 - la primitive reste `pm.*`
 
 ### 6.4 `backlog.*`
@@ -297,7 +297,7 @@ Les payloads d'actions doivent rester métier et compacts.
 
 ```json
 {
-  "tool": "jiraCreateIssue",
+  "tool": "issueTrackerCreateIssue",
   "projectKey": "AUTH",
   "issueTypeId": "10014",
   "customField_12345": "..."
@@ -364,7 +364,7 @@ Par nature :
 - `context.*`
 - `review.*`
 - `agent.*`
-- la plupart des `pm.*` quand ils impliquent le backend SaaS
+- la plupart des `pm.*` quand ils impliquent le runtime Nakiros
 
 Règle :
 
@@ -405,7 +405,7 @@ Toujours :
 
 Jamais :
 
-- `jira.createIssue`
+- `atlassian.createIssue`
 - `linear.createIssue`
 - `github.createIssue`
 
@@ -421,9 +421,9 @@ Exemples :
 
 On expose l'intention, pas les détails de mapping technique.
 
-### R4 — Le backend garde la connaissance des outils réels
+### R4 — Le runtime garde la connaissance des outils réels
 
-Le routing Jira / Linear / GitHub appartient au backend SaaS.
+Le routing vers les PM tools appartient au runtime local Nakiros.
 
 ### R5 — Toute action doit avoir une histoire de fallback
 
@@ -441,7 +441,7 @@ Les outils externes ne sont jamais les primitives directes du modèle.
 
 Mais le langage d'architecture raisonne en noms canoniques.
 
-### D3 — Le backend SaaS est le point de routage
+### D3 — Le runtime local est le point de routage
 
 L'agent ne sait pas quel PM tool est branché.
 

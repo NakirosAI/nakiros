@@ -20,7 +20,7 @@ Nakiros is built for developers who want to stay in coding flow while keeping pr
 - clear ticket challenge gate before coding
 - explicit persona orchestration (PM for challenge, Dev for implementation)
 - branch/run traceability in local artifacts
-- PM-tool-aware setup (Jira MCP wiring when selected)
+- PM-tool-aware setup (issue tracker MCP wiring when selected)
 
 ## Prerequisites
 
@@ -81,7 +81,7 @@ npx @nakiros/nakiros@dev init
 
 `init` does the following:
 
-1. asks for PM tool (`jira`, `gitlab`, `none`), git host, branch pattern, and workspace metadata
+1. asks for PM tool, git host, branch pattern, and workspace metadata
 2. asks for user/language defaults
 3. creates/updates:
    - user profile: `~/.nakiros/config.yaml`

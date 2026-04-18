@@ -30,7 +30,7 @@
   "backlogSectionTitle": "Backlog",
   "backlogSectionSubtitle": "Issues not yet committed to a sprint",
   "sprintPlanningEmpty": "No issues in this sprint yet",
-  "jiraLikeEmptySubtitle": "Create an epic or a story to structure the backlog like an issue list.",
+  "backlogEmptySubtitle": "Create an epic or a story to structure the backlog like an issue list.",
   "detailEmptyTitle": "No issue selected",
   "detailEmptySubtitle": "Select an epic or a story from the list to inspect and edit it on the right.",
   "detailPanelEpic": "Epic detail",

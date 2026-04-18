@@ -13,9 +13,9 @@ Le dossier `_nakiros/` est le point d'entrée portable des agents Nakiros dans u
 
 Il permet :
 
-- de produire des artefacts utiles sans Desktop, sans SaaS et sans orchestrateur
+- de produire des artefacts utiles sans Desktop et sans orchestrateur
 - de conserver des conventions lisibles dans Git
-- de préparer une future synchronisation sélective vers Nakiros Desktop / SaaS
+- de rester 100% local-first, versionné dans le repo
 
 Principe :
 
@@ -110,7 +110,7 @@ Structure recommandée :
 
     research/
       market-exporting-options.md
-      technical-jira-integration.md
+      technical-issue-tracker-integration.md
 
     backlog/
       epics/
@@ -803,25 +803,7 @@ Règle pratique :
 
 ---
 
-## 18. Synchronisation future vers le SaaS
-
-Direction cible :
-
-- sync sélective des artefacts `_nakiros/`
-- validation humaine avant publication cloud
-- enrichissement du contexte partagé à partir des artefacts locaux
-
-La sync future ne doit pas casser le local-first.
-
-Le modèle visé est :
-
-1. l'agent écrit ou propose un artefact local
-2. l'humain valide
-3. Nakiros peut publier cet artefact dans le contexte SaaS si pertinent
-
----
-
-## 19. Implications pour la suite
+## 18. Implications pour la suite
 
 Les prochaines étapes cohérentes sont :
 
@@ -829,4 +811,3 @@ Les prochaines étapes cohérentes sont :
 2. aligner les prompts agents sur ces chemins et formats
 3. introduire `architecture/index.md` comme point d'entrée de contexte partiel
 4. connecter la review Nakiros aux mutations `proposal` et `applied`
-5. ajouter plus tard la sync `_nakiros/` -> SaaS avec validation

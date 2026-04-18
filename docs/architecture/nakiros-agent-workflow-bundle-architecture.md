@@ -31,7 +31,6 @@ Il s'agit de conserver leur qualité méthodologique, puis d'ajouter :
 - nakiros-actions runtime
 - multi-agent
 - multi-repo
-- sync SaaS future
 
 ---
 
@@ -440,7 +439,7 @@ Contient :
 - les `nakiros-actions` liées au PM tool configuré
 - ce qu'un agent a le droit de demander
 - quand créer ou mettre à jour un ticket
-- quelle granularité de payload produire sans exposer Jira/Linear/GitHub comme primitives directes
+- quelle granularité de payload produire sans exposer l'issue tracker comme primitive directe
 
 ---
 

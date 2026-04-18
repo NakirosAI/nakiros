@@ -93,7 +93,7 @@ Keys: `product`, `global`, `interRepo`, `brainstorming`.
 
 ## PM tool
 
-Tool names are **PM-agnostic**. The Nakiros backend routes to Jira / Linear / GitHub based on the workspace configuration. Agents never need to know which PM tool is active.
+Tool names are **PM-agnostic**. The Nakiros runtime routes to the configured issue tracker based on the workspace configuration. Agents never need to know which PM tool is active.
 
 ### `get_ticket`
 Fetch full ticket details (title, description, status, assignee, comments).

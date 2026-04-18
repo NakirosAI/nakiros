@@ -1,28 +1,27 @@
 {
-  "name": "@nakiros/orchestrator",
+  "name": "nakiros",
   "version": "0.1.0",
-  "private": true,
+  "description": "Local daemon that observes Claude Code usage and lets you inspect, audit, evaluate and improve skills from your browser.",
+  "license": "MIT",
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    }
-  },
   "bin": {
     "nakiros": "./dist/bin/nakiros.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "tsup",
-    "dev": "tsx bin/nakiros.ts"
+    "build": "tsup && node scripts/copy-frontend.mjs",
+    "dev": "tsx bin/nakiros.ts",
+    "prepack": "pnpm build"
   },
   "dependencies": {
     "@fastify/static": "^9.1.1",
     "@fastify/websocket": "^11.2.0",
+    "@nakiros/agents-bundle": "workspace:*",
     "@nakiros/shared": "workspace:*",
     "chokidar": "^5.0.0",
     "fastify": "^5.8.5",

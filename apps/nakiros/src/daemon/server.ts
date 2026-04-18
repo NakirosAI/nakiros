@@ -32,9 +32,12 @@ const PLACEHOLDER_HTML = `<!DOCTYPE html>
 function findFrontendDir(override?: string): string | null {
   if (override && existsSync(override)) return override;
   const candidates = [
-    resolve(__dirname, '../../../../apps/desktop/dist-electron/renderer'),
-    resolve(__dirname, '../../../apps/desktop/dist-electron/renderer'),
-    resolve(process.cwd(), 'apps/desktop/dist-electron/renderer'),
+    // Prod (packaged npm install): dist/daemon/ → dist/ui
+    resolve(__dirname, '../ui'),
+    // Dev (tsx): apps/nakiros/src/daemon/ → apps/frontend/dist
+    resolve(__dirname, '../../../frontend/dist'),
+    // Monorepo root fallback
+    resolve(process.cwd(), 'apps/frontend/dist'),
   ];
   for (const dir of candidates) {
     if (existsSync(resolve(dir, 'index.html'))) return dir;

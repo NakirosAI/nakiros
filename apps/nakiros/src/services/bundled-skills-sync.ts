@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Where Nakiros owns its skills on disk.
- * ROM = apps/desktop/bundled-skills (source in the repo, read-only)
+ * ROM = apps/nakiros/bundled-skills (source in the repo, or packaged with the
+ *       published npm tarball in prod)
  * Nakiros home = ~/.nakiros/skills/{name} (the live, editable copy Nakiros operates on)
  * Claude home = ~/.claude/skills/{name} (symlink → Nakiros home so Claude Code discovers it)
  */
@@ -15,12 +16,13 @@ const CLAUDE_SKILLS_DIR = join(homedir(), '.claude', 'skills');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function getBundledSkillsRomDir(): string {
-  // From `packages/orchestrator/src/services/` climb to monorepo root:
-  // src/services → src → orchestrator → packages → <root>
-  const monorepoRoot = resolve(__dirname, '../../../..');
   const candidates = [
-    resolve(monorepoRoot, 'apps/desktop/bundled-skills'),
-    resolve(process.cwd(), 'apps/desktop/bundled-skills'),
+    // Prod: `dist/services/` → package root: climb 2 levels to reach `bundled-skills/`
+    resolve(__dirname, '../../bundled-skills'),
+    // Dev (tsx): `src/services/` → app root: climb 2 levels to reach `bundled-skills/`
+    resolve(__dirname, '../../bundled-skills'),
+    // Monorepo root fallback (e.g. running from repo root)
+    resolve(process.cwd(), 'apps/nakiros/bundled-skills'),
   ];
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate;

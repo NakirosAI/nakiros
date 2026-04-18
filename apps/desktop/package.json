@@ -19,7 +19,6 @@
     "make:dmg:x64": "electron-vite build && electron-forge make --targets @electron-forge/maker-dmg --arch=x64"
   },
   "dependencies": {
-    "@nakiros/orchestrator": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "i18next": "^25.8.14",

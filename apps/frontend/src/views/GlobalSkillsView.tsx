@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   ArrowLeft,
   ChevronRight,
@@ -32,6 +34,7 @@ interface Props {
 }
 
 export default function GlobalSkillsView({ onBack }: Props) {
+  const { t } = useTranslation('global-skills');
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
@@ -160,7 +163,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
       setActiveRuns({ runIds: response.runIds, iteration: response.iteration, skillName });
     } catch (err) {
       console.error(err);
-      alert(`Failed to start eval runs: ${(err as Error).message}`);
+      alert(t('alertEvalFailed', { message: (err as Error).message }));
     } finally {
       setStarting(false);
     }
@@ -173,7 +176,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
       const run = await window.nakiros.startAudit({ scope: 'claude-global', skillName });
       setActiveAudit({ run, skillName });
     } catch (err) {
-      alert(`Failed to start audit: ${(err as Error).message}`);
+      alert(t('alertAuditFailed', { message: (err as Error).message }));
     } finally {
       setAuditing(false);
     }
@@ -186,7 +189,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
       const run = await window.nakiros.startFix({ scope: 'claude-global', skillName });
       setActiveFix({ run, skillName });
     } catch (err) {
-      alert(`Failed to start fix: ${(err as Error).message}`);
+      alert(t('alertFixFailed', { message: (err as Error).message }));
     } finally {
       setFixing(false);
     }
@@ -251,7 +254,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center text-[var(--text-muted)]">
-        Loading Nakiros skills...
+        {t('loading')}
       </div>
     );
   }
@@ -263,7 +266,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
 
     return (
       <div className="flex h-screen flex-col overflow-hidden">
-        <TopBar onBack={onBack} title="Global Skills" />
+        <TopBar onBack={onBack} title={t('topBarTitle')} t={t} />
         <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-2.5">
           <button
             onClick={() => setSelectedSkill(null)}
@@ -293,12 +296,12 @@ export default function GlobalSkillsView({ onBack }: Props) {
             )}
             title={
               activeAuditBySkill.has(skill.name)
-                ? 'An audit is already running for this skill — click to resume'
-                : 'Run an audit of this skill (uses nakiros-skill-factory)'
+                ? t('auditResumeTooltip')
+                : t('auditTooltip')
             }
           >
             {activeAuditBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-            {activeAuditBySkill.has(skill.name) ? 'Audit running' : auditing ? 'Starting...' : 'Audit'}
+            {activeAuditBySkill.has(skill.name) ? t('auditRunning') : auditing ? t('auditStarting') : t('audit')}
           </button>
 
           <button
@@ -316,12 +319,12 @@ export default function GlobalSkillsView({ onBack }: Props) {
             )}
             title={
               activeFixBySkill.has(skill.name)
-                ? 'A fix session is already running for this skill — click to resume'
-                : 'Apply fixes to this skill based on the latest audit + eval results + feedback'
+                ? t('fixResumeTooltip')
+                : t('fixTooltip')
             }
           >
             {activeFixBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
-            {activeFixBySkill.has(skill.name) ? 'Fix running' : fixing ? 'Starting...' : 'Fix'}
+            {activeFixBySkill.has(skill.name) ? t('fixRunning') : fixing ? t('fixStarting') : t('fix')}
           </button>
 
           {detailTab === 'evals' && skill.evals && skill.evals.definitions.length > 0 && (
@@ -332,19 +335,19 @@ export default function GlobalSkillsView({ onBack }: Props) {
                   className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white"
                 >
                   <Loader2 size={12} className="animate-spin" />
-                  Resume ({ongoingRunsBySkill.get(skill.name)!.runIds.length} running)
+                  {t('resumeEvals', { count: ongoingRunsBySkill.get(skill.name)!.runIds.length })}
                 </button>
               ) : (
                 <>
                   <label
                     className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--text-muted)]"
-                    title="Also run each eval without the skill loaded, to measure real skill value via delta"
+                    title={t('baselineTooltip')}
                   >
                     <Checkbox
                       checked={includeBaseline}
                       onCheckedChange={(checked) => setIncludeBaseline(checked === true)}
                     />
-                    Include baseline
+                    {t('includeBaseline')}
                   </label>
                   <button
                     onClick={() => handleRunEvals(skill.name)}
@@ -352,7 +355,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
                     className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
                   >
                     <Play size={12} />
-                    {starting ? 'Starting...' : 'Run evals'}
+                    {starting ? t('evalStarting') : t('runEvals')}
                   </button>
                 </>
               )}
@@ -361,15 +364,15 @@ export default function GlobalSkillsView({ onBack }: Props) {
 
           <div className="flex rounded-lg border border-[var(--line)] bg-[var(--bg-soft)]">
             <TabButton active={detailTab === 'files'} onClick={() => setDetailTab('files')}>
-              Files
+              {t('tabFiles')}
             </TabButton>
             <TabButton active={detailTab === 'evals'} onClick={() => setDetailTab('evals')}>
               <FlaskConical size={12} />
-              Evals {skill.evals && `(${skill.evals.definitions.length})`}
+              {t('tabEvals')} {skill.evals && `(${skill.evals.definitions.length})`}
             </TabButton>
             <TabButton active={detailTab === 'audits'} onClick={() => setDetailTab('audits')}>
               <Search size={12} />
-              Audits {skill.auditCount > 0 && `(${skill.auditCount})`}
+              {t('tabAudits')} {skill.auditCount > 0 && `(${skill.auditCount})`}
             </TabButton>
           </div>
         </div>
@@ -397,12 +400,12 @@ export default function GlobalSkillsView({ onBack }: Props) {
                       className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1 text-xs font-medium text-white transition-colors disabled:opacity-50"
                     >
                       <Save size={12} />
-                      {saving ? 'Saving...' : 'Save'}
+                      {saving ? t('saving') : t('save')}
                     </button>
                   </div>
                   {loadingFile ? (
                     <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-                      Loading...
+                      {t('loadingFile')}
                     </div>
                   ) : imageDataUrl ? (
                     <div className="flex flex-1 items-center justify-center overflow-auto bg-[var(--bg-muted)] p-6">
@@ -414,7 +417,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
                     </div>
                   ) : selectedFile && isImagePath(selectedFile) ? (
                     <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-                      Unable to display image
+                      {t('imageError')}
                     </div>
                   ) : isMarkdown && !dirty ? (
                     <div className="flex-1 overflow-y-auto p-6">
@@ -424,7 +427,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
                     <textarea
                       value={fileContent}
                       onChange={(e) => setFileContent(e.target.value)}
-                      className="flex-1 resize-none border-none bg-[var(--bg-base)] p-4 font-mono text-sm text-[var(--text-primary)] outline-none"
+                      className="flex-1 resize-none border-none bg-[var(--bg)] p-4 font-mono text-sm text-[var(--text-primary)] outline-none"
                       spellCheck={false}
                     />
                   )}
@@ -432,14 +435,14 @@ export default function GlobalSkillsView({ onBack }: Props) {
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
                   <File size={32} />
-                  <p className="text-sm">Select a file to view</p>
+                  <p className="text-sm">{t('selectFile')}</p>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {detailTab === 'evals' && <EvalsPanel skill={skill} />}
+        {detailTab === 'evals' && <EvalsPanel skill={skill} t={t} />}
       </div>
     );
   }
@@ -447,23 +450,22 @@ export default function GlobalSkillsView({ onBack }: Props) {
   // ─── Skills list ───────────────────────────────────────────────────────────
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <TopBar onBack={onBack} title="Global Skills" />
+      <TopBar onBack={onBack} title={t('topBarTitle')} t={t} />
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-[900px]">
           <div className="mb-4 flex items-center gap-2">
             <Package size={18} className="text-emerald-400" />
             <h2 className="text-lg font-bold text-[var(--text-primary)]">
-              Global Skills ({skills.length})
+              {t('heading', { count: skills.length })}
             </h2>
           </div>
           <p className="mb-6 text-sm text-[var(--text-muted)]">
-            Skills installés directement dans <code className="rounded bg-[var(--bg-muted)] px-1">~/.claude/skills/</code> par l'utilisateur — disponibles dans tous les projets.
-            Les skills gérés par Nakiros (symlinks) sont exclus de cette liste — ils sont visibles dans <strong>Nakiros Skills</strong>.
+            {t('descriptionStart')} <code className="rounded bg-[var(--bg-muted)] px-1">~/.claude/skills/</code> {t('descriptionMiddle')} <strong>{t('nakirosSkillsLabel')}</strong>{t('descriptionEnd')}
           </p>
 
           {skills.length === 0 ? (
             <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-              No bundled skills found.
+              {t('noSkills')}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -486,7 +488,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
                           className="flex cursor-pointer items-center gap-1 rounded bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-bold text-white hover:opacity-90"
                         >
                           <Loader2 size={10} className="animate-spin" />
-                          running
+                          {t('running')}
                         </span>
                       )}
                     </div>
@@ -500,11 +502,11 @@ export default function GlobalSkillsView({ onBack }: Props) {
                     </p>
                   )}
                   <div className="flex gap-1.5">
-                    {skill.hasEvals && <Badge label={`${skill.evals?.definitions.length ?? 0} evals`} />}
-                    {skill.auditCount > 0 && <Badge label={`${skill.auditCount} audits`} />}
-                    {skill.hasReferences && <Badge label="refs" />}
-                    {skill.hasTemplates && <Badge label="templates" />}
-                    <Badge label={`${countFiles(skill.files)} files`} />
+                    {skill.hasEvals && <Badge label={t('evalsBadge', { count: skill.evals?.definitions.length ?? 0 })} />}
+                    {skill.auditCount > 0 && <Badge label={t('auditsBadge', { count: skill.auditCount })} />}
+                    {skill.hasReferences && <Badge label={t('refsBadge')} />}
+                    {skill.hasTemplates && <Badge label={t('templatesBadge')} />}
+                    <Badge label={t('filesBadge', { count: countFiles(skill.files) })} />
                   </div>
                 </button>
               ))}
@@ -518,7 +520,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
 
 // ─── Top bar ────────────────────────────────────────────────────────────────
 
-function TopBar({ onBack, title }: { onBack(): void; title: string }) {
+function TopBar({ onBack, title, t }: { onBack(): void; title: string; t: TFunction<'global-skills'> }) {
   return (
     <div className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--line)] bg-[var(--bg-soft)] px-[18px]">
       <button
@@ -526,7 +528,7 @@ function TopBar({ onBack, title }: { onBack(): void; title: string }) {
         className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
       >
         <ArrowLeft size={14} />
-        Back
+        {t('topBarBack')}
       </button>
       <span className="text-sm font-semibold text-[var(--text-primary)]">{title}</span>
     </div>
@@ -535,7 +537,7 @@ function TopBar({ onBack, title }: { onBack(): void; title: string }) {
 
 // ─── Evals panel (duplicated from SkillsView) ──────────────────────────────
 
-function EvalsPanel({ skill }: { skill: Skill }) {
+function EvalsPanel({ skill, t }: { skill: Skill; t: TFunction<'global-skills'> }) {
   const [expandedIter, setExpandedIter] = useState<number | null>(
     skill.evals?.iterations.length
       ? skill.evals.iterations[skill.evals.iterations.length - 1].number
@@ -547,7 +549,7 @@ function EvalsPanel({ skill }: { skill: Skill }) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
         <FlaskConical size={32} />
-        <p className="text-sm">No evals defined for this skill</p>
+        <p className="text-sm">{t('evals.noEvals')}</p>
       </div>
     );
   }
@@ -558,14 +560,14 @@ function EvalsPanel({ skill }: { skill: Skill }) {
     <div className="flex-1 overflow-y-auto p-6">
       <div className="mb-6">
         <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-          Eval Definitions ({definitions.length})
+          {t('evals.definitionsHeading', { count: definitions.length })}
         </h3>
         <div className="flex flex-col gap-1.5">
           {definitions.map((def) => (
             <div key={def.id} className="rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-[var(--text-primary)]">{def.name}</span>
-                <Badge label={`${def.assertions.length} assertions`} />
+                <Badge label={t('evals.assertionsBadge', { count: def.assertions.length })} />
               </div>
               <p className="mt-1 text-xs text-[var(--text-muted)]">{def.prompt}</p>
             </div>
@@ -576,7 +578,7 @@ function EvalsPanel({ skill }: { skill: Skill }) {
       {iterations.length > 0 ? (
         <div>
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-            Iterations ({iterations.length})
+            {t('evals.iterationsHeading', { count: iterations.length })}
           </h3>
           <div className="flex flex-col gap-2">
             {[...iterations].reverse().map((iter) => {
@@ -592,28 +594,28 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                   >
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     <span className="text-sm font-semibold text-[var(--text-primary)]">
-                      Iteration {iter.number}
+                      {t('evals.iterationLabel', { number: iter.number })}
                     </span>
                     {isLatest && (
                       <span className="rounded bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-bold text-white">
-                        latest
+                        {t('evals.latestBadge')}
                       </span>
                     )}
                     {!hasBaseline && (
                       <span
                         className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400"
-                        title="No baseline — absolute pass rate alone is weak evidence"
+                        title={t('evals.noBaselineTooltip')}
                       >
-                        no baseline
+                        {t('evals.noBaselineBadge')}
                       </span>
                     )}
                     <span className="ml-auto flex items-center gap-3 text-xs text-[var(--text-muted)]">
                       <span>
-                        with: <PassRateBadge rate={iter.withSkill.passRate} size="sm" />
+                        {t('evals.with')} <PassRateBadge rate={iter.withSkill.passRate} size="sm" />
                       </span>
                       {hasBaseline && iter.withoutSkill && (
                         <span>
-                          without: <PassRateBadge rate={iter.withoutSkill.passRate} size="sm" />
+                          {t('evals.without')} <PassRateBadge rate={iter.withoutSkill.passRate} size="sm" />
                         </span>
                       )}
                       {iter.delta.passRate != null && (
@@ -638,14 +640,14 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                     <div className="border-t border-[var(--line)] px-4 py-3">
                       <div className="mb-3 grid grid-cols-3 gap-3 rounded bg-[var(--bg-muted)] p-3 text-xs">
                         <div>
-                          <div className="mb-0.5 text-[var(--text-muted)]">With skill</div>
+                          <div className="mb-0.5 text-[var(--text-muted)]">{t('evals.withSkill')}</div>
                           <div className="font-semibold">
                             {iter.withSkill.passedAssertions}/{iter.withSkill.totalAssertions} ·{' '}
                             {formatTokens(iter.withSkill.tokens)} · {formatDuration(iter.withSkill.durationMs)}
                           </div>
                         </div>
                         <div>
-                          <div className="mb-0.5 text-[var(--text-muted)]">Without skill (baseline)</div>
+                          <div className="mb-0.5 text-[var(--text-muted)]">{t('evals.withoutSkillBaseline')}</div>
                           <div className="font-semibold">
                             {iter.withoutSkill ? (
                               <>
@@ -653,12 +655,12 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                                 {formatTokens(iter.withoutSkill.tokens)} · {formatDuration(iter.withoutSkill.durationMs)}
                               </>
                             ) : (
-                              <span className="text-amber-400">not run — delta unavailable</span>
+                              <span className="text-amber-400">{t('evals.notRun')}</span>
                             )}
                           </div>
                         </div>
                         <div>
-                          <div className="mb-0.5 text-[var(--text-muted)]">Delta (skill value)</div>
+                          <div className="mb-0.5 text-[var(--text-muted)]">{t('evals.delta')}</div>
                           <div className="font-semibold">
                             {iter.delta.passRate != null
                               ? `${iter.delta.passRate > 0 ? '+' : ''}${(iter.delta.passRate * 100).toFixed(0)}%`
@@ -672,10 +674,10 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                       <table className="w-full">
                         <thead>
                           <tr className="text-left text-xs text-[var(--text-muted)]">
-                            <th className="pb-2 font-medium">Eval</th>
-                            <th className="pb-2 text-center font-medium">With</th>
-                            <th className="pb-2 text-center font-medium">Without</th>
-                            <th className="pb-2 text-right font-medium">Δ</th>
+                            <th className="pb-2 font-medium">{t('evals.table.name')}</th>
+                            <th className="pb-2 text-center font-medium">{t('evals.table.with')}</th>
+                            <th className="pb-2 text-center font-medium">{t('evals.table.without')}</th>
+                            <th className="pb-2 text-right font-medium">{t('evals.table.delta')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -691,6 +693,7 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                                     : `${iter.number}-${grading.evalName}`,
                                 )
                               }
+                              t={t}
                             />
                           ))}
                         </tbody>
@@ -704,8 +707,8 @@ function EvalsPanel({ skill }: { skill: Skill }) {
         </div>
       ) : (
         <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-          No eval runs yet. Use{' '}
-          <code className="rounded bg-[var(--bg-muted)] px-1">eval run {skill.name}</code> in Claude Code to run the suite.
+          {t('evals.noIterationsHintStart')}{' '}
+          <code className="rounded bg-[var(--bg-muted)] px-1">{t('evals.noIterationsHintCommand', { name: skill.name })}</code> {t('evals.noIterationsHintEnd')}
         </div>
       )}
     </div>
@@ -716,10 +719,12 @@ function EvalRow({
   grading,
   expanded,
   onToggle,
+  t,
 }: {
   grading: SkillEvalGrading;
   expanded: boolean;
   onToggle(): void;
+  t: TFunction<'global-skills'>;
 }) {
   const { withSkill, withoutSkill, deltaPassRate, humanFeedback } = grading;
 
@@ -738,7 +743,7 @@ function EvalRow({
                 title={humanFeedback}
                 className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] text-amber-400"
               >
-                human review
+                {t('evals.humanReview')}
               </span>
             )}
           </div>
@@ -787,11 +792,11 @@ function EvalRow({
         <tr>
           <td colSpan={4} className="pb-3">
             <div className="ml-5 mt-1 flex flex-col gap-3">
-              {withSkill && <RunBlock title="With skill" run={withSkill} />}
-              {withoutSkill && <RunBlock title="Without skill (baseline)" run={withoutSkill} />}
+              {withSkill && <RunBlock title={t('evals.withSkill')} run={withSkill} t={t} />}
+              {withoutSkill && <RunBlock title={t('evals.withoutSkillBaseline')} run={withoutSkill} t={t} />}
               {humanFeedback && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
-                  <div className="mb-1 font-semibold text-amber-400">Human review</div>
+                  <div className="mb-1 font-semibold text-amber-400">{t('evals.humanReviewHeading')}</div>
                   <p className="text-[var(--text-primary)]">{humanFeedback}</p>
                 </div>
               )}
@@ -803,7 +808,7 @@ function EvalRow({
   );
 }
 
-function RunBlock({ title, run }: { title: string; run: SkillEvalGradingRun }) {
+function RunBlock({ title, run, t }: { title: string; run: SkillEvalGradingRun; t: TFunction<'global-skills'> }) {
   return (
     <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3">
       <div className="mb-2 flex items-center gap-2">
@@ -816,7 +821,7 @@ function RunBlock({ title, run }: { title: string; run: SkillEvalGradingRun }) {
         )}
         {run.graderModel && (
           <span className="ml-auto rounded bg-[var(--bg-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-            grader: {run.graderModel}
+            {t('evals.grader', { model: run.graderModel })}
           </span>
         )}
       </div>

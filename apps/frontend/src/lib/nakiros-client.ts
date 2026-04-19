@@ -214,6 +214,11 @@ const client = {
   saveBundledSkillFile: (skillName: string, relativePath: string, content: string) =>
     invoke('nakiros:saveBundledSkillFile', skillName, relativePath, content),
   promoteBundledSkill: (skillName: string) => invoke('nakiros:promoteBundledSkill', skillName),
+  listBundledSkillConflicts: () => invoke('nakiros:listBundledSkillConflicts'),
+  resolveBundledSkillConflict: (skillName: string, resolution: string) =>
+    invoke('nakiros:resolveBundledSkillConflict', skillName, resolution),
+  readBundledSkillConflictDiff: (skillName: string, relativePath: string) =>
+    invoke('nakiros:readBundledSkillConflictDiff', skillName, relativePath),
 
   // Claude global skills
   listClaudeGlobalSkills: () => invoke('claudeGlobal:listSkills'),
@@ -232,19 +237,23 @@ const client = {
   onEvalEvent: (cb: (event: unknown) => void) => subscribe('eval:event', cb),
   sendEvalUserMessage: (runId: string, message: string) => invoke('eval:sendUserMessage', runId, message),
   finishEvalRun: (runId: string) => invoke('eval:finishRun', runId),
+  getEvalBufferedEvents: (runId: string) => invoke('eval:getBufferedEvents', runId),
   getEvalFeedback: (request: unknown) => invoke('eval:getFeedback', request),
   saveEvalFeedback: (request: unknown) => invoke('eval:saveFeedback', request),
   listEvalRunOutputs: (runId: string) => invoke('eval:listOutputs', runId),
   readEvalRunOutput: (runId: string, relativePath: string) => invoke('eval:readOutput', runId, relativePath),
+  readEvalRunDiffPatch: (runId: string) => invoke('eval:readDiffPatch', runId),
 
   // Audit
   startAudit: (request: unknown) => invoke('audit:start', request),
   stopAudit: (runId: string) => invoke('audit:stopRun', runId),
   getAuditRun: (runId: string) => invoke('audit:getRun', runId),
   sendAuditUserMessage: (runId: string, message: string) => invoke('audit:sendUserMessage', runId, message),
+  finishAudit: (runId: string) => invoke('audit:finish', runId),
   listAuditHistory: (request: unknown) => invoke('audit:listHistory', request),
   readAuditReport: (path: string) => invoke('audit:readReport', path),
   listActiveAuditRuns: () => invoke('audit:listActive'),
+  getAuditBufferedEvents: (runId: string) => invoke('audit:getBufferedEvents', runId),
   onAuditEvent: (cb: (event: unknown) => void) => subscribe('audit:event', cb),
 
   // Fix
@@ -258,6 +267,8 @@ const client = {
   listActiveFixRuns: () => invoke('fix:listActive'),
   getFixBufferedEvents: (runId: string) => invoke('fix:getBufferedEvents', runId),
   onFixEvent: (cb: (event: unknown) => void) => subscribe('fix:event', cb),
+  listFixDiff: (runId: string) => invoke('fix:listDiff', runId),
+  readFixDiffFile: (runId: string, relativePath: string) => invoke('fix:readDiffFile', runId, relativePath),
 
   // Create
   startCreate: (request: unknown) => invoke('create:start', request),
@@ -268,6 +279,11 @@ const client = {
   listActiveCreateRuns: () => invoke('create:listActive'),
   getCreateBufferedEvents: (runId: string) => invoke('create:getBufferedEvents', runId),
   onCreateEvent: (cb: (event: unknown) => void) => subscribe('create:event', cb),
+  listCreateDiff: (runId: string) => invoke('create:listDiff', runId),
+  readCreateDiffFile: (runId: string, relativePath: string) => invoke('create:readDiffFile', runId, relativePath),
+
+  // Meta
+  getVersionInfo: (options?: { force?: boolean }) => invoke('meta:getVersionInfo', options ?? {}),
 
   // Skill agent temp files
   listSkillAgentTempFiles: (runId: string) => invoke('skillAgent:listTempFiles', runId),

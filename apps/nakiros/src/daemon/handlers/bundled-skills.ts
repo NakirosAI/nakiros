@@ -1,10 +1,16 @@
+import type { BundledSkillConflictResolution } from '@nakiros/shared';
 import {
   listBundledSkills,
   readBundledSkill,
   readBundledSkillFile,
   saveBundledSkillFile,
 } from '../../services/bundled-skills-reader.js';
-import { promoteBundledSkill } from '../../services/bundled-skills-sync.js';
+import {
+  listBundledSkillConflicts,
+  promoteBundledSkill,
+  readBundledSkillConflictDiff,
+  resolveBundledSkillConflict,
+} from '../../services/bundled-skills-sync.js';
 import type { HandlerRegistry } from './index.js';
 
 export const bundledSkillsHandlers: HandlerRegistry = {
@@ -16,4 +22,10 @@ export const bundledSkillsHandlers: HandlerRegistry = {
     saveBundledSkillFile(args[0] as string, args[1] as string, args[2] as string);
   },
   'nakiros:promoteBundledSkill': (args) => promoteBundledSkill(args[0] as string),
+  'nakiros:listBundledSkillConflicts': () => listBundledSkillConflicts(),
+  'nakiros:resolveBundledSkillConflict': (args) => {
+    resolveBundledSkillConflict(args[0] as string, args[1] as BundledSkillConflictResolution);
+  },
+  'nakiros:readBundledSkillConflictDiff': (args) =>
+    readBundledSkillConflictDiff(args[0] as string, args[1] as string),
 };

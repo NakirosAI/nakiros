@@ -12,6 +12,8 @@ import {
   finishCreate,
   listActiveCreateRuns,
   getCreateBufferedEvents,
+  listFixDiff,
+  readFixDiffFile,
 } from '../../services/fix-runner.js';
 import { eventBus } from '../event-bus.js';
 import { resolveEvalSkillDir } from './skill-dir.js';
@@ -65,4 +67,7 @@ export const createHandlers: HandlerRegistry = {
   'create:listActive': () => listActiveCreateRuns(),
 
   'create:getBufferedEvents': (args) => getCreateBufferedEvents(args[0] as string),
+
+  'create:listDiff': (args) => listFixDiff(args[0] as string),
+  'create:readDiffFile': (args) => readFixDiffFile(args[0] as string, args[1] as string),
 };

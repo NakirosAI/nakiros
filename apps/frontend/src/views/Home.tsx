@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { Project } from '@nakiros/shared';
 import appIcon from '../assets/icon.svg';
 import { AlertTriangle, Globe, Package, RefreshCw, X } from 'lucide-react';
+import VersionIndicator from '../components/VersionIndicator';
 
 interface Props {
   projects: Project[];
@@ -30,12 +31,12 @@ export default function Home({
   function timeAgo(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(diff / 60_000);
-    if (mins < 1) return t('now', 'now');
-    if (mins < 60) return t('minutesAgo', { count: mins, defaultValue: '{{count}}m ago' });
+    if (mins < 1) return t('now');
+    if (mins < 60) return t('minutesAgo', { count: mins });
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return t('hoursAgo', { count: hours, defaultValue: '{{count}}h ago' });
+    if (hours < 24) return t('hoursAgo', { count: hours });
     const days = Math.floor(hours / 24);
-    return t('daysAgo', { count: days, defaultValue: '{{count}}d ago' });
+    return t('daysAgo', { count: days });
   }
 
   const sorted = [...projects].sort((a, b) => {
@@ -51,6 +52,9 @@ export default function Home({
 
   return (
     <div className="box-border flex min-h-screen flex-col items-center justify-center p-6">
+      <div className="fixed right-4 top-3 z-10">
+        <VersionIndicator variant="inline" />
+      </div>
       <div className="w-full max-w-[820px] rounded-[14px] border border-[var(--line)] bg-[var(--bg-soft)] px-7 pb-[26px] pt-[34px] shadow-[var(--shadow-sm)]">
         <div className="mb-7 flex items-start justify-between">
           <div>
@@ -67,32 +71,32 @@ export default function Home({
               </h1>
             </div>
             <p className="mb-0 mt-2.5 max-w-[520px] text-[15px] text-[var(--text-muted)]">
-              {t('subtitle', 'Analysez et améliorez vos équipes d\'agents IA')}
+              {t('subtitle')}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onOpenNakirosSkills}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--primary)] hover:text-[var(--primary)]"
-              title={t('nakirosSkills', 'Nakiros Skills')}
+              title={t('nakirosSkills')}
             >
               <Package size={14} />
-              {t('nakirosSkills', 'Nakiros Skills')}
+              {t('nakirosSkills')}
             </button>
             <button
               onClick={onOpenGlobalSkills}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-emerald-400 hover:text-emerald-400"
-              title="Skills installed in ~/.claude/skills/ by the user"
+              title={t('globalSkillsTooltip')}
             >
               <Globe size={14} />
-              Global Skills
+              {t('globalSkills')}
             </button>
             <button
               onClick={onRescan}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--primary)] hover:text-[var(--primary)]"
             >
               <RefreshCw size={14} />
-              {t('rescan', 'Rescan')}
+              {t('rescan')}
             </button>
           </div>
         </div>
@@ -106,7 +110,7 @@ export default function Home({
         {sorted.length > 0 ? (
           <div>
             <p className="mb-3 mt-0 text-xs font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              {t('projects', 'Projets')} ({sorted.length})
+              {t('projects')} ({sorted.length})
             </p>
             <div className="flex flex-col gap-2">
               {displayed.map((project) => {
@@ -142,7 +146,7 @@ export default function Home({
                         e.stopPropagation();
                         onDismissProject(project.id);
                       }}
-                      title={t('dismiss', 'Ignorer ce projet')}
+                      title={t('dismiss')}
                       className="ml-2 rounded p-1 text-[var(--text-muted)] opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
                     >
                       <X size={14} />
@@ -157,14 +161,14 @@ export default function Home({
                 className="mt-2.5 border-none bg-transparent px-0.5 py-1 text-[13px] text-[var(--text-muted)]"
               >
                 {showAll
-                  ? t('showLess', 'Show less')
-                  : t('showMore', { count: sorted.length - RECENT_LIMIT, defaultValue: 'Show {{count}} more' })}
+                  ? t('showLess')
+                  : t('showMore', { count: sorted.length - RECENT_LIMIT })}
               </button>
             )}
           </div>
         ) : (
           <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-            {t('noProjects', 'Aucun projet Claude Code détecté. Lancez un rescan ou commencez à utiliser Claude Code.')}
+            {t('noProjects')}
           </div>
         )}
       </div>

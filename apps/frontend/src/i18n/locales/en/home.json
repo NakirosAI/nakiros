@@ -12,5 +12,12 @@
   "showMore": "Show {{count}} more",
   "showLess": "Show less",
   "repoCount_one": "{{count}} repo",
-  "repoCount_other": "{{count}} repos"
+  "repoCount_other": "{{count}} repos",
+  "nakirosSkills": "Nakiros Skills",
+  "globalSkills": "Global Skills",
+  "globalSkillsTooltip": "Skills installed in ~/.claude/skills/ by the user",
+  "rescan": "Rescan",
+  "projects": "Projects",
+  "dismiss": "Dismiss this project",
+  "noProjects": "No Claude Code project detected. Run a rescan or start using Claude Code."
 }

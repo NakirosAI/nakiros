@@ -33,6 +33,7 @@
 :root {
   /* ── Nakiros design tokens ──────────────────────────────────────────────── */
   --bg: #080808;
+  --bg-base: #080808;
   --bg-card: #111111;
   --bg-soft: #111111;
   --bg-muted: #0d0d0d;
@@ -68,6 +69,7 @@
 
 :root[data-theme='dark'] {
   --bg: #080808;
+  --bg-base: #080808;
   --bg-card: #111111;
   --bg-soft: #111111;
   --bg-muted: #0d0d0d;

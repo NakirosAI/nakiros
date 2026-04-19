@@ -1,0 +1,11 @@
+{
+  "title": "Nakiros is scanning your AI tools…",
+  "subtitle": "Detecting Claude Code projects",
+  "scanning": "Scanning…",
+  "progress": "{{current}}/{{total}} — {{name}}",
+  "inactive": "Inactive",
+  "dismiss": "Dismiss this project",
+  "projectsFound_one": "{{count}} project found",
+  "projectsFound_other": "{{count}} projects found",
+  "continue": "Continue"
+}

@@ -1,0 +1,62 @@
+{
+  "header": {
+    "back": "Back",
+    "title": "Audit — {{skillName}}",
+    "stop": "Stop",
+    "finish": "Finish"
+  },
+  "tabs": {
+    "conversation": "Conversation",
+    "report": "Report",
+    "reportPending": "Report (pending)"
+  },
+  "report": {
+    "notYetProduced": "Report not yet produced"
+  },
+  "error": {
+    "title": "Error"
+  },
+  "input": {
+    "waitingForInput": "Agent is waiting for your input",
+    "placeholder": "Type your response... (⌘/Ctrl+Enter to send)",
+    "send": "Send",
+    "sendFailed": "Failed to send: {{message}}"
+  },
+  "live": {
+    "streaming": "Streaming…",
+    "events_one": "{{count}} event",
+    "events_other": "{{count}} events",
+    "waitingFirstChunk": "Waiting for first chunk..."
+  },
+  "status": {
+    "completed": "completed",
+    "failed": "failed",
+    "stopped": "stopped",
+    "waiting": "waiting",
+    "running": "running",
+    "starting": "starting"
+  },
+  "tokens": {
+    "short": "{{count}} tok",
+    "thousands": "{{value}}k tok"
+  },
+  "duration": {
+    "ms": "{{ms}}ms",
+    "seconds": "{{s}}s",
+    "minutes": "{{m}}m{{s}}s"
+  },
+  "history": {
+    "loading": "Loading audit history…",
+    "loadingReport": "Loading…",
+    "reportError": "Could not read this audit report.",
+    "heading": "Audit history ({{count}})",
+    "emptyPrefix": "No audits yet. Click ",
+    "emptyBold": "Audit",
+    "emptySuffix": " in the header to run one.",
+    "size": {
+      "bytes": "{{count}} B",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB"
+    }
+  }
+}

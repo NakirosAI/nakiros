@@ -1,0 +1,62 @@
+{
+  "header": {
+    "back": "Retour",
+    "title": "Audit — {{skillName}}",
+    "stop": "Arrêter",
+    "finish": "Terminer"
+  },
+  "tabs": {
+    "conversation": "Conversation",
+    "report": "Rapport",
+    "reportPending": "Rapport (en attente)"
+  },
+  "report": {
+    "notYetProduced": "Rapport pas encore généré"
+  },
+  "error": {
+    "title": "Erreur"
+  },
+  "input": {
+    "waitingForInput": "L'agent attend ta réponse",
+    "placeholder": "Tape ta réponse... (⌘/Ctrl+Entrée pour envoyer)",
+    "send": "Envoyer",
+    "sendFailed": "Échec de l'envoi : {{message}}"
+  },
+  "live": {
+    "streaming": "Streaming…",
+    "events_one": "{{count}} événement",
+    "events_other": "{{count}} événements",
+    "waitingFirstChunk": "En attente du premier chunk..."
+  },
+  "status": {
+    "completed": "terminé",
+    "failed": "échec",
+    "stopped": "arrêté",
+    "waiting": "en attente",
+    "running": "en cours",
+    "starting": "démarrage"
+  },
+  "tokens": {
+    "short": "{{count}} tok",
+    "thousands": "{{value}}k tok"
+  },
+  "duration": {
+    "ms": "{{ms}}ms",
+    "seconds": "{{s}}s",
+    "minutes": "{{m}}m{{s}}s"
+  },
+  "history": {
+    "loading": "Chargement de l'historique des audits…",
+    "loadingReport": "Chargement…",
+    "reportError": "Impossible de lire ce rapport d'audit.",
+    "heading": "Historique des audits ({{count}})",
+    "emptyPrefix": "Aucun audit pour l'instant. Clique sur ",
+    "emptyBold": "Audit",
+    "emptySuffix": " dans le header pour en lancer un.",
+    "size": {
+      "bytes": "{{count}} o",
+      "kb": "{{value}} Ko",
+      "mb": "{{value}} Mo"
+    }
+  }
+}

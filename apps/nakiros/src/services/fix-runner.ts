@@ -549,6 +549,9 @@ async function executeTurn(
 
   let assistantText = '';
   const tools: { name: string; display: string }[] = [];
+  // Ordered interleaved blocks so the UI can render text and tool calls in
+  // the exact sequence the agent emitted them (chat-style thread).
+  const blocks: Array<{ type: 'text'; text: string } | { type: 'tool'; name: string; display: string }> = [];
 
   run.status = 'running';
   writeRunJson(entry);
@@ -562,10 +565,12 @@ async function executeTurn(
     onSession: (id) => { run.sessionId = id; },
     onText: (text) => {
       assistantText += text;
+      blocks.push({ type: 'text', text });
       entry.eventLog.emit({ type: 'text', text });
     },
     onTool: (name, display) => {
       tools.push({ name, display });
+      blocks.push({ type: 'tool', name, display });
       entry.eventLog.emit({ type: 'tool', name, display });
     },
     onUsage: (tokens) => {
@@ -575,7 +580,7 @@ async function executeTurn(
   });
 
   run.durationMs += Date.now() - started;
-  run.turns.push({ role: 'assistant', content: assistantText, timestamp: new Date().toISOString(), tools });
+  run.turns.push({ role: 'assistant', content: assistantText, timestamp: new Date().toISOString(), tools, blocks });
   entry.child = null;
 
   if (result.exitCode !== 0 || result.error) {

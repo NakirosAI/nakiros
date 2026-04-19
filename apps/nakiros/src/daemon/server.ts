@@ -85,7 +85,10 @@ export function bootstrapDaemonRuntime(): void {
 }
 
 export async function createDaemonServer(opts: DaemonServerOptions = {}): Promise<FastifyInstance> {
-  const app = Fastify({ logger: { level: opts.logLevel ?? 'info' } });
+  // Default to 'warn' so routine request logs stay out of the terminal; the
+  // user can still opt in to verbose logs by passing `logLevel: 'info'` or
+  // setting the CLI flag.
+  const app = Fastify({ logger: { level: opts.logLevel ?? 'warn' } });
 
   await app.register(fastifyWebsocket);
 

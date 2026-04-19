@@ -243,6 +243,8 @@ const client = {
   listEvalRunOutputs: (runId: string) => invoke('eval:listOutputs', runId),
   readEvalRunOutput: (runId: string, relativePath: string) => invoke('eval:readOutput', runId, relativePath),
   readEvalRunDiffPatch: (runId: string) => invoke('eval:readDiffPatch', runId),
+  getEvalMatrix: (request: unknown) => invoke('eval:getMatrix', request),
+  loadIterationRun: (request: unknown) => invoke('eval:loadIterationRun', request),
 
   // Audit
   startAudit: (request: unknown) => invoke('audit:start', request),

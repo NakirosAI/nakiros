@@ -1,6 +1,6 @@
 import { type ChildProcess, execFile } from 'child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { join, relative, sep } from 'path';
 import { promisify } from 'util';
 
 import { gradeLlmAssertionsBatch, JUDGE_MODEL } from './eval-llm-grader.js';
@@ -12,8 +12,10 @@ import {
   buildClaudeArgs,
   captureSandboxDiff,
   createEvalSandbox,
+  createTmpSandbox,
   deleteClaudeProjectEntry,
   destroyEvalSandbox,
+  destroyTmpSandbox,
   findGitRoot,
   generateRunId,
   listSandboxUntracked,
@@ -43,12 +45,19 @@ interface RunEntry {
   killed: boolean;
   eventLog: EventLog<EvalRunEvent['event']>;
   /**
-   * Git-worktree sandbox used to isolate code-modifying skills from the real
-   * project. `null` when the skill's git root couldn't be found (bundled,
-   * global, or non-git project) — in that case the run executes in the
-   * artefact directory directly (legacy behaviour).
+   * Isolated execution directory used so the agent never touches the real
+   * project/skill. Two kinds:
+   *  - `'git-worktree'`: a detached worktree of the skill's enclosing git repo
+   *    (the ideal case — `diff.patch` is meaningful, `node_modules` resolves via
+   *    parent lookup if the worktree lives inside the repo).
+   *  - `'tmp'`: a fresh throwaway directory holding a copy of the skill under
+   *    `.claude/skills/<name>/`. Used for skills that don't live in a git repo
+   *    (bundled / global / any `~/.nakiros/skills/` skill).
    */
-  sandbox: { path: string; gitRoot: string } | null;
+  sandbox:
+    | { kind: 'git-worktree'; path: string; gitRoot: string }
+    | { kind: 'tmp'; path: string }
+    | null;
 }
 
 const runs = new Map<string, RunEntry>();
@@ -118,6 +127,76 @@ function writeExecutionSettings(dir: string, config: EvalRunConfig): void {
     settings.permissions.deny = ['Skill'];
   }
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+}
+
+/**
+ * Strip every `evals/workspace/` directory inside the sandbox. These contain
+ * the outputs, turns, and grading of previous iterations committed to the
+ * repo. Leaving them in place contaminates new runs: a baseline agent
+ * (without_skill) that stumbles on `evals/workspace/iteration-1/eval-X/with_skill/outputs/audit-report.md`
+ * will mimic the filename/structure, defeating the whole point of the baseline.
+ *
+ * We remove workspaces for ALL skills in the sandbox, not just the one under
+ * test, because a skill being evaluated may look sideways at sibling skills'
+ * past runs too.
+ */
+function stripEvalWorkspaces(sandboxPath: string): void {
+  const walk = (dir: string): void => {
+    let entries: import('fs').Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const full = join(dir, entry.name);
+      // Skip node_modules, .git, and anything hidden at the root to keep the
+      // walk fast. Worktrees don't have node_modules (not tracked) but any
+      // fixtures/vendored trees might.
+      if (entry.name === 'node_modules' || entry.name === '.git') continue;
+      if (entry.name === 'workspace' && dir.endsWith(`${sep}evals`)) {
+        try {
+          rmSync(full, { recursive: true, force: true });
+        } catch (err) {
+          console.warn(
+            `[eval-runner] Failed to strip eval workspace at ${full}: ${(err as Error).message}`,
+          );
+        }
+        continue;
+      }
+      walk(full);
+    }
+  };
+  walk(sandboxPath);
+}
+
+/**
+ * For `without_skill` baselines we must make sure the agent cannot see the
+ * skill under test — not even as a readable SKILL.md file. `deny: ['Skill']`
+ * in settings.local.json only blocks the Skill tool invocation; it does not
+ * prevent Claude from reading SKILL.md via the Read tool or from auto-loading
+ * CLAUDE.md-style context from the skill directory. The only reliable way to
+ * hide the skill is to physically remove its directory from the sandbox.
+ *
+ * We compute the skill's location relative to the git root, then delete that
+ * subtree inside the sandbox. No-op when the skill is not under the git root
+ * (e.g. bundled/global skills — those skip sandboxing altogether).
+ */
+function removeSkillFromSandbox(sandboxPath: string, skillDir: string, gitRoot: string): void {
+  const rel = relative(gitRoot, skillDir);
+  // If skillDir is outside the git root, `rel` starts with '..' — in that case
+  // the skill wasn't in the worktree to begin with, nothing to do.
+  if (rel.startsWith('..') || rel === '') return;
+  const targetInSandbox = join(sandboxPath, rel);
+  if (!existsSync(targetInSandbox)) return;
+  try {
+    rmSync(targetInSandbox, { recursive: true, force: true });
+  } catch (err) {
+    console.warn(
+      `[eval-runner] Failed to remove skill from baseline sandbox (${targetInSandbox}): ${(err as Error).message}`,
+    );
+  }
 }
 
 function copyFixtures(skillDir: string, targetDir: string, fixtureRelPaths: string[]): void {
@@ -395,28 +474,71 @@ export async function startEvalRuns(
 
       const runId = generateRunId('run');
 
-      // Try to give the agent a git-worktree sandbox. Any failure (git missing,
-      // dirty state, permissions) is non-fatal — we degrade to running in the
-      // artefact directory, which is what eval-runner has always done.
-      let sandbox: { path: string; gitRoot: string } | null = null;
+      // Isolation strategy:
+      //  - If the skill lives inside a git repo → detached worktree (cheap, COW-like,
+      //    preserves the full project context).
+      //  - Otherwise → throwaway tmp dir with a COPY of the skill under
+      //    `.claude/skills/<name>/` (sans past iterations' workspace/). This is
+      //    the only way to keep the agent from reading/writing the real skill
+      //    when no git repo encloses it.
+      let sandbox: RunEntry['sandbox'] = null;
       if (gitRoot) {
         try {
           const created = createEvalSandbox(gitRoot, `eval-${runId}`);
-          sandbox = { path: created.path, gitRoot: created.gitRoot };
+          sandbox = { kind: 'git-worktree', path: created.path, gitRoot: created.gitRoot };
         } catch (err) {
           console.warn(
-            `[eval-runner] Could not create git sandbox for ${runId} (falling back to in-place): ${(err as Error).message}`,
+            `[eval-runner] Could not create git sandbox for ${runId}: ${(err as Error).message}`,
+          );
+        }
+      }
+      if (!sandbox) {
+        try {
+          const created = createTmpSandbox({
+            runId,
+            skillDir,
+            skillName: request.skillName,
+            includeSkill: config === 'with_skill',
+          });
+          sandbox = { kind: 'tmp', path: created.path };
+        } catch (err) {
+          // Last-resort fallback: if we can't even create a tmp dir (disk full?),
+          // refuse to run rather than silently leak into the real skill.
+          throw new Error(
+            `[eval-runner] Could not create tmp sandbox for ${runId}: ${(err as Error).message}`,
           );
         }
       }
 
-      const executionDir = sandbox?.path ?? artifactDir;
+      const executionDir = sandbox.path;
+
+      // Cross-run isolation for worktrees: strip committed eval artefacts from
+      // previous iterations so the agent can't see past runs' outputs. Applies
+      // to both configs. (Tmp sandboxes already exclude workspace/ at copy time.)
+      if (sandbox.kind === 'git-worktree') {
+        stripEvalWorkspaces(sandbox.path);
+      }
+
+      // Baseline isolation for worktrees: physically strip the skill from the
+      // sandbox so it can't leak via CLAUDE.md auto-discovery or Read. (Tmp
+      // sandboxes already omit the skill entirely when `includeSkill: false`.)
+      if (sandbox.kind === 'git-worktree' && config === 'without_skill') {
+        removeSkillFromSandbox(sandbox.path, skillDir, sandbox.gitRoot);
+      }
+
       // Fixtures + permission settings go where the agent will actually run.
       copyFixtures(skillDir, executionDir, def.files);
       writeExecutionSettings(executionDir, config);
       // outputs/ in the execution dir — the agent writes here, we copy back
       // to artefactDir on finalise so the grader + UI still find it.
       mkdirSync(join(executionDir, 'outputs'), { recursive: true });
+
+      // NOTE: Isolated HOME was removed — it broke claude CLI auth ("Not logged in")
+      // despite mirroring ~/.claude/ via symlinks. The protection it was meant to
+      // provide (hiding globally-installed skills at ~/.claude/skills/<name>/) is
+      // unnecessary for nakiros skills, which live under ~/.nakiros/skills/ and
+      // don't collide with Claude's global skill registry. See createIsolatedHome
+      // in runner-core/isolated-home.ts (kept for potential future use).
 
       const run: SkillEvalRun = {
         runId,
@@ -573,6 +695,11 @@ async function executeTurn(
 
   let assistantText = '';
   const tools: { name: string; display: string }[] = [];
+  // `blocks` tracks the interleaved order of text + tool events as they come
+  // off the stream — so the UI can render a chat-style thread where each tool
+  // call appears at the exact spot the agent emitted it, rather than all
+  // grouped at the bottom of the assistant message.
+  const blocks: Array<{ type: 'text'; text: string } | { type: 'tool'; name: string; display: string }> = [];
 
   run.status = 'running';
   writeRunJson(run);
@@ -590,10 +717,12 @@ async function executeTurn(
     onSession: (id) => { run.sessionId = id; },
     onText: (text) => {
       assistantText += text;
+      blocks.push({ type: 'text', text });
       entry.eventLog.emit({ type: 'text', text });
     },
     onTool: (name, display) => {
       tools.push({ name, display });
+      blocks.push({ type: 'tool', name, display });
       entry.eventLog.emit({ type: 'tool', name, display });
     },
     onUsage: (tokens) => {
@@ -608,6 +737,7 @@ async function executeTurn(
     content: assistantText,
     timestamp: new Date().toISOString(),
     tools,
+    blocks,
   });
   entry.child = null;
 
@@ -685,18 +815,24 @@ async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Pr
 }
 
 /**
- * Copy outputs/ into the artefact directory, save diff.patch, and destroy the
- * git worktree. Idempotent — safe to call multiple times (second call is a
- * no-op because `entry.sandbox` has been cleared).
+ * Copy outputs/ into the artefact directory, save diff.patch (git-worktree
+ * mode only), and destroy the sandbox. Idempotent — safe to call multiple
+ * times (second call is a no-op because `entry.sandbox` has been cleared).
  */
 function teardownSandbox(entry: RunEntry): void {
   const executionDir = entry.run.executionDir ?? entry.run.workdir;
   // 1. Copy whatever the agent produced into outputs/ so the grader sees it.
   syncOutputsToArtifact(executionDir, entry.run.workdir);
-  // 2. If we're in sandbox mode, capture the git diff and drop the worktree.
-  if (entry.sandbox) {
+  // 2. Dispatch cleanup per sandbox kind.
+  if (entry.sandbox?.kind === 'git-worktree') {
     saveSandboxDiff(entry.sandbox.path, entry.run.workdir);
     destroyEvalSandbox(entry.sandbox.path);
+  } else if (entry.sandbox?.kind === 'tmp') {
+    // No git diff meaningful for a fresh tmp dir — the whole sandbox was the
+    // diff. We simply drop it.
+    destroyTmpSandbox(entry.sandbox.path);
+  }
+  if (entry.sandbox) {
     entry.sandbox = null;
     // From this point on the run's execution dir no longer exists. Point it
     // at the artefact dir so subsequent reads (`getEvalBufferedEvents`,

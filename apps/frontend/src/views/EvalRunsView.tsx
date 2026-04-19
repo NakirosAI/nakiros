@@ -18,6 +18,13 @@ import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { MarkdownViewer } from '../components/ui';
+import {
+  ConversationTurn,
+  liveEventsToBlocks,
+  legacyTurnToBlocks,
+  endsOnAssistant,
+  type LiveStreamEvent,
+} from '../components/ConversationTurn';
 import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry } from '@nakiros/shared';
 
 interface Props {
@@ -29,9 +36,7 @@ interface Props {
   onClose(): void;
 }
 
-type LiveEvent =
-  | { type: 'text'; text: string; ts: number }
-  | { type: 'tool'; name: string; display: string; ts: number };
+type LiveEvent = LiveStreamEvent;
 
 export default function EvalRunsView({ scope, projectId, skillName, initialRunIds, iteration, onClose }: Props) {
   const { t } = useTranslation('evals');
@@ -410,65 +415,40 @@ function RunDetail({
           </pre>
         </Section>
 
-        {/* Turns */}
-        {run.turns.length > 0 && (
+        {/* Conversation — user prompt + assistant turns with ordered text/tool
+            blocks. While the run is streaming, we append a provisional assistant
+            turn built from live events so the user sees each Read/Bash/Write
+            appear in place as it happens (like the Claude Code extension). */}
+        {(run.turns.length > 0 || (isRunning && liveEvents.length > 0)) && (
           <div className="mt-4 flex flex-col gap-2">
             {run.turns.map((turn, i) => (
-              <div
+              <ConversationTurn
                 key={i}
-                className={clsx(
-                  'rounded-lg px-4 py-3',
-                  turn.role === 'user'
-                    ? 'ml-8 bg-[var(--primary-soft)]'
-                    : 'mr-8 border border-[var(--line)] bg-[var(--bg-card)]',
-                )}
-              >
-                <div className="mb-1 flex items-center gap-2 text-xs text-[var(--text-muted)]">
-                  <span className="font-semibold capitalize">{turn.role}</span>
-                  <span>{new Date(turn.timestamp).toLocaleTimeString()}</span>
-                </div>
-                {turn.role === 'assistant' ? (
-                  <MarkdownViewer content={turn.content} className="px-0 py-0" />
-                ) : (
-                  <div className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{turn.content}</div>
-                )}
-                {turn.tools && turn.tools.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {turn.tools.map((tool, j) => (
-                      <span
-                        key={j}
-                        className="rounded bg-[var(--bg-muted)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]"
-                        title={tool.display}
-                      >
-                        {tool.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+                role={turn.role}
+                timestamp={turn.timestamp}
+                blocks={
+                  turn.blocks ??
+                  (turn.role === 'assistant'
+                    ? legacyTurnToBlocks(turn.content, turn.tools)
+                    : [{ type: 'text', text: turn.content }])
+                }
+              />
             ))}
-          </div>
-        )}
 
-        {/* Live activity panel — text + tool calls as they stream in */}
-        {isRunning && (
-          <div className="mt-4 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary-soft)]/30 px-4 py-3">
-            <div className="mb-2 flex items-center gap-2 text-xs text-[var(--primary)]">
-              <Loader2 size={12} className="animate-spin" />
-              <span className="font-semibold">{t('streaming')}</span>
-              <span className="text-[var(--text-muted)]">{t('events', { count: liveEvents.length })}</span>
-            </div>
-            <div ref={liveScrollRef} className="max-h-[400px] overflow-y-auto rounded bg-[var(--bg)] p-2">
-              {liveEvents.length === 0 ? (
-                <span className="text-xs text-[var(--text-muted)]">{t('waitingFirstChunk')}</span>
-              ) : (
-                <div className="flex flex-col gap-1.5 font-mono text-xs">
-                  {liveEvents.map((event, i) => (
-                    <LiveEventLine key={i} event={event} />
-                  ))}
-                </div>
+            {/* Provisional turn: events streaming in right now, not yet saved
+                to run.turns. Disappears as soon as the real turn lands. */}
+            {isRunning &&
+              liveEvents.length > 0 &&
+              !endsOnAssistant(run.turns) && (
+                <ConversationTurn
+                  key="provisional"
+                  role="assistant"
+                  timestamp={new Date().toISOString()}
+                  blocks={liveEventsToBlocks(liveEvents)}
+                  streaming
+                  scrollRef={liveScrollRef}
+                />
               )}
-            </div>
           </div>
         )}
 
@@ -602,19 +582,6 @@ function StatusIcon({ status, size = 'sm' }: { status: EvalRunStatus; size?: 'sm
   }
 }
 
-function LiveEventLine({ event }: { event: LiveEvent }) {
-  if (event.type === 'tool') {
-    return (
-      <div className="flex items-start gap-2">
-        <span className="shrink-0 rounded bg-[var(--bg-muted)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--primary)]">
-          {event.name}
-        </span>
-        <span className="break-all text-[var(--text-primary)]">{event.display}</span>
-      </div>
-    );
-  }
-  return <div className="whitespace-pre-wrap text-[var(--text-muted)]">{event.text}</div>;
-}
 
 function formatTokens(n: number, t: TFunction<'evals'>): string {
   if (n < 1000) return t('units.tokens', { count: n });

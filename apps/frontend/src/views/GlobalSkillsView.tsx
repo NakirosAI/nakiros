@@ -26,6 +26,7 @@ import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
 import FixView from './FixView';
 import SkillAuditsTab from '../components/skill/SkillAuditsTab';
+import { EvalMatrix } from '../components/eval-matrix';
 
 type SkillDetailTab = 'files' | 'evals' | 'audits';
 
@@ -442,7 +443,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
           </div>
         )}
 
-        {detailTab === 'evals' && <EvalsPanel skill={skill} t={t} />}
+        {detailTab === 'evals' && <EvalsPanel skill={skill} scope="claude-global" t={t} />}
       </div>
     );
   }
@@ -537,13 +538,22 @@ function TopBar({ onBack, title, t }: { onBack(): void; title: string; t: TFunct
 
 // ─── Evals panel (duplicated from SkillsView) ──────────────────────────────
 
-function EvalsPanel({ skill, t }: { skill: Skill; t: TFunction<'global-skills'> }) {
+function EvalsPanel({
+  skill,
+  scope,
+  t,
+}: {
+  skill: Skill;
+  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  t: TFunction<'global-skills'>;
+}) {
   const [expandedIter, setExpandedIter] = useState<number | null>(
     skill.evals?.iterations.length
       ? skill.evals.iterations[skill.evals.iterations.length - 1].number
       : null,
   );
   const [expandedEval, setExpandedEval] = useState<string | null>(null);
+  void expandedIter; void setExpandedIter; void expandedEval; void setExpandedEval;
 
   if (!skill.evals || skill.evals.definitions.length === 0) {
     return (
@@ -555,6 +565,7 @@ function EvalsPanel({ skill, t }: { skill: Skill; t: TFunction<'global-skills'> 
   }
 
   const { definitions, iterations } = skill.evals;
+  void iterations;
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -575,7 +586,12 @@ function EvalsPanel({ skill, t }: { skill: Skill; t: TFunction<'global-skills'> 
         </div>
       </div>
 
-      {iterations.length > 0 ? (
+      {/* Evolution matrix — replaces the old iteration accordion. Old code guarded
+          behind `{false && ...}` for a quick revert if needed. */}
+      <EvalMatrix request={{ scope, skillName: skill.name }} />
+
+      {/* eslint-disable-next-line @typescript-eslint/no-constant-binary-expression, @typescript-eslint/no-unused-expressions */}
+      {false && (iterations.length > 0 ? (
         <div>
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
             {t('evals.iterationsHeading', { count: iterations.length })}
@@ -710,7 +726,7 @@ function EvalsPanel({ skill, t }: { skill: Skill; t: TFunction<'global-skills'> 
           {t('evals.noIterationsHintStart')}{' '}
           <code className="rounded bg-[var(--bg-muted)] px-1">{t('evals.noIterationsHintCommand', { name: skill.name })}</code> {t('evals.noIterationsHintEnd')}
         </div>
-      )}
+      ))}
     </div>
   );
 }

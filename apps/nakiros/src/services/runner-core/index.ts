@@ -27,3 +27,10 @@ export {
   sandboxRoot,
   type CreateSandboxResult,
 } from './git-worktree.js';
+export {
+  createTmpSandbox,
+  destroyTmpSandbox,
+  type CreateTmpSandboxArgs,
+  type CreateTmpSandboxResult,
+} from './tmp-sandbox.js';
+export { createIsolatedHome, destroyIsolatedHome, type IsolatedHome } from './isolated-home.js';

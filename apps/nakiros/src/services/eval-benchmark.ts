@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import type { FixBenchmarkSnapshot, SkillEvalRunSummary } from '@nakiros/shared';
+import { computeSkillFingerprint } from './skill-fingerprint.js';
 
 interface GradingSummary {
   passed: number;
@@ -145,10 +146,25 @@ export function writeIterationBenchmark(skillDir: string, skillName: string, ite
     duration_ms: withAgg.duration_ms.mean - withoutAgg.duration_ms.mean,
   };
 
+  // Capture the skill's content hash at the moment the benchmark is written.
+  // The eval matrix uses this to tell apart a real regression (hash changed →
+  // something in the skill actually moved) from judge variance (hash identical
+  // → the LLM just graded the same content slightly differently).
+  // Best-effort: fingerprint failure doesn't block benchmark persistence.
+  let skillFingerprint: string | null = null;
+  try {
+    skillFingerprint = computeSkillFingerprint(skillDir);
+  } catch (err) {
+    console.warn(
+      `[eval-benchmark] Failed to compute skill fingerprint for ${skillName}: ${(err as Error).message}`,
+    );
+  }
+
   const benchmark = {
     skill_name: skillName,
     iteration,
     timestamp: new Date().toISOString(),
+    skill_fingerprint: skillFingerprint,
     run_summary: {
       with_skill: withAgg,
       without_skill: withoutAgg,

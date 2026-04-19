@@ -2,8 +2,12 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 
 import type {
+  EvalMatrix,
   EvalRunEvent,
   EvalRunOutputEntry,
+  GetEvalMatrixRequest,
+  IterationRunArtifact,
+  LoadIterationRunRequest,
   SkillEvalDefinition,
   SkillEvalRun,
   StartEvalRunRequest,
@@ -20,6 +24,7 @@ import {
   getEvalBufferedEvents,
 } from '../../services/eval-runner.js';
 import { readIterationFeedback, saveEvalFeedback } from '../../services/eval-feedback.js';
+import { buildEvalMatrix } from '../../services/eval-matrix.js';
 import { eventBus } from '../event-bus.js';
 import { resolveEvalSkillDir } from './skill-dir.js';
 import type { HandlerRegistry } from './index.js';
@@ -189,5 +194,91 @@ export const evalHandlers: HandlerRegistry = {
     } catch {
       return null;
     }
+  },
+
+  'eval:getMatrix': (args): EvalMatrix => {
+    const request = args[0] as GetEvalMatrixRequest;
+    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+    return buildEvalMatrix(skillDir, request.skillName);
+  },
+
+  'eval:loadIterationRun': (args): IterationRunArtifact => {
+    const request = args[0] as LoadIterationRunRequest;
+    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+    const runDir = join(
+      skillDir,
+      'evals',
+      'workspace',
+      `iteration-${request.iteration}`,
+      `eval-${request.evalName}`,
+      request.config,
+    );
+
+    const read = <T>(rel: string): T | null => {
+      const p = join(runDir, rel);
+      if (!existsSync(p)) return null;
+      try {
+        return JSON.parse(readFileSync(p, 'utf8')) as T;
+      } catch {
+        return null;
+      }
+    };
+
+    const run = read<SkillEvalRun>('run.json');
+    const grading = read<IterationRunArtifact['grading']>('grading.json');
+    const timing = read<{ total_tokens: number; duration_ms: number }>('timing.json');
+    const diffPath = join(runDir, 'diff.patch');
+    const diffPatch = existsSync(diffPath)
+      ? (() => {
+          try {
+            return readFileSync(diffPath, 'utf8');
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+
+    const outputs: EvalRunOutputEntry[] = [];
+    const outputsDir = join(runDir, 'outputs');
+    if (existsSync(outputsDir)) {
+      const walk = (dir: string, prefix: string): void => {
+        let items: import('fs').Dirent[];
+        try {
+          items = readdirSync(dir, { withFileTypes: true }) as import('fs').Dirent[];
+        } catch {
+          return;
+        }
+        for (const item of items) {
+          const full = join(dir, item.name);
+          const rel = prefix + item.name;
+          if (item.isDirectory()) {
+            walk(full, `${rel}/`);
+            continue;
+          }
+          if (!item.isFile()) continue;
+          try {
+            const st = statSync(full);
+            outputs.push({
+              relativePath: rel,
+              sizeBytes: st.size,
+              modifiedAt: st.mtime.toISOString(),
+            });
+          } catch {
+            // skip
+          }
+        }
+      };
+      walk(outputsDir, '');
+    }
+
+    return {
+      run,
+      grading,
+      outputs,
+      diffPatch,
+      timing: timing
+        ? { totalTokens: timing.total_tokens, durationMs: timing.duration_ms }
+        : null,
+    };
   },
 };

@@ -1,13 +1,15 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { Settings2 } from 'lucide-react';
+import { Languages } from 'lucide-react';
+import type { LanguagePreference } from '@nakiros/shared';
 import appIcon from '../assets/icon.svg';
 import DashboardErrorBoundary from '../components/dashboard/DashboardErrorBoundary';
 import { DashboardRouter } from '../components/dashboard/DashboardRouter';
 import Sidebar, { type SidebarTab } from '../components/Sidebar';
+import VersionIndicator from '../components/VersionIndicator';
 import { useProject } from '../hooks/useProject';
-import type { GlobalSettingsSection } from '../components/GlobalSettings';
+import { usePreferences } from '../hooks/usePreferences';
 
 interface Props {
   onGoHome(): void;
@@ -25,14 +27,27 @@ export default function Dashboard({ onGoHome }: Props) {
     openProjectTab,
     closeProjectTab,
   } = useProject();
+  const { preferences, updatePreferences } = usePreferences();
 
   const [activeTab, setActiveTab] = useState<SidebarTab>('dashboard');
-  const [showGlobalSettings, setShowGlobalSettings] = useState(false);
-  const [globalSettingsSection, setGlobalSettingsSection] = useState<GlobalSettingsSection>('general');
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
   const [projectMenuSide, setProjectMenuSide] = useState<'left' | 'right'>('right');
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
   const projectMenuRef = useRef<HTMLDivElement>(null);
   const projectMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+  const languageOptions: { value: LanguagePreference; label: string }[] = [
+    { value: 'system', label: tSettings('languageSystem') },
+    { value: 'fr', label: tSettings('languageFrench') },
+    { value: 'en', label: tSettings('languageEnglish') },
+  ];
+  const currentLanguage = preferences.language ?? 'system';
+
+  async function handleLanguageChange(next: LanguagePreference) {
+    setIsLangMenuOpen(false);
+    if (next === currentLanguage) return;
+    await updatePreferences({ ...preferences, language: next });
+  }
 
   const unopenedProjects = allProjects.filter(
     (candidate) => !openProjects.some((op) => op.id === candidate.id),
@@ -136,23 +151,39 @@ export default function Dashboard({ onGoHome }: Props) {
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="relative flex shrink-0 items-center gap-2">
+          <VersionIndicator />
           <button
-            onClick={() => {
-              setGlobalSettingsSection('general');
-              setShowGlobalSettings((prev) => !prev);
-            }}
-            title={tSettings('title')}
-            aria-label={tSettings('title')}
+            onClick={() => setIsLangMenuOpen((prev) => !prev)}
+            title={tSettings('languageTitle')}
+            aria-label={tSettings('languageTitle')}
             className={clsx(
               'grid h-7 w-7 place-items-center rounded-lg p-0',
-              showGlobalSettings
+              isLangMenuOpen
                 ? 'border border-[var(--primary)] bg-[var(--bg-muted)]'
                 : 'border border-[var(--line)] bg-transparent',
             )}
           >
-            <Settings2 size={14} color={showGlobalSettings ? 'var(--primary)' : 'var(--text-muted)'} />
+            <Languages size={14} color={isLangMenuOpen ? 'var(--primary)' : 'var(--text-muted)'} />
           </button>
+          {isLangMenuOpen && (
+            <div className="absolute right-0 top-[34px] z-[200] w-[180px] rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-1.5">
+              {languageOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => void handleLanguageChange(option.value)}
+                  className={clsx(
+                    'w-full rounded-lg border-none bg-transparent px-[10px] py-2 text-left text-[13px]',
+                    option.value === currentLanguage
+                      ? 'font-semibold text-[var(--primary)]'
+                      : 'text-[var(--text)]',
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -171,14 +202,7 @@ export default function Dashboard({ onGoHome }: Props) {
         />
         <DashboardErrorBoundary resetKey={`${activeProjectId ?? 'none'}:${activeTab}`}>
           <div className="flex min-w-0 flex-1 overflow-hidden">
-            <DashboardRouter
-              showGlobalSettings={showGlobalSettings}
-              globalSettingsSection={globalSettingsSection}
-              activeTab={activeTab}
-              project={project}
-              onCloseGlobalSettings={() => setShowGlobalSettings(false)}
-              onGlobalUpdateApplied={() => {}}
-            />
+            <DashboardRouter activeTab={activeTab} project={project} />
           </div>
         </DashboardErrorBoundary>
       </div>

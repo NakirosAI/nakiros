@@ -28,6 +28,10 @@ import type {
   FixBenchmarks,
   SkillAgentTempFileEntry,
   SkillAgentTempFileContent,
+  EvalMatrix,
+  GetEvalMatrixRequest,
+  IterationRunArtifact,
+  LoadIterationRunRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -185,6 +189,8 @@ declare global {
       listEvalRunOutputs(runId: string): Promise<EvalRunOutputEntry[]>;
       readEvalRunOutput(runId: string, relativePath: string): Promise<string | null>;
       readEvalRunDiffPatch(runId: string): Promise<string | null>;
+      getEvalMatrix(request: GetEvalMatrixRequest): Promise<EvalMatrix>;
+      loadIterationRun(request: LoadIterationRunRequest): Promise<IterationRunArtifact>;
 
       // Audit
       startAudit(request: StartAuditRequest): Promise<AuditRun>;

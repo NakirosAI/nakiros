@@ -187,11 +187,24 @@ export type EvalRunStatus =
 
 export type EvalRunConfig = 'with_skill' | 'without_skill';
 
+export type EvalRunTurnBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool'; name: string; display: string };
+
 export interface EvalRunTurn {
   role: 'user' | 'assistant';
+  /** Joined text of all text-blocks. Kept for backward compat + grading which aggregates text. */
   content: string;
   timestamp: string;
+  /** Legacy flat list of tools used in this turn. Replaced by `blocks` for ordered rendering. */
   tools?: { name: string; display: string }[];
+  /**
+   * Ordered blocks as they arrived in the claude stream. Text and tool blocks
+   * are interleaved in the order the agent emitted them, so the UI can render
+   * a chat-style thread instead of "text then tools grouped at the bottom".
+   * Absent on runs written before this field existed.
+   */
+  blocks?: EvalRunTurnBlock[];
 }
 
 export interface SkillEvalRun {
@@ -311,9 +324,18 @@ export type AuditRunStatus =
 
 export interface AuditRunTurn {
   role: 'user' | 'assistant';
+  /** Joined text-block content. Kept for backward compat + grading. */
   content: string;
   timestamp: string;
+  /** Legacy flat list — replaced by `blocks` for ordered rendering. */
   tools?: { name: string; display: string }[];
+  /**
+   * Ordered text/tool blocks as they arrived in the claude stream. Same shape
+   * as `EvalRunTurnBlock` — UIs can render a chat-style thread where tool
+   * calls appear at the exact spot the agent emitted them. Absent on runs
+   * written before this field existed.
+   */
+  blocks?: EvalRunTurnBlock[];
 }
 
 export interface AuditRun {

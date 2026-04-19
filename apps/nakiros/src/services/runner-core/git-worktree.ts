@@ -47,6 +47,12 @@ export interface CreateSandboxResult {
  * Create a detached worktree of `gitRoot` at HEAD. The label is used as the
  * sandbox directory name under `~/.nakiros/sandboxes/`. Throws if git is
  * unavailable or the worktree add fails.
+ *
+ * Remotes are removed from the worktree immediately after creation. Worktrees
+ * share their `.git/` with the main repo via hardlinks, so a `git push` from
+ * inside would otherwise push to the user's real origin. Removing the remotes
+ * makes any push a no-op (fail fast) while still letting the skill inspect
+ * history, commit locally, or diff against HEAD.
  */
 export function createEvalSandbox(gitRoot: string, label: string): CreateSandboxResult {
   mkdirSync(SANDBOX_ROOT, { recursive: true });
@@ -66,7 +72,76 @@ export function createEvalSandbox(gitRoot: string, label: string): CreateSandbox
     { stdio: 'pipe' },
   );
 
+  detachRemotes(sandboxPath);
+
   return { path: sandboxPath, gitRoot };
+}
+
+/**
+ * Remove every git remote from a sandbox worktree. Because worktrees share
+ * `.git/` with the main repo via hardlinks, the remote config is actually the
+ * main repo's config — `git remote remove` here modifies the user's original
+ * repo. To avoid that, we override the remote URLs inside the worktree only,
+ * pointing them at a black-hole local path. `git push` then fails immediately
+ * without reaching any real server.
+ *
+ * We can't use `git remote remove` because the removal would propagate to the
+ * user's real project. Overriding with a per-worktree config insertion would
+ * also hit the shared config. The safe approach is to set an invalid URL via
+ * `git config --local` on the worktree — but `--local` in a worktree points to
+ * `.git/worktrees/<name>/config.worktree`, which is per-worktree and doesn't
+ * bleed back. We toggle `extensions.worktreeConfig=true` first to enable that.
+ */
+function detachRemotes(sandboxPath: string): void {
+  try {
+    // Enable per-worktree config so subsequent sets only affect this sandbox.
+    execFileSync('git', ['-C', sandboxPath, 'config', 'extensions.worktreeConfig', 'true'], {
+      stdio: 'pipe',
+    });
+    const remotesOut = execFileSync('git', ['-C', sandboxPath, 'remote'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+      .toString('utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    for (const remote of remotesOut) {
+      // Override the URL to a non-existent local path — any push/fetch fails
+      // instantly instead of reaching the user's real origin.
+      execFileSync(
+        'git',
+        [
+          '-C',
+          sandboxPath,
+          'config',
+          '--worktree',
+          `remote.${remote}.url`,
+          '/dev/null/nakiros-sandbox-detached',
+        ],
+        { stdio: 'pipe' },
+      );
+      execFileSync(
+        'git',
+        [
+          '-C',
+          sandboxPath,
+          'config',
+          '--worktree',
+          `remote.${remote}.pushurl`,
+          '/dev/null/nakiros-sandbox-detached',
+        ],
+        { stdio: 'pipe' },
+      );
+    }
+  } catch (err) {
+    // Best-effort — if we can't neutralise remotes, we log and move on rather
+    // than block the run. The user will still see test output; they just have
+    // to be aware their skill could push. We warn loudly.
+    console.warn(
+      `[git-worktree] Failed to neutralise remotes in ${sandboxPath}. ` +
+        `A skill that runs \`git push\` may reach your real remote. Error: ${(err as Error).message}`,
+    );
+  }
 }
 
 /**

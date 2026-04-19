@@ -10,6 +10,7 @@ import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
 import FixView from './FixView';
 import SkillAuditsTab from '../components/skill/SkillAuditsTab';
+import { EvalMatrix } from '../components/eval-matrix';
 
 interface Props {
   project: Project;
@@ -504,7 +505,7 @@ export default function SkillsView({ project }: Props) {
         )}
 
         {detailTab === 'evals' && (
-          <EvalsPanel skill={skill} t={t} />
+          <EvalsPanel skill={skill} scope="project" projectId={project.id} t={t} />
         )}
       </div>
     );
@@ -648,11 +649,22 @@ export default function SkillsView({ project }: Props) {
 
 // ─── Evals Panel ─────────────────────────────────────────────────────────────
 
-function EvalsPanel({ skill, t }: { skill: Skill; t: TFunction<'skills'> }) {
+function EvalsPanel({
+  skill,
+  scope,
+  projectId,
+  t,
+}: {
+  skill: Skill;
+  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  projectId?: string;
+  t: TFunction<'skills'>;
+}) {
   const [expandedIter, setExpandedIter] = useState<number | null>(
     skill.evals?.iterations.length ? skill.evals.iterations[skill.evals.iterations.length - 1].number : null,
   );
   const [expandedEval, setExpandedEval] = useState<string | null>(null);
+  void expandedIter; void setExpandedIter; void expandedEval; void setExpandedEval; // retained for legacy block below
 
   if (!skill.evals || skill.evals.definitions.length === 0) {
     return (
@@ -664,6 +676,7 @@ function EvalsPanel({ skill, t }: { skill: Skill; t: TFunction<'skills'> }) {
   }
 
   const { definitions, iterations } = skill.evals;
+  void iterations; // the legacy panel used this; the matrix fetches its own data
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -685,8 +698,12 @@ function EvalsPanel({ skill, t }: { skill: Skill; t: TFunction<'skills'> }) {
         </div>
       </div>
 
-      {/* Iterations */}
-      {iterations.length > 0 && (
+      {/* Evolution matrix — replaces the old iteration accordion. The old code
+          is kept below, commented out, for a quick revert if needed. */}
+      <EvalMatrix request={{ scope, projectId, skillName: skill.name }} />
+
+      {/* eslint-disable-next-line @typescript-eslint/no-unused-expressions */}
+      {false && iterations.length > 0 && (
         <div>
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
             {t('evals.iterationsHeading', { count: iterations.length })}

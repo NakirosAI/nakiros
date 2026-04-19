@@ -16,6 +16,13 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { AuditRun, AuditRunEvent } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui';
+import {
+  ConversationTurn,
+  liveEventsToBlocks,
+  legacyTurnToBlocks,
+  endsOnAssistant,
+  type LiveStreamEvent,
+} from '../components/ConversationTurn';
 
 interface Props {
   scope: 'project' | 'nakiros-bundled' | 'claude-global';
@@ -27,9 +34,7 @@ interface Props {
 
 type Tab = 'conversation' | 'report';
 
-type LiveEvent =
-  | { type: 'text'; text: string; ts: number }
-  | { type: 'tool'; name: string; display: string; ts: number };
+type LiveEvent = LiveStreamEvent;
 
 export default function AuditView({ scope, projectId, skillName, initialRun, onClose }: Props) {
   const { t } = useTranslation('audit');
@@ -281,7 +286,6 @@ function ConversationPanel({
   liveEvents,
   liveScrollRef,
   isStreaming,
-  t,
 }: {
   run: AuditRun;
   liveEvents: LiveEvent[];
@@ -289,105 +293,35 @@ function ConversationPanel({
   isStreaming: boolean;
   t: TFunction<'audit'>;
 }) {
-  // The last turn in run.turns is the user message of the current in-progress turn (if streaming).
-  // Show it followed by the live event panel that aggregates streaming text + tool calls.
   return (
     <div className="flex-1 overflow-y-auto p-4">
       <div className="mx-auto flex max-w-[900px] flex-col gap-3">
         {run.turns.map((turn, i) => (
-          <TurnBubble key={i} turn={turn} />
+          <ConversationTurn
+            key={i}
+            role={turn.role}
+            timestamp={turn.timestamp}
+            blocks={
+              turn.blocks ??
+              (turn.role === 'assistant'
+                ? legacyTurnToBlocks(turn.content, turn.tools)
+                : [{ type: 'text', text: turn.content }])
+            }
+          />
         ))}
 
-        {isStreaming && (
-          <LiveActivity events={liveEvents} scrollRef={liveScrollRef} t={t} />
-        )}
+        {isStreaming &&
+          liveEvents.length > 0 &&
+          !endsOnAssistant(run.turns) && (
+            <ConversationTurn
+              role="assistant"
+              timestamp={new Date().toISOString()}
+              blocks={liveEventsToBlocks(liveEvents)}
+              streaming
+              scrollRef={liveScrollRef}
+            />
+          )}
       </div>
-    </div>
-  );
-}
-
-function TurnBubble({ turn }: { turn: AuditRun['turns'][number] }) {
-  return (
-    <div
-      className={clsx(
-        'rounded-lg px-4 py-3',
-        turn.role === 'user'
-          ? 'ml-12 bg-[var(--primary-soft)]'
-          : 'mr-12 border border-[var(--line)] bg-[var(--bg-card)]',
-      )}
-    >
-      <div className="mb-1 flex items-center gap-2 text-xs text-[var(--text-muted)]">
-        <span className="font-semibold capitalize">{turn.role}</span>
-        <span>{new Date(turn.timestamp).toLocaleTimeString()}</span>
-      </div>
-      {turn.role === 'assistant' ? (
-        <MarkdownViewer content={turn.content} className="px-0 py-0" />
-      ) : (
-        <div className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{turn.content}</div>
-      )}
-      {turn.tools && turn.tools.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {turn.tools.map((tool, j) => (
-            <span
-              key={j}
-              title={tool.display}
-              className="rounded bg-[var(--bg-muted)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]"
-            >
-              {tool.name}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LiveActivity({
-  events,
-  scrollRef,
-  t,
-}: {
-  events: LiveEvent[];
-  scrollRef: React.RefObject<HTMLDivElement | null>;
-  t: TFunction<'audit'>;
-}) {
-  return (
-    <div className="mr-12 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary-soft)]/30 px-4 py-3">
-      <div className="mb-2 flex items-center gap-2 text-xs text-[var(--primary)]">
-        <Loader2 size={12} className="animate-spin" />
-        <span className="font-semibold">{t('live.streaming')}</span>
-        <span className="text-[var(--text-muted)]">{t('live.events', { count: events.length })}</span>
-      </div>
-      <div ref={scrollRef} className="max-h-[400px] overflow-y-auto rounded bg-[var(--bg)] p-2">
-        {events.length === 0 ? (
-          <span className="text-xs text-[var(--text-muted)]">{t('live.waitingFirstChunk')}</span>
-        ) : (
-          <div className="flex flex-col gap-1.5 font-mono text-xs">
-            {events.map((event, i) => (
-              <LiveEventLine key={i} event={event} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LiveEventLine({ event }: { event: LiveEvent }) {
-  if (event.type === 'tool') {
-    return (
-      <div className="flex items-start gap-2">
-        <span className="shrink-0 rounded bg-[var(--bg-muted)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--primary)]">
-          {event.name}
-        </span>
-        <span className="break-all text-[var(--text-primary)]">{event.display}</span>
-      </div>
-    );
-  }
-  // text event
-  return (
-    <div className="whitespace-pre-wrap text-[var(--text-muted)]">
-      {event.text}
     </div>
   );
 }

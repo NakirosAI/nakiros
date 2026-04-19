@@ -83,6 +83,13 @@ export interface SpawnTurnOptions extends ClaudeStreamHandlers {
    * Returning true from `isKilled()` short-circuits handling.
    */
   isKilled(): boolean;
+  /**
+   * Environment variables to pass to the child process. Use this to override
+   * `HOME` (isolated HOME that shadows `~/.claude/CLAUDE.md`, `~/.claude/skills/`,
+   * and auto-memory) so a run can't be contaminated by user-level state.
+   * Defaults to `process.env`.
+   */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface SpawnTurnResult {
@@ -99,7 +106,7 @@ export function spawnClaudeTurn(opts: SpawnTurnOptions): Promise<SpawnTurnResult
   return new Promise((resolve) => {
     const child = spawn('claude', opts.cliArgs, {
       cwd: opts.workdir,
-      env: process.env,
+      env: opts.env ?? process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     opts.onChildSpawned(child);

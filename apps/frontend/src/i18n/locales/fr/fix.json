@@ -1,0 +1,106 @@
+{
+  "back": "Retour",
+  "title": {
+    "create": "Create",
+    "fix": "Fix"
+  },
+  "header": {
+    "runEvalsTooltip": "Lancer les evals du skill contre la copie fix en cours",
+    "evaluating": "Évaluation…",
+    "runEvals": "Lancer les evals",
+    "openEvalsTooltip": "Rouvrir le panneau des runs d'eval",
+    "openEvals": "Ouvrir les evals ({{count}})",
+    "discardTooltip": "Abandonner cette session fix — supprimer toutes les modifs temporaires",
+    "discard": "Abandonner",
+    "syncTooltip": {
+      "create": "Créer le skill — copier le workdir temporaire dans le dossier du skill",
+      "fix": "Synchroniser le workdir temporaire vers le vrai dossier du skill"
+    },
+    "syncLabel": {
+      "create": "Créer le skill",
+      "fix": "Synchroniser vers le skill"
+    }
+  },
+  "prompts": {
+    "syncCreate": "Créer le skill \"{{name}}\" depuis le workdir temporaire actuel ? Tous les fichiers produits par l'agent seront copiés dans le nouveau dossier du skill.",
+    "syncFix": "Synchroniser les changements du fix en cours vers le vrai skill \"{{name}}\" ? Le workdir temporaire va écraser le dossier du skill.",
+    "discardCreate": "Abandonner cette session create ? Le brouillon du skill sera perdu.",
+    "discardFix": "Abandonner cette session fix ? Toutes les modifs du workdir temporaire seront perdues."
+  },
+  "errors": {
+    "sendFailed": "Échec de l'envoi : {{message}}",
+    "syncFailed": "Échec de la synchro : {{message}}",
+    "evalsStartFailed": "Échec du lancement des evals : {{message}}",
+    "heading": "Erreur"
+  },
+  "input": {
+    "waitingCreate": "Réponds à l'agent, puis clique sur « Créer le skill » quand le brouillon est prêt, ou « Abandonner » pour tout jeter.",
+    "waitingFix": "Réponds pour itérer, lance les evals pour valider, puis synchronise vers le skill ou abandonne",
+    "placeholderRunning": "Attends que l'agent termine le tour en cours...",
+    "placeholderIdle": "Tape ta réponse... (⌘/Ctrl+Entrée pour envoyer)",
+    "send": "Envoyer"
+  },
+  "status": {
+    "completed": "terminé",
+    "failed": "échoué",
+    "stopped": "arrêté",
+    "waiting": "en attente"
+  },
+  "units": {
+    "tokens": "tok"
+  },
+  "live": {
+    "streaming": "Streaming…",
+    "events_one": "{{count}} événement",
+    "events_other": "{{count}} événements",
+    "waitingFirstChunk": "En attente du premier chunk..."
+  },
+  "benchmarks": {
+    "heading": "Benchmarks",
+    "realLabel": "Skill réel",
+    "tempLabel": "Fix en cours",
+    "deltaTooltip": "Delta du taux de passage (temp vs réel)",
+    "refreshTooltip": "Rafraîchir les benchmarks",
+    "running": "En cours…",
+    "refresh": "Rafraîchir",
+    "iteration": "iter {{iteration}}"
+  },
+  "draftFiles": {
+    "heading": "Fichiers du brouillon ({{count}})",
+    "hintHide": "— clique pour masquer",
+    "hintPreview": "— clique pour prévisualiser ce qui sera écrit",
+    "ipcErrorTitle": "Erreur IPC",
+    "ipcErrorHint": "Le main process a probablement besoin d'un redémarrage — quitte et relance l'app.",
+    "emptyList": "Aucun fichier écrit pour l'instant. Le poll rafraîchit toutes les 3s tant que le panneau est ouvert.",
+    "selectFile": "Sélectionne un fichier.",
+    "loading": "Chargement…",
+    "missing": "Le fichier n'existe plus. L'agent l'a peut-être déplacé ou supprimé.",
+    "binary": "Fichier binaire ({{size}}). Prévisualisation désactivée."
+  },
+  "tabs": {
+    "conversation": "Conversation",
+    "review": "Revue des changements"
+  },
+  "review": {
+    "loading": "Calcul du diff…",
+    "listFailed": "Impossible de lister les changements : {{message}}",
+    "emptyFix": "Aucun changement pour l'instant — l'agent n'a rien écrit de différent du vrai skill.",
+    "emptyCreate": "Aucun fichier produit pour l'instant — l'agent n'a rien écrit dans le workdir.",
+    "filesPanelTitle": "Fichiers",
+    "originalColumn": "Avant (skill actuel)",
+    "modifiedColumn": "Après (en cours)",
+    "missingFile": "— fichier absent",
+    "binaryNotice": "Fichier binaire — diff non affichable.",
+    "identicalNotice": "Aucune différence sur ce fichier.",
+    "diffLoading": "Chargement du diff…",
+    "diffFailed": "Impossible de lire le diff : {{message}}",
+    "pickFile": "Sélectionne un fichier pour voir le diff.",
+    "sideAdded": "Ajouté",
+    "sideRemoved": "Supprimé",
+    "sideModified": "Modifié",
+    "addedLines_one": "+{{count}}",
+    "addedLines_other": "+{{count}}",
+    "removedLines_one": "-{{count}}",
+    "removedLines_other": "-{{count}}"
+  }
+}

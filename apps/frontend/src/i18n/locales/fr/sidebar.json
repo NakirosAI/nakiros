@@ -1,8 +1,7 @@
 {
-  "overview": "Overview",
-  "chat": "Chat IA",
-  "product": "Product",
-  "delivery": "Delivery",
-  "backlog": "Backlog",
-  "settings": "Workspace"
+  "dashboard": "Dashboard",
+  "skills": "Skills",
+  "conversations": "Conv.",
+  "recommendations": "Insights",
+  "settings": "Settings"
 }

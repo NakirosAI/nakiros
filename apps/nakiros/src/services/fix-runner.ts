@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess } from 'child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join, relative } from 'path';
 import { homedir } from 'os';
@@ -6,10 +6,20 @@ import { homedir } from 'os';
 import type {
   AuditRun,
   AuditRunEvent,
-  AuditRunStatus,
-  AuditRunTurn,
+  SkillDiffEntry,
+  SkillDiffFilePayload,
   StartAuditRequest,
 } from '@nakiros/shared';
+
+import {
+  EventLog,
+  buildClaudeArgs,
+  deleteClaudeProjectEntry,
+  generateRunId,
+  loadRunJson,
+  persistRunJson,
+  spawnClaudeTurn,
+} from './runner-core/index.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 
@@ -21,9 +31,9 @@ const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
  *              workdir, sync back to the target location only if it still doesn't
  *              exist (to avoid clobbering).
  *
- * Both share the same runtime machinery (Claude CLI, stream buffering, resume,
- * interactive turns, Run-evals-in-temp). They differ only in workdir seeding,
- * first-turn prompt, and sync-back policy.
+ * Both share the same runtime machinery (runner-core: Claude CLI, event log,
+ * resume, interactive turns, Run-evals-in-temp). They differ only in workdir
+ * seeding, first-turn prompt, and sync-back policy.
  */
 export type SkillAgentMode = 'fix' | 'create';
 
@@ -37,15 +47,11 @@ interface FixEntry {
   /** Temp workdir where the agent operates to avoid `.claude/` permission issues. */
   tempWorkdir: string;
   /**
-   * Ring-ish buffer of the CURRENT turn's stream events (text + tool) so the UI
-   * can replay them when the user closes FixView and reopens it mid-turn.
-   * Capped to avoid unbounded growth on very long turns.
-   * Reset on each `status=starting` transition (new turn).
+   * Replay log for the CURRENT turn. Persisted to `{workdir}/events.jsonl` so
+   * both remount-mid-turn AND daemon-restart survive without losing the stream.
    */
-  currentTurnEvents: AuditRunEvent['event'][];
+  eventLog: EventLog<AuditRunEvent['event']>;
 }
-
-const MAX_BUFFERED_EVENTS_PER_TURN = 500;
 
 /**
  * Recursively copy `src` to `dest`. No filtering — caller decides what to pass in.
@@ -134,7 +140,6 @@ function copyLatestAudit(realSkillDir: string, destSkillDir: string): string | n
     return null;
   }
   if (names.length === 0) return null;
-  // Filenames encode ISO timestamps → lexicographic sort == chronological sort.
   names.sort();
   const latest = names[names.length - 1];
   const destAuditsDir = join(destSkillDir, 'audits');
@@ -167,24 +172,15 @@ function copyLatestIteration(realSkillDir: string, destSkillDir: string): number
 /**
  * Paths (relative to the temp workdir) that are Nakiros-internal runtime state
  * and must NEVER be synced to the real skill.
- * - audits/, evals/workspace/ : runtime output, owned per-user
- * - run.json : fix-runner persistence blob
- * - .claude/ : the workdir's auto-accept settings, not part of the skill
  */
 function isRuntimeOnlyPath(rel: string): boolean {
-  if (rel === 'run.json') return true;
+  if (rel === 'run.json' || rel === 'events.jsonl') return true;
   if (rel === 'audits' || rel.startsWith('audits/')) return true;
   if (rel === '.claude' || rel.startsWith('.claude/')) return true;
   if (rel.startsWith('evals/workspace/') || rel === 'evals/workspace') return true;
   return false;
 }
 
-/**
- * Sync the temp workdir back into the real skill directory.
- * Additive: writes files that exist in temp (new or modified) into their matching path
- * in the real skill. Does NOT delete files from real that no longer exist in temp.
- * Skips Nakiros-internal runtime state (see `isRuntimeOnlyPath`).
- */
 function syncBackToSkill(tempDir: string, realSkillDir: string): { filesCopied: number } {
   let filesCopied = 0;
 
@@ -221,6 +217,9 @@ function cleanupTempWorkdir(tempDir: string): void {
   } catch {
     // ignore
   }
+  // The claude CLI registered `tempDir` as a project under
+  // `~/.claude/projects/`; drop that entry so we don't leak one row per run.
+  deleteClaudeProjectEntry(tempDir);
 }
 
 /**
@@ -232,7 +231,9 @@ function cleanupTempWorkdir(tempDir: string): void {
  *
  * We can't re-attach to the old Claude subprocess (it's dead), but the agent's
  * `sessionId` is preserved — the next `sendUserMessage` spawns a fresh process
- * with `--resume <sessionId>` and the conversation picks back up.
+ * with `--resume <sessionId>` and the conversation picks back up. The EventLog
+ * is also restored from `events.jsonl` so the user sees the last streamed chunks
+ * of the interrupted turn when they reopen the view.
  */
 export function restoreOrCleanupTempWorkdirs(): void {
   const tempRoot = join(homedir(), '.nakiros', 'tmp-skills');
@@ -247,22 +248,12 @@ export function restoreOrCleanupTempWorkdirs(): void {
 
   for (const name of dirs) {
     const workdir = join(tempRoot, name);
-    const runJsonPath = join(workdir, 'run.json');
-    if (!existsSync(runJsonPath)) {
-      // No persisted state → truly orphan, safe to nuke.
+    const blob = loadRunJson<AuditRun & { _mode?: SkillAgentMode; _realSkillDir?: string }>(workdir);
+    if (!blob) {
       cleanupTempWorkdir(workdir);
       continue;
     }
-
-    let blob: (AuditRun & { _mode?: SkillAgentMode; _realSkillDir?: string }) | null = null;
-    try {
-      blob = JSON.parse(readFileSync(runJsonPath, 'utf8'));
-    } catch {
-      // Corrupt file → can't recover; drop it.
-      cleanupTempWorkdir(workdir);
-      continue;
-    }
-    if (!blob || !blob.runId || !blob._mode || !blob._realSkillDir) {
+    if (!blob.runId || !blob._mode || !blob._realSkillDir) {
       cleanupTempWorkdir(workdir);
       continue;
     }
@@ -299,10 +290,14 @@ export function restoreOrCleanupTempWorkdirs(): void {
       killed: false,
       realSkillDir: blob._realSkillDir,
       tempWorkdir: workdir,
-      currentTurnEvents: [], // buffered events are lost across restarts — acceptable
+      eventLog: new EventLog({
+        workdir,
+        broadcast: () => { /* no listener yet; first real event will replace this log */ },
+      }),
     };
+    entry.eventLog.restore();
     fixes.set(restoredRun.runId, entry);
-    persistRunJson(entry); // rewrite with the new 'waiting_for_input' status
+    writeRunJson(entry); // rewrite with the new 'waiting_for_input' status
     console.log(`[skill-agent-runner] Restored ${entry.mode} run ${restoredRun.runId} for "${restoredRun.skillName}" (sessionId=${restoredRun.sessionId ?? 'none'})`);
   }
 }
@@ -311,26 +306,9 @@ export function restoreOrCleanupTempWorkdirs(): void {
 export const cleanupOrphanTempWorkdirs = restoreOrCleanupTempWorkdirs;
 
 const fixes = new Map<string, FixEntry>();
-let counter = 0;
-
-function generateRunId(): string {
-  return `fix_${Date.now().toString(36)}_${(++counter).toString(36)}`;
-}
 
 // ─── Setup ──────────────────────────────────────────────────────────────────
 
-/**
- * Build the temp workdir for a fix run:
- * - Located at ~/.nakiros/tmp-skills/{runId}/ (never inside `.claude/`)
- * - Contains a copy of the skill being fixed (excluding runtime artifacts)
- * - Includes a `.claude/settings.local.json` to auto-accept edits inside the workdir
- *
- * On finish, we sync the temp workdir BACK to the real skill directory.
- * This decouples editing (in temp) from persistence (in real dir) so that:
- *   - Claude's `.claude/` path protection is never triggered (cwd has no `.claude/` segment)
- *   - The original skill stays intact if the fix fails mid-way
- *   - (future) we can diff-preview changes before applying
- */
 interface WorkdirContext {
   workdir: string;
   latestAuditFile: string | null;
@@ -353,17 +331,13 @@ function prepareWorkdir(mode: SkillAgentMode, realSkillDir: string, runId: strin
   let latestIteration: number | null = null;
 
   if (mode === 'fix') {
-    // Copy the skill source (SKILL.md, references/, assets/, scripts/, templates/,
-    // evals/evals.json, evals/files/). Leaves out audits/ and evals/workspace/ —
-    // those are materialized below, latest-only, to keep the temp workdir lean.
     copySkillSourceForFix(realSkillDir, workdir);
     latestAuditFile = copyLatestAudit(realSkillDir, workdir);
     latestIteration = copyLatestIteration(realSkillDir, workdir);
   }
-  // mode === 'create': temp workdir stays empty (beyond .claude/settings.local.json below).
 
-  // Auto-accept edits inside the workdir (no prompts needed here since we bypass already,
-  // but keep it for explicitness and for potential future tightening).
+  // Auto-accept edits inside the workdir (explicit — even though we pass
+  // --dangerously-skip-permissions too, keep this for potential future tightening).
   const claudeDir = join(workdir, '.claude');
   mkdirSync(claudeDir, { recursive: true });
   writeFileSync(
@@ -379,90 +353,17 @@ function prepareWorkdir(mode: SkillAgentMode, realSkillDir: string, runId: strin
   return { workdir, latestAuditFile, latestIteration };
 }
 
-function buildClaudeArgs(prompt: string, resumeSessionId?: string): string[] {
-  // Fix runs are user-initiated and explicitly modify the skill directory.
-  // We bypass permission prompts because:
-  //  - the user has clicked "Fix" → intent is explicit
-  //  - the workdir is scoped to the skill being fixed (nothing else is reachable)
-  //  - .claude/** files are blocked by Claude Code's hard rule even with `acceptEdits`
-  const args: string[] = [
-    '--output-format', 'stream-json',
-    '--verbose',
-    '--dangerously-skip-permissions',
-  ];
-  if (resumeSessionId) args.push('--resume', resumeSessionId);
-  args.push('--print', prompt);
-  return args;
-}
-
 /**
  * Persist the run to `run.json` in the temp workdir. We stash the runner's
  * internal state (mode + realSkillDir) under underscore-prefixed fields so
- * `restoreEntriesFromDisk` can rehydrate the entry after an app crash / restart.
+ * `restoreOrCleanupTempWorkdirs` can rehydrate the entry after a daemon restart.
  */
-function persistRunJson(entry: FixEntry): void {
-  const blob = {
+function writeRunJson(entry: FixEntry): void {
+  persistRunJson(entry.run.workdir, {
     ...entry.run,
     _mode: entry.mode,
     _realSkillDir: entry.realSkillDir,
-  };
-  try {
-    writeFileSync(join(entry.run.workdir, 'run.json'), JSON.stringify(blob, null, 2), 'utf8');
-  } catch {
-    // ignore
-  }
-}
-
-// ─── Stream parsing (shared with audit) ─────────────────────────────────────
-
-interface ClaudeHandlers {
-  onSession(id: string): void;
-  onText(text: string): void;
-  onTool(name: string, display: string): void;
-  onUsage(totalTokens: number): void;
-}
-
-function handleClaudeEvent(event: Record<string, unknown>, h: ClaudeHandlers): void {
-  const type = event['type'] as string;
-  if (type === 'system') {
-    const sid = event['session_id'] as string | undefined;
-    if (sid) h.onSession(sid);
-    return;
-  }
-  if (type === 'assistant') {
-    const sid = event['session_id'] as string | undefined;
-    if (sid) h.onSession(sid);
-    const message = event['message'] as { content?: unknown[] } | undefined;
-    if (!Array.isArray(message?.content)) return;
-    for (const block of message!.content) {
-      const b = block as { type?: string; text?: string; name?: string; input?: Record<string, unknown> };
-      if (b.type === 'text' && b.text) h.onText(b.text);
-      else if (b.type === 'tool_use' && b.name) h.onTool(b.name, formatTool(b.name, b.input ?? {}));
-    }
-    return;
-  }
-  if (type === 'result') {
-    const usage = event['usage'] as { total_tokens?: number; input_tokens?: number; output_tokens?: number } | undefined;
-    if (usage) {
-      const total = usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
-      h.onUsage(total);
-    }
-  }
-}
-
-function formatTool(name: string, input: Record<string, unknown>): string {
-  const s = (v: unknown) => String(v ?? '');
-  const truncate = (str: string, max = 72) => (str.length > max ? str.slice(0, max) + '…' : str);
-  switch (name) {
-    case 'Read': return `Reading ${s(input['file_path'])}`;
-    case 'Write': return `Writing ${s(input['file_path'])}`;
-    case 'Edit':
-    case 'MultiEdit': return `Editing ${s(input['file_path'])}`;
-    case 'Bash': return `$ ${truncate(s(input['command']))}`;
-    case 'Glob': return `Glob: ${s(input['pattern'])}`;
-    case 'Grep': return `Grep: ${s(input['pattern'])}`;
-    default: return name;
-  }
+  });
 }
 
 // ─── Run lifecycle ──────────────────────────────────────────────────────────
@@ -498,14 +399,15 @@ function findActiveForSkill(
 
 /** Core entry-point. Both `startFix` and `startCreate` are thin wrappers. */
 function startSkillAgent(mode: SkillAgentMode, request: StartAuditRequest, opts: RunOpts): AuditRun {
-  // Resume an already-active run for this (mode, scope, project, skill) instead of duplicating.
   const existing = findActiveForSkill(mode, request.scope, request.projectId, request.skillName);
   if (existing) {
     console.log(`[skill-agent-runner] Resuming active ${mode} ${existing.run.runId} for ${request.skillName} (status=${existing.run.status})`);
+    // Rebind the EventLog's broadcast listener to this fresh caller so the
+    // resumed session's events reach the new websocket subscriber.
+    rebindEventLog(existing, opts);
     return existing.run;
   }
 
-  // For create: refuse if the target already exists — we'd otherwise overwrite the skill silently.
   if (mode === 'create' && existsSync(opts.skillDir)) {
     throw new Error(
       `Cannot create skill "${request.skillName}": target directory already exists (${opts.skillDir}). ` +
@@ -513,7 +415,7 @@ function startSkillAgent(mode: SkillAgentMode, request: StartAuditRequest, opts:
     );
   }
 
-  const runId = generateRunId();
+  const runId = generateRunId(mode);
   const ctx = prepareWorkdir(mode, opts.skillDir, runId);
 
   const run: AuditRun = {
@@ -540,15 +442,39 @@ function startSkillAgent(mode: SkillAgentMode, request: StartAuditRequest, opts:
     killed: false,
     realSkillDir: opts.skillDir,
     tempWorkdir: ctx.workdir,
-    currentTurnEvents: [],
+    eventLog: new EventLog<AuditRunEvent['event']>({
+      workdir: ctx.workdir,
+      broadcast: (event) => opts.onEvent({ runId: run.runId, event }),
+    }),
   };
   fixes.set(run.runId, entry);
-  persistRunJson(entry);
+  writeRunJson(entry);
 
   const firstPrompt = buildFirstPrompt(mode, request, ctx, opts.skillDir);
-  void executeTurn(entry, firstPrompt, true, opts).then(() => maybeWait(entry, opts));
+  void executeTurn(entry, firstPrompt, true).then(() => maybeWait(entry));
 
   return run;
+}
+
+/**
+ * Re-point an existing entry's event log broadcast to the current caller. The
+ * EventLog itself (and its in-memory buffer) is preserved — only the "who to
+ * broadcast to" function is swapped. Used when a fresh `startSkillAgent` call
+ * resumes an already-active run.
+ */
+function rebindEventLog(entry: FixEntry, opts: RunOpts): void {
+  const buffered = entry.eventLog.getBuffered();
+  entry.eventLog = new EventLog<AuditRunEvent['event']>({
+    workdir: entry.tempWorkdir,
+    broadcast: (event) => opts.onEvent({ runId: entry.run.runId, event }),
+  });
+  // Restore the in-memory buffer so getBufferedEvents stays accurate without
+  // re-reading the jsonl file.
+  for (const ev of buffered) {
+    // Bypass broadcast (don't replay to the new listener; the frontend replays
+    // explicitly via getBufferedEvents at mount time).
+    (entry.eventLog as unknown as { buffer: unknown[] }).buffer.push(ev);
+  }
 }
 
 function buildFirstPrompt(
@@ -596,125 +522,71 @@ export function startCreate(request: StartAuditRequest, opts: RunOpts): AuditRun
   return startSkillAgent('create', request, opts);
 }
 
-/**
- * Emit an event to the UI AND buffer text/tool events so a late-attaching
- * FixView can replay the current turn's stream.
- * The buffer is cleared on each 'starting' status (= new turn).
- */
-function emit(entry: FixEntry, opts: RunOpts, event: AuditRunEvent['event']): void {
-  if (event.type === 'status' && event.status === 'starting') {
-    entry.currentTurnEvents = [];
-  }
-  if (event.type === 'text' || event.type === 'tool') {
-    entry.currentTurnEvents.push(event);
-    if (entry.currentTurnEvents.length > MAX_BUFFERED_EVENTS_PER_TURN) {
-      entry.currentTurnEvents.shift();
-    }
-  }
-  opts.onEvent({ runId: entry.run.runId, event });
-}
-
 async function executeTurn(
   entry: FixEntry,
   userMessage: string,
   isFirstTurn: boolean,
-  opts: RunOpts,
 ): Promise<void> {
   const { run } = entry;
   if (entry.killed) return;
 
+  entry.eventLog.resetForNewTurn();
   run.status = 'starting';
-  persistRunJson(entry);
-  emit(entry, opts, { type: 'status', status: 'starting' });
+  writeRunJson(entry);
+  entry.eventLog.emit({ type: 'status', status: 'starting' });
 
-  const cliArgs = buildClaudeArgs(userMessage, isFirstTurn ? undefined : (run.sessionId ?? undefined));
+  const cliArgs = buildClaudeArgs({
+    prompt: userMessage,
+    resumeSessionId: isFirstTurn ? undefined : (run.sessionId ?? undefined),
+    // Fix/create runs are user-initiated and explicitly modify the skill directory.
+    // The workdir is scoped (nothing else is reachable); .claude/** files stay blocked
+    // by Claude Code's hard rule even with `acceptEdits`.
+    skipPermissions: true,
+  });
 
   const started = Date.now();
   run.turns.push({ role: 'user', content: userMessage, timestamp: new Date().toISOString() });
 
   let assistantText = '';
   const tools: { name: string; display: string }[] = [];
-  let exitCode = 0;
-  let errorMessage: string | null = null;
 
-  await new Promise<void>((resolve) => {
-    const child = spawn('claude', cliArgs, {
-      cwd: run.workdir,
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    entry.child = child;
+  run.status = 'running';
+  writeRunJson(entry);
+  entry.eventLog.emit({ type: 'status', status: 'running' });
 
-    run.status = 'running';
-    persistRunJson(entry);
-    emit(entry, opts, { type: 'status', status: 'running' });
-
-    let buffer = '';
-    let stderrBuffer = '';
-
-    child.stdout?.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString('utf8');
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const event = JSON.parse(trimmed) as Record<string, unknown>;
-          handleClaudeEvent(event, {
-            onSession: (id) => { run.sessionId = id; },
-            onText: (text) => {
-              assistantText += text;
-              emit(entry, opts, { type: 'text', text });
-            },
-            onTool: (name, display) => {
-              tools.push({ name, display });
-              emit(entry, opts, { type: 'tool', name, display });
-            },
-            onUsage: (tokens) => {
-              run.tokensUsed += tokens;
-              emit(entry, opts, { type: 'tokens', tokensUsed: run.tokensUsed });
-            },
-          });
-        } catch {
-          // ignore non-JSON lines
-        }
-      }
-    });
-
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderrBuffer += chunk.toString('utf8');
-    });
-
-    child.on('close', (code) => {
-      exitCode = code ?? 0;
-      if (exitCode !== 0 && stderrBuffer.trim()) {
-        errorMessage = stderrBuffer.trim().slice(-500);
-      }
-      resolve();
-    });
-
-    child.on('error', (err) => {
-      exitCode = 1;
-      errorMessage = err.message.includes('ENOENT')
-        ? '`claude` CLI not found. Make sure Claude Code is installed and on PATH.'
-        : err.message;
-      resolve();
-    });
+  const result = await spawnClaudeTurn({
+    workdir: run.workdir,
+    cliArgs,
+    onChildSpawned: (c) => { entry.child = c; },
+    isKilled: () => entry.killed,
+    onSession: (id) => { run.sessionId = id; },
+    onText: (text) => {
+      assistantText += text;
+      entry.eventLog.emit({ type: 'text', text });
+    },
+    onTool: (name, display) => {
+      tools.push({ name, display });
+      entry.eventLog.emit({ type: 'tool', name, display });
+    },
+    onUsage: (tokens) => {
+      run.tokensUsed += tokens;
+      entry.eventLog.emit({ type: 'tokens', tokensUsed: run.tokensUsed });
+    },
   });
 
   run.durationMs += Date.now() - started;
   run.turns.push({ role: 'assistant', content: assistantText, timestamp: new Date().toISOString(), tools });
   entry.child = null;
 
-  if (exitCode !== 0 || errorMessage) {
+  if (result.exitCode !== 0 || result.error) {
     run.status = 'failed';
-    run.error = errorMessage;
+    run.error = result.error;
     run.finishedAt = new Date().toISOString();
     // Discard temp modifications on failure — same policy as stop
+    entry.eventLog.destroy();
     cleanupTempWorkdir(entry.tempWorkdir);
-    persistRunJson(entry);
-    emit(entry, opts, { type: 'done', exitCode, error: errorMessage ?? undefined });
+    writeRunJson(entry);
+    entry.eventLog.emit({ type: 'done', exitCode: result.exitCode, error: result.error ?? undefined });
   }
 }
 
@@ -722,14 +594,14 @@ async function executeTurn(
  * Fix runs don't auto-complete — the user decides when the work is done by clicking Finish.
  * After each turn, transition to waiting_for_input so the user can reply or finalize.
  */
-function maybeWait(entry: FixEntry, opts: RunOpts): void {
+function maybeWait(entry: FixEntry): void {
   const { run } = entry;
   if (run.status === 'failed' || run.status === 'stopped') return;
   run.status = 'waiting_for_input';
-  persistRunJson(entry);
+  writeRunJson(entry);
   const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? '';
-  emit(entry, opts, { type: 'status', status: 'waiting_for_input' });
-  emit(entry, opts, { type: 'waiting_for_input', lastAssistantText });
+  entry.eventLog.emit({ type: 'status', status: 'waiting_for_input' });
+  entry.eventLog.emit({ type: 'waiting_for_input', lastAssistantText });
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -740,27 +612,27 @@ export async function sendFixUserMessage(runId: string, message: string, opts: R
   if (entry.run.status !== 'waiting_for_input') {
     throw new Error(`Fix run ${runId} is not waiting for input (status=${entry.run.status})`);
   }
-  await executeTurn(entry, message, false, opts);
-  maybeWait(entry, opts);
+  rebindEventLog(entry, opts);
+  await executeTurn(entry, message, false);
+  maybeWait(entry);
 }
 
 export function finishFix(runId: string, opts: RunOpts): void {
   const entry = fixes.get(runId);
   if (!entry) return;
   if (entry.run.status === 'completed' || entry.run.status === 'failed') return;
+  rebindEventLog(entry, opts);
 
-  // Create mode safety net: if the target appeared since we started (someone made the skill
-  // in a different window), refuse the sync so we don't clobber it.
+  // Create mode safety net: if the target appeared since we started, refuse to sync.
   if (entry.mode === 'create' && existsSync(entry.realSkillDir)) {
     entry.run.status = 'failed';
     entry.run.error = `Cannot finalize create: "${entry.realSkillDir}" already exists. Discard this run and pick a different skill name.`;
     entry.run.finishedAt = new Date().toISOString();
-    persistRunJson(entry);
+    writeRunJson(entry);
     opts.onEvent({ runId, event: { type: 'done', exitCode: 1, error: entry.run.error } });
     return;
   }
 
-  // Sync the temp workdir back to the real skill directory
   let syncInfo = '';
   try {
     const result = syncBackToSkill(entry.tempWorkdir, entry.realSkillDir);
@@ -769,24 +641,23 @@ export function finishFix(runId: string, opts: RunOpts): void {
     entry.run.status = 'failed';
     entry.run.error = `Sync-back failed: ${(err as Error).message}`;
     entry.run.finishedAt = new Date().toISOString();
-    persistRunJson(entry);
+    writeRunJson(entry);
     opts.onEvent({ runId, event: { type: 'done', exitCode: 1, error: entry.run.error } });
     return;
   }
 
+  entry.eventLog.destroy();
   cleanupTempWorkdir(entry.tempWorkdir);
 
   entry.run.status = 'completed';
   entry.run.finishedAt = new Date().toISOString();
   entry.run.error = null;
-  persistRunJson(entry);
   console.log(`[skill-agent-runner] ${entry.mode} ${runId} completed${syncInfo}`);
   opts.onEvent({ runId, event: { type: 'status', status: 'completed' } });
   opts.onEvent({ runId, event: { type: 'done', exitCode: 0 } });
 }
 
-// Create runs share the same entry registry and lifecycle — these aliases make
-// the intent at the call-site clear and match the IPC naming.
+// Create runs share the same entry registry and lifecycle.
 export const finishCreate = finishFix;
 export const stopCreate = stopFix;
 export const sendCreateUserMessage = sendFixUserMessage;
@@ -800,14 +671,17 @@ export function stopFix(runId: string): void {
   entry.killed = true;
   entry.child?.kill('SIGTERM');
 
-  // Stopped runs do NOT sync back — the temp modifications are discarded
-  cleanupTempWorkdir(entry.tempWorkdir);
-
   if (entry.run.status !== 'completed' && entry.run.status !== 'failed') {
     entry.run.status = 'stopped';
     entry.run.finishedAt = new Date().toISOString();
-    persistRunJson(entry);
   }
+  // Broadcast BEFORE tearing down so the frontend reacts instantly.
+  entry.eventLog.emit({ type: 'status', status: 'stopped' });
+  entry.eventLog.emit({ type: 'done', exitCode: 130 });
+
+  // Stopped runs do NOT sync back — the temp modifications are discarded.
+  entry.eventLog.destroy();
+  cleanupTempWorkdir(entry.tempWorkdir);
 }
 
 export function getFixRun(runId: string): AuditRun | null {
@@ -832,7 +706,7 @@ export function getFixRealSkillDir(runId: string): string | null {
  * Works for both fix and create runs (same runId space).
  */
 export function getFixBufferedEvents(runId: string): AuditRunEvent['event'][] {
-  return fixes.get(runId)?.currentTurnEvents.slice() ?? [];
+  return fixes.get(runId)?.eventLog.getBuffered() ?? [];
 }
 
 export const getCreateBufferedEvents = getFixBufferedEvents;
@@ -849,7 +723,7 @@ function listActive(mode: SkillAgentMode): AuditRun[] {
   return out;
 }
 
-/** List all active (non-terminal) fix runs. Used by the UI to surface "fix running" badges. */
+/** List all active (non-terminal) fix runs. */
 export function listActiveFixRuns(): AuditRun[] {
   return listActive('fix');
 }
@@ -857,4 +731,122 @@ export function listActiveFixRuns(): AuditRun[] {
 /** List all active (non-terminal) create runs. */
 export function listActiveCreateRuns(): AuditRun[] {
   return listActive('create');
+}
+
+// ─── Review diff API ─────────────────────────────────────────────────────────
+
+/**
+ * Walk a skill directory and return every file path (relative to the root)
+ * that is NOT runtime-only. Used on both real skill and temp workdir so the
+ * comparison sees the same things the sync step would actually copy.
+ */
+function listSyncableFiles(root: string): string[] {
+  const results: string[] = [];
+  function walk(dir: string): void {
+    let entries: import('fs').Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true }) as import('fs').Dirent[];
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      const rel = relative(root, fullPath);
+      if (isRuntimeOnlyPath(rel)) continue;
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        results.push(rel);
+      }
+    }
+  }
+  walk(root);
+  results.sort();
+  return results;
+}
+
+function isLikelyBinary(buffer: Buffer): boolean {
+  const sample = buffer.subarray(0, Math.min(4096, buffer.length));
+  for (const byte of sample) {
+    if (byte === 0) return true;
+  }
+  return false;
+}
+
+function readPair(relativePath: string, originalDir: string | null, modifiedDir: string): SkillDiffFilePayload {
+  let originalContent: string | null = null;
+  let modifiedContent: string | null = null;
+  let isBinary = false;
+
+  if (originalDir) {
+    const origPath = join(originalDir, relativePath);
+    if (existsSync(origPath)) {
+      const buf = readFileSync(origPath);
+      if (isLikelyBinary(buf)) isBinary = true;
+      else originalContent = buf.toString('utf8');
+    }
+  }
+
+  const modPath = join(modifiedDir, relativePath);
+  if (existsSync(modPath)) {
+    const buf = readFileSync(modPath);
+    if (isLikelyBinary(buf)) isBinary = true;
+    else modifiedContent = buf.toString('utf8');
+  }
+
+  return {
+    relativePath,
+    originalContent: isBinary ? null : originalContent,
+    modifiedContent: isBinary ? null : modifiedContent,
+    isBinary,
+  };
+}
+
+/**
+ * List the files that would differ between the real skill (before-state) and
+ * the current temp workdir (after-state). Files that are identical are excluded.
+ * `create` runs surface every file in the temp workdir since the original does
+ * not exist yet.
+ */
+export function listFixDiff(runId: string): SkillDiffEntry[] {
+  const entry = fixes.get(runId);
+  if (!entry) return [];
+  const realDir = entry.realSkillDir;
+  const tempDir = entry.tempWorkdir;
+  const isCreate = entry.mode === 'create';
+
+  const originalExists = !isCreate && existsSync(realDir);
+  const originalPaths = originalExists ? new Set(listSyncableFiles(realDir)) : new Set<string>();
+  const modifiedPaths = new Set(listSyncableFiles(tempDir));
+
+  const all = new Set<string>([...originalPaths, ...modifiedPaths]);
+  const diffs: SkillDiffEntry[] = [];
+  for (const rel of [...all].sort()) {
+    const inOriginal = originalPaths.has(rel);
+    const inModified = modifiedPaths.has(rel);
+    if (inOriginal && inModified) {
+      // Skip bytewise-identical files to keep the list focused on real changes.
+      try {
+        const a = readFileSync(join(realDir, rel));
+        const b = readFileSync(join(tempDir, rel));
+        if (a.equals(b)) continue;
+      } catch {
+        // surface as a diff entry if we can't read — UI will show the error
+      }
+    }
+    diffs.push({ relativePath: rel, inOriginal, inModified });
+  }
+  return diffs;
+}
+
+export function readFixDiffFile(runId: string, relativePath: string): SkillDiffFilePayload {
+  const entry = fixes.get(runId);
+  if (!entry) throw new Error(`Unknown run: ${runId}`);
+  if (relativePath.includes('..')) throw new Error(`Refused suspicious path: ${relativePath}`);
+  if (isRuntimeOnlyPath(relativePath)) {
+    throw new Error(`Refused runtime-only path: ${relativePath}`);
+  }
+  const realDir = entry.realSkillDir;
+  const originalDir = entry.mode === 'create' ? null : existsSync(realDir) ? realDir : null;
+  return readPair(relativePath, originalDir, entry.tempWorkdir);
 }

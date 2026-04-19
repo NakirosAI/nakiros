@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { buildHandlerRegistry } from './handlers/index.js';
 import { eventBus } from './event-bus.js';
 import { restoreOrCleanupTempWorkdirs } from '../services/fix-runner.js';
+import { restoreOrCleanupAuditWorkdirs } from '../services/audit-runner.js';
 import { cleanupEvalArtifacts } from '../services/eval-artifact-cleanup.js';
 import { syncBundledSkills } from '../services/bundled-skills-sync.js';
+import { sweepOrphanNakirosProjectEntries, sweepOrphanSandboxes } from '../services/runner-core/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -64,7 +66,22 @@ export function bootstrapDaemonRuntime(): void {
     console.warn('[nakiros] syncBundledSkills failed:', err instanceof Error ? err.message : err);
   }
   restoreOrCleanupTempWorkdirs();
+  restoreOrCleanupAuditWorkdirs();
   cleanupEvalArtifacts();
+  // Reclaim `~/.claude/projects/*` entries left behind by previous runs whose
+  // workdir has since been deleted. Only targets Nakiros-named orphans, never
+  // user-created projects.
+  const sweep = sweepOrphanNakirosProjectEntries();
+  if (sweep.deleted > 0) {
+    console.log(`[nakiros] Swept ${sweep.deleted} orphan Claude project entr${sweep.deleted === 1 ? 'y' : 'ies'} (scanned ${sweep.scanned}).`);
+  }
+  // Worktrees from a previous (crashed) session leave directories under
+  // ~/.nakiros/sandboxes/ and stale entries in the source repo's worktree
+  // list. Boot sweep drops all of them.
+  const sandboxes = sweepOrphanSandboxes();
+  if (sandboxes.deleted > 0) {
+    console.log(`[nakiros] Swept ${sandboxes.deleted} orphan eval sandbox${sandboxes.deleted === 1 ? '' : 'es'}.`);
+  }
 }
 
 export async function createDaemonServer(opts: DaemonServerOptions = {}): Promise<FastifyInstance> {

@@ -1,0 +1,11 @@
+{
+  "title": "Nakiros analyse tes outils IA…",
+  "subtitle": "Détection des projets Claude Code",
+  "scanning": "Scan en cours…",
+  "progress": "{{current}}/{{total}} — {{name}}",
+  "inactive": "Inactif",
+  "dismiss": "Ignorer ce projet",
+  "projectsFound_one": "{{count}} projet détecté",
+  "projectsFound_other": "{{count}} projets détectés",
+  "continue": "Continuer"
+}

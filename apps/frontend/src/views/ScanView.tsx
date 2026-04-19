@@ -38,15 +38,15 @@ export default function ScanView({ onComplete }: ScanViewProps) {
   const inactiveThresholdDays = 30;
 
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-8 bg-[var(--bg-base)] p-8">
+    <div className="flex h-screen flex-col items-center justify-center gap-8 bg-[var(--bg)] p-8">
       <div className="w-full max-w-xl">
         {/* Header */}
         <div className="mb-8 text-center">
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            {t('title', 'Nakiros analyse vos outils IA...')}
+            {t('title')}
           </h1>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            {t('subtitle', 'Détection des projets Claude Code')}
+            {t('subtitle')}
           </p>
         </div>
 
@@ -56,8 +56,8 @@ export default function ScanView({ onComplete }: ScanViewProps) {
             <div className="mb-2 flex items-center gap-2 text-sm text-[var(--text-muted)]">
               <Loader2 className="h-4 w-4 animate-spin" />
               {progress
-                ? `${progress.current}/${progress.total} — ${progress.projectName ?? '...'}`
-                : t('scanning', 'Scan en cours...')}
+                ? t('progress', { current: progress.current, total: progress.total, name: progress.projectName ?? '…' })
+                : t('scanning')}
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-muted)]">
               <div
@@ -93,7 +93,7 @@ export default function ScanView({ onComplete }: ScanViewProps) {
                     {isInactive && (
                       <span className="flex items-center gap-1 text-xs text-amber-400">
                         <AlertTriangle className="h-3 w-3" />
-                        {t('inactive', 'Inactif')}
+                        {t('inactive')}
                       </span>
                     )}
                   </div>
@@ -110,7 +110,7 @@ export default function ScanView({ onComplete }: ScanViewProps) {
                 <button
                   onClick={() => handleDismiss(project.id)}
                   className="ml-3 rounded p-1 text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400"
-                  title={t('dismiss', 'Ignorer ce projet')}
+                  title={t('dismiss')}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -123,13 +123,13 @@ export default function ScanView({ onComplete }: ScanViewProps) {
         {!scanning && (
           <div className="mt-6 flex items-center justify-between">
             <span className="text-sm text-[var(--text-muted)]">
-              {projects.length} {t('projectsFound', 'projets détectés')}
+              {t('projectsFound', { count: projects.length })}
             </span>
             <button
               onClick={handleContinue}
               className="rounded-lg bg-[var(--primary)] px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--primary-hover)]"
             >
-              {t('continue', 'Continuer')}
+              {t('continue')}
             </button>
           </div>
         )}

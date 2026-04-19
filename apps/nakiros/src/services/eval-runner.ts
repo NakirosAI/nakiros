@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess, execFile } from 'child_process';
+import { type ChildProcess, execFile } from 'child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { promisify } from 'util';
@@ -7,11 +7,24 @@ import { gradeLlmAssertionsBatch, JUDGE_MODEL } from './eval-llm-grader.js';
 import { writeIterationBenchmark } from './eval-benchmark.js';
 import { cleanupEvalArtifacts } from './eval-artifact-cleanup.js';
 
+import {
+  EventLog,
+  buildClaudeArgs,
+  captureSandboxDiff,
+  createEvalSandbox,
+  deleteClaudeProjectEntry,
+  destroyEvalSandbox,
+  findGitRoot,
+  generateRunId,
+  listSandboxUntracked,
+  persistRunJson,
+  spawnClaudeTurn,
+} from './runner-core/index.js';
+
 import type {
   EvalRunConfig,
   EvalRunEvent,
   EvalRunStatus,
-  EvalRunTurn,
   SkillEvalAssertionDefinition,
   SkillEvalDefinition,
   SkillEvalRun,
@@ -28,17 +41,20 @@ interface RunEntry {
   child: ChildProcess | null;
   onEvent: (event: EvalRunEvent) => void;
   killed: boolean;
+  eventLog: EventLog<EvalRunEvent['event']>;
+  /**
+   * Git-worktree sandbox used to isolate code-modifying skills from the real
+   * project. `null` when the skill's git root couldn't be found (bundled,
+   * global, or non-git project) — in that case the run executes in the
+   * artefact directory directly (legacy behaviour).
+   */
+  sandbox: { path: string; gitRoot: string } | null;
 }
 
 const runs = new Map<string, RunEntry>();
-let runCounter = 0;
 
 /** Default max number of claude subprocesses running in parallel. */
 const DEFAULT_MAX_CONCURRENT = 4;
-
-function generateRunId(): string {
-  return `run_${Date.now().toString(36)}_${(++runCounter).toString(36)}`;
-}
 
 // ─── Iteration helpers ──────────────────────────────────────────────────────
 
@@ -60,49 +76,55 @@ function computeNextIteration(skillDir: string): number {
   }
 }
 
-function prepareEvalWorkdir(
+/**
+ * Prepare the artefact directory — where grading, timing, run.json, the copied
+ * outputs, diff.patch and events.jsonl are persisted. Always lives inside the
+ * skill's workspace so users can compare iterations over time.
+ */
+function prepareArtifactDir(
   skillDir: string,
   iteration: number,
   evalName: string,
   config: EvalRunConfig,
 ): string {
-  const workdir = join(skillDir, 'evals', 'workspace', `iteration-${iteration}`, `eval-${evalName}`, config);
-  mkdirSync(join(workdir, 'outputs'), { recursive: true });
-
-  // Create `.claude/settings.local.json` to auto-accept edits and scope tool permissions.
-  // For without_skill runs: deny the Skill tool so Claude cannot load any skill
-  // (even if auto-discovery would match one from ~/.claude/skills/).
-  const claudeDir = join(workdir, '.claude');
-  mkdirSync(claudeDir, { recursive: true });
-  const settingsPath = join(claudeDir, 'settings.local.json');
-  if (!existsSync(settingsPath)) {
-    const settings: {
-      permissions: {
-        defaultMode: string;
-        allow: string[];
-        deny?: string[];
-      };
-    } = {
-      permissions: {
-        defaultMode: 'acceptEdits',
-        allow: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
-      },
-    };
-    if (config === 'without_skill') {
-      settings.permissions.deny = ['Skill'];
-    }
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
-  }
-
-  return workdir;
+  const dir = join(skillDir, 'evals', 'workspace', `iteration-${iteration}`, `eval-${evalName}`, config);
+  mkdirSync(join(dir, 'outputs'), { recursive: true });
+  return dir;
 }
 
-function copyFixtures(skillDir: string, workdir: string, fixtureRelPaths: string[]): void {
+/**
+ * Write `.claude/settings.local.json` at `dir/.claude/` so the claude CLI
+ * running with `cwd=dir` auto-accepts edits and (for without_skill baselines)
+ * cannot invoke any skill even if auto-discovery would match one.
+ */
+function writeExecutionSettings(dir: string, config: EvalRunConfig): void {
+  const claudeDir = join(dir, '.claude');
+  mkdirSync(claudeDir, { recursive: true });
+  const settingsPath = join(claudeDir, 'settings.local.json');
+  if (existsSync(settingsPath)) return;
+  const settings: {
+    permissions: {
+      defaultMode: string;
+      allow: string[];
+      deny?: string[];
+    };
+  } = {
+    permissions: {
+      defaultMode: 'acceptEdits',
+      allow: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
+    },
+  };
+  if (config === 'without_skill') {
+    settings.permissions.deny = ['Skill'];
+  }
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+}
+
+function copyFixtures(skillDir: string, targetDir: string, fixtureRelPaths: string[]): void {
   for (const relPath of fixtureRelPaths) {
     const src = join(skillDir, relPath);
     if (!existsSync(src)) continue;
-    // Mirror the directory structure inside the workdir
-    const dest = join(workdir, relPath);
+    const dest = join(targetDir, relPath);
     mkdirSync(join(dest, '..'), { recursive: true });
     try {
       cpSync(src, dest);
@@ -112,31 +134,50 @@ function copyFixtures(skillDir: string, workdir: string, fixtureRelPaths: string
   }
 }
 
-// ─── Run lifecycle ──────────────────────────────────────────────────────────
-
-interface SpawnArgs {
-  prompt: string;
-  workdir: string;
-  addDirs: string[];
-  resumeSessionId?: string;
+/**
+ * After a turn finishes, copy every file the agent produced under
+ * `executionDir/outputs/` into `artifactDir/outputs/` so the grader + UI still
+ * find them at the canonical artefact location.
+ * No-op when executionDir === artifactDir (fallback mode — outputs are already
+ * in the artefact directory).
+ */
+function syncOutputsToArtifact(executionDir: string, artifactDir: string): void {
+  if (executionDir === artifactDir) return;
+  const src = join(executionDir, 'outputs');
+  if (!existsSync(src)) return;
+  const dest = join(artifactDir, 'outputs');
+  mkdirSync(dest, { recursive: true });
+  try {
+    cpSync(src, dest, { recursive: true });
+  } catch {
+    // best-effort
+  }
 }
 
-function buildClaudeArgs(args: SpawnArgs): string[] {
-  // No --dangerously-skip-permissions: permissions are scoped via settings.local.json in the workdir.
-  const cliArgs: string[] = ['--output-format', 'stream-json', '--verbose'];
-  for (const d of args.addDirs) {
-    cliArgs.push('--add-dir', d);
+/**
+ * Save `git diff HEAD` of the sandbox + the list of untracked paths as a
+ * readable patch file inside the artefact directory. This is the artefact of
+ * "what this skill would have done to the project".
+ */
+function saveSandboxDiff(sandboxPath: string, artifactDir: string): void {
+  const diff = captureSandboxDiff(sandboxPath);
+  const untracked = listSandboxUntracked(sandboxPath);
+  let body = diff;
+  if (untracked.length > 0) {
+    const list = untracked.map((p) => `  ${p}`).join('\n');
+    body =
+      `# Untracked files created by the agent (not in HEAD):\n${list}\n\n` +
+      `# Diff of tracked files modified by the agent:\n${diff || '(no tracked changes)'}\n`;
   }
-  if (args.resumeSessionId) {
-    cliArgs.push('--resume', args.resumeSessionId);
+  try {
+    writeFileSync(join(artifactDir, 'diff.patch'), body, 'utf8');
+  } catch {
+    // best-effort
   }
-  cliArgs.push('--print', args.prompt);
-  return cliArgs;
 }
 
-function persistRunJson(run: SkillEvalRun): void {
-  const runJsonPath = join(run.workdir, 'run.json');
-  writeFileSync(runJsonPath, JSON.stringify(run, null, 2), 'utf8');
+function writeRunJson(run: SkillEvalRun): void {
+  persistRunJson(run.workdir, run);
 }
 
 function saveTimingJson(run: SkillEvalRun): void {
@@ -183,17 +224,19 @@ async function gradeScriptAssertion(
   }
 }
 
-async function gradeRun(run: SkillEvalRun, definition: SkillEvalDefinition): Promise<void> {
+async function gradeRun(
+  run: SkillEvalRun,
+  definition: SkillEvalDefinition,
+  scriptCwd: string,
+): Promise<void> {
   const assertionDefs = normalizeAssertions(definition.assertions);
 
-  // Collect the last assistant text so LLM judges can reason when agent didn't write files
   const lastAssistantText = run.turns
     .filter((t) => t.role === 'assistant')
     .map((t) => t.content)
     .join('\n\n')
-    .slice(-8000); // cap size passed to judge
+    .slice(-8000);
 
-  // Partition assertions by type, keeping original positions so we can merge back in order
   const scriptIndices: number[] = [];
   const llmIndices: number[] = [];
   const manualIndices: number[] = [];
@@ -204,11 +247,13 @@ async function gradeRun(run: SkillEvalRun, definition: SkillEvalDefinition): Pro
     else manualIndices.push(i);
   }
 
-  // Grade scripts sequentially (fast), LLM assertions in a single batched judge spawn
   const results: AssertionResult[] = new Array(assertionDefs.length);
 
   for (const i of scriptIndices) {
-    results[i] = await gradeScriptAssertion(run.workdir, assertionDefs[i]);
+    // Scripts assert on the state the agent produced — in sandbox mode that's
+    // the worktree (modified tracked files + untracked); in fallback mode it's
+    // the artefact dir itself. `scriptCwd` is the right dir in either case.
+    results[i] = await gradeScriptAssertion(scriptCwd, assertionDefs[i]);
   }
 
   if (llmIndices.length > 0) {
@@ -284,8 +329,8 @@ export interface StartRunsOptions {
 }
 
 /**
- * Start a batch of eval runs for a skill. Runs execute sequentially.
- * Returns immediately with the iteration number and the list of runIds created (queued).
+ * Start a batch of eval runs for a skill. Runs execute with bounded concurrency.
+ * Returns immediately with the iteration number and the list of runIds created.
  */
 export async function startEvalRuns(
   request: StartEvalRunRequest,
@@ -338,15 +383,43 @@ export async function startEvalRuns(
   const includeBaseline = request.includeBaseline === true;
   const configs: EvalRunConfig[] = includeBaseline ? ['with_skill', 'without_skill'] : ['with_skill'];
 
-  // Create all runs in `queued` state first
+  // Detect the skill's enclosing git repo once — all runs in this batch share
+  // the same source. `null` when the skill lives outside a git repo (bundled,
+  // global, or non-git project): runs fall back to the legacy in-place mode.
+  const gitRoot = findGitRoot(skillDir);
+
   const createdRuns: SkillEvalRun[] = [];
   for (const def of selectedDefs) {
     for (const config of configs) {
-      const workdir = prepareEvalWorkdir(skillDir, iteration, def.name, config);
-      copyFixtures(skillDir, workdir, def.files);
+      const artifactDir = prepareArtifactDir(skillDir, iteration, def.name, config);
+
+      const runId = generateRunId('run');
+
+      // Try to give the agent a git-worktree sandbox. Any failure (git missing,
+      // dirty state, permissions) is non-fatal — we degrade to running in the
+      // artefact directory, which is what eval-runner has always done.
+      let sandbox: { path: string; gitRoot: string } | null = null;
+      if (gitRoot) {
+        try {
+          const created = createEvalSandbox(gitRoot, `eval-${runId}`);
+          sandbox = { path: created.path, gitRoot: created.gitRoot };
+        } catch (err) {
+          console.warn(
+            `[eval-runner] Could not create git sandbox for ${runId} (falling back to in-place): ${(err as Error).message}`,
+          );
+        }
+      }
+
+      const executionDir = sandbox?.path ?? artifactDir;
+      // Fixtures + permission settings go where the agent will actually run.
+      copyFixtures(skillDir, executionDir, def.files);
+      writeExecutionSettings(executionDir, config);
+      // outputs/ in the execution dir — the agent writes here, we copy back
+      // to artefactDir on finalise so the grader + UI still find it.
+      mkdirSync(join(executionDir, 'outputs'), { recursive: true });
 
       const run: SkillEvalRun = {
-        runId: generateRunId(),
+        runId,
         skillName: request.skillName,
         evalName: def.name,
         iteration,
@@ -354,7 +427,9 @@ export async function startEvalRuns(
         status: 'queued',
         sessionId: null,
         scope: request.scope,
-        workdir,
+        workdir: artifactDir,
+        executionDir,
+        usesSandbox: sandbox !== null,
         prompt: def.prompt,
         mode: def.mode ?? 'autonomous',
         outputFiles: def.outputFiles,
@@ -367,18 +442,24 @@ export async function startEvalRuns(
         error: null,
       };
 
+      const eventLog = new EventLog<EvalRunEvent['event']>({
+        workdir: artifactDir,
+        broadcast: (event) => options.onEvent({ runId, event }),
+      });
+
       runs.set(run.runId, {
         run,
         child: null,
         onEvent: options.onEvent,
         killed: false,
+        eventLog,
+        sandbox,
       });
-      persistRunJson(run);
+      writeRunJson(run);
       createdRuns.push(run);
     }
   }
 
-  // Execute with bounded concurrency (max N runs in parallel)
   const maxConcurrent = request.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
 
   void (async () => {
@@ -398,8 +479,9 @@ export async function startEvalRuns(
           entry.run.status = 'failed';
           entry.run.error = msg;
           entry.run.finishedAt = new Date().toISOString();
-          persistRunJson(entry.run);
-          options.onEvent({ runId: entry.run.runId, event: { type: 'done', exitCode: 1, error: msg } });
+          writeRunJson(entry.run);
+          entry.eventLog.emit({ type: 'done', exitCode: 1, error: msg });
+          entry.eventLog.destroy();
         }
       }
     };
@@ -410,17 +492,12 @@ export async function startEvalRuns(
 
     await Promise.all(workers);
 
-    // Note: interactive runs that stay in waiting_for_input don't count here —
-    // they are finalized (and benchmarked again) when the user clicks Finish or
-    // output files appear. For fully-autonomous batches, all runs are terminal now.
     try {
       writeIterationBenchmark(skillDir, request.skillName, iteration);
     } catch (err) {
       console.error('[eval-runner] Failed to write benchmark.json:', err);
     }
 
-    // Sweep up any stray `nakiros-eval-*` skills that might have been created
-    // in the user's skill dirs despite our prompt instructions.
     cleanupEvalArtifacts();
   })();
 
@@ -431,14 +508,9 @@ export async function startEvalRuns(
 }
 
 async function executeRun(entry: RunEntry, definition: SkillEvalDefinition, skillDir: string): Promise<void> {
-  const { run, onEvent } = entry;
-
-  // No HOME isolation. For without_skill baselines we deny the Skill tool in the
-  // workdir settings (see prepareEvalWorkdir) so Claude cannot invoke any skill
-  // even if auto-discovery would otherwise pick one up.
+  const { run } = entry;
 
   // For with_skill runs, invoke the skill explicitly on the first turn via the /skill-name pattern.
-  // This ensures the skill is actually loaded, not just discoverable.
   const firstTurnPrompt =
     run.config === 'with_skill'
       ? `/${run.skillName} ${definition.prompt}`
@@ -447,7 +519,6 @@ async function executeRun(entry: RunEntry, definition: SkillEvalDefinition, skil
   await executeTurn(entry, skillDir, firstTurnPrompt, /* isFirstTurn */ true);
 
   if (entry.killed || run.status === 'failed' || run.status === 'stopped') {
-    cleanupRunIsolation(run);
     return;
   }
 
@@ -455,11 +526,11 @@ async function executeRun(entry: RunEntry, definition: SkillEvalDefinition, skil
   if (run.mode === 'interactive') {
     if (!allOutputFilesExist(run)) {
       run.status = 'waiting_for_input';
-      persistRunJson(run);
+      writeRunJson(run);
       const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? '';
-      onEvent({ runId: run.runId, event: { type: 'status', status: 'waiting_for_input' } });
-      onEvent({ runId: run.runId, event: { type: 'waiting_for_input', lastAssistantText } });
-      return; // Control returns here when the user sends a message or clicks "Finish"
+      entry.eventLog.emit({ type: 'status', status: 'waiting_for_input' });
+      entry.eventLog.emit({ type: 'waiting_for_input', lastAssistantText });
+      return;
     }
   }
 
@@ -475,20 +546,22 @@ async function executeTurn(
   userMessage: string,
   isFirstTurn: boolean,
 ): Promise<void> {
-  const { run, onEvent } = entry;
+  const { run } = entry;
 
+  entry.eventLog.resetForNewTurn();
   run.status = 'starting';
-  persistRunJson(run);
-  onEvent({ runId: run.runId, event: { type: 'status', status: 'starting' } });
+  writeRunJson(run);
+  entry.eventLog.emit({ type: 'status', status: 'starting' });
 
   const addDirs: string[] = [];
   if (run.config === 'with_skill') addDirs.push(skillDir);
 
   const cliArgs = buildClaudeArgs({
     prompt: userMessage,
-    workdir: run.workdir,
     addDirs,
     resumeSessionId: isFirstTurn ? undefined : (run.sessionId ?? undefined),
+    // No skipPermissions: eval runs rely on execution-dir-scoped settings.local.json
+    // so baseline (without_skill) runs can't load any skill.
   });
 
   const started = Date.now();
@@ -500,82 +573,36 @@ async function executeTurn(
 
   let assistantText = '';
   const tools: { name: string; display: string }[] = [];
-  let capturedSessionId: string | null = run.sessionId;
-  let exitCode = 0;
-  let errorMessage: string | null = null;
 
-  await new Promise<void>((resolve) => {
-    const child = spawn('claude', cliArgs, {
-      cwd: run.workdir,
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    entry.child = child;
+  run.status = 'running';
+  writeRunJson(run);
+  entry.eventLog.emit({ type: 'status', status: 'running' });
 
-    run.status = 'running';
-    persistRunJson(run);
-    onEvent({ runId: run.runId, event: { type: 'status', status: 'running' } });
+  // Run claude in the execution dir (git-worktree sandbox when available; the
+  // artefact dir itself when we fell back to the legacy mode).
+  const executionDir = run.executionDir ?? run.workdir;
 
-    let buffer = '';
-    let stderrBuffer = '';
-
-    child.stdout?.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString('utf8');
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const event = JSON.parse(trimmed) as Record<string, unknown>;
-          handleClaudeEvent(event, {
-            onSession: (id) => {
-              capturedSessionId = id;
-              run.sessionId = id;
-            },
-            onText: (text) => {
-              assistantText += text;
-              onEvent({ runId: run.runId, event: { type: 'text', text } });
-            },
-            onTool: (name, display) => {
-              tools.push({ name, display });
-              onEvent({ runId: run.runId, event: { type: 'tool', name, display } });
-            },
-            onUsage: (tokens) => {
-              run.tokensUsed += tokens;
-              onEvent({ runId: run.runId, event: { type: 'tokens', tokensUsed: run.tokensUsed } });
-            },
-          });
-        } catch {
-          // Not a JSON line — ignore
-        }
-      }
-    });
-
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderrBuffer += chunk.toString('utf8');
-    });
-
-    child.on('close', (code) => {
-      exitCode = code ?? 0;
-      if (exitCode !== 0 && stderrBuffer.trim()) {
-        errorMessage = stderrBuffer.trim().slice(-500);
-      }
-      resolve();
-    });
-
-    child.on('error', (err) => {
-      exitCode = 1;
-      errorMessage = err.message.includes('ENOENT')
-        ? '`claude` CLI not found. Make sure Claude Code is installed and on PATH.'
-        : err.message;
-      resolve();
-    });
+  const result = await spawnClaudeTurn({
+    workdir: executionDir,
+    cliArgs,
+    onChildSpawned: (c) => { entry.child = c; },
+    isKilled: () => entry.killed,
+    onSession: (id) => { run.sessionId = id; },
+    onText: (text) => {
+      assistantText += text;
+      entry.eventLog.emit({ type: 'text', text });
+    },
+    onTool: (name, display) => {
+      tools.push({ name, display });
+      entry.eventLog.emit({ type: 'tool', name, display });
+    },
+    onUsage: (tokens) => {
+      run.tokensUsed += tokens;
+      entry.eventLog.emit({ type: 'tokens', tokensUsed: run.tokensUsed });
+    },
   });
 
-  const ended = Date.now();
-  run.durationMs += ended - started;
-  run.sessionId = capturedSessionId;
+  run.durationMs += Date.now() - started;
   run.turns.push({
     role: 'assistant',
     content: assistantText,
@@ -584,49 +611,69 @@ async function executeTurn(
   });
   entry.child = null;
 
-  if (exitCode !== 0 || errorMessage) {
+  if (result.exitCode !== 0 || result.error) {
     run.status = 'failed';
-    run.error = errorMessage;
+    run.error = result.error;
     run.finishedAt = new Date().toISOString();
-    cleanupRunIsolation(run);
-    persistRunJson(run);
+    // Snapshot whatever partial state exists: copy outputs, freeze the diff,
+    // then drop the sandbox. Without this, a failed sandbox run would leave
+    // no trace of what the agent tried to do.
+    teardownSandbox(entry);
+    writeRunJson(run);
     saveTimingJson(run);
-    onEvent({ runId: run.runId, event: { type: 'done', exitCode, error: errorMessage ?? undefined } });
+    entry.eventLog.emit({ type: 'done', exitCode: result.exitCode, error: result.error ?? undefined });
+    entry.eventLog.destroy();
+    deleteClaudeProjectEntry(executionDir);
   }
-}
-
-function cleanupRunIsolation(_run: SkillEvalRun): void {
-  // No-op — we no longer use an isolated HOME.
-  // Skill isolation for without_skill runs is done via settings.local.json deny list.
 }
 
 function allOutputFilesExist(run: SkillEvalRun): boolean {
   if (run.outputFiles.length === 0) return false;
+  // Outputs live in the execution dir while the run is in flight (worktree or
+  // fallback). The grader reads them from the artefact dir AFTER finalisation
+  // because we copy-sync there.
+  const dir = run.executionDir ?? run.workdir;
   for (const file of run.outputFiles) {
-    if (!existsSync(join(run.workdir, 'outputs', file))) return false;
+    if (!existsSync(join(dir, 'outputs', file))) return false;
   }
   return true;
 }
 
 async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Promise<void> {
-  const { run, onEvent } = entry;
+  const { run } = entry;
 
   run.finishedAt = new Date().toISOString();
-  cleanupRunIsolation(run);
 
   run.status = 'grading';
-  persistRunJson(run);
-  onEvent({ runId: run.runId, event: { type: 'status', status: 'grading' } });
+  writeRunJson(run);
+  entry.eventLog.emit({ type: 'status', status: 'grading' });
 
-  await gradeRun(run, definition);
+  const executionDirBeforeTeardown = run.executionDir ?? run.workdir;
+
+  // Step 1: bring the outputs to the artefact dir so the LLM judge (which
+  // reads `{workdir}/outputs/`) sees what the agent produced.
+  syncOutputsToArtifact(executionDirBeforeTeardown, run.workdir);
+
+  // Step 2: grade. Scripts run in the execution dir (sandbox still alive so
+  // assertions can see modified tracked files). LLM assertions use the
+  // artefact dir (outputs/ are there now).
+  await gradeRun(run, definition, executionDirBeforeTeardown);
+
+  // Step 3: freeze diff + drop the sandbox. Outputs were already synced above.
+  teardownSandbox(entry);
 
   run.status = 'completed';
-  persistRunJson(run);
+  writeRunJson(run);
   saveTimingJson(run);
-  onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
-  onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+  entry.eventLog.emit({ type: 'status', status: 'completed' });
+  entry.eventLog.emit({ type: 'done', exitCode: 0 });
 
-  // Refresh benchmark.json so the UI picks up this run's results immediately
+  // Conversation + events are superseded by grading.json; drop the replay log.
+  entry.eventLog.destroy();
+  // Claude-side project entry is redundant now that run.turns[] + grading.json
+  // capture everything meaningful. Drop by the path the CLI actually ran in.
+  deleteClaudeProjectEntry(executionDirBeforeTeardown);
+
   try {
     const iterDir = deriveIterDir(run);
     if (iterDir) writeIterationBenchmark(iterDir.skillDir, run.skillName, run.iteration);
@@ -634,8 +681,29 @@ async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Pr
     console.error('[eval-runner] Failed to refresh benchmark.json:', err);
   }
 
-  // Sweep stray eval-produced skills (interactive runs that just finalized)
   cleanupEvalArtifacts();
+}
+
+/**
+ * Copy outputs/ into the artefact directory, save diff.patch, and destroy the
+ * git worktree. Idempotent — safe to call multiple times (second call is a
+ * no-op because `entry.sandbox` has been cleared).
+ */
+function teardownSandbox(entry: RunEntry): void {
+  const executionDir = entry.run.executionDir ?? entry.run.workdir;
+  // 1. Copy whatever the agent produced into outputs/ so the grader sees it.
+  syncOutputsToArtifact(executionDir, entry.run.workdir);
+  // 2. If we're in sandbox mode, capture the git diff and drop the worktree.
+  if (entry.sandbox) {
+    saveSandboxDiff(entry.sandbox.path, entry.run.workdir);
+    destroyEvalSandbox(entry.sandbox.path);
+    entry.sandbox = null;
+    // From this point on the run's execution dir no longer exists. Point it
+    // at the artefact dir so subsequent reads (`getEvalBufferedEvents`,
+    // `run.json` inspection) resolve correctly.
+    entry.run.executionDir = entry.run.workdir;
+    entry.run.usesSandbox = true; // keep the signal for the UI
+  }
 }
 
 function deriveIterDir(run: SkillEvalRun): { skillDir: string; iterDir: string } | null {
@@ -648,10 +716,31 @@ function deriveIterDir(run: SkillEvalRun): { skillDir: string; iterDir: string }
 }
 
 /**
- * Send a user message to a run that is waiting_for_input (interactive mode).
- * Resumes the claude session, executes a new turn, then re-evaluates completion.
+ * Re-point the entry's event log broadcast to the current caller's onEvent.
+ * Preserves the in-memory replay buffer.
  */
-export async function sendUserMessage(runId: string, message: string, skillDir: string, definition: SkillEvalDefinition): Promise<void> {
+function rebindEventLog(entry: RunEntry, onEvent: (event: EvalRunEvent) => void): void {
+  const buffered = entry.eventLog.getBuffered();
+  entry.eventLog = new EventLog<EvalRunEvent['event']>({
+    workdir: entry.run.workdir,
+    broadcast: (event) => onEvent({ runId: entry.run.runId, event }),
+  });
+  for (const ev of buffered) {
+    (entry.eventLog as unknown as { buffer: unknown[] }).buffer.push(ev);
+  }
+  entry.onEvent = onEvent;
+}
+
+/**
+ * Send a user message to a run that is waiting_for_input (interactive mode).
+ */
+export async function sendUserMessage(
+  runId: string,
+  message: string,
+  skillDir: string,
+  definition: SkillEvalDefinition,
+  onEvent: (event: EvalRunEvent) => void,
+): Promise<void> {
   const entry = runs.get(runId);
   if (!entry) throw new Error(`Run not found: ${runId}`);
   const { run } = entry;
@@ -659,6 +748,7 @@ export async function sendUserMessage(runId: string, message: string, skillDir: 
     throw new Error(`Run ${runId} is not waiting for input (status=${run.status})`);
   }
 
+  rebindEventLog(entry, onEvent);
   await executeTurn(entry, skillDir, message, /* isFirstTurn */ false);
 
   const currentStatus = run.status as EvalRunStatus;
@@ -666,10 +756,10 @@ export async function sendUserMessage(runId: string, message: string, skillDir: 
 
   if (run.mode === 'interactive' && !allOutputFilesExist(run)) {
     run.status = 'waiting_for_input';
-    persistRunJson(run);
+    writeRunJson(run);
     const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? '';
-    entry.onEvent({ runId, event: { type: 'status', status: 'waiting_for_input' } });
-    entry.onEvent({ runId, event: { type: 'waiting_for_input', lastAssistantText } });
+    entry.eventLog.emit({ type: 'status', status: 'waiting_for_input' });
+    entry.eventLog.emit({ type: 'waiting_for_input', lastAssistantText });
     return;
   }
 
@@ -687,67 +777,6 @@ export async function finishWaitingRun(runId: string, definition: SkillEvalDefin
   await finalizeRun(entry, definition);
 }
 
-// ─── Claude stream event handler ────────────────────────────────────────────
-
-interface ClaudeEventHandlers {
-  onSession(id: string): void;
-  onText(text: string): void;
-  onTool(name: string, display: string): void;
-  onUsage(totalTokens: number): void;
-}
-
-function handleClaudeEvent(event: Record<string, unknown>, handlers: ClaudeEventHandlers): void {
-  const type = event['type'] as string;
-
-  if (type === 'system') {
-    const sessionId = event['session_id'] as string | undefined;
-    if (sessionId) handlers.onSession(sessionId);
-    return;
-  }
-
-  if (type === 'assistant') {
-    const sessionId = event['session_id'] as string | undefined;
-    if (sessionId) handlers.onSession(sessionId);
-    const message = event['message'] as { content?: unknown[] } | undefined;
-    if (!Array.isArray(message?.content)) return;
-    for (const block of message!.content) {
-      const b = block as { type?: string; text?: string; name?: string; input?: Record<string, unknown> };
-      if (b.type === 'text' && b.text) {
-        handlers.onText(b.text);
-      } else if (b.type === 'tool_use' && b.name) {
-        handlers.onTool(b.name, formatTool(b.name, b.input ?? {}));
-      }
-    }
-    return;
-  }
-
-  if (type === 'result') {
-    const usage = event['usage'] as { input_tokens?: number; output_tokens?: number; total_tokens?: number } | undefined;
-    if (usage) {
-      const total = usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
-      handlers.onUsage(total);
-    }
-    const sessionId = event['session_id'] as string | undefined;
-    if (sessionId) handlers.onSession(sessionId);
-    return;
-  }
-}
-
-function formatTool(name: string, input: Record<string, unknown>): string {
-  const s = (v: unknown) => String(v ?? '');
-  const truncate = (str: string, max = 72) => (str.length > max ? str.slice(0, max) + '…' : str);
-  switch (name) {
-    case 'Read': return `Reading ${s(input['file_path'])}`;
-    case 'Write': return `Writing ${s(input['file_path'])}`;
-    case 'Edit':
-    case 'MultiEdit': return `Editing ${s(input['file_path'])}`;
-    case 'Bash': return `$ ${truncate(s(input['command']))}`;
-    case 'Glob': return `Glob: ${s(input['pattern'])}`;
-    case 'Grep': return `Grep: ${s(input['pattern'])}`;
-    default: return name;
-  }
-}
-
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export function listRuns(): SkillEvalRun[] {
@@ -756,6 +785,13 @@ export function listRuns(): SkillEvalRun[] {
 
 export function getRun(runId: string): SkillEvalRun | null {
   return runs.get(runId)?.run ?? null;
+}
+
+/**
+ * Return the buffered stream events for the current (in-flight) turn of an eval run.
+ */
+export function getEvalBufferedEvents(runId: string): EvalRunEvent['event'][] {
+  return runs.get(runId)?.eventLog.getBuffered() ?? [];
 }
 
 export function stopRun(runId: string): void {
@@ -768,15 +804,19 @@ export function stopRun(runId: string): void {
   if (entry.run.status === 'running' || entry.run.status === 'starting' || entry.run.status === 'queued') {
     entry.run.status = 'stopped';
     entry.run.finishedAt = new Date().toISOString();
-    persistRunJson(entry.run);
-    entry.onEvent({ runId, event: { type: 'status', status: 'stopped' } });
+    // Preserve partial artefacts (outputs + diff) even on manual stop so the
+    // user can inspect what the agent managed to do before interruption.
+    const executionDirBeforeTeardown = entry.run.executionDir ?? entry.run.workdir;
+    teardownSandbox(entry);
+    writeRunJson(entry.run);
+    entry.eventLog.emit({ type: 'status', status: 'stopped' });
+    entry.eventLog.destroy();
+    deleteClaudeProjectEntry(executionDirBeforeTeardown);
   }
 }
 
 /**
  * Load all runs from a skill's workspace iterations into the in-memory registry.
- * Useful when the app boots to surface previously-run results in the UI.
- * Called once per view render; deduplicates by workdir.
  */
 export function loadPersistedRuns(skillDir: string): SkillEvalRun[] {
   const workspaceDir = join(skillDir, 'evals', 'workspace');

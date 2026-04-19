@@ -1,0 +1,10 @@
+{
+  "currentVersion": "v{{version}}",
+  "updateAvailable": "Update available",
+  "updateAvailableTooltip": "v{{latest}} available on npm. You're on v{{current}}. Click for instructions.",
+  "upToDateTooltip": "Up to date (v{{current}})",
+  "devTooltip": "Local build — not compared against npm",
+  "openNpm": "View on npm",
+  "updateInstructions": "Update with: npm install -g @nakirosai/nakiros@latest, then restart the daemon.",
+  "dismiss": "Got it"
+}

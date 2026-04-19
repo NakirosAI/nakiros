@@ -8,7 +8,16 @@ user-invocable: true
 
 You create, audit, and improve agent skills for any project. Every skill must follow the agentskills.io best practices and be calibrated for real execution, not theory.
 
-**IMPORTANT: Always speak French with the user. Only these instructions are in English.**
+## Output language
+
+Two separate languages are at play in every run — treat them independently:
+
+- **Conversation language** — match whatever the user is writing in. Detect it from their message (French, English, German, Spanish, anything) and answer in that same language. Do not ask; just follow the user's lead. Switch if they switch.
+- **Artefact language** (the files you write — `SKILL.md`, audit reports, `evals.json`, reference docs, scripts, commit messages, etc.) — **default to English** regardless of the conversation language. English skills perform measurably better with LLMs, and this is the safer default for a reusable skill.
+
+If the user explicitly asks for artefacts in another language (e.g. "écris le SKILL.md en français", "schreib es auf Deutsch"), comply — but on the first occurrence, add one short line reminding them that English artefacts perform better with Claude. Do not argue or repeat the warning on later turns.
+
+Never translate existing artefact files unless explicitly asked. If a skill's `SKILL.md` is already in German, do not rewrite it in English just because you default to English — respect the existing file's language.
 
 ## Inputs
 
@@ -137,6 +146,12 @@ Read `assets/templates/skill-template.md` and use it as the skeleton. Fill in ev
 ```
 
 ### Step 4 — Validate against checklist (23 checks)
+Walk the 23-check list in the "Skill quality checklist" section above. Mark each check ✓ / ❌ / N/A. Any ❌ → fix the skill (adjust SKILL.md, split a reference, tighten a default, etc.) and re-check until all items are ✓ or N/A. Do NOT proceed to Step 5 while a ❌ remains.
+
+### Step 5 — Propose evals (don't auto-create)
+After the skill is written and validated, finish the chat response by asking the user whether they want evals created now. Adapt the phrasing to the conversation language. Example (French): "Skill créé. Veux-tu que je crée les évals maintenant ? (`eval create {name}`)"
+
+Do NOT chain into `eval create` automatically. The user decides when — evals written right after skill creation tend to be shallow because real failure modes haven't surfaced yet.
 
 ## Auditing skills
 
@@ -216,7 +231,15 @@ Read `references/agentskills-evals.md` for the full methodology, workspace struc
 
 ### Per-command procedures
 
-- **`eval create`** — Read SKILL.md → design 2-3 test prompts (happy path + edge case) → write assertions (prefer `script`) → create fixtures in `evals/files/` → save to `evals/evals.json`
+- **`eval create`** — Interactive flow, never write files before user validation:
+  1. Read SKILL.md fully (commands, outputs, gotchas)
+  2. **Propose in chat** 2-3 test cases (happy path + edge case). For each: `prompt`, `expected_output` (one line), and 2-4 concrete `assertions` (prefer `script`-verifiable). Do NOT write files yet.
+  3. Ask the user: "Ces cas couvrent-ils les vrais risques du skill ? Modifications / ajouts / suppressions ?"
+  4. Iterate until user says ok (adjust prompts, tighten assertions, add edge cases the user knows about)
+  5. **Only then** write `evals/evals.json` + fixtures in `evals/files/`
+  6. Confirm in chat with paths written
+
+  The validation step is load-bearing: evals written without user input are usually shallow (assertions unverifiable, prompts miss real failure modes).
 - **`eval run`** — For each test: run two subagents (with_skill + without_skill) → grade assertions → save `grading.json` per run → compute `benchmark.json` with deltas → create `feedback.json` → present the DELTA, not absolute pass rate
 - **`eval analyze`** — Read grading + benchmark + feedback → classify assertions (pass both = remove, fail both = broken, with > without = value) → check token outliers → propose improvements
 - **`eval compare`** — Compare two iterations side by side. Use **blind comparison** for qualitative judgments (don't reveal which is v1/v2 to the judge LLM)

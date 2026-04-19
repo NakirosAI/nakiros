@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, MessageSquare } from 'lucide-react';
 import type { Project, ProjectConversation, ConversationMessage } from '@nakiros/shared';
 
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export default function ConversationsView({ project }: Props) {
+  const { t } = useTranslation('conversations');
   const [conversations, setConversations] = useState<ProjectConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
@@ -33,7 +35,7 @@ export default function ConversationsView({ project }: Props) {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        Loading conversations...
+        {t('loading')}
       </div>
     );
   }
@@ -56,7 +58,7 @@ export default function ConversationsView({ project }: Props) {
             </div>
             {conv && (
               <div className="flex gap-3 text-xs text-[var(--text-muted)]">
-                <span>{conv.messageCount} messages</span>
+                <span>{t('messageCount', { count: conv.messageCount })}</span>
                 <span>{new Date(conv.startedAt).toLocaleString()}</span>
                 {conv.gitBranch && <span>{conv.gitBranch}</span>}
               </div>
@@ -65,7 +67,7 @@ export default function ConversationsView({ project }: Props) {
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {loadingMessages ? (
-            <div className="text-center text-[var(--text-muted)]">Loading messages...</div>
+            <div className="text-center text-[var(--text-muted)]">{t('loadingMessages')}</div>
           ) : (
             <div className="flex flex-col gap-3">
               {messages.map((msg) => (
@@ -112,11 +114,11 @@ export default function ConversationsView({ project }: Props) {
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <h2 className="mb-4 text-lg font-bold text-[var(--text-primary)]">
-        Conversations ({conversations.length})
+        {t('heading', { count: conversations.length })}
       </h2>
       {conversations.length === 0 ? (
         <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-          No conversations found for this project.
+          {t('empty')}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
@@ -132,11 +134,11 @@ export default function ConversationsView({ project }: Props) {
                   {conv.summary}
                 </div>
                 <div className="mt-1 flex flex-wrap gap-3 text-xs text-[var(--text-muted)]">
-                  <span>{conv.messageCount} messages</span>
+                  <span>{t('messageCount', { count: conv.messageCount })}</span>
                   <span>{new Date(conv.lastMessageAt).toLocaleDateString()}</span>
                   {conv.gitBranch && <span>{conv.gitBranch}</span>}
                   {conv.toolsUsed.length > 0 && (
-                    <span>{conv.toolsUsed.length} tools used</span>
+                    <span>{t('toolsUsed', { count: conv.toolsUsed.length })}</span>
                   )}
                 </div>
               </div>

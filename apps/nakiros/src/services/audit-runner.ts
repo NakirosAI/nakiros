@@ -1,16 +1,24 @@
-import { spawn, type ChildProcess } from 'child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'fs';
+import { type ChildProcess } from 'child_process';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs';
 import { join, basename } from 'path';
-import { tmpdir } from 'os';
+import { homedir } from 'os';
 
 import type {
   AuditHistoryEntry,
   AuditRun,
   AuditRunEvent,
-  AuditRunStatus,
-  AuditRunTurn,
   StartAuditRequest,
 } from '@nakiros/shared';
+
+import {
+  EventLog,
+  buildClaudeArgs,
+  deleteClaudeProjectEntry,
+  generateRunId,
+  loadRunJson,
+  persistRunJson,
+  spawnClaudeTurn,
+} from './runner-core/index.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 
@@ -20,33 +28,38 @@ interface AuditEntry {
   killed: boolean;
   /** Absolute path to the real skill directory — used to archive the audit report. */
   skillDir: string;
+  /** Replay log persisted to `{workdir}/events.jsonl`. */
+  eventLog: EventLog<AuditRunEvent['event']>;
 }
 
 const audits = new Map<string, AuditEntry>();
-let counter = 0;
-
-function generateRunId(): string {
-  return `audit_${Date.now().toString(36)}_${(++counter).toString(36)}`;
-}
 
 function isoSafeTimestamp(): string {
   // Filesystem-safe ISO: replace ':' with '-'
   return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 }
 
+function auditRunsRoot(): string {
+  return join(homedir(), '.nakiros', 'runs', 'audit');
+}
+
 // ─── Setup helpers ──────────────────────────────────────────────────────────
 
-function prepareWorkdir(skillDir: string, skillName: string): string {
+function prepareWorkdir(skillDir: string, skillName: string, runId: string): string {
   if (!existsSync(skillDir)) {
     throw new Error(
       `Skill directory not found: ${skillDir}. If this is a Nakiros bundled skill, restart the daemon to re-sync ~/.nakiros/skills.`,
     );
   }
 
-  const workdir = mkdtempSync(join(tmpdir(), 'nakiros-audit-'));
+  // Persistent workdir: survives daemon restart so we can rehydrate in-flight
+  // audits. Cleanup happens on Terminer / stop / failure.
+  const runsRoot = auditRunsRoot();
+  mkdirSync(runsRoot, { recursive: true });
+  const workdir = join(runsRoot, runId);
+  mkdirSync(workdir, { recursive: true });
   mkdirSync(join(workdir, 'outputs'), { recursive: true });
 
-  // Settings: bypass permissions for this scratch dir
   const claudeDir = join(workdir, '.claude');
   mkdirSync(claudeDir, { recursive: true });
   writeFileSync(
@@ -69,79 +82,110 @@ function prepareWorkdir(skillDir: string, skillName: string): string {
   mkdirSync(skillsDir, { recursive: true });
   const linkPath = join(skillsDir, skillName);
   if (!existsSync(linkPath)) {
-    // Follow any symlinks on skillDir so the link points at a stable absolute path
-    // (avoids resolution issues later for claude-global skills that are themselves symlinks).
     symlinkSync(realpathSync(skillDir), linkPath, 'dir');
   }
 
   return workdir;
 }
 
-function buildClaudeArgs(prompt: string, resumeSessionId?: string): string[] {
-  const args: string[] = ['--output-format', 'stream-json', '--verbose'];
-  if (resumeSessionId) args.push('--resume', resumeSessionId);
-  args.push('--print', prompt);
-  return args;
-}
-
-function persistRunJson(run: AuditRun): void {
-  // Ephemeral persistence inside the workdir for crash recovery / debugging
+function cleanupWorkdir(workdir: string): void {
   try {
-    writeFileSync(join(run.workdir, 'run.json'), JSON.stringify(run, null, 2), 'utf8');
+    rmSync(workdir, { recursive: true, force: true });
   } catch {
     // ignore
   }
+  // Every `claude` run registered this workdir as a project in
+  // `~/.claude/projects/`; drop that entry too so the user's project list
+  // doesn't accumulate a row per audit.
+  deleteClaudeProjectEntry(workdir);
 }
 
-// ─── Stream parsing ─────────────────────────────────────────────────────────
-
-interface ClaudeHandlers {
-  onSession(id: string): void;
-  onText(text: string): void;
-  onTool(name: string, display: string): void;
-  onUsage(totalTokens: number): void;
+function writeRunJson(entry: AuditEntry): void {
+  persistRunJson(entry.run.workdir, {
+    ...entry.run,
+    _skillDir: entry.skillDir,
+  });
 }
 
-function handleClaudeEvent(event: Record<string, unknown>, h: ClaudeHandlers): void {
-  const type = event['type'] as string;
-  if (type === 'system') {
-    const sid = event['session_id'] as string | undefined;
-    if (sid) h.onSession(sid);
+// ─── Boot recovery ──────────────────────────────────────────────────────────
+
+/**
+ * Scan `~/.nakiros/runs/audit/*` on daemon boot. For each persisted workdir:
+ *  - terminal runs (stopped/failed) → delete workdir (user didn't Terminer them).
+ *  - completed runs → rehydrate so user can still Terminer from the UI.
+ *  - in-flight (starting/running/waiting_for_input) → rehydrate with status
+ *    collapsed appropriately (the subprocess is gone; waiting_for_input is
+ *    recoverable via --resume, starting/running collapses to stopped if we
+ *    can't continue).
+ */
+export function restoreOrCleanupAuditWorkdirs(): void {
+  const root = auditRunsRoot();
+  if (!existsSync(root)) return;
+
+  let dirs: string[];
+  try {
+    dirs = readdirSync(root);
+  } catch {
     return;
   }
-  if (type === 'assistant') {
-    const sid = event['session_id'] as string | undefined;
-    if (sid) h.onSession(sid);
-    const message = event['message'] as { content?: unknown[] } | undefined;
-    if (!Array.isArray(message?.content)) return;
-    for (const block of message!.content) {
-      const b = block as { type?: string; text?: string; name?: string; input?: Record<string, unknown> };
-      if (b.type === 'text' && b.text) h.onText(b.text);
-      else if (b.type === 'tool_use' && b.name) h.onTool(b.name, formatTool(b.name, b.input ?? {}));
-    }
-    return;
-  }
-  if (type === 'result') {
-    const usage = event['usage'] as { total_tokens?: number; input_tokens?: number; output_tokens?: number } | undefined;
-    if (usage) {
-      const total = usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
-      h.onUsage(total);
-    }
-  }
-}
 
-function formatTool(name: string, input: Record<string, unknown>): string {
-  const s = (v: unknown) => String(v ?? '');
-  const truncate = (str: string, max = 72) => (str.length > max ? str.slice(0, max) + '…' : str);
-  switch (name) {
-    case 'Read': return `Reading ${s(input['file_path'])}`;
-    case 'Write': return `Writing ${s(input['file_path'])}`;
-    case 'Edit':
-    case 'MultiEdit': return `Editing ${s(input['file_path'])}`;
-    case 'Bash': return `$ ${truncate(s(input['command']))}`;
-    case 'Glob': return `Glob: ${s(input['pattern'])}`;
-    case 'Grep': return `Grep: ${s(input['pattern'])}`;
-    default: return name;
+  for (const name of dirs) {
+    const workdir = join(root, name);
+    const blob = loadRunJson<AuditRun & { _skillDir?: string }>(workdir);
+    if (!blob || !blob.runId || !blob._skillDir) {
+      cleanupWorkdir(workdir);
+      continue;
+    }
+
+    // Stopped/failed are genuinely disposable.
+    if (blob.status === 'stopped' || blob.status === 'failed') {
+      cleanupWorkdir(workdir);
+      continue;
+    }
+
+    // Running/starting with no sessionId → can't resume meaningfully; drop.
+    if ((blob.status === 'starting' || blob.status === 'running') && !blob.sessionId) {
+      cleanupWorkdir(workdir);
+      continue;
+    }
+
+    // Collapse running/starting to waiting_for_input (child is dead, but --resume works).
+    const restoredStatus: AuditRun['status'] =
+      blob.status === 'starting' || blob.status === 'running'
+        ? 'waiting_for_input'
+        : blob.status;
+
+    const restoredRun: AuditRun = {
+      runId: blob.runId,
+      scope: blob.scope,
+      projectId: blob.projectId,
+      skillName: blob.skillName,
+      status: restoredStatus,
+      sessionId: blob.sessionId ?? null,
+      workdir,
+      reportPath: blob.reportPath ?? null,
+      turns: Array.isArray(blob.turns) ? blob.turns : [],
+      tokensUsed: typeof blob.tokensUsed === 'number' ? blob.tokensUsed : 0,
+      durationMs: typeof blob.durationMs === 'number' ? blob.durationMs : 0,
+      startedAt: blob.startedAt ?? new Date().toISOString(),
+      finishedAt: blob.finishedAt ?? null,
+      error: blob.error ?? null,
+    };
+
+    const entry: AuditEntry = {
+      run: restoredRun,
+      child: null,
+      killed: false,
+      skillDir: blob._skillDir,
+      eventLog: new EventLog<AuditRunEvent['event']>({
+        workdir,
+        broadcast: () => { /* rebound on first incoming IPC call */ },
+      }),
+    };
+    entry.eventLog.restore();
+    audits.set(restoredRun.runId, entry);
+    writeRunJson(entry);
+    console.log(`[audit-runner] Restored audit ${restoredRun.runId} for "${restoredRun.skillName}" (status=${restoredStatus})`);
   }
 }
 
@@ -150,6 +194,21 @@ function formatTool(name: string, input: Record<string, unknown>): string {
 interface RunOpts {
   skillDir: string;
   onEvent(event: AuditRunEvent): void;
+}
+
+/**
+ * Re-point an existing entry's event log broadcast to the current caller.
+ * Preserves the in-memory replay buffer.
+ */
+function rebindEventLog(entry: AuditEntry, opts: RunOpts): void {
+  const buffered = entry.eventLog.getBuffered();
+  entry.eventLog = new EventLog<AuditRunEvent['event']>({
+    workdir: entry.run.workdir,
+    broadcast: (event) => opts.onEvent({ runId: entry.run.runId, event }),
+  });
+  for (const ev of buffered) {
+    (entry.eventLog as unknown as { buffer: unknown[] }).buffer.push(ev);
+  }
 }
 
 /** Return the active (non-terminal) audit run for a given skill, if any. */
@@ -183,16 +242,17 @@ export function listActiveAuditRuns(): AuditRun[] {
 }
 
 export function startAudit(request: StartAuditRequest, opts: RunOpts): AuditRun {
-  // Resume an in-flight audit for the same skill instead of starting a duplicate.
   const existing = findActiveAuditForSkill(request.scope, request.projectId, request.skillName);
   if (existing) {
     console.log(`[audit-runner] Resuming active audit ${existing.run.runId} for ${request.skillName} (status=${existing.run.status})`);
+    rebindEventLog(existing, opts);
     return existing.run;
   }
 
-  const workdir = prepareWorkdir(opts.skillDir, request.skillName);
+  const runId = generateRunId('audit');
+  const workdir = prepareWorkdir(opts.skillDir, request.skillName, runId);
   const run: AuditRun = {
-    runId: generateRunId(),
+    runId,
     scope: request.scope,
     projectId: request.projectId,
     skillName: request.skillName,
@@ -208,13 +268,22 @@ export function startAudit(request: StartAuditRequest, opts: RunOpts): AuditRun 
     error: null,
   };
 
-  const entry: AuditEntry = { run, child: null, killed: false, skillDir: opts.skillDir };
+  const entry: AuditEntry = {
+    run,
+    child: null,
+    killed: false,
+    skillDir: opts.skillDir,
+    eventLog: new EventLog<AuditRunEvent['event']>({
+      workdir,
+      broadcast: (event) => opts.onEvent({ runId: run.runId, event }),
+    }),
+  };
   audits.set(run.runId, entry);
-  persistRunJson(run);
+  writeRunJson(entry);
 
   // Launch the first turn asynchronously
   const firstPrompt = `/${FACTORY_SKILL_NAME} audit ${request.skillName}`;
-  void executeTurn(entry, firstPrompt, true, opts).then(() => maybeFinalize(entry, opts));
+  void executeTurn(entry, firstPrompt, true).then(() => maybeFinalize(entry));
 
   return run;
 }
@@ -223,101 +292,60 @@ async function executeTurn(
   entry: AuditEntry,
   userMessage: string,
   isFirstTurn: boolean,
-  opts: RunOpts,
 ): Promise<void> {
   const { run } = entry;
   if (entry.killed) return;
 
+  entry.eventLog.resetForNewTurn();
   run.status = 'starting';
-  persistRunJson(run);
-  opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'starting' } });
+  writeRunJson(entry);
+  entry.eventLog.emit({ type: 'status', status: 'starting' });
 
-  const cliArgs = buildClaudeArgs(userMessage, isFirstTurn ? undefined : (run.sessionId ?? undefined));
+  const cliArgs = buildClaudeArgs({
+    prompt: userMessage,
+    resumeSessionId: isFirstTurn ? undefined : (run.sessionId ?? undefined),
+  });
 
   const started = Date.now();
   run.turns.push({ role: 'user', content: userMessage, timestamp: new Date().toISOString() });
 
   let assistantText = '';
   const tools: { name: string; display: string }[] = [];
-  let exitCode = 0;
-  let errorMessage: string | null = null;
 
-  await new Promise<void>((resolve) => {
-    const child = spawn('claude', cliArgs, {
-      cwd: run.workdir,
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    entry.child = child;
+  run.status = 'running';
+  writeRunJson(entry);
+  entry.eventLog.emit({ type: 'status', status: 'running' });
 
-    run.status = 'running';
-    persistRunJson(run);
-    opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'running' } });
-
-    let buffer = '';
-    let stderrBuffer = '';
-
-    child.stdout?.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString('utf8');
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const event = JSON.parse(trimmed) as Record<string, unknown>;
-          handleClaudeEvent(event, {
-            onSession: (id) => { run.sessionId = id; },
-            onText: (text) => {
-              assistantText += text;
-              opts.onEvent({ runId: run.runId, event: { type: 'text', text } });
-            },
-            onTool: (name, display) => {
-              tools.push({ name, display });
-              opts.onEvent({ runId: run.runId, event: { type: 'tool', name, display } });
-            },
-            onUsage: (tokens) => {
-              run.tokensUsed += tokens;
-              opts.onEvent({ runId: run.runId, event: { type: 'tokens', tokensUsed: run.tokensUsed } });
-            },
-          });
-        } catch {
-          // ignore non-JSON lines
-        }
-      }
-    });
-
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderrBuffer += chunk.toString('utf8');
-    });
-
-    child.on('close', (code) => {
-      exitCode = code ?? 0;
-      if (exitCode !== 0 && stderrBuffer.trim()) {
-        errorMessage = stderrBuffer.trim().slice(-500);
-      }
-      resolve();
-    });
-
-    child.on('error', (err) => {
-      exitCode = 1;
-      errorMessage = err.message.includes('ENOENT')
-        ? '`claude` CLI not found. Make sure Claude Code is installed and on PATH.'
-        : err.message;
-      resolve();
-    });
+  const result = await spawnClaudeTurn({
+    workdir: run.workdir,
+    cliArgs,
+    onChildSpawned: (c) => { entry.child = c; },
+    isKilled: () => entry.killed,
+    onSession: (id) => { run.sessionId = id; },
+    onText: (text) => {
+      assistantText += text;
+      entry.eventLog.emit({ type: 'text', text });
+    },
+    onTool: (name, display) => {
+      tools.push({ name, display });
+      entry.eventLog.emit({ type: 'tool', name, display });
+    },
+    onUsage: (tokens) => {
+      run.tokensUsed += tokens;
+      entry.eventLog.emit({ type: 'tokens', tokensUsed: run.tokensUsed });
+    },
   });
 
   run.durationMs += Date.now() - started;
   run.turns.push({ role: 'assistant', content: assistantText, timestamp: new Date().toISOString(), tools });
   entry.child = null;
 
-  if (exitCode !== 0 || errorMessage) {
+  if (result.exitCode !== 0 || result.error) {
     run.status = 'failed';
-    run.error = errorMessage;
+    run.error = result.error;
     run.finishedAt = new Date().toISOString();
-    persistRunJson(run);
-    opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode, error: errorMessage ?? undefined } });
+    writeRunJson(entry);
+    entry.eventLog.emit({ type: 'done', exitCode: result.exitCode, error: result.error ?? undefined });
   }
 }
 
@@ -326,48 +354,41 @@ async function executeTurn(
  * If yes, archive and complete. Otherwise, transition to waiting_for_input
  * so the user can answer the agent's questions.
  */
-function maybeFinalize(entry: AuditEntry, opts: RunOpts): void {
+function maybeFinalize(entry: AuditEntry): void {
   const { run } = entry;
   if (run.status === 'failed' || run.status === 'stopped') return;
 
   const reportSrc = join(run.workdir, 'outputs', 'audit-report.md');
   if (existsSync(reportSrc)) {
-    finalizeRun(entry, opts);
+    finalizeRun(entry);
     return;
   }
 
-  // No report yet → expect more interaction
   run.status = 'waiting_for_input';
-  persistRunJson(run);
+  writeRunJson(entry);
   const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? '';
-  opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'waiting_for_input' } });
-  opts.onEvent({ runId: run.runId, event: { type: 'waiting_for_input', lastAssistantText } });
+  entry.eventLog.emit({ type: 'status', status: 'waiting_for_input' });
+  entry.eventLog.emit({ type: 'waiting_for_input', lastAssistantText });
 }
 
-function finalizeRun(entry: AuditEntry, opts: RunOpts): void {
+/**
+ * Archive the audit report into `{skillDir}/audits/audit-{ISO}.md` and mark
+ * the run as completed. Workdir and eventLog survive until the user clicks
+ * Terminer — that way they can keep re-reading the conversation.
+ */
+function finalizeRun(entry: AuditEntry): void {
   const { run } = entry;
   const reportSrc = join(run.workdir, 'outputs', 'audit-report.md');
   if (!existsSync(reportSrc)) {
     run.status = 'failed';
     run.error = 'No audit-report.md was produced';
     run.finishedAt = new Date().toISOString();
-    persistRunJson(run);
-    opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+    writeRunJson(entry);
+    entry.eventLog.emit({ type: 'done', exitCode: 1, error: run.error });
     return;
   }
 
-  // Archive into {actualSkillDir}/audits/audit-{ISO}.md
-  const skillDir = entry.skillDir ?? resolveActualSkillDir(run);
-  if (!skillDir) {
-    run.status = 'failed';
-    run.error = 'Could not resolve skill directory to archive the audit';
-    run.finishedAt = new Date().toISOString();
-    persistRunJson(run);
-    opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
-    return;
-  }
-
-  const auditsDir = join(skillDir, 'audits');
+  const auditsDir = join(entry.skillDir, 'audits');
   mkdirSync(auditsDir, { recursive: true });
   const dest = join(auditsDir, `audit-${isoSafeTimestamp()}.md`);
   try {
@@ -377,31 +398,16 @@ function finalizeRun(entry: AuditEntry, opts: RunOpts): void {
     run.status = 'failed';
     run.error = `Failed to archive report: ${(err as Error).message}`;
     run.finishedAt = new Date().toISOString();
-    persistRunJson(run);
-    opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+    writeRunJson(entry);
+    entry.eventLog.emit({ type: 'done', exitCode: 1, error: run.error });
     return;
   }
 
   run.status = 'completed';
   run.finishedAt = new Date().toISOString();
-  persistRunJson(run);
-  opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
-  opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0, reportPath: dest } });
-}
-
-/**
- * Best-effort resolution of the actual skill directory from the run.
- * For nakiros-bundled scope: resolved by the IPC handler; we store skillDir hint.
- */
-function resolveActualSkillDir(_run: AuditRun): string | null {
-  // We rely on the workdir's symlink target. Read it back.
-  // Workdir has .claude/skills/{skillName} → real skill dir.
-  const symlink = join(_run.workdir, '.claude', 'skills', _run.skillName);
-  try {
-    return realpathSync(symlink);
-  } catch {
-    return null;
-  }
+  writeRunJson(entry);
+  entry.eventLog.emit({ type: 'status', status: 'completed' });
+  entry.eventLog.emit({ type: 'done', exitCode: 0, reportPath: dest });
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -412,8 +418,9 @@ export async function sendAuditUserMessage(runId: string, message: string, opts:
   if (entry.run.status !== 'waiting_for_input') {
     throw new Error(`Audit run ${runId} is not waiting for input (status=${entry.run.status})`);
   }
-  await executeTurn(entry, message, false, opts);
-  maybeFinalize(entry, opts);
+  rebindEventLog(entry, opts);
+  await executeTurn(entry, message, false);
+  maybeFinalize(entry);
 }
 
 export function stopAudit(runId: string): void {
@@ -424,12 +431,41 @@ export function stopAudit(runId: string): void {
   if (entry.run.status !== 'completed' && entry.run.status !== 'failed') {
     entry.run.status = 'stopped';
     entry.run.finishedAt = new Date().toISOString();
-    persistRunJson(entry.run);
   }
+  // Broadcast BEFORE tearing down the log so the frontend gets immediate
+  // feedback instead of waiting for the 500ms poll cycle.
+  entry.eventLog.emit({ type: 'status', status: 'stopped' });
+  entry.eventLog.emit({ type: 'done', exitCode: 130 });
+  // Tear down the workdir (report, if any, was already archived to
+  // {skillDir}/audits/). The entry stays in the registry so the UI can keep
+  // rendering the stopped run until the user navigates away.
+  entry.eventLog.destroy();
+  cleanupWorkdir(entry.run.workdir);
+}
+
+/**
+ * User-acknowledged completion ("Terminer" button). The archived audit-report.md
+ * in `{skillDir}/audits/` is kept; the workdir (conversation + events) is deleted.
+ */
+export function finishAudit(runId: string): void {
+  const entry = audits.get(runId);
+  if (!entry) return;
+  entry.eventLog.destroy();
+  cleanupWorkdir(entry.run.workdir);
+  audits.delete(runId);
 }
 
 export function getAuditRun(runId: string): AuditRun | null {
   return audits.get(runId)?.run ?? null;
+}
+
+/**
+ * Return the buffered stream events for the current (in-flight) turn. Used by
+ * the frontend when remounting AuditView mid-run so the live activity panel
+ * re-populates instead of appearing empty.
+ */
+export function getAuditBufferedEvents(runId: string): AuditRunEvent['event'][] {
+  return audits.get(runId)?.eventLog.getBuffered() ?? [];
 }
 
 /**
@@ -455,7 +491,6 @@ export function listAuditHistory(skillDir: string): AuditHistoryEntry[] {
       // Try to parse the ISO timestamp from filename: audit-YYYY-MM-DDTHH-MM-SS.md
       const m = basename(fileName).match(/^audit-(.+)\.md$/);
       if (m) {
-        // Reverse the earlier replacement: '-' between H/M/S parts → ':'
         const isoLike = m[1].replace(/(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/, '$1T$2:$3:$4');
         timestamp = new Date(isoLike).toISOString();
       } else {
@@ -471,10 +506,9 @@ export function listAuditHistory(skillDir: string): AuditHistoryEntry[] {
   return result;
 }
 
-import { readFileSync as fsReadFile } from 'fs';
 export function readAuditReport(path: string): string | null {
   try {
-    return fsReadFile(path, 'utf8');
+    return readFileSync(path, 'utf8');
   } catch {
     return null;
   }

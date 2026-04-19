@@ -15,6 +15,8 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { MarkdownViewer } from '../components/ui';
 import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry } from '@nakiros/shared';
 
@@ -32,6 +34,7 @@ type LiveEvent =
   | { type: 'tool'; name: string; display: string; ts: number };
 
 export default function EvalRunsView({ scope, projectId, skillName, initialRunIds, iteration, onClose }: Props) {
+  const { t } = useTranslation('evals');
   const [runs, setRuns] = useState<Map<string, SkillEvalRun>>(new Map());
   const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRunIds[0] ?? null);
   const [liveEventsByRun, setLiveEventsByRun] = useState<Map<string, LiveEvent[]>>(new Map());
@@ -145,7 +148,7 @@ export default function EvalRunsView({ scope, projectId, skillName, initialRunId
   }
 
   return (
-    <div className="fixed inset-0 z-[300] flex flex-col bg-[var(--bg-base)]">
+    <div className="fixed inset-0 z-[300] flex flex-col bg-[var(--bg)]">
       {/* Header */}
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--line)] bg-[var(--bg-soft)] px-4">
         <button
@@ -153,32 +156,32 @@ export default function EvalRunsView({ scope, projectId, skillName, initialRunId
           className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
         >
           <ArrowLeft size={14} />
-          Back
+          {t('back')}
         </button>
         <span className="text-sm font-semibold text-[var(--text-primary)]">
-          Eval Runs — {skillName} · Iteration {iteration}
+          {t('headerTitle', { skillName, iteration })}
         </span>
         <div className="ml-auto flex items-center gap-4 text-xs text-[var(--text-muted)]">
           <span>
-            {completed}/{runsList.length} complete
+            {t('completeCount', { completed, total: runsList.length })}
           </span>
           {running > 0 && (
             <>
               <span>·</span>
-              <span className="text-[var(--primary)]">{running} running</span>
+              <span className="text-[var(--primary)]">{t('runningCount', { count: running })}</span>
             </>
           )}
           <span>·</span>
-          <span>{formatDuration(elapsed)} elapsed</span>
+          <span>{t('elapsed', { duration: formatDuration(elapsed, t) })}</span>
           <span>·</span>
-          <span>{formatTokens(totalTokens)} used</span>
+          <span>{t('tokensUsed', { tokens: formatTokens(totalTokens, t) })}</span>
           {!allDone && (
             <button
               onClick={handleStopAll}
               className="ml-2 flex items-center gap-1 rounded bg-red-500/20 px-2 py-1 text-red-400 transition-colors hover:bg-red-500/30"
             >
               <Square size={12} />
-              Stop all
+              {t('stopAll')}
             </button>
           )}
         </div>
@@ -201,17 +204,19 @@ export default function EvalRunsView({ scope, projectId, skillName, initialRunId
               {pair.withSkill && (
                 <RunListItem
                   run={pair.withSkill}
-                  label="with skill"
+                  label={t('withSkill')}
                   selected={selectedRunId === pair.withSkill.runId}
                   onClick={() => setSelectedRunId(pair.withSkill!.runId)}
+                  t={t}
                 />
               )}
               {pair.withoutSkill && (
                 <RunListItem
                   run={pair.withoutSkill}
-                  label="without (baseline)"
+                  label={t('withoutBaseline')}
                   selected={selectedRunId === pair.withoutSkill.runId}
                   onClick={() => setSelectedRunId(pair.withoutSkill!.runId)}
+                  t={t}
                 />
               )}
             </div>
@@ -227,10 +232,11 @@ export default function EvalRunsView({ scope, projectId, skillName, initialRunId
               onStop={handleStop}
               feedback={feedback[selected.evalName] ?? ''}
               onSaveFeedback={(text) => saveFeedback(selected.evalName, text)}
+              t={t}
             />
           ) : (
             <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-              Select a run
+              {t('selectRun')}
             </div>
           )}
         </div>
@@ -244,11 +250,13 @@ function RunListItem({
   label,
   selected,
   onClick,
+  t,
 }: {
   run: SkillEvalRun;
   label: string;
   selected: boolean;
   onClick(): void;
+  t: TFunction<'evals'>;
 }) {
   return (
     <button
@@ -263,8 +271,8 @@ function RunListItem({
         {label}
       </span>
       <span className="ml-auto truncate text-[10px] text-[var(--text-muted)]">
-        {run.tokensUsed > 0 && formatTokens(run.tokensUsed)}
-        {run.durationMs > 0 && ` · ${formatDuration(run.durationMs)}`}
+        {run.tokensUsed > 0 && formatTokens(run.tokensUsed, t)}
+        {run.durationMs > 0 && ` · ${formatDuration(run.durationMs, t)}`}
       </span>
     </button>
   );
@@ -276,12 +284,14 @@ function RunDetail({
   onStop,
   feedback,
   onSaveFeedback,
+  t,
 }: {
   run: SkillEvalRun;
   liveEvents: LiveEvent[];
   onStop(runId: string): void;
   feedback: string;
   onSaveFeedback(text: string): void | Promise<void>;
+  t: TFunction<'evals'>;
 }) {
   const [expanded, setExpanded] = useState<'turns' | 'stream' | null>('turns');
   const [userInput, setUserInput] = useState('');
@@ -315,7 +325,7 @@ function RunDetail({
       await window.nakiros.sendEvalUserMessage(run.runId, trimmed);
       setUserInput('');
     } catch (err) {
-      alert(`Failed to send: ${(err as Error).message}`);
+      alert(t('alertSendFailed', { message: (err as Error).message }));
     } finally {
       setSending(false);
     }
@@ -327,7 +337,7 @@ function RunDetail({
     try {
       await window.nakiros.finishEvalRun(run.runId);
     } catch (err) {
-      alert(`Failed to finish: ${(err as Error).message}`);
+      alert(t('alertFinishFailed', { message: (err as Error).message }));
     } finally {
       setSending(false);
     }
@@ -350,19 +360,19 @@ function RunDetail({
         <div className="flex-1">
           <div className="text-sm font-semibold text-[var(--text-primary)]">{run.evalName}</div>
           <div className="flex gap-2 text-xs text-[var(--text-muted)]">
-            <span>{run.config === 'with_skill' ? 'With skill' : 'Without skill (baseline)'}</span>
+            <span>{run.config === 'with_skill' ? t('configWithSkill') : t('configWithoutSkill')}</span>
             <span>·</span>
-            <span>{run.status}</span>
+            <span>{t(`status.${statusToKey(run.status)}` as const)}</span>
             {run.tokensUsed > 0 && (
               <>
                 <span>·</span>
-                <span>{formatTokens(run.tokensUsed)}</span>
+                <span>{formatTokens(run.tokensUsed, t)}</span>
               </>
             )}
             {run.durationMs > 0 && (
               <>
                 <span>·</span>
-                <span>{formatDuration(run.durationMs)}</span>
+                <span>{formatDuration(run.durationMs, t)}</span>
               </>
             )}
           </div>
@@ -373,7 +383,7 @@ function RunDetail({
             className="flex items-center gap-1 rounded bg-red-500/20 px-2 py-1 text-xs text-red-400 transition-colors hover:bg-red-500/30"
           >
             <Square size={12} />
-            Stop
+            {t('stop')}
           </button>
         )}
       </div>
@@ -382,7 +392,7 @@ function RunDetail({
         <div className="mx-4 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
           <div className="mb-1 flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={12} />
-            Error
+            {t('errorLabel')}
           </div>
           <pre className="whitespace-pre-wrap break-all font-mono">{run.error}</pre>
         </div>
@@ -391,7 +401,7 @@ function RunDetail({
       <div className="flex-1 overflow-y-auto p-4">
         {/* Prompt */}
         <Section
-          title="Prompt"
+          title={t('promptTitle')}
           expanded={expanded === 'turns'}
           onToggle={() => setExpanded(expanded === 'turns' ? null : 'turns')}
         >
@@ -445,12 +455,12 @@ function RunDetail({
           <div className="mt-4 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary-soft)]/30 px-4 py-3">
             <div className="mb-2 flex items-center gap-2 text-xs text-[var(--primary)]">
               <Loader2 size={12} className="animate-spin" />
-              <span className="font-semibold">Streaming…</span>
-              <span className="text-[var(--text-muted)]">{liveEvents.length} events</span>
+              <span className="font-semibold">{t('streaming')}</span>
+              <span className="text-[var(--text-muted)]">{t('events', { count: liveEvents.length })}</span>
             </div>
-            <div ref={liveScrollRef} className="max-h-[400px] overflow-y-auto rounded bg-[var(--bg-base)] p-2">
+            <div ref={liveScrollRef} className="max-h-[400px] overflow-y-auto rounded bg-[var(--bg)] p-2">
               {liveEvents.length === 0 ? (
-                <span className="text-xs text-[var(--text-muted)]">Waiting for first chunk...</span>
+                <span className="text-xs text-[var(--text-muted)]">{t('waitingFirstChunk')}</span>
               ) : (
                 <div className="flex flex-col gap-1.5 font-mono text-xs">
                   {liveEvents.map((event, i) => (
@@ -462,7 +472,9 @@ function RunDetail({
           </div>
         )}
 
-        {isTerminal && <GeneratedOutputsPanel runId={run.runId} status={run.status} />}
+        {isTerminal && <GeneratedOutputsPanel runId={run.runId} status={run.status} t={t} />}
+
+        {isTerminal && run.usesSandbox && <SandboxDiffPanel runId={run.runId} t={t} />}
 
         {/* Human feedback panel — visible once a run is terminal (not while running) */}
         {isTerminal && (
@@ -470,12 +482,12 @@ function RunDetail({
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MessageSquare size={12} className="text-[var(--text-muted)]" />
-                <span className="text-xs font-semibold text-[var(--text-primary)]">Your feedback</span>
+                <span className="text-xs font-semibold text-[var(--text-primary)]">{t('feedback.title')}</span>
                 {!feedback && !feedbackDirty && (
-                  <span className="text-[10px] text-[var(--text-muted)]">— empty means "passed review"</span>
+                  <span className="text-[10px] text-[var(--text-muted)]">{t('feedback.emptyHint')}</span>
                 )}
                 {feedback && !feedbackDirty && (
-                  <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-400">saved</span>
+                  <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-400">{t('feedback.savedBadge')}</span>
                 )}
               </div>
               <button
@@ -483,14 +495,14 @@ function RunDetail({
                 disabled={!feedbackDirty || feedbackSaving}
                 className="rounded bg-[var(--primary)] px-2 py-1 text-[10px] font-medium text-white transition-colors disabled:opacity-50"
               >
-                {feedbackSaving ? 'Saving…' : 'Save'}
+                {feedbackSaving ? t('feedback.saving') : t('feedback.save')}
               </button>
             </div>
             <textarea
               value={feedbackDraft}
               onChange={(e) => setFeedbackDraft(e.target.value)}
-              placeholder="What did you notice about this output? Be specific — actionable comments help fix the skill."
-              className="min-h-[80px] w-full resize-y rounded border border-[var(--line)] bg-[var(--bg-base)] p-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
+              placeholder={t('feedback.placeholder')}
+              className="min-h-[80px] w-full resize-y rounded border border-[var(--line)] bg-[var(--bg)] p-2 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
             />
           </div>
         )}
@@ -501,7 +513,7 @@ function RunDetail({
         <div className="border-t border-amber-500/30 bg-amber-500/5 p-3">
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-amber-400">
             <MessageSquare size={12} />
-            Agent is waiting for your input
+            {t('waitingForInput')}
           </div>
           <div className="flex gap-2">
             <textarea
@@ -512,7 +524,7 @@ function RunDetail({
                   void handleSend();
                 }
               }}
-              placeholder="Type your response... (⌘/Ctrl+Enter to send)"
+              placeholder={t('userInputPlaceholder')}
               className="min-h-[60px] flex-1 resize-none rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
               autoFocus
             />
@@ -523,16 +535,16 @@ function RunDetail({
                 className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
               >
                 <Send size={12} />
-                Send
+                {t('send')}
               </button>
               <button
                 onClick={handleFinish}
                 disabled={sending}
                 className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
-                title="Finish the run without answering (useful for 'should NOT do X' assertions)"
+                title={t('finishTooltip')}
               >
                 <Flag size={12} />
-                Finish
+                {t('finish')}
               </button>
             </div>
           </div>
@@ -604,23 +616,28 @@ function LiveEventLine({ event }: { event: LiveEvent }) {
   return <div className="whitespace-pre-wrap text-[var(--text-muted)]">{event.text}</div>;
 }
 
-function formatTokens(n: number): string {
-  if (n < 1000) return `${n} tok`;
-  return `${(n / 1000).toFixed(1)}k tok`;
+function formatTokens(n: number, t: TFunction<'evals'>): string {
+  if (n < 1000) return t('units.tokens', { count: n });
+  return t('units.tokensThousands', { value: (n / 1000).toFixed(1) });
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+function formatDuration(ms: number, t: TFunction<'evals'>): string {
+  if (ms < 1000) return t('units.milliseconds', { count: ms });
+  if (ms < 60000) return t('units.seconds', { value: (ms / 1000).toFixed(1) });
   const min = Math.floor(ms / 60000);
   const sec = Math.floor((ms % 60000) / 1000);
-  return `${min}m${sec}s`;
+  return t('units.minutes', { minutes: min, seconds: sec });
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+function formatBytes(n: number, t: TFunction<'evals'>): string {
+  if (n < 1024) return t('units.bytes', { count: n });
+  if (n < 1024 * 1024) return t('units.kilobytes', { value: (n / 1024).toFixed(1) });
+  return t('units.megabytes', { value: (n / (1024 * 1024)).toFixed(1) });
+}
+
+function statusToKey(status: EvalRunStatus): string {
+  if (status === 'waiting_for_input') return 'waitingForInput';
+  return status;
 }
 
 function isRenderableAsText(relativePath: string): boolean {
@@ -636,7 +653,7 @@ function isMarkdown(relativePath: string): boolean {
  * Without this panel the human reviewer can't actually see what the agent produced,
  * which is exactly the signal the feedback textarea is meant to capture.
  */
-function GeneratedOutputsPanel({ runId, status }: { runId: string; status: EvalRunStatus }) {
+function GeneratedOutputsPanel({ runId, status, t }: { runId: string; status: EvalRunStatus; t: TFunction<'evals'> }) {
   const [entries, setEntries] = useState<EvalRunOutputEntry[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
@@ -684,21 +701,21 @@ function GeneratedOutputsPanel({ runId, status }: { runId: string; status: EvalR
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText size={12} className="text-[var(--text-muted)]" />
-            <span className="font-semibold text-[var(--text-primary)]">Generated files</span>
-            <span className="text-[var(--text-muted)]">— none</span>
+            <span className="font-semibold text-[var(--text-primary)]">{t('outputs.title')}</span>
+            <span className="text-[var(--text-muted)]">{t('outputs.none')}</span>
           </div>
           <button
             onClick={refresh}
-            className="flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--bg-base)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            className="flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
           >
             <RefreshCw size={10} />
-            Refresh
+            {t('outputs.refresh')}
           </button>
         </div>
         <p className="mt-2 text-[var(--text-muted)]">
           {status === 'failed'
-            ? 'Run failed before producing any output.'
-            : 'The agent did not write any files under outputs/.'}
+            ? t('outputs.noneFailed')
+            : t('outputs.noneWritten')}
         </p>
       </div>
     );
@@ -711,15 +728,15 @@ function GeneratedOutputsPanel({ runId, status }: { runId: string; status: EvalR
       <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
         <div className="flex items-center gap-2 text-xs">
           <FileText size={12} className="text-emerald-400" />
-          <span className="font-semibold text-[var(--text-primary)]">Generated files</span>
-          <span className="text-[var(--text-muted)]">({entries.length})</span>
+          <span className="font-semibold text-[var(--text-primary)]">{t('outputs.title')}</span>
+          <span className="text-[var(--text-muted)]">{t('outputs.count', { count: entries.length })}</span>
         </div>
         <button
           onClick={refresh}
-          className="flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--bg-base)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className="flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
           <RefreshCw size={10} />
-          Refresh
+          {t('outputs.refresh')}
         </button>
       </div>
       <div className="flex">
@@ -739,7 +756,7 @@ function GeneratedOutputsPanel({ runId, status }: { runId: string; status: EvalR
                 title={entry.relativePath}
               >
                 <span className="truncate">{entry.relativePath}</span>
-                <span className="shrink-0 text-[10px] text-[var(--text-muted)]">{formatBytes(entry.sizeBytes)}</span>
+                <span className="shrink-0 text-[10px] text-[var(--text-muted)]">{formatBytes(entry.sizeBytes, t)}</span>
               </button>
             ))}
           </div>
@@ -749,13 +766,13 @@ function GeneratedOutputsPanel({ runId, status }: { runId: string; status: EvalR
         <div className="min-w-0 flex-1 p-3">
           {selectedEntry && !isRenderableAsText(selectedEntry.relativePath) && (
             <div className="text-xs text-[var(--text-muted)]">
-              <code className="text-[var(--text-primary)]">{selectedEntry.relativePath}</code> is a binary file ({formatBytes(selectedEntry.sizeBytes)}). Preview is disabled.
+              <code className="text-[var(--text-primary)]">{selectedEntry.relativePath}</code> {t('outputs.binaryNotice', { size: formatBytes(selectedEntry.sizeBytes, t) })}
             </div>
           )}
           {selectedEntry && isRenderableAsText(selectedEntry.relativePath) && loading && (
             <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
               <Loader2 size={12} className="animate-spin" />
-              Loading…
+              {t('outputs.loading')}
             </div>
           )}
           {selectedEntry && isRenderableAsText(selectedEntry.relativePath) && !loading && content !== null && (
@@ -768,9 +785,73 @@ function GeneratedOutputsPanel({ runId, status }: { runId: string; status: EvalR
             </div>
           )}
           {selectedEntry && isRenderableAsText(selectedEntry.relativePath) && !loading && content === null && (
-            <div className="text-xs text-[var(--text-muted)]">(unable to read file)</div>
+            <div className="text-xs text-[var(--text-muted)]">{t('outputs.unableToRead')}</div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Renders the `git diff HEAD` captured from a run's sandbox — the artefact of
+ * "what the skill would have changed if applied to the real project". Shown
+ * only for runs that used a sandbox (usesSandbox=true); for those, the diff
+ * is the only record of code-level modifications the agent made.
+ */
+function SandboxDiffPanel({ runId, t }: { runId: string; t: TFunction<'evals'> }) {
+  const [patch, setPatch] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = () => {
+    setLoading(true);
+    window.nakiros
+      .readEvalRunDiffPatch(runId)
+      .then((p) => setPatch(p))
+      .catch(() => setPatch(null))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId]);
+
+  const isEmpty = !loading && (patch === null || patch.trim().length === 0);
+
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--bg-card)]">
+      <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
+        <div className="flex items-center gap-2 text-xs">
+          <FileText size={12} className="text-amber-400" />
+          <span className="font-semibold text-[var(--text-primary)]">{t('sandboxDiff.title')}</span>
+          <span className="text-[var(--text-muted)]">{t('sandboxDiff.subtitle')}</span>
+        </div>
+        <button
+          onClick={refresh}
+          className="flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--bg)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+        >
+          <RefreshCw size={10} />
+          {t('sandboxDiff.refresh')}
+        </button>
+      </div>
+      <div className="p-3">
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <Loader2 size={12} className="animate-spin" />
+            {t('sandboxDiff.loading')}
+          </div>
+        )}
+        {!loading && isEmpty && (
+          <div className="text-xs text-[var(--text-muted)]">
+            {t('sandboxDiff.noChanges')}
+          </div>
+        )}
+        {!loading && !isEmpty && patch !== null && (
+          <pre className="max-h-[500px] overflow-y-auto whitespace-pre break-all font-mono text-[11px] text-[var(--text-primary)]">
+            {patch}
+          </pre>
+        )}
       </div>
     </div>
   );

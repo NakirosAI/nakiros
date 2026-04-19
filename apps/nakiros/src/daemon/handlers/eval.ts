@@ -17,6 +17,7 @@ import {
   sendUserMessage as sendEvalUserMessage,
   finishWaitingRun as finishEvalWaitingRun,
   getRun as getEvalRun,
+  getEvalBufferedEvents,
 } from '../../services/eval-runner.js';
 import { readIterationFeedback, saveEvalFeedback } from '../../services/eval-feedback.js';
 import { eventBus } from '../event-bus.js';
@@ -88,7 +89,7 @@ export const evalHandlers: HandlerRegistry = {
     const run = getEvalRun(runId);
     if (!run) throw new Error(`Run not found: ${runId}`);
     const { skillDir, definition } = getDefinitionForRun(run);
-    await sendEvalUserMessage(runId, message, skillDir, definition);
+    await sendEvalUserMessage(runId, message, skillDir, definition, broadcastEvalEvent);
   },
 
   'eval:finishRun': async (args) => {
@@ -98,6 +99,8 @@ export const evalHandlers: HandlerRegistry = {
     const { definition } = getDefinitionForRun(run);
     await finishEvalWaitingRun(runId, definition);
   },
+
+  'eval:getBufferedEvents': (args) => getEvalBufferedEvents(args[0] as string),
 
   'eval:getFeedback': (args) => {
     const request = args[0] as StartEvalRunRequest & { iteration: number };
@@ -166,6 +169,23 @@ export const evalHandlers: HandlerRegistry = {
     if (!existsSync(abs)) return null;
     try {
       return readFileSync(abs, 'utf8');
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Return the git diff captured from this run's sandbox. Null when the run
+   * didn't use a sandbox (no git root) or when the diff file is absent.
+   */
+  'eval:readDiffPatch': (args): string | null => {
+    const runId = args[0] as string;
+    const run = getEvalRun(runId);
+    if (!run) throw new Error(`Run not found: ${runId}`);
+    const path = join(run.workdir, 'diff.patch');
+    if (!existsSync(path)) return null;
+    try {
+      return readFileSync(path, 'utf8');
     } catch {
       return null;
     }

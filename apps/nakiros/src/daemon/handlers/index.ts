@@ -1,6 +1,7 @@
 import type { IpcChannel } from '@nakiros/shared';
 import { preferencesHandlers } from './preferences.js';
 import { shellHandlers } from './shell.js';
+import { metaHandlers } from './meta.js';
 import { projectHandlers } from './projects.js';
 import { bundledSkillsHandlers } from './bundled-skills.js';
 import { claudeGlobalHandlers } from './claude-global.js';
@@ -21,6 +22,7 @@ export function buildHandlerRegistry(): HandlerRegistry {
   return {
     ...preferencesHandlers,
     ...shellHandlers,
+    ...metaHandlers,
     ...projectHandlers,
     ...bundledSkillsHandlers,
     ...claudeGlobalHandlers,

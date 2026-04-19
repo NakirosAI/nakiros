@@ -232,6 +232,7 @@ const client = {
   onEvalEvent: (cb: (event: unknown) => void) => subscribe('eval:event', cb),
   sendEvalUserMessage: (runId: string, message: string) => invoke('eval:sendUserMessage', runId, message),
   finishEvalRun: (runId: string) => invoke('eval:finishRun', runId),
+  getEvalBufferedEvents: (runId: string) => invoke('eval:getBufferedEvents', runId),
   getEvalFeedback: (request: unknown) => invoke('eval:getFeedback', request),
   saveEvalFeedback: (request: unknown) => invoke('eval:saveFeedback', request),
   listEvalRunOutputs: (runId: string) => invoke('eval:listOutputs', runId),
@@ -242,9 +243,11 @@ const client = {
   stopAudit: (runId: string) => invoke('audit:stopRun', runId),
   getAuditRun: (runId: string) => invoke('audit:getRun', runId),
   sendAuditUserMessage: (runId: string, message: string) => invoke('audit:sendUserMessage', runId, message),
+  finishAudit: (runId: string) => invoke('audit:finish', runId),
   listAuditHistory: (request: unknown) => invoke('audit:listHistory', request),
   readAuditReport: (path: string) => invoke('audit:readReport', path),
   listActiveAuditRuns: () => invoke('audit:listActive'),
+  getAuditBufferedEvents: (runId: string) => invoke('audit:getBufferedEvents', runId),
   onAuditEvent: (cb: (event: unknown) => void) => subscribe('audit:event', cb),
 
   // Fix

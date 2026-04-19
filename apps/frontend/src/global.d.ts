@@ -161,6 +161,7 @@ declare global {
       onEvalEvent(cb: (event: EvalRunEvent) => void): () => void;
       sendEvalUserMessage(runId: string, message: string): Promise<void>;
       finishEvalRun(runId: string): Promise<void>;
+      getEvalBufferedEvents(runId: string): Promise<EvalRunEvent['event'][]>;
       getEvalFeedback(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string; iteration: number }): Promise<Record<string, string>>;
       saveEvalFeedback(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string; iteration: number; evalName: string; feedback: string }): Promise<void>;
       listEvalRunOutputs(runId: string): Promise<EvalRunOutputEntry[]>;
@@ -171,9 +172,11 @@ declare global {
       stopAudit(runId: string): Promise<void>;
       getAuditRun(runId: string): Promise<AuditRun | null>;
       sendAuditUserMessage(runId: string, message: string): Promise<void>;
+      finishAudit(runId: string): Promise<void>;
       listAuditHistory(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string }): Promise<AuditHistoryEntry[]>;
       readAuditReport(path: string): Promise<string | null>;
       listActiveAuditRuns(): Promise<AuditRun[]>;
+      getAuditBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onAuditEvent(cb: (event: AuditRunEvent) => void): () => void;
 
       // Fix

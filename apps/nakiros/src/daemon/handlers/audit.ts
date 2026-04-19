@@ -12,6 +12,8 @@ import {
   listAuditHistory,
   readAuditReport,
   listActiveAuditRuns,
+  finishAudit,
+  getAuditBufferedEvents,
 } from '../../services/audit-runner.js';
 import { eventBus } from '../event-bus.js';
 import { resolveEvalSkillDir } from './skill-dir.js';
@@ -59,4 +61,10 @@ export const auditHandlers: HandlerRegistry = {
   'audit:readReport': (args) => readAuditReport(args[0] as string),
 
   'audit:listActive': () => listActiveAuditRuns(),
+
+  'audit:finish': (args) => {
+    finishAudit(args[0] as string);
+  },
+
+  'audit:getBufferedEvents': (args) => getAuditBufferedEvents(args[0] as string),
 };

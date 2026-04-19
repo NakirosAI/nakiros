@@ -35,8 +35,10 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
   const [tab, setTab] = useState<Tab>('conversation');
   const [userInput, setUserInput] = useState('');
   const [sending, setSending] = useState(false);
-  const startTime = useRef(Date.now());
-  const [elapsed, setElapsed] = useState(0);
+  // Anchor elapsed on the run's real start time so re-opening mid-run doesn't
+  // reset the counter to zero.
+  const startTime = useRef(new Date(initialRun.startedAt).getTime());
+  const [elapsed, setElapsed] = useState(() => Math.max(0, Date.now() - new Date(initialRun.startedAt).getTime()));
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
   const liveScrollRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +57,20 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
     };
   }, [initialRun.runId]);
 
+  // Replay any events the daemon buffered for the in-flight turn so the stream
+  // is populated instead of starting empty when remounting mid-turn.
+  useEffect(() => {
+    void window.nakiros.getAuditBufferedEvents(initialRun.runId).then((buffered) => {
+      const now = Date.now();
+      const replay: LiveEvent[] = [];
+      for (const ev of buffered) {
+        if (ev.type === 'text') replay.push({ type: 'text', text: ev.text, ts: now });
+        else if (ev.type === 'tool') replay.push({ type: 'tool', name: ev.name, display: ev.display, ts: now });
+      }
+      if (replay.length > 0) setLiveEvents(replay);
+    });
+  }, [initialRun.runId]);
+
   // Subscribe to live events: capture text/tool for the live activity panel
   useEffect(() => {
     return window.nakiros.onAuditEvent((event: AuditRunEvent) => {
@@ -69,6 +85,9 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
         if (inner.status === 'starting') {
           setLiveEvents([]);
         }
+        // Reflect status changes immediately rather than waiting for the next
+        // poll — critical for Stop feedback, also correct for all other transitions.
+        setRun((prev) => ({ ...prev, status: inner.status }));
       } else if (inner.type === 'done' && inner.reportPath) {
         void window.nakiros.readAuditReport(inner.reportPath).then((content) => {
           if (content !== null) setReportContent(content);
@@ -122,6 +141,16 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
     await window.nakiros.stopAudit(initialRun.runId);
   }
 
+  /**
+   * User is satisfied with the archived audit report — discard the in-memory
+   * run + workdir (conversation + events) so the skill can be audited fresh
+   * next time. The report file in `{skill}/audits/` is kept.
+   */
+  async function handleFinish() {
+    await window.nakiros.finishAudit(initialRun.runId);
+    onClose();
+  }
+
   return (
     <div className="fixed inset-0 z-[300] flex flex-col bg-[var(--bg-base)]">
       {/* Header */}
@@ -150,6 +179,15 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
             >
               <Square size={12} />
               Stop
+            </button>
+          )}
+          {run.status === 'completed' && (
+            <button
+              onClick={handleFinish}
+              className="ml-2 flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-1 text-emerald-400 transition-colors hover:bg-emerald-500/30"
+            >
+              <CheckCircle size={12} />
+              Terminer
             </button>
           )}
           <div className="flex rounded-lg border border-[var(--line)] bg-[var(--bg-soft)]">

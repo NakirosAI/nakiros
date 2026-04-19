@@ -63,6 +63,7 @@ export const IPC_CHANNELS = {
   'eval:event': 'eval:event',
   'eval:sendUserMessage': 'eval:sendUserMessage',
   'eval:finishRun': 'eval:finishRun',
+  'eval:getBufferedEvents': 'eval:getBufferedEvents',
   'eval:getFeedback': 'eval:getFeedback',
   'eval:saveFeedback': 'eval:saveFeedback',
   'eval:listOutputs': 'eval:listOutputs',
@@ -73,10 +74,12 @@ export const IPC_CHANNELS = {
   'audit:stopRun': 'audit:stopRun',
   'audit:getRun': 'audit:getRun',
   'audit:sendUserMessage': 'audit:sendUserMessage',
+  'audit:finish': 'audit:finish',
   'audit:listHistory': 'audit:listHistory',
   'audit:readReport': 'audit:readReport',
   'audit:event': 'audit:event',
   'audit:listActive': 'audit:listActive',
+  'audit:getBufferedEvents': 'audit:getBufferedEvents',
 
   // Fix runner
   'fix:start': 'fix:start',

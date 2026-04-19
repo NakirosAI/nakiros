@@ -1,0 +1,10 @@
+{
+  "currentVersion": "v{{version}}",
+  "updateAvailable": "Mise à jour disponible",
+  "updateAvailableTooltip": "v{{latest}} disponible sur npm. Tu utilises v{{current}}. Clique pour voir les instructions.",
+  "upToDateTooltip": "À jour (v{{current}})",
+  "devTooltip": "Version locale — pas de comparaison avec npm",
+  "openNpm": "Voir sur npm",
+  "updateInstructions": "Met à jour avec : npm install -g @nakirosai/nakiros@latest, puis relance le daemon.",
+  "dismiss": "OK"
+}

@@ -214,6 +214,11 @@ const client = {
   saveBundledSkillFile: (skillName: string, relativePath: string, content: string) =>
     invoke('nakiros:saveBundledSkillFile', skillName, relativePath, content),
   promoteBundledSkill: (skillName: string) => invoke('nakiros:promoteBundledSkill', skillName),
+  listBundledSkillConflicts: () => invoke('nakiros:listBundledSkillConflicts'),
+  resolveBundledSkillConflict: (skillName: string, resolution: string) =>
+    invoke('nakiros:resolveBundledSkillConflict', skillName, resolution),
+  readBundledSkillConflictDiff: (skillName: string, relativePath: string) =>
+    invoke('nakiros:readBundledSkillConflictDiff', skillName, relativePath),
 
   // Claude global skills
   listClaudeGlobalSkills: () => invoke('claudeGlobal:listSkills'),
@@ -262,6 +267,8 @@ const client = {
   listActiveFixRuns: () => invoke('fix:listActive'),
   getFixBufferedEvents: (runId: string) => invoke('fix:getBufferedEvents', runId),
   onFixEvent: (cb: (event: unknown) => void) => subscribe('fix:event', cb),
+  listFixDiff: (runId: string) => invoke('fix:listDiff', runId),
+  readFixDiffFile: (runId: string, relativePath: string) => invoke('fix:readDiffFile', runId, relativePath),
 
   // Create
   startCreate: (request: unknown) => invoke('create:start', request),
@@ -272,6 +279,11 @@ const client = {
   listActiveCreateRuns: () => invoke('create:listActive'),
   getCreateBufferedEvents: (runId: string) => invoke('create:getBufferedEvents', runId),
   onCreateEvent: (cb: (event: unknown) => void) => subscribe('create:event', cb),
+  listCreateDiff: (runId: string) => invoke('create:listDiff', runId),
+  readCreateDiffFile: (runId: string, relativePath: string) => invoke('create:readDiffFile', runId, relativePath),
+
+  // Meta
+  getVersionInfo: (options?: { force?: boolean }) => invoke('meta:getVersionInfo', options ?? {}),
 
   // Skill agent temp files
   listSkillAgentTempFiles: (runId: string) => invoke('skillAgent:listTempFiles', runId),

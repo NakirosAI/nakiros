@@ -2,6 +2,9 @@ export const IPC_CHANNELS = {
   // Generic
   'shell:openPath': 'shell:openPath',
 
+  // Meta
+  'meta:getVersionInfo': 'meta:getVersionInfo',
+
   // Preferences
   'preferences:get': 'preferences:get',
   'preferences:getSystemLanguage': 'preferences:getSystemLanguage',
@@ -45,6 +48,9 @@ export const IPC_CHANNELS = {
   'nakiros:readBundledSkillFile': 'nakiros:readBundledSkillFile',
   'nakiros:saveBundledSkillFile': 'nakiros:saveBundledSkillFile',
   'nakiros:promoteBundledSkill': 'nakiros:promoteBundledSkill',
+  'nakiros:listBundledSkillConflicts': 'nakiros:listBundledSkillConflicts',
+  'nakiros:resolveBundledSkillConflict': 'nakiros:resolveBundledSkillConflict',
+  'nakiros:readBundledSkillConflictDiff': 'nakiros:readBundledSkillConflictDiff',
 
   // Unified binary/asset file reader (works across project/nakiros-bundled/claude-global scopes)
   'skill:readFileAsDataUrl': 'skill:readFileAsDataUrl',
@@ -93,6 +99,8 @@ export const IPC_CHANNELS = {
   'fix:getBenchmarks': 'fix:getBenchmarks',
   'fix:listActive': 'fix:listActive',
   'fix:getBufferedEvents': 'fix:getBufferedEvents',
+  'fix:listDiff': 'fix:listDiff',
+  'fix:readDiffFile': 'fix:readDiffFile',
 
   // Create runner — thin mirror of fix:* with different temp-workdir seeding and sync-back policy.
   'create:start': 'create:start',
@@ -103,6 +111,8 @@ export const IPC_CHANNELS = {
   'create:event': 'create:event',
   'create:listActive': 'create:listActive',
   'create:getBufferedEvents': 'create:getBufferedEvents',
+  'create:listDiff': 'create:listDiff',
+  'create:readDiffFile': 'create:readDiffFile',
 
   // Draft files (shared by fix + create — reads from the run's temp workdir)
   'skillAgent:listTempFiles': 'skillAgent:listTempFiles',

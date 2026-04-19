@@ -1,0 +1,106 @@
+{
+  "back": "Back",
+  "title": {
+    "create": "Create",
+    "fix": "Fix"
+  },
+  "header": {
+    "runEvalsTooltip": "Run the skill's evals against the in-progress fix copy",
+    "evaluating": "Evaluating…",
+    "runEvals": "Run evals",
+    "openEvalsTooltip": "Reopen the eval runs panel",
+    "openEvals": "Open evals ({{count}})",
+    "discardTooltip": "Abandon this fix session — discard all temp changes",
+    "discard": "Discard",
+    "syncTooltip": {
+      "create": "Create the skill — copy the temp workdir into the skill directory",
+      "fix": "Sync the temp workdir back to the real skill directory"
+    },
+    "syncLabel": {
+      "create": "Create skill",
+      "fix": "Sync to skill"
+    }
+  },
+  "prompts": {
+    "syncCreate": "Create the skill \"{{name}}\" from the current temp workdir? This copies every file produced by the agent into the new skill directory.",
+    "syncFix": "Sync the current fix changes to the real skill \"{{name}}\"? This copies the temp workdir onto the real skill directory.",
+    "discardCreate": "Discard this create session? The draft skill will be lost.",
+    "discardFix": "Discard this fix session? All changes in the temp workdir will be lost."
+  },
+  "errors": {
+    "sendFailed": "Failed to send: {{message}}",
+    "syncFailed": "Failed to sync: {{message}}",
+    "evalsStartFailed": "Failed to start evals: {{message}}",
+    "heading": "Error"
+  },
+  "input": {
+    "waitingCreate": "Reply to the agent, then click \"Create skill\" when the draft is ready or \"Discard\" to abandon.",
+    "waitingFix": "Reply to iterate, Run evals to validate, then Sync to skill or Discard",
+    "placeholderRunning": "Wait for the agent to finish the current turn...",
+    "placeholderIdle": "Type your response... (⌘/Ctrl+Enter to send)",
+    "send": "Send"
+  },
+  "status": {
+    "completed": "completed",
+    "failed": "failed",
+    "stopped": "stopped",
+    "waiting": "waiting"
+  },
+  "units": {
+    "tokens": "tok"
+  },
+  "live": {
+    "streaming": "Streaming…",
+    "events_one": "{{count}} event",
+    "events_other": "{{count}} events",
+    "waitingFirstChunk": "Waiting for first chunk..."
+  },
+  "benchmarks": {
+    "heading": "Benchmarks",
+    "realLabel": "Real skill",
+    "tempLabel": "In-progress fix",
+    "deltaTooltip": "Delta pass-rate (temp vs real)",
+    "refreshTooltip": "Refresh benchmarks",
+    "running": "Running…",
+    "refresh": "Refresh",
+    "iteration": "iter {{iteration}}"
+  },
+  "draftFiles": {
+    "heading": "Draft files ({{count}})",
+    "hintHide": "— click to hide",
+    "hintPreview": "— click to preview what will be written",
+    "ipcErrorTitle": "IPC error",
+    "ipcErrorHint": "The main process likely needs a restart — quit and relaunch the app.",
+    "emptyList": "No files written yet. Poll refreshes every 3s while the panel is open.",
+    "selectFile": "Select a file.",
+    "loading": "Loading…",
+    "missing": "File no longer exists. The agent may have moved or deleted it.",
+    "binary": "Binary file ({{size}}). Preview disabled."
+  },
+  "tabs": {
+    "conversation": "Conversation",
+    "review": "Review changes"
+  },
+  "review": {
+    "loading": "Computing diff…",
+    "listFailed": "Failed to list changes: {{message}}",
+    "emptyFix": "No changes yet — the agent hasn't written anything different from the real skill.",
+    "emptyCreate": "No files produced yet — the agent hasn't written anything in the workdir.",
+    "filesPanelTitle": "Files",
+    "originalColumn": "Before (current skill)",
+    "modifiedColumn": "After (in progress)",
+    "missingFile": "— file missing",
+    "binaryNotice": "Binary file — diff cannot be displayed.",
+    "identicalNotice": "No differences on this file.",
+    "diffLoading": "Loading diff…",
+    "diffFailed": "Failed to read diff: {{message}}",
+    "pickFile": "Select a file to view the diff.",
+    "sideAdded": "Added",
+    "sideRemoved": "Removed",
+    "sideModified": "Modified",
+    "addedLines_one": "+{{count}}",
+    "addedLines_other": "+{{count}}",
+    "removedLines_one": "-{{count}}",
+    "removedLines_other": "-{{count}}"
+  }
+}

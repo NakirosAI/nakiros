@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Project, AppPreferences } from '@nakiros/shared';
+import type { Project, AppPreferences, BundledSkillConflict } from '@nakiros/shared';
 import Home from './views/Home';
 import ScanView from './views/ScanView';
 import Dashboard from './views/Dashboard';
 import NakirosSkillsView from './views/NakirosSkillsView';
 import GlobalSkillsView from './views/GlobalSkillsView';
+import BundledSkillConflictsView from './views/BundledSkillConflictsView';
 import { resolveLanguage } from './utils/language';
 import i18n from './i18n/index';
 import { PreferencesProvider } from './hooks/usePreferences';
@@ -15,10 +16,6 @@ const FALLBACK_PREFERENCES: AppPreferences = {
   theme: 'dark',
   language: 'system',
   updatedAt: '',
-  agentProvider: 'claude',
-  agentChannel: 'stable',
-  desktopNotificationsEnabled: true,
-  desktopNotificationMinDurationSeconds: 60,
 };
 
 type View =
@@ -37,6 +34,8 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<AppPreferences>(FALLBACK_PREFERENCES);
+  const [bundledConflicts, setBundledConflicts] = useState<BundledSkillConflict[]>([]);
+  const [bundledConflictsDismissed, setBundledConflictsDismissed] = useState(false);
 
   async function boot() {
     try {
@@ -46,13 +45,17 @@ export default function App() {
         language: prefs.language ?? 'system',
         updatedAt: prefs.updatedAt ?? '',
         mcpServerUrl: prefs.mcpServerUrl,
-        agentProvider: prefs.agentProvider ?? 'claude',
-        agentChannel: prefs.agentChannel ?? 'stable',
-        desktopNotificationsEnabled: prefs.desktopNotificationsEnabled !== false,
-        desktopNotificationMinDurationSeconds: prefs.desktopNotificationMinDurationSeconds ?? 60,
       };
       setPreferences(resolvedPrefs);
       void i18n.changeLanguage(resolveLanguage(resolvedPrefs.language));
+
+      // Surface any bundled-skill update conflicts the daemon detected at boot.
+      try {
+        const conflicts = await window.nakiros.listBundledSkillConflicts();
+        setBundledConflicts(conflicts);
+      } catch (err) {
+        console.error('[App] listBundledSkillConflicts failed', err);
+      }
 
       // Try loading projects from SQLite
       const savedProjects = await window.nakiros.listProjects();
@@ -151,80 +154,98 @@ export default function App() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
-  if (view.name === 'loading') {
+  const showConflictsView =
+    !bundledConflictsDismissed && bundledConflicts.length > 0 && view.name !== 'loading';
+  if (showConflictsView) {
     return (
-      <div className="grid h-screen place-items-center font-semibold text-[var(--text-muted)]">
-        <div className="flex items-center gap-2.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />
-          {t('loadingWorkspace')}
-        </div>
-      </div>
-    );
-  }
-
-  if (view.name === 'scan') {
-    return <ScanView onComplete={handleScanComplete} />;
-  }
-
-  if (view.name === 'home') {
-    return (
-      <Home
-        projects={projects}
-        bootError={bootError ?? undefined}
-        onOpenProject={(id) => {
-          const project = projects.find((p) => p.id === id);
-          if (project) openProject(project);
+      <BundledSkillConflictsView
+        conflicts={bundledConflicts}
+        onClose={() => setBundledConflictsDismissed(true)}
+        onResolved={(skillName) => {
+          setBundledConflicts((prev) => prev.filter((c) => c.skillName !== skillName));
         }}
-        onRescan={handleRescan}
-        onDismissProject={handleDismissProject}
-        onOpenNakirosSkills={() => setView({ name: 'nakiros-skills' })}
-        onOpenGlobalSkills={() => setView({ name: 'global-skills' })}
       />
     );
   }
 
-  if (view.name === 'nakiros-skills') {
-    return <NakirosSkillsView onBack={() => setView({ name: 'home' })} />;
-  }
+  function renderView() {
+    if (view.name === 'loading') {
+      return (
+        <div className="grid h-screen place-items-center font-semibold text-[var(--text-muted)]">
+          <div className="flex items-center gap-2.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />
+            {t('loadingWorkspace')}
+          </div>
+        </div>
+      );
+    }
 
-  if (view.name === 'global-skills') {
-    return <GlobalSkillsView onBack={() => setView({ name: 'home' })} />;
-  }
+    if (view.name === 'scan') {
+      return <ScanView onComplete={handleScanComplete} />;
+    }
 
-  const project = activeProjectId
-    ? projects.find((p) => p.id === activeProjectId)
-    : undefined;
-  const openedProjects = openedProjectIds
-    .map((id) => projects.find((p) => p.id === id))
-    .filter((p): p is Project => Boolean(p));
-
-  if (!project) {
-    return <div className="p-5 text-[var(--text-muted)]">{t('loadingWorkspace')}</div>;
-  }
-
-  return (
-    <PreferencesProvider
-      preferences={preferences}
-      updatePreferences={handlePreferencesChange}
-    >
-      <ProjectProvider
-        project={project}
-        openProjects={openedProjects}
-        activeProjectId={project.id}
-        allProjects={projects}
-        openProjectTab={handleOpenProjectTab}
-        closeProjectTab={handleCloseProjectTab}
-      >
-        <Dashboard
-          onGoHome={() => {
-            void window.nakiros.listProjects().then((fresh) => {
-              setProjects(fresh);
-              setOpenedProjectIds((prev) => prev.filter((id) => fresh.some((p) => p.id === id)));
-            });
-            setView({ name: 'home' });
+    if (view.name === 'home') {
+      return (
+        <Home
+          projects={projects}
+          bootError={bootError ?? undefined}
+          onOpenProject={(id) => {
+            const project = projects.find((p) => p.id === id);
+            if (project) openProject(project);
           }}
+          onRescan={handleRescan}
+          onDismissProject={handleDismissProject}
+          onOpenNakirosSkills={() => setView({ name: 'nakiros-skills' })}
+          onOpenGlobalSkills={() => setView({ name: 'global-skills' })}
         />
-      </ProjectProvider>
-    </PreferencesProvider>
-  );
+      );
+    }
+
+    if (view.name === 'nakiros-skills') {
+      return <NakirosSkillsView onBack={() => setView({ name: 'home' })} />;
+    }
+
+    if (view.name === 'global-skills') {
+      return <GlobalSkillsView onBack={() => setView({ name: 'home' })} />;
+    }
+
+    const project = activeProjectId
+      ? projects.find((p) => p.id === activeProjectId)
+      : undefined;
+    const openedProjects = openedProjectIds
+      .map((id) => projects.find((p) => p.id === id))
+      .filter((p): p is Project => Boolean(p));
+
+    if (!project) {
+      return <div className="p-5 text-[var(--text-muted)]">{t('loadingWorkspace')}</div>;
+    }
+
+    return (
+      <PreferencesProvider
+        preferences={preferences}
+        updatePreferences={handlePreferencesChange}
+      >
+        <ProjectProvider
+          project={project}
+          openProjects={openedProjects}
+          activeProjectId={project.id}
+          allProjects={projects}
+          openProjectTab={handleOpenProjectTab}
+          closeProjectTab={handleCloseProjectTab}
+        >
+          <Dashboard
+            onGoHome={() => {
+              void window.nakiros.listProjects().then((fresh) => {
+                setProjects(fresh);
+                setOpenedProjectIds((prev) => prev.filter((id) => fresh.some((p) => p.id === id)));
+              });
+              setView({ name: 'home' });
+            }}
+          />
+        </ProjectProvider>
+      </PreferencesProvider>
+    );
+  }
+
+  return renderView();
 }

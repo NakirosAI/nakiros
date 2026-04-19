@@ -166,6 +166,7 @@ declare global {
       saveEvalFeedback(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string; iteration: number; evalName: string; feedback: string }): Promise<void>;
       listEvalRunOutputs(runId: string): Promise<EvalRunOutputEntry[]>;
       readEvalRunOutput(runId: string, relativePath: string): Promise<string | null>;
+      readEvalRunDiffPatch(runId: string): Promise<string | null>;
 
       // Audit
       startAudit(request: StartAuditRequest): Promise<AuditRun>;

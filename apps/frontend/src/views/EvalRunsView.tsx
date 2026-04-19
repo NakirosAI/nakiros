@@ -464,6 +464,8 @@ function RunDetail({
 
         {isTerminal && <GeneratedOutputsPanel runId={run.runId} status={run.status} />}
 
+        {isTerminal && run.usesSandbox && <SandboxDiffPanel runId={run.runId} />}
+
         {/* Human feedback panel — visible once a run is terminal (not while running) */}
         {isTerminal && (
           <div className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-3">
@@ -771,6 +773,70 @@ function GeneratedOutputsPanel({ runId, status }: { runId: string; status: EvalR
             <div className="text-xs text-[var(--text-muted)]">(unable to read file)</div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Renders the `git diff HEAD` captured from a run's sandbox — the artefact of
+ * "what the skill would have changed if applied to the real project". Shown
+ * only for runs that used a sandbox (usesSandbox=true); for those, the diff
+ * is the only record of code-level modifications the agent made.
+ */
+function SandboxDiffPanel({ runId }: { runId: string }) {
+  const [patch, setPatch] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = () => {
+    setLoading(true);
+    window.nakiros
+      .readEvalRunDiffPatch(runId)
+      .then((p) => setPatch(p))
+      .catch(() => setPatch(null))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId]);
+
+  const isEmpty = !loading && (patch === null || patch.trim().length === 0);
+
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--bg-card)]">
+      <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
+        <div className="flex items-center gap-2 text-xs">
+          <FileText size={12} className="text-amber-400" />
+          <span className="font-semibold text-[var(--text-primary)]">Sandbox diff</span>
+          <span className="text-[var(--text-muted)]">— git diff HEAD of the eval worktree</span>
+        </div>
+        <button
+          onClick={refresh}
+          className="flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--bg-base)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+        >
+          <RefreshCw size={10} />
+          Refresh
+        </button>
+      </div>
+      <div className="p-3">
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <Loader2 size={12} className="animate-spin" />
+            Loading diff…
+          </div>
+        )}
+        {!loading && isEmpty && (
+          <div className="text-xs text-[var(--text-muted)]">
+            No changes — the agent did not modify any tracked files in the sandbox.
+          </div>
+        )}
+        {!loading && !isEmpty && patch !== null && (
+          <pre className="max-h-[500px] overflow-y-auto whitespace-pre break-all font-mono text-[11px] text-[var(--text-primary)]">
+            {patch}
+          </pre>
+        )}
       </div>
     </div>
   );

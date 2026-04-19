@@ -10,8 +10,13 @@ import { cleanupEvalArtifacts } from './eval-artifact-cleanup.js';
 import {
   EventLog,
   buildClaudeArgs,
+  captureSandboxDiff,
+  createEvalSandbox,
   deleteClaudeProjectEntry,
+  destroyEvalSandbox,
+  findGitRoot,
   generateRunId,
+  listSandboxUntracked,
   persistRunJson,
   spawnClaudeTurn,
 } from './runner-core/index.js';
@@ -37,6 +42,13 @@ interface RunEntry {
   onEvent: (event: EvalRunEvent) => void;
   killed: boolean;
   eventLog: EventLog<EvalRunEvent['event']>;
+  /**
+   * Git-worktree sandbox used to isolate code-modifying skills from the real
+   * project. `null` when the skill's git root couldn't be found (bundled,
+   * global, or non-git project) — in that case the run executes in the
+   * artefact directory directly (legacy behaviour).
+   */
+  sandbox: { path: string; gitRoot: string } | null;
 }
 
 const runs = new Map<string, RunEntry>();
@@ -64,54 +76,103 @@ function computeNextIteration(skillDir: string): number {
   }
 }
 
-function prepareEvalWorkdir(
+/**
+ * Prepare the artefact directory — where grading, timing, run.json, the copied
+ * outputs, diff.patch and events.jsonl are persisted. Always lives inside the
+ * skill's workspace so users can compare iterations over time.
+ */
+function prepareArtifactDir(
   skillDir: string,
   iteration: number,
   evalName: string,
   config: EvalRunConfig,
 ): string {
-  const workdir = join(skillDir, 'evals', 'workspace', `iteration-${iteration}`, `eval-${evalName}`, config);
-  mkdirSync(join(workdir, 'outputs'), { recursive: true });
-
-  // Create `.claude/settings.local.json` to auto-accept edits and scope tool permissions.
-  // For without_skill runs: deny the Skill tool so Claude cannot load any skill
-  // (even if auto-discovery would match one from ~/.claude/skills/).
-  const claudeDir = join(workdir, '.claude');
-  mkdirSync(claudeDir, { recursive: true });
-  const settingsPath = join(claudeDir, 'settings.local.json');
-  if (!existsSync(settingsPath)) {
-    const settings: {
-      permissions: {
-        defaultMode: string;
-        allow: string[];
-        deny?: string[];
-      };
-    } = {
-      permissions: {
-        defaultMode: 'acceptEdits',
-        allow: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
-      },
-    };
-    if (config === 'without_skill') {
-      settings.permissions.deny = ['Skill'];
-    }
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
-  }
-
-  return workdir;
+  const dir = join(skillDir, 'evals', 'workspace', `iteration-${iteration}`, `eval-${evalName}`, config);
+  mkdirSync(join(dir, 'outputs'), { recursive: true });
+  return dir;
 }
 
-function copyFixtures(skillDir: string, workdir: string, fixtureRelPaths: string[]): void {
+/**
+ * Write `.claude/settings.local.json` at `dir/.claude/` so the claude CLI
+ * running with `cwd=dir` auto-accepts edits and (for without_skill baselines)
+ * cannot invoke any skill even if auto-discovery would match one.
+ */
+function writeExecutionSettings(dir: string, config: EvalRunConfig): void {
+  const claudeDir = join(dir, '.claude');
+  mkdirSync(claudeDir, { recursive: true });
+  const settingsPath = join(claudeDir, 'settings.local.json');
+  if (existsSync(settingsPath)) return;
+  const settings: {
+    permissions: {
+      defaultMode: string;
+      allow: string[];
+      deny?: string[];
+    };
+  } = {
+    permissions: {
+      defaultMode: 'acceptEdits',
+      allow: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
+    },
+  };
+  if (config === 'without_skill') {
+    settings.permissions.deny = ['Skill'];
+  }
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+}
+
+function copyFixtures(skillDir: string, targetDir: string, fixtureRelPaths: string[]): void {
   for (const relPath of fixtureRelPaths) {
     const src = join(skillDir, relPath);
     if (!existsSync(src)) continue;
-    const dest = join(workdir, relPath);
+    const dest = join(targetDir, relPath);
     mkdirSync(join(dest, '..'), { recursive: true });
     try {
       cpSync(src, dest);
     } catch {
       // ignore
     }
+  }
+}
+
+/**
+ * After a turn finishes, copy every file the agent produced under
+ * `executionDir/outputs/` into `artifactDir/outputs/` so the grader + UI still
+ * find them at the canonical artefact location.
+ * No-op when executionDir === artifactDir (fallback mode — outputs are already
+ * in the artefact directory).
+ */
+function syncOutputsToArtifact(executionDir: string, artifactDir: string): void {
+  if (executionDir === artifactDir) return;
+  const src = join(executionDir, 'outputs');
+  if (!existsSync(src)) return;
+  const dest = join(artifactDir, 'outputs');
+  mkdirSync(dest, { recursive: true });
+  try {
+    cpSync(src, dest, { recursive: true });
+  } catch {
+    // best-effort
+  }
+}
+
+/**
+ * Save `git diff HEAD` of the sandbox + the list of untracked paths as a
+ * readable patch file inside the artefact directory. This is the artefact of
+ * "what this skill would have done to the project".
+ */
+function saveSandboxDiff(sandboxPath: string, artifactDir: string): void {
+  const diff = captureSandboxDiff(sandboxPath);
+  const untracked = listSandboxUntracked(sandboxPath);
+  let body = diff;
+  if (untracked.length > 0) {
+    const list = untracked.map((p) => `  ${p}`).join('\n');
+    body =
+      `# Untracked files created by the agent (not in HEAD):\n${list}\n\n` +
+      `# Diff of tracked files modified by the agent:\n${diff || '(no tracked changes)'}\n`;
+  }
+  try {
+    writeFileSync(join(artifactDir, 'diff.patch'), body, 'utf8');
+  } catch {
+    // best-effort
   }
 }
 
@@ -163,7 +224,11 @@ async function gradeScriptAssertion(
   }
 }
 
-async function gradeRun(run: SkillEvalRun, definition: SkillEvalDefinition): Promise<void> {
+async function gradeRun(
+  run: SkillEvalRun,
+  definition: SkillEvalDefinition,
+  scriptCwd: string,
+): Promise<void> {
   const assertionDefs = normalizeAssertions(definition.assertions);
 
   const lastAssistantText = run.turns
@@ -185,7 +250,10 @@ async function gradeRun(run: SkillEvalRun, definition: SkillEvalDefinition): Pro
   const results: AssertionResult[] = new Array(assertionDefs.length);
 
   for (const i of scriptIndices) {
-    results[i] = await gradeScriptAssertion(run.workdir, assertionDefs[i]);
+    // Scripts assert on the state the agent produced — in sandbox mode that's
+    // the worktree (modified tracked files + untracked); in fallback mode it's
+    // the artefact dir itself. `scriptCwd` is the right dir in either case.
+    results[i] = await gradeScriptAssertion(scriptCwd, assertionDefs[i]);
   }
 
   if (llmIndices.length > 0) {
@@ -315,13 +383,41 @@ export async function startEvalRuns(
   const includeBaseline = request.includeBaseline === true;
   const configs: EvalRunConfig[] = includeBaseline ? ['with_skill', 'without_skill'] : ['with_skill'];
 
+  // Detect the skill's enclosing git repo once — all runs in this batch share
+  // the same source. `null` when the skill lives outside a git repo (bundled,
+  // global, or non-git project): runs fall back to the legacy in-place mode.
+  const gitRoot = findGitRoot(skillDir);
+
   const createdRuns: SkillEvalRun[] = [];
   for (const def of selectedDefs) {
     for (const config of configs) {
-      const workdir = prepareEvalWorkdir(skillDir, iteration, def.name, config);
-      copyFixtures(skillDir, workdir, def.files);
+      const artifactDir = prepareArtifactDir(skillDir, iteration, def.name, config);
 
       const runId = generateRunId('run');
+
+      // Try to give the agent a git-worktree sandbox. Any failure (git missing,
+      // dirty state, permissions) is non-fatal — we degrade to running in the
+      // artefact directory, which is what eval-runner has always done.
+      let sandbox: { path: string; gitRoot: string } | null = null;
+      if (gitRoot) {
+        try {
+          const created = createEvalSandbox(gitRoot, `eval-${runId}`);
+          sandbox = { path: created.path, gitRoot: created.gitRoot };
+        } catch (err) {
+          console.warn(
+            `[eval-runner] Could not create git sandbox for ${runId} (falling back to in-place): ${(err as Error).message}`,
+          );
+        }
+      }
+
+      const executionDir = sandbox?.path ?? artifactDir;
+      // Fixtures + permission settings go where the agent will actually run.
+      copyFixtures(skillDir, executionDir, def.files);
+      writeExecutionSettings(executionDir, config);
+      // outputs/ in the execution dir — the agent writes here, we copy back
+      // to artefactDir on finalise so the grader + UI still find it.
+      mkdirSync(join(executionDir, 'outputs'), { recursive: true });
+
       const run: SkillEvalRun = {
         runId,
         skillName: request.skillName,
@@ -331,7 +427,9 @@ export async function startEvalRuns(
         status: 'queued',
         sessionId: null,
         scope: request.scope,
-        workdir,
+        workdir: artifactDir,
+        executionDir,
+        usesSandbox: sandbox !== null,
         prompt: def.prompt,
         mode: def.mode ?? 'autonomous',
         outputFiles: def.outputFiles,
@@ -345,7 +443,7 @@ export async function startEvalRuns(
       };
 
       const eventLog = new EventLog<EvalRunEvent['event']>({
-        workdir,
+        workdir: artifactDir,
         broadcast: (event) => options.onEvent({ runId, event }),
       });
 
@@ -355,6 +453,7 @@ export async function startEvalRuns(
         onEvent: options.onEvent,
         killed: false,
         eventLog,
+        sandbox,
       });
       writeRunJson(run);
       createdRuns.push(run);
@@ -461,7 +560,7 @@ async function executeTurn(
     prompt: userMessage,
     addDirs,
     resumeSessionId: isFirstTurn ? undefined : (run.sessionId ?? undefined),
-    // No skipPermissions: eval runs rely on workdir-scoped settings.local.json
+    // No skipPermissions: eval runs rely on execution-dir-scoped settings.local.json
     // so baseline (without_skill) runs can't load any skill.
   });
 
@@ -479,8 +578,12 @@ async function executeTurn(
   writeRunJson(run);
   entry.eventLog.emit({ type: 'status', status: 'running' });
 
+  // Run claude in the execution dir (git-worktree sandbox when available; the
+  // artefact dir itself when we fell back to the legacy mode).
+  const executionDir = run.executionDir ?? run.workdir;
+
   const result = await spawnClaudeTurn({
-    workdir: run.workdir,
+    workdir: executionDir,
     cliArgs,
     onChildSpawned: (c) => { entry.child = c; },
     isKilled: () => entry.killed,
@@ -512,20 +615,26 @@ async function executeTurn(
     run.status = 'failed';
     run.error = result.error;
     run.finishedAt = new Date().toISOString();
+    // Snapshot whatever partial state exists: copy outputs, freeze the diff,
+    // then drop the sandbox. Without this, a failed sandbox run would leave
+    // no trace of what the agent tried to do.
+    teardownSandbox(entry);
     writeRunJson(run);
     saveTimingJson(run);
     entry.eventLog.emit({ type: 'done', exitCode: result.exitCode, error: result.error ?? undefined });
     entry.eventLog.destroy();
-    // Iteration workdir stays (grading artefacts), but the Claude project
-    // entry is redundant once the run has failed — drop it.
-    deleteClaudeProjectEntry(run.workdir);
+    deleteClaudeProjectEntry(executionDir);
   }
 }
 
 function allOutputFilesExist(run: SkillEvalRun): boolean {
   if (run.outputFiles.length === 0) return false;
+  // Outputs live in the execution dir while the run is in flight (worktree or
+  // fallback). The grader reads them from the artefact dir AFTER finalisation
+  // because we copy-sync there.
+  const dir = run.executionDir ?? run.workdir;
   for (const file of run.outputFiles) {
-    if (!existsSync(join(run.workdir, 'outputs', file))) return false;
+    if (!existsSync(join(dir, 'outputs', file))) return false;
   }
   return true;
 }
@@ -539,7 +648,19 @@ async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Pr
   writeRunJson(run);
   entry.eventLog.emit({ type: 'status', status: 'grading' });
 
-  await gradeRun(run, definition);
+  const executionDirBeforeTeardown = run.executionDir ?? run.workdir;
+
+  // Step 1: bring the outputs to the artefact dir so the LLM judge (which
+  // reads `{workdir}/outputs/`) sees what the agent produced.
+  syncOutputsToArtifact(executionDirBeforeTeardown, run.workdir);
+
+  // Step 2: grade. Scripts run in the execution dir (sandbox still alive so
+  // assertions can see modified tracked files). LLM assertions use the
+  // artefact dir (outputs/ are there now).
+  await gradeRun(run, definition, executionDirBeforeTeardown);
+
+  // Step 3: freeze diff + drop the sandbox. Outputs were already synced above.
+  teardownSandbox(entry);
 
   run.status = 'completed';
   writeRunJson(run);
@@ -550,8 +671,8 @@ async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Pr
   // Conversation + events are superseded by grading.json; drop the replay log.
   entry.eventLog.destroy();
   // Claude-side project entry is redundant now that run.turns[] + grading.json
-  // capture everything meaningful. Keep the workdir (iteration artefact).
-  deleteClaudeProjectEntry(run.workdir);
+  // capture everything meaningful. Drop by the path the CLI actually ran in.
+  deleteClaudeProjectEntry(executionDirBeforeTeardown);
 
   try {
     const iterDir = deriveIterDir(run);
@@ -561,6 +682,28 @@ async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Pr
   }
 
   cleanupEvalArtifacts();
+}
+
+/**
+ * Copy outputs/ into the artefact directory, save diff.patch, and destroy the
+ * git worktree. Idempotent — safe to call multiple times (second call is a
+ * no-op because `entry.sandbox` has been cleared).
+ */
+function teardownSandbox(entry: RunEntry): void {
+  const executionDir = entry.run.executionDir ?? entry.run.workdir;
+  // 1. Copy whatever the agent produced into outputs/ so the grader sees it.
+  syncOutputsToArtifact(executionDir, entry.run.workdir);
+  // 2. If we're in sandbox mode, capture the git diff and drop the worktree.
+  if (entry.sandbox) {
+    saveSandboxDiff(entry.sandbox.path, entry.run.workdir);
+    destroyEvalSandbox(entry.sandbox.path);
+    entry.sandbox = null;
+    // From this point on the run's execution dir no longer exists. Point it
+    // at the artefact dir so subsequent reads (`getEvalBufferedEvents`,
+    // `run.json` inspection) resolve correctly.
+    entry.run.executionDir = entry.run.workdir;
+    entry.run.usesSandbox = true; // keep the signal for the UI
+  }
 }
 
 function deriveIterDir(run: SkillEvalRun): { skillDir: string; iterDir: string } | null {
@@ -661,10 +804,14 @@ export function stopRun(runId: string): void {
   if (entry.run.status === 'running' || entry.run.status === 'starting' || entry.run.status === 'queued') {
     entry.run.status = 'stopped';
     entry.run.finishedAt = new Date().toISOString();
+    // Preserve partial artefacts (outputs + diff) even on manual stop so the
+    // user can inspect what the agent managed to do before interruption.
+    const executionDirBeforeTeardown = entry.run.executionDir ?? entry.run.workdir;
+    teardownSandbox(entry);
     writeRunJson(entry.run);
     entry.eventLog.emit({ type: 'status', status: 'stopped' });
     entry.eventLog.destroy();
-    deleteClaudeProjectEntry(entry.run.workdir);
+    deleteClaudeProjectEntry(executionDirBeforeTeardown);
   }
 }
 

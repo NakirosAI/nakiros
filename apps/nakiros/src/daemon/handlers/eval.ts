@@ -173,4 +173,21 @@ export const evalHandlers: HandlerRegistry = {
       return null;
     }
   },
+
+  /**
+   * Return the git diff captured from this run's sandbox. Null when the run
+   * didn't use a sandbox (no git root) or when the diff file is absent.
+   */
+  'eval:readDiffPatch': (args): string | null => {
+    const runId = args[0] as string;
+    const run = getEvalRun(runId);
+    if (!run) throw new Error(`Run not found: ${runId}`);
+    const path = join(run.workdir, 'diff.patch');
+    if (!existsSync(path)) return null;
+    try {
+      return readFileSync(path, 'utf8');
+    } catch {
+      return null;
+    }
+  },
 };

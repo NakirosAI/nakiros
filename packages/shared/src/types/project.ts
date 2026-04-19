@@ -211,8 +211,19 @@ export interface SkillEvalRun {
   sessionId: string | null;
   /** Scope: whether launched from a project or from bundled Nakiros skills. */
   scope: 'project' | 'nakiros-bundled' | 'claude-global';
-  /** Absolute path to the eval working directory (where outputs/ lives). */
+  /** Absolute path to the eval artefact directory (grading.json, outputs/, diff.patch, run.json). */
   workdir: string;
+  /**
+   * Where the claude subprocess actually runs. Either a git worktree of the
+   * project root (when the skill lives inside a git repo — the safe sandbox
+   * mode for code-modifying skills) or the same path as `workdir` when no
+   * git repo was found (fallback to the legacy in-place behaviour).
+   *
+   * Null on runs created before this field existed.
+   */
+  executionDir?: string | null;
+  /** True when `executionDir` is a git worktree (diff.patch is meaningful for this run). */
+  usesSandbox?: boolean;
   /** Prompt text the agent is executing. */
   prompt: string;
   /** Eval execution mode. */

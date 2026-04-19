@@ -1,0 +1,10 @@
+{
+  "loading": "Loading conversations…",
+  "loadingMessages": "Loading messages…",
+  "heading": "Conversations ({{count}})",
+  "empty": "No conversations found for this project.",
+  "messageCount_one": "{{count}} message",
+  "messageCount_other": "{{count}} messages",
+  "toolsUsed_one": "{{count}} tool used",
+  "toolsUsed_other": "{{count}} tools used"
+}

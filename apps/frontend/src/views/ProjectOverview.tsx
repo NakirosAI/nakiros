@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function ProjectOverview({ project }: Props) {
-  const { t } = useTranslation('dashboard');
+  const { t } = useTranslation('overview');
   const [conversations, setConversations] = useState<ProjectConversation[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +30,7 @@ export default function ProjectOverview({ project }: Props) {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        Loading...
+        {t('loading')}
       </div>
     );
   }
@@ -44,23 +44,23 @@ export default function ProjectOverview({ project }: Props) {
       <div className="mb-8 grid grid-cols-4 gap-4">
         <StatCard
           icon={<MessageSquare size={18} />}
-          label="Sessions"
+          label={t('statSessions')}
           value={String(conversations.length)}
         />
         <StatCard
           icon={<Sparkles size={18} />}
-          label="Skills"
+          label={t('statSkills')}
           value={String(skills.length)}
         />
         <StatCard
           icon={<FolderOpen size={18} />}
-          label="Provider"
+          label={t('statProvider')}
           value={project.provider}
         />
         <StatCard
           icon={<Clock size={18} />}
-          label="Last activity"
-          value={project.lastActivityAt ? new Date(project.lastActivityAt).toLocaleDateString() : '—'}
+          label={t('statLastActivity')}
+          value={project.lastActivityAt ? new Date(project.lastActivityAt).toLocaleDateString() : t('lastActivityEmpty')}
         />
       </div>
 
@@ -68,7 +68,7 @@ export default function ProjectOverview({ project }: Props) {
       {skills.length > 0 && (
         <div className="mb-8">
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-            Skills ({skills.length})
+            {t('skillsHeading', { count: skills.length })}
           </h3>
           <div className="flex flex-wrap gap-2">
             {skills.map((skill) => (
@@ -79,9 +79,9 @@ export default function ProjectOverview({ project }: Props) {
                 <Sparkles size={14} className="text-[var(--primary)]" />
                 <span className="text-sm font-medium">{skill.name}</span>
                 <div className="flex gap-1">
-                  {skill.hasEvals && <Badge label="evals" />}
-                  {skill.hasReferences && <Badge label="refs" />}
-                  {skill.hasTemplates && <Badge label="tpl" />}
+                  {skill.hasEvals && <Badge label={t('badgeEvals')} />}
+                  {skill.hasReferences && <Badge label={t('badgeRefs')} />}
+                  {skill.hasTemplates && <Badge label={t('badgeTemplates')} />}
                 </div>
               </div>
             ))}
@@ -93,7 +93,7 @@ export default function ProjectOverview({ project }: Props) {
       {recentConversations.length > 0 && (
         <div>
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-            Recent conversations
+            {t('recentConversations')}
           </h3>
           <div className="flex flex-col gap-2">
             {recentConversations.map((conv) => (
@@ -110,10 +110,10 @@ export default function ProjectOverview({ project }: Props) {
                   </span>
                 </div>
                 <div className="mt-1 flex gap-3 text-xs text-[var(--text-muted)]">
-                  <span>{conv.messageCount} messages</span>
+                  <span>{t('messageCount', { count: conv.messageCount })}</span>
                   {conv.gitBranch && <span>{conv.gitBranch}</span>}
                   {conv.toolsUsed.length > 0 && (
-                    <span>{conv.toolsUsed.length} tools</span>
+                    <span>{t('toolCount', { count: conv.toolsUsed.length })}</span>
                   )}
                 </div>
               </div>

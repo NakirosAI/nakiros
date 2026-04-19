@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, ChevronRight, ChevronDown, File, Folder, Loader2, Play, Plus, Save, Search, Sparkles, CheckCircle, Wrench, XCircle, FlaskConical } from 'lucide-react';
 import clsx from 'clsx';
 import type { AuditRun, Project, Skill, SkillFileEntry, SkillEvalGrading, SkillEvalGradingRun } from '@nakiros/shared';
+import type { TFunction } from 'i18next';
 import { Checkbox, MarkdownViewer } from '../components/ui';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
@@ -16,6 +18,7 @@ interface Props {
 type SkillDetailTab = 'files' | 'evals' | 'audits';
 
 export default function SkillsView({ project }: Props) {
+  const { t } = useTranslation('skills');
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
@@ -169,7 +172,7 @@ export default function SkillsView({ project }: Props) {
       setActiveRuns({ runIds: response.runIds, iteration: response.iteration, skillName });
     } catch (err) {
       console.error(err);
-      alert(`Failed to start eval runs: ${(err as Error).message}`);
+      alert(t('alertEvalFailed', { message: (err as Error).message }));
     } finally {
       setStarting(false);
     }
@@ -186,7 +189,7 @@ export default function SkillsView({ project }: Props) {
       });
       setActiveAudit({ run, skillName });
     } catch (err) {
-      alert(`Failed to start audit: ${(err as Error).message}`);
+      alert(t('alertAuditFailed', { message: (err as Error).message }));
     } finally {
       setAuditing(false);
     }
@@ -203,7 +206,7 @@ export default function SkillsView({ project }: Props) {
       });
       setActiveFix({ run, skillName });
     } catch (err) {
-      alert(`Failed to start fix: ${(err as Error).message}`);
+      alert(t('alertFixFailed', { message: (err as Error).message }));
     } finally {
       setFixing(false);
     }
@@ -219,7 +222,7 @@ export default function SkillsView({ project }: Props) {
     if (creating || createNameInput == null) return;
     const name = createNameInput.trim().toLowerCase();
     if (!/^[a-z][a-z0-9-]*$/.test(name)) {
-      setCreateError('Use lowercase letters, numbers, and hyphens. Must start with a letter.');
+      setCreateError(t('modal.nameValidationError'));
       return;
     }
     setCreating(true);
@@ -307,7 +310,7 @@ export default function SkillsView({ project }: Props) {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        Loading skills...
+        {t('loading')}
       </div>
     );
   }
@@ -352,12 +355,12 @@ export default function SkillsView({ project }: Props) {
             )}
             title={
               activeAuditBySkill.has(skill.name)
-                ? 'An audit is already running for this skill — click to resume'
-                : 'Run an audit of this skill (uses nakiros-skill-factory)'
+                ? t('auditResumeTooltip')
+                : t('auditTooltip')
             }
           >
             {activeAuditBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-            {activeAuditBySkill.has(skill.name) ? 'Audit running' : auditing ? 'Starting...' : 'Audit'}
+            {activeAuditBySkill.has(skill.name) ? t('auditRunning') : auditing ? t('auditStarting') : t('audit')}
           </button>
 
           <button
@@ -375,12 +378,12 @@ export default function SkillsView({ project }: Props) {
             )}
             title={
               activeFixBySkill.has(skill.name)
-                ? 'A fix session is already running for this skill — click to resume'
-                : 'Apply fixes based on the latest audit + eval results + feedback'
+                ? t('fixResumeTooltip')
+                : t('fixTooltip')
             }
           >
             {activeFixBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
-            {activeFixBySkill.has(skill.name) ? 'Fix running' : fixing ? 'Starting...' : 'Fix'}
+            {activeFixBySkill.has(skill.name) ? t('fixRunning') : fixing ? t('fixStarting') : t('fix')}
           </button>
 
           {detailTab === 'evals' && skill.evals && skill.evals.definitions.length > 0 && (
@@ -391,19 +394,19 @@ export default function SkillsView({ project }: Props) {
                   className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white"
                 >
                   <Loader2 size={12} className="animate-spin" />
-                  Resume ({ongoingRunsBySkill.get(skill.name)!.runIds.length} running)
+                  {t('resumeEvals', { count: ongoingRunsBySkill.get(skill.name)!.runIds.length })}
                 </button>
               ) : (
                 <>
                   <label
                     className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--text-muted)]"
-                    title="Also run each eval without the skill loaded, to measure real skill value via delta"
+                    title={t('baselineTooltip')}
                   >
                     <Checkbox
                       checked={includeBaseline}
                       onCheckedChange={(checked) => setIncludeBaseline(checked === true)}
                     />
-                    Include baseline
+                    {t('includeBaseline')}
                   </label>
                   <button
                     onClick={() => handleRunEvals(skill.name)}
@@ -411,7 +414,7 @@ export default function SkillsView({ project }: Props) {
                     className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
                   >
                     <Play size={12} />
-                    {starting ? 'Starting...' : 'Run evals'}
+                    {starting ? t('starting') : t('runEvals')}
                   </button>
                 </>
               )}
@@ -421,15 +424,15 @@ export default function SkillsView({ project }: Props) {
           {/* Tab switcher */}
           <div className="flex rounded-lg border border-[var(--line)] bg-[var(--bg-soft)]">
             <TabButton active={detailTab === 'files'} onClick={() => setDetailTab('files')}>
-              Files
+              {t('tabFiles')}
             </TabButton>
             <TabButton active={detailTab === 'evals'} onClick={() => setDetailTab('evals')}>
               <FlaskConical size={12} />
-              Evals {skill.evals && `(${skill.evals.definitions.length})`}
+              {t('tabEvals')} {skill.evals && `(${skill.evals.definitions.length})`}
             </TabButton>
             <TabButton active={detailTab === 'audits'} onClick={() => setDetailTab('audits')}>
               <Search size={12} />
-              Audits {skill.auditCount > 0 && `(${skill.auditCount})`}
+              {t('tabAudits')} {skill.auditCount > 0 && `(${skill.auditCount})`}
             </TabButton>
           </div>
         </div>
@@ -460,11 +463,11 @@ export default function SkillsView({ project }: Props) {
                       className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1 text-xs font-medium text-white transition-colors disabled:opacity-50"
                     >
                       <Save size={12} />
-                      {saving ? 'Saving...' : 'Save'}
+                      {saving ? t('saving') : t('save')}
                     </button>
                   </div>
                   {loadingFile ? (
-                    <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">Loading...</div>
+                    <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">{t('loadingFile')}</div>
                   ) : imageDataUrl ? (
                     <div className="flex flex-1 items-center justify-center overflow-auto bg-[var(--bg-muted)] p-6">
                       <img
@@ -475,7 +478,7 @@ export default function SkillsView({ project }: Props) {
                     </div>
                   ) : selectedFile && isImagePath(selectedFile) ? (
                     <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-                      Unable to display image
+                      {t('imageError')}
                     </div>
                   ) : isMarkdown && !dirty ? (
                     <div className="flex-1 overflow-y-auto p-6">
@@ -485,7 +488,7 @@ export default function SkillsView({ project }: Props) {
                     <textarea
                       value={fileContent}
                       onChange={(e) => setFileContent(e.target.value)}
-                      className="flex-1 resize-none border-none bg-[var(--bg-base)] p-4 font-mono text-sm text-[var(--text-primary)] outline-none"
+                      className="flex-1 resize-none border-none bg-[var(--bg)] p-4 font-mono text-sm text-[var(--text-primary)] outline-none"
                       spellCheck={false}
                     />
                   )}
@@ -493,7 +496,7 @@ export default function SkillsView({ project }: Props) {
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
                   <File size={32} />
-                  <p className="text-sm">Select a file to view</p>
+                  <p className="text-sm">{t('selectFile')}</p>
                 </div>
               )}
             </div>
@@ -501,7 +504,7 @@ export default function SkillsView({ project }: Props) {
         )}
 
         {detailTab === 'evals' && (
-          <EvalsPanel skill={skill} />
+          <EvalsPanel skill={skill} t={t} />
         )}
       </div>
     );
@@ -512,33 +515,33 @@ export default function SkillsView({ project }: Props) {
     <div className="flex-1 overflow-y-auto p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-[var(--text-primary)]">
-          Skills ({skills.length})
+          {t('heading', { count: skills.length })}
         </h2>
         <div className="flex items-center gap-2">
           {pendingCreate && (
             <button
               onClick={() => setActiveCreate({ run: pendingCreate, skillName: pendingCreate.skillName })}
               className="flex items-center gap-1.5 rounded-lg border border-emerald-400 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-500/20"
-              title={`Resume the in-progress draft: ${pendingCreate.skillName}`}
+              title={t('draftTooltip', { name: pendingCreate.skillName })}
             >
               <Loader2 size={12} className="animate-spin" />
-              Draft: {pendingCreate.skillName}
+              {t('draftInProgress', { name: pendingCreate.skillName })}
             </button>
           )}
           <button
             onClick={openCreateNameModal}
             disabled={creating}
             className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-            title="Create a new skill in this project using nakiros-skill-factory"
+            title={t('newSkillTooltip')}
           >
             <Plus size={12} />
-            {creating ? 'Starting...' : 'New skill'}
+            {creating ? t('creating') : t('newSkill')}
           </button>
         </div>
       </div>
       {skills.length === 0 ? (
         <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-          No skills found. Skills should be in <code className="rounded bg-[var(--bg-muted)] px-1">.claude/skills/</code>
+          {t('noSkills')} <code className="rounded bg-[var(--bg-muted)] px-1">.claude/skills/</code>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
@@ -561,7 +564,7 @@ export default function SkillsView({ project }: Props) {
                       className="flex cursor-pointer items-center gap-1 rounded bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-bold text-white hover:opacity-90"
                     >
                       <Loader2 size={10} className="animate-spin" />
-                      running
+                      {t('running')}
                     </span>
                   )}
                 </div>
@@ -575,11 +578,11 @@ export default function SkillsView({ project }: Props) {
                 </p>
               )}
               <div className="flex gap-1.5">
-                {skill.hasEvals && <Badge label={`${skill.evals?.definitions.length ?? 0} evals`} />}
-                {skill.auditCount > 0 && <Badge label={`${skill.auditCount} audits`} />}
-                {skill.hasReferences && <Badge label="refs" />}
-                {skill.hasTemplates && <Badge label="templates" />}
-                <Badge label={`${countFiles(skill.files)} files`} />
+                {skill.hasEvals && <Badge label={t('evalsBadge', { count: skill.evals?.definitions.length ?? 0 })} />}
+                {skill.auditCount > 0 && <Badge label={t('auditsBadge', { count: skill.auditCount })} />}
+                {skill.hasReferences && <Badge label={t('refsBadge')} />}
+                {skill.hasTemplates && <Badge label={t('templatesBadge')} />}
+                <Badge label={t('filesBadge', { count: countFiles(skill.files) })} />
               </div>
             </button>
           ))}
@@ -596,9 +599,9 @@ export default function SkillsView({ project }: Props) {
             className="w-[420px] rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-2 text-sm font-bold text-[var(--text-primary)]">Create a new skill</h3>
+            <h3 className="mb-2 text-sm font-bold text-[var(--text-primary)]">{t('modal.title')}</h3>
             <p className="mb-3 text-xs text-[var(--text-muted)]">
-              Pick a short, kebab-case name. The skill-factory will ask design questions before writing any file.
+              {t('modal.hint')}
             </p>
             <input
               type="text"
@@ -612,9 +615,9 @@ export default function SkillsView({ project }: Props) {
                 if (e.key === 'Enter') void submitCreateName();
                 else if (e.key === 'Escape') setCreateNameInput(null);
               }}
-              placeholder="data-migration"
+              placeholder={t('modal.placeholder')}
               disabled={creating}
-              className="w-full rounded border border-[var(--line)] bg-[var(--bg-base)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)] disabled:opacity-50"
+              className="w-full rounded border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)] disabled:opacity-50"
             />
             {createError && (
               <p className="mt-2 text-xs text-red-400">{createError}</p>
@@ -625,7 +628,7 @@ export default function SkillsView({ project }: Props) {
                 disabled={creating}
                 className="rounded px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-50"
               >
-                Cancel
+                {t('modal.cancel')}
               </button>
               <button
                 onClick={() => void submitCreateName()}
@@ -633,7 +636,7 @@ export default function SkillsView({ project }: Props) {
                 className="flex items-center gap-1.5 rounded bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
               >
                 {creating && <Loader2 size={12} className="animate-spin" />}
-                {creating ? 'Starting…' : 'Create'}
+                {creating ? t('modal.creating') : t('modal.create')}
               </button>
             </div>
           </div>
@@ -645,7 +648,7 @@ export default function SkillsView({ project }: Props) {
 
 // ─── Evals Panel ─────────────────────────────────────────────────────────────
 
-function EvalsPanel({ skill }: { skill: Skill }) {
+function EvalsPanel({ skill, t }: { skill: Skill; t: TFunction<'skills'> }) {
   const [expandedIter, setExpandedIter] = useState<number | null>(
     skill.evals?.iterations.length ? skill.evals.iterations[skill.evals.iterations.length - 1].number : null,
   );
@@ -655,7 +658,7 @@ function EvalsPanel({ skill }: { skill: Skill }) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
         <FlaskConical size={32} />
-        <p className="text-sm">No evals defined for this skill</p>
+        <p className="text-sm">{t('evals.noEvals')}</p>
       </div>
     );
   }
@@ -667,14 +670,14 @@ function EvalsPanel({ skill }: { skill: Skill }) {
       {/* Eval definitions summary */}
       <div className="mb-6">
         <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-          Eval Definitions ({definitions.length})
+          {t('evals.definitionsHeading', { count: definitions.length })}
         </h3>
         <div className="flex flex-col gap-1.5">
           {definitions.map((def) => (
             <div key={def.id} className="rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-[var(--text-primary)]">{def.name}</span>
-                <Badge label={`${def.assertions.length} assertions`} />
+                <Badge label={t('evals.assertionsBadge', { count: def.assertions.length })} />
               </div>
               <p className="mt-1 text-xs text-[var(--text-muted)]">{def.prompt}</p>
             </div>
@@ -686,7 +689,7 @@ function EvalsPanel({ skill }: { skill: Skill }) {
       {iterations.length > 0 && (
         <div>
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-            Iterations ({iterations.length})
+            {t('evals.iterationsHeading', { count: iterations.length })}
           </h3>
           <div className="flex flex-col gap-2">
             {[...iterations].reverse().map((iter) => {
@@ -703,25 +706,25 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                   >
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     <span className="text-sm font-semibold text-[var(--text-primary)]">
-                      Iteration {iter.number}
+                      {t('evals.iterationLabel', { number: iter.number })}
                     </span>
                     {isLatest && (
                       <span className="rounded bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-bold text-white">
-                        latest
+                        {t('evals.latestBadge')}
                       </span>
                     )}
                     {!hasBaseline && (
-                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400" title="No baseline (without_skill) — absolute pass rate alone is weak evidence">
-                        no baseline
+                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400" title={t('evals.noBaselineTooltip')}>
+                        {t('evals.noBaselineBadge')}
                       </span>
                     )}
                     <span className="ml-auto flex items-center gap-3 text-xs text-[var(--text-muted)]">
                       <span>
-                        with: <PassRateBadge rate={iter.withSkill.passRate} size="sm" />
+                        {t('evals.with')} <PassRateBadge rate={iter.withSkill.passRate} size="sm" />
                       </span>
                       {hasBaseline && iter.withoutSkill && (
                         <span>
-                          without: <PassRateBadge rate={iter.withoutSkill.passRate} size="sm" />
+                          {t('evals.without')} <PassRateBadge rate={iter.withoutSkill.passRate} size="sm" />
                         </span>
                       )}
                       {iter.delta.passRate != null && (
@@ -738,14 +741,14 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                       {/* Summary row */}
                       <div className="mb-3 grid grid-cols-3 gap-3 rounded bg-[var(--bg-muted)] p-3 text-xs">
                         <div>
-                          <div className="mb-0.5 text-[var(--text-muted)]">With skill</div>
+                          <div className="mb-0.5 text-[var(--text-muted)]">{t('evals.withSkill')}</div>
                           <div className="font-semibold">
                             {iter.withSkill.passedAssertions}/{iter.withSkill.totalAssertions} ·{' '}
                             {formatTokens(iter.withSkill.tokens)} · {formatDuration(iter.withSkill.durationMs)}
                           </div>
                         </div>
                         <div>
-                          <div className="mb-0.5 text-[var(--text-muted)]">Without skill (baseline)</div>
+                          <div className="mb-0.5 text-[var(--text-muted)]">{t('evals.withoutSkillBaseline')}</div>
                           <div className="font-semibold">
                             {iter.withoutSkill ? (
                               <>
@@ -753,12 +756,12 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                                 {formatTokens(iter.withoutSkill.tokens)} · {formatDuration(iter.withoutSkill.durationMs)}
                               </>
                             ) : (
-                              <span className="text-amber-400">not run — delta unavailable</span>
+                              <span className="text-amber-400">{t('evals.notRun')}</span>
                             )}
                           </div>
                         </div>
                         <div>
-                          <div className="mb-0.5 text-[var(--text-muted)]">Delta (skill value)</div>
+                          <div className="mb-0.5 text-[var(--text-muted)]">{t('evals.delta')}</div>
                           <div className="font-semibold">
                             {iter.delta.passRate != null
                               ? `${iter.delta.passRate > 0 ? '+' : ''}${(iter.delta.passRate * 100).toFixed(0)}%`
@@ -771,10 +774,10 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                       <table className="w-full">
                         <thead>
                           <tr className="text-left text-xs text-[var(--text-muted)]">
-                            <th className="pb-2 font-medium">Eval</th>
-                            <th className="pb-2 text-center font-medium">With</th>
-                            <th className="pb-2 text-center font-medium">Without</th>
-                            <th className="pb-2 text-right font-medium">Δ</th>
+                            <th className="pb-2 font-medium">{t('evals.table.name')}</th>
+                            <th className="pb-2 text-center font-medium">{t('evals.table.with')}</th>
+                            <th className="pb-2 text-center font-medium">{t('evals.table.without')}</th>
+                            <th className="pb-2 text-right font-medium">{t('evals.table.delta')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -782,6 +785,7 @@ function EvalsPanel({ skill }: { skill: Skill }) {
                             <EvalRow
                               key={grading.evalName}
                               grading={grading}
+                              t={t}
                               expanded={expandedEval === `${iter.number}-${grading.evalName}`}
                               onToggle={() =>
                                 setExpandedEval(
@@ -806,7 +810,7 @@ function EvalsPanel({ skill }: { skill: Skill }) {
   );
 }
 
-function EvalRow({ grading, expanded, onToggle }: { grading: SkillEvalGrading; expanded: boolean; onToggle(): void }) {
+function EvalRow({ grading, expanded, onToggle, t }: { grading: SkillEvalGrading; expanded: boolean; onToggle(): void; t: TFunction<'skills'> }) {
   const { withSkill, withoutSkill, deltaPassRate, humanFeedback } = grading;
 
   return (
@@ -821,7 +825,7 @@ function EvalRow({ grading, expanded, onToggle }: { grading: SkillEvalGrading; e
             {grading.evalName}
             {humanFeedback && (
               <span title={humanFeedback} className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] text-amber-400">
-                human review
+                {t('evals.humanReview')}
               </span>
             )}
           </div>
@@ -860,11 +864,11 @@ function EvalRow({ grading, expanded, onToggle }: { grading: SkillEvalGrading; e
         <tr>
           <td colSpan={4} className="pb-3">
             <div className="ml-5 mt-1 flex flex-col gap-3">
-              {withSkill && <RunBlock title="With skill" run={withSkill} />}
-              {withoutSkill && <RunBlock title="Without skill (baseline)" run={withoutSkill} />}
+              {withSkill && <RunBlock title={t('evals.withSkill')} run={withSkill} t={t} />}
+              {withoutSkill && <RunBlock title={t('evals.withoutSkillBaseline')} run={withoutSkill} t={t} />}
               {humanFeedback && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
-                  <div className="mb-1 font-semibold text-amber-400">Human review</div>
+                  <div className="mb-1 font-semibold text-amber-400">{t('evals.humanReviewHeading')}</div>
                   <p className="text-[var(--text-primary)]">{humanFeedback}</p>
                 </div>
               )}
@@ -876,7 +880,7 @@ function EvalRow({ grading, expanded, onToggle }: { grading: SkillEvalGrading; e
   );
 }
 
-function RunBlock({ title, run }: { title: string; run: SkillEvalGradingRun }) {
+function RunBlock({ title, run, t }: { title: string; run: SkillEvalGradingRun; t: TFunction<'skills'> }) {
   return (
     <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3">
       <div className="mb-2 flex items-center gap-2">
@@ -889,7 +893,7 @@ function RunBlock({ title, run }: { title: string; run: SkillEvalGradingRun }) {
         )}
         {run.graderModel && (
           <span className="ml-auto rounded bg-[var(--bg-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-            grader: {run.graderModel}
+            {t('evals.grader', { model: run.graderModel })}
           </span>
         )}
       </div>

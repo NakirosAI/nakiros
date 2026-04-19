@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, FileText, Search } from 'lucide-react';
 import type { AuditHistoryEntry } from '@nakiros/shared';
+import type { TFunction } from 'i18next';
 import { MarkdownViewer } from '../ui';
 
 interface Props {
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export default function SkillAuditsTab({ scope, projectId, skillName }: Props) {
+  const { t } = useTranslation('audit');
   const [history, setHistory] = useState<AuditHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<AuditHistoryEntry | null>(null);
@@ -42,7 +45,7 @@ export default function SkillAuditsTab({ scope, projectId, skillName }: Props) {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        Loading audit history...
+        {t('history.loading')}
       </div>
     );
   }
@@ -70,13 +73,13 @@ export default function SkillAuditsTab({ scope, projectId, skillName }: Props) {
         </div>
         <div className="flex-1 overflow-y-auto p-6">
           {loadingContent ? (
-            <div className="text-center text-[var(--text-muted)]">Loading...</div>
+            <div className="text-center text-[var(--text-muted)]">{t('history.loadingReport')}</div>
           ) : content ? (
             <div className="mx-auto max-w-[900px]">
               <MarkdownViewer content={content} />
             </div>
           ) : (
-            <div className="text-center text-[var(--text-muted)]">Could not read this audit report.</div>
+            <div className="text-center text-[var(--text-muted)]">{t('history.reportError')}</div>
           )}
         </div>
       </div>
@@ -88,12 +91,12 @@ export default function SkillAuditsTab({ scope, projectId, skillName }: Props) {
       <div className="mb-4 flex items-center gap-2">
         <Search size={16} className="text-[var(--primary)]" />
         <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-          Audit history ({history.length})
+          {t('history.heading', { count: history.length })}
         </h3>
       </div>
       {history.length === 0 ? (
         <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-          No audits yet. Click <strong>Audit</strong> in the header to run one.
+          {t('history.emptyPrefix')}<strong>{t('history.emptyBold')}</strong>{t('history.emptySuffix')}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
@@ -113,7 +116,7 @@ export default function SkillAuditsTab({ scope, projectId, skillName }: Props) {
                 </div>
               </div>
               <span className="shrink-0 text-xs text-[var(--text-muted)]">
-                {formatBytes(entry.sizeBytes)}
+                {formatBytes(entry.sizeBytes, t)}
               </span>
             </button>
           ))}
@@ -123,8 +126,8 @@ export default function SkillAuditsTab({ scope, projectId, skillName }: Props) {
   );
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+function formatBytes(n: number, t: TFunction<'audit'>): string {
+  if (n < 1024) return t('history.size.bytes', { count: n });
+  if (n < 1024 * 1024) return t('history.size.kb', { value: (n / 1024).toFixed(1) });
+  return t('history.size.mb', { value: (n / (1024 * 1024)).toFixed(1) });
 }

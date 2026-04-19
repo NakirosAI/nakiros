@@ -12,6 +12,8 @@ import {
   FileText,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { AuditRun, AuditRunEvent } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui';
 
@@ -30,6 +32,7 @@ type LiveEvent =
   | { type: 'tool'; name: string; display: string; ts: number };
 
 export default function AuditView({ scope, projectId, skillName, initialRun, onClose }: Props) {
+  const { t } = useTranslation('audit');
   const [run, setRun] = useState<AuditRun>(initialRun);
   const [reportContent, setReportContent] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('conversation');
@@ -131,7 +134,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
       await window.nakiros.sendAuditUserMessage(initialRun.runId, trimmed);
       setUserInput('');
     } catch (err) {
-      alert(`Failed to send: ${(err as Error).message}`);
+      alert(t('input.sendFailed', { message: (err as Error).message }));
     } finally {
       setSending(false);
     }
@@ -152,7 +155,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
   }
 
   return (
-    <div className="fixed inset-0 z-[300] flex flex-col bg-[var(--bg-base)]">
+    <div className="fixed inset-0 z-[300] flex flex-col bg-[var(--bg)]">
       {/* Header */}
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--line)] bg-[var(--bg-soft)] px-4">
         <button
@@ -160,25 +163,25 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
           className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
         >
           <ArrowLeft size={14} />
-          Back
+          {t('header.back')}
         </button>
         <Sparkles size={14} className="text-[var(--primary)]" />
         <span className="text-sm font-semibold text-[var(--text-primary)]">
-          Audit — {skillName}
+          {t('header.title', { skillName })}
         </span>
-        <StatusPill status={run.status} />
+        <StatusPill status={run.status} t={t} />
 
         <div className="ml-auto flex items-center gap-3 text-xs text-[var(--text-muted)]">
-          <span>{formatTokens(run.tokensUsed)}</span>
+          <span>{formatTokens(run.tokensUsed, t)}</span>
           <span>·</span>
-          <span>{formatDuration(isTerminal ? run.durationMs : elapsed)}</span>
+          <span>{formatDuration(isTerminal ? run.durationMs : elapsed, t)}</span>
           {isRunning && (
             <button
               onClick={handleStop}
               className="ml-2 flex items-center gap-1 rounded bg-red-500/20 px-2 py-1 text-red-400 transition-colors hover:bg-red-500/30"
             >
               <Square size={12} />
-              Stop
+              {t('header.stop')}
             </button>
           )}
           {run.status === 'completed' && (
@@ -187,13 +190,13 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
               className="ml-2 flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-1 text-emerald-400 transition-colors hover:bg-emerald-500/30"
             >
               <CheckCircle size={12} />
-              Terminer
+              {t('header.finish')}
             </button>
           )}
           <div className="flex rounded-lg border border-[var(--line)] bg-[var(--bg-soft)]">
             <TabButton active={tab === 'conversation'} onClick={() => setTab('conversation')}>
               <MessageSquare size={12} />
-              Conversation
+              {t('tabs.conversation')}
             </TabButton>
             <TabButton
               active={tab === 'report'}
@@ -201,7 +204,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
               disabled={!reportContent}
             >
               <FileText size={12} />
-              Report {reportContent ? '' : '(pending)'}
+              {reportContent ? t('tabs.report') : t('tabs.reportPending')}
             </TabButton>
           </div>
         </div>
@@ -215,6 +218,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
             liveEvents={liveEvents}
             liveScrollRef={liveScrollRef}
             isStreaming={isRunning}
+            t={t}
           />
         ) : reportContent ? (
           <div className="flex-1 overflow-y-auto p-6">
@@ -224,7 +228,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
           </div>
         ) : (
           <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-            Report not yet produced
+            {t('report.notYetProduced')}
           </div>
         )}
 
@@ -232,7 +236,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
           <div className="mx-4 mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
             <div className="mb-1 flex items-center gap-1.5 font-semibold">
               <AlertTriangle size={12} />
-              Error
+              {t('error.title')}
             </div>
             <pre className="whitespace-pre-wrap break-all font-mono">{run.error}</pre>
           </div>
@@ -244,7 +248,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
         <div className="border-t border-amber-500/30 bg-amber-500/5 p-3">
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-amber-400">
             <MessageSquare size={12} />
-            Agent is waiting for your input
+            {t('input.waitingForInput')}
           </div>
           <div className="flex gap-2">
             <textarea
@@ -253,7 +257,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleSend();
               }}
-              placeholder="Type your response... (⌘/Ctrl+Enter to send)"
+              placeholder={t('input.placeholder')}
               className="min-h-[60px] flex-1 resize-none rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
               autoFocus
             />
@@ -263,7 +267,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
               className="flex items-start gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
             >
               <Send size={12} />
-              Send
+              {t('input.send')}
             </button>
           </div>
         </div>
@@ -277,11 +281,13 @@ function ConversationPanel({
   liveEvents,
   liveScrollRef,
   isStreaming,
+  t,
 }: {
   run: AuditRun;
   liveEvents: LiveEvent[];
   liveScrollRef: React.RefObject<HTMLDivElement | null>;
   isStreaming: boolean;
+  t: TFunction<'audit'>;
 }) {
   // The last turn in run.turns is the user message of the current in-progress turn (if streaming).
   // Show it followed by the live event panel that aggregates streaming text + tool calls.
@@ -293,7 +299,7 @@ function ConversationPanel({
         ))}
 
         {isStreaming && (
-          <LiveActivity events={liveEvents} scrollRef={liveScrollRef} />
+          <LiveActivity events={liveEvents} scrollRef={liveScrollRef} t={t} />
         )}
       </div>
     </div>
@@ -339,20 +345,22 @@ function TurnBubble({ turn }: { turn: AuditRun['turns'][number] }) {
 function LiveActivity({
   events,
   scrollRef,
+  t,
 }: {
   events: LiveEvent[];
   scrollRef: React.RefObject<HTMLDivElement | null>;
+  t: TFunction<'audit'>;
 }) {
   return (
     <div className="mr-12 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary-soft)]/30 px-4 py-3">
       <div className="mb-2 flex items-center gap-2 text-xs text-[var(--primary)]">
         <Loader2 size={12} className="animate-spin" />
-        <span className="font-semibold">Streaming…</span>
-        <span className="text-[var(--text-muted)]">{events.length} events</span>
+        <span className="font-semibold">{t('live.streaming')}</span>
+        <span className="text-[var(--text-muted)]">{t('live.events', { count: events.length })}</span>
       </div>
-      <div ref={scrollRef} className="max-h-[400px] overflow-y-auto rounded bg-[var(--bg-base)] p-2">
+      <div ref={scrollRef} className="max-h-[400px] overflow-y-auto rounded bg-[var(--bg)] p-2">
         {events.length === 0 ? (
-          <span className="text-xs text-[var(--text-muted)]">Waiting for first chunk...</span>
+          <span className="text-xs text-[var(--text-muted)]">{t('live.waitingFirstChunk')}</span>
         ) : (
           <div className="flex flex-col gap-1.5 font-mono text-xs">
             {events.map((event, i) => (
@@ -384,17 +392,17 @@ function LiveEventLine({ event }: { event: LiveEvent }) {
   );
 }
 
-function StatusPill({ status }: { status: AuditRun['status'] }) {
+function StatusPill({ status, t }: { status: AuditRun['status']; t: TFunction<'audit'> }) {
   const conf =
     status === 'completed'
-      ? { icon: <CheckCircle size={12} />, label: 'completed', className: 'bg-emerald-500/20 text-emerald-400' }
+      ? { icon: <CheckCircle size={12} />, label: t('status.completed'), className: 'bg-emerald-500/20 text-emerald-400' }
       : status === 'failed'
-        ? { icon: <XCircle size={12} />, label: 'failed', className: 'bg-red-500/20 text-red-400' }
+        ? { icon: <XCircle size={12} />, label: t('status.failed'), className: 'bg-red-500/20 text-red-400' }
         : status === 'stopped'
-          ? { icon: <Square size={12} />, label: 'stopped', className: 'bg-[var(--bg-muted)] text-[var(--text-muted)]' }
+          ? { icon: <Square size={12} />, label: t('status.stopped'), className: 'bg-[var(--bg-muted)] text-[var(--text-muted)]' }
           : status === 'waiting_for_input'
-            ? { icon: <MessageSquare size={12} />, label: 'waiting', className: 'bg-amber-500/20 text-amber-400' }
-            : { icon: <Loader2 size={12} className="animate-spin" />, label: status, className: 'bg-[var(--primary-soft)] text-[var(--primary)]' };
+            ? { icon: <MessageSquare size={12} />, label: t('status.waiting'), className: 'bg-amber-500/20 text-amber-400' }
+            : { icon: <Loader2 size={12} className="animate-spin" />, label: t(`status.${status}` as 'status.running' | 'status.starting'), className: 'bg-[var(--primary-soft)] text-[var(--primary)]' };
 
   return (
     <span className={clsx('flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold', conf.className)}>
@@ -431,15 +439,15 @@ function TabButton({
   );
 }
 
-function formatTokens(n: number): string {
-  if (n < 1000) return `${n} tok`;
-  return `${(n / 1000).toFixed(1)}k tok`;
+function formatTokens(n: number, t: TFunction<'audit'>): string {
+  if (n < 1000) return t('tokens.short', { count: n });
+  return t('tokens.thousands', { value: (n / 1000).toFixed(1) });
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+function formatDuration(ms: number, t: TFunction<'audit'>): string {
+  if (ms < 1000) return t('duration.ms', { ms });
+  if (ms < 60000) return t('duration.seconds', { s: (ms / 1000).toFixed(1) });
   const min = Math.floor(ms / 60000);
   const sec = Math.floor((ms % 60000) / 1000);
-  return `${min}m${sec}s`;
+  return t('duration.minutes', { m: min, s: sec });
 }

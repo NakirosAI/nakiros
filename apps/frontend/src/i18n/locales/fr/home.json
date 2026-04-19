@@ -1,6 +1,6 @@
 {
   "title": "Nakiros",
-  "subtitle": "Analysez et améliorez vos équipes d’agents IA",
+  "subtitle": "Analyse et améliore tes équipes d'agents IA",
   "createWorkspace": "Créer un workspace",
   "createWorkspaceHint": "Configurer un nouveau projet guidé",
   "recent": "Workspaces récents",
@@ -12,5 +12,12 @@
   "showMore": "Voir {{count}} de plus",
   "showLess": "Voir moins",
   "repoCount_one": "{{count}} repo",
-  "repoCount_other": "{{count}} repos"
+  "repoCount_other": "{{count}} repos",
+  "nakirosSkills": "Nakiros Skills",
+  "globalSkills": "Global Skills",
+  "globalSkillsTooltip": "Skills installés dans ~/.claude/skills/ par l'utilisateur",
+  "rescan": "Rescanner",
+  "projects": "Projets",
+  "dismiss": "Ignorer ce projet",
+  "noProjects": "Aucun projet Claude Code détecté. Lance un rescan ou commence à utiliser Claude Code."
 }

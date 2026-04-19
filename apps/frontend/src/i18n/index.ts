@@ -16,6 +16,17 @@ import frTicket from './locales/fr/ticket.json';
 import frAgent from './locales/fr/agent.json';
 import frWorkspaceSetup from './locales/fr/workspace-setup.json';
 import frSpec from './locales/fr/spec.json';
+import frSkills from './locales/fr/skills.json';
+import frConversations from './locales/fr/conversations.json';
+import frRecommendations from './locales/fr/recommendations.json';
+import frScan from './locales/fr/scan.json';
+import frAudit from './locales/fr/audit.json';
+import frEvals from './locales/fr/evals.json';
+import frFix from './locales/fr/fix.json';
+import frNakirosSkills from './locales/fr/nakiros-skills.json';
+import frGlobalSkills from './locales/fr/global-skills.json';
+import frBundledConflicts from './locales/fr/bundled-conflicts.json';
+import frVersion from './locales/fr/version.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -32,6 +43,17 @@ import enTicket from './locales/en/ticket.json';
 import enAgent from './locales/en/agent.json';
 import enWorkspaceSetup from './locales/en/workspace-setup.json';
 import enSpec from './locales/en/spec.json';
+import enSkills from './locales/en/skills.json';
+import enConversations from './locales/en/conversations.json';
+import enRecommendations from './locales/en/recommendations.json';
+import enScan from './locales/en/scan.json';
+import enAudit from './locales/en/audit.json';
+import enEvals from './locales/en/evals.json';
+import enFix from './locales/en/fix.json';
+import enNakirosSkills from './locales/en/nakiros-skills.json';
+import enGlobalSkills from './locales/en/global-skills.json';
+import enBundledConflicts from './locales/en/bundled-conflicts.json';
+import enVersion from './locales/en/version.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -52,6 +74,17 @@ const resources = {
     agent: frAgent,
     'workspace-setup': frWorkspaceSetup,
     spec: frSpec,
+    skills: frSkills,
+    conversations: frConversations,
+    recommendations: frRecommendations,
+    scan: frScan,
+    audit: frAudit,
+    evals: frEvals,
+    fix: frFix,
+    'nakiros-skills': frNakirosSkills,
+    'global-skills': frGlobalSkills,
+    'bundled-conflicts': frBundledConflicts,
+    version: frVersion,
   },
   en: {
     common: enCommon,
@@ -69,6 +102,17 @@ const resources = {
     agent: enAgent,
     'workspace-setup': enWorkspaceSetup,
     spec: enSpec,
+    skills: enSkills,
+    conversations: enConversations,
+    recommendations: enRecommendations,
+    scan: enScan,
+    audit: enAudit,
+    evals: enEvals,
+    fix: enFix,
+    'nakiros-skills': enNakirosSkills,
+    'global-skills': enGlobalSkills,
+    'bundled-conflicts': enBundledConflicts,
+    version: enVersion,
   },
 };
 

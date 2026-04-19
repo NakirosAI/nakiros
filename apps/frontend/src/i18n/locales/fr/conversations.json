@@ -1,0 +1,10 @@
+{
+  "loading": "Chargement des conversations…",
+  "loadingMessages": "Chargement des messages…",
+  "heading": "Conversations ({{count}})",
+  "empty": "Aucune conversation trouvée pour ce projet.",
+  "messageCount_one": "{{count}} message",
+  "messageCount_other": "{{count}} messages",
+  "toolsUsed_one": "{{count}} outil utilisé",
+  "toolsUsed_other": "{{count}} outils utilisés"
+}

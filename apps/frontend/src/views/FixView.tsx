@@ -126,8 +126,13 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
         setLiveEvents((prev) => [...prev, { type: 'text', text: inner.text, ts: Date.now() }]);
       } else if (inner.type === 'tool') {
         setLiveEvents((prev) => [...prev, { type: 'tool', name: inner.name, display: inner.display, ts: Date.now() }]);
-      } else if (inner.type === 'status' && inner.status === 'starting') {
-        setLiveEvents([]);
+      } else if (inner.type === 'status') {
+        if (inner.status === 'starting') {
+          setLiveEvents([]);
+        }
+        // Mirror status changes into local state so Stop / completion etc.
+        // are reflected immediately without waiting for the 500ms poll.
+        setRun((prev) => ({ ...prev, status: inner.status }));
       }
     });
   }, [initialRun.runId]);

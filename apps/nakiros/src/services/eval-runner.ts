@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess, execFile } from 'child_process';
+import { type ChildProcess, execFile } from 'child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { promisify } from 'util';
@@ -7,11 +7,19 @@ import { gradeLlmAssertionsBatch, JUDGE_MODEL } from './eval-llm-grader.js';
 import { writeIterationBenchmark } from './eval-benchmark.js';
 import { cleanupEvalArtifacts } from './eval-artifact-cleanup.js';
 
+import {
+  EventLog,
+  buildClaudeArgs,
+  deleteClaudeProjectEntry,
+  generateRunId,
+  persistRunJson,
+  spawnClaudeTurn,
+} from './runner-core/index.js';
+
 import type {
   EvalRunConfig,
   EvalRunEvent,
   EvalRunStatus,
-  EvalRunTurn,
   SkillEvalAssertionDefinition,
   SkillEvalDefinition,
   SkillEvalRun,
@@ -28,17 +36,13 @@ interface RunEntry {
   child: ChildProcess | null;
   onEvent: (event: EvalRunEvent) => void;
   killed: boolean;
+  eventLog: EventLog<EvalRunEvent['event']>;
 }
 
 const runs = new Map<string, RunEntry>();
-let runCounter = 0;
 
 /** Default max number of claude subprocesses running in parallel. */
 const DEFAULT_MAX_CONCURRENT = 4;
-
-function generateRunId(): string {
-  return `run_${Date.now().toString(36)}_${(++runCounter).toString(36)}`;
-}
 
 // ─── Iteration helpers ──────────────────────────────────────────────────────
 
@@ -101,7 +105,6 @@ function copyFixtures(skillDir: string, workdir: string, fixtureRelPaths: string
   for (const relPath of fixtureRelPaths) {
     const src = join(skillDir, relPath);
     if (!existsSync(src)) continue;
-    // Mirror the directory structure inside the workdir
     const dest = join(workdir, relPath);
     mkdirSync(join(dest, '..'), { recursive: true });
     try {
@@ -112,31 +115,8 @@ function copyFixtures(skillDir: string, workdir: string, fixtureRelPaths: string
   }
 }
 
-// ─── Run lifecycle ──────────────────────────────────────────────────────────
-
-interface SpawnArgs {
-  prompt: string;
-  workdir: string;
-  addDirs: string[];
-  resumeSessionId?: string;
-}
-
-function buildClaudeArgs(args: SpawnArgs): string[] {
-  // No --dangerously-skip-permissions: permissions are scoped via settings.local.json in the workdir.
-  const cliArgs: string[] = ['--output-format', 'stream-json', '--verbose'];
-  for (const d of args.addDirs) {
-    cliArgs.push('--add-dir', d);
-  }
-  if (args.resumeSessionId) {
-    cliArgs.push('--resume', args.resumeSessionId);
-  }
-  cliArgs.push('--print', args.prompt);
-  return cliArgs;
-}
-
-function persistRunJson(run: SkillEvalRun): void {
-  const runJsonPath = join(run.workdir, 'run.json');
-  writeFileSync(runJsonPath, JSON.stringify(run, null, 2), 'utf8');
+function writeRunJson(run: SkillEvalRun): void {
+  persistRunJson(run.workdir, run);
 }
 
 function saveTimingJson(run: SkillEvalRun): void {
@@ -186,14 +166,12 @@ async function gradeScriptAssertion(
 async function gradeRun(run: SkillEvalRun, definition: SkillEvalDefinition): Promise<void> {
   const assertionDefs = normalizeAssertions(definition.assertions);
 
-  // Collect the last assistant text so LLM judges can reason when agent didn't write files
   const lastAssistantText = run.turns
     .filter((t) => t.role === 'assistant')
     .map((t) => t.content)
     .join('\n\n')
-    .slice(-8000); // cap size passed to judge
+    .slice(-8000);
 
-  // Partition assertions by type, keeping original positions so we can merge back in order
   const scriptIndices: number[] = [];
   const llmIndices: number[] = [];
   const manualIndices: number[] = [];
@@ -204,7 +182,6 @@ async function gradeRun(run: SkillEvalRun, definition: SkillEvalDefinition): Pro
     else manualIndices.push(i);
   }
 
-  // Grade scripts sequentially (fast), LLM assertions in a single batched judge spawn
   const results: AssertionResult[] = new Array(assertionDefs.length);
 
   for (const i of scriptIndices) {
@@ -284,8 +261,8 @@ export interface StartRunsOptions {
 }
 
 /**
- * Start a batch of eval runs for a skill. Runs execute sequentially.
- * Returns immediately with the iteration number and the list of runIds created (queued).
+ * Start a batch of eval runs for a skill. Runs execute with bounded concurrency.
+ * Returns immediately with the iteration number and the list of runIds created.
  */
 export async function startEvalRuns(
   request: StartEvalRunRequest,
@@ -338,15 +315,15 @@ export async function startEvalRuns(
   const includeBaseline = request.includeBaseline === true;
   const configs: EvalRunConfig[] = includeBaseline ? ['with_skill', 'without_skill'] : ['with_skill'];
 
-  // Create all runs in `queued` state first
   const createdRuns: SkillEvalRun[] = [];
   for (const def of selectedDefs) {
     for (const config of configs) {
       const workdir = prepareEvalWorkdir(skillDir, iteration, def.name, config);
       copyFixtures(skillDir, workdir, def.files);
 
+      const runId = generateRunId('run');
       const run: SkillEvalRun = {
-        runId: generateRunId(),
+        runId,
         skillName: request.skillName,
         evalName: def.name,
         iteration,
@@ -367,18 +344,23 @@ export async function startEvalRuns(
         error: null,
       };
 
+      const eventLog = new EventLog<EvalRunEvent['event']>({
+        workdir,
+        broadcast: (event) => options.onEvent({ runId, event }),
+      });
+
       runs.set(run.runId, {
         run,
         child: null,
         onEvent: options.onEvent,
         killed: false,
+        eventLog,
       });
-      persistRunJson(run);
+      writeRunJson(run);
       createdRuns.push(run);
     }
   }
 
-  // Execute with bounded concurrency (max N runs in parallel)
   const maxConcurrent = request.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
 
   void (async () => {
@@ -398,8 +380,9 @@ export async function startEvalRuns(
           entry.run.status = 'failed';
           entry.run.error = msg;
           entry.run.finishedAt = new Date().toISOString();
-          persistRunJson(entry.run);
-          options.onEvent({ runId: entry.run.runId, event: { type: 'done', exitCode: 1, error: msg } });
+          writeRunJson(entry.run);
+          entry.eventLog.emit({ type: 'done', exitCode: 1, error: msg });
+          entry.eventLog.destroy();
         }
       }
     };
@@ -410,17 +393,12 @@ export async function startEvalRuns(
 
     await Promise.all(workers);
 
-    // Note: interactive runs that stay in waiting_for_input don't count here —
-    // they are finalized (and benchmarked again) when the user clicks Finish or
-    // output files appear. For fully-autonomous batches, all runs are terminal now.
     try {
       writeIterationBenchmark(skillDir, request.skillName, iteration);
     } catch (err) {
       console.error('[eval-runner] Failed to write benchmark.json:', err);
     }
 
-    // Sweep up any stray `nakiros-eval-*` skills that might have been created
-    // in the user's skill dirs despite our prompt instructions.
     cleanupEvalArtifacts();
   })();
 
@@ -431,14 +409,9 @@ export async function startEvalRuns(
 }
 
 async function executeRun(entry: RunEntry, definition: SkillEvalDefinition, skillDir: string): Promise<void> {
-  const { run, onEvent } = entry;
-
-  // No HOME isolation. For without_skill baselines we deny the Skill tool in the
-  // workdir settings (see prepareEvalWorkdir) so Claude cannot invoke any skill
-  // even if auto-discovery would otherwise pick one up.
+  const { run } = entry;
 
   // For with_skill runs, invoke the skill explicitly on the first turn via the /skill-name pattern.
-  // This ensures the skill is actually loaded, not just discoverable.
   const firstTurnPrompt =
     run.config === 'with_skill'
       ? `/${run.skillName} ${definition.prompt}`
@@ -447,7 +420,6 @@ async function executeRun(entry: RunEntry, definition: SkillEvalDefinition, skil
   await executeTurn(entry, skillDir, firstTurnPrompt, /* isFirstTurn */ true);
 
   if (entry.killed || run.status === 'failed' || run.status === 'stopped') {
-    cleanupRunIsolation(run);
     return;
   }
 
@@ -455,11 +427,11 @@ async function executeRun(entry: RunEntry, definition: SkillEvalDefinition, skil
   if (run.mode === 'interactive') {
     if (!allOutputFilesExist(run)) {
       run.status = 'waiting_for_input';
-      persistRunJson(run);
+      writeRunJson(run);
       const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? '';
-      onEvent({ runId: run.runId, event: { type: 'status', status: 'waiting_for_input' } });
-      onEvent({ runId: run.runId, event: { type: 'waiting_for_input', lastAssistantText } });
-      return; // Control returns here when the user sends a message or clicks "Finish"
+      entry.eventLog.emit({ type: 'status', status: 'waiting_for_input' });
+      entry.eventLog.emit({ type: 'waiting_for_input', lastAssistantText });
+      return;
     }
   }
 
@@ -475,20 +447,22 @@ async function executeTurn(
   userMessage: string,
   isFirstTurn: boolean,
 ): Promise<void> {
-  const { run, onEvent } = entry;
+  const { run } = entry;
 
+  entry.eventLog.resetForNewTurn();
   run.status = 'starting';
-  persistRunJson(run);
-  onEvent({ runId: run.runId, event: { type: 'status', status: 'starting' } });
+  writeRunJson(run);
+  entry.eventLog.emit({ type: 'status', status: 'starting' });
 
   const addDirs: string[] = [];
   if (run.config === 'with_skill') addDirs.push(skillDir);
 
   const cliArgs = buildClaudeArgs({
     prompt: userMessage,
-    workdir: run.workdir,
     addDirs,
     resumeSessionId: isFirstTurn ? undefined : (run.sessionId ?? undefined),
+    // No skipPermissions: eval runs rely on workdir-scoped settings.local.json
+    // so baseline (without_skill) runs can't load any skill.
   });
 
   const started = Date.now();
@@ -500,82 +474,32 @@ async function executeTurn(
 
   let assistantText = '';
   const tools: { name: string; display: string }[] = [];
-  let capturedSessionId: string | null = run.sessionId;
-  let exitCode = 0;
-  let errorMessage: string | null = null;
 
-  await new Promise<void>((resolve) => {
-    const child = spawn('claude', cliArgs, {
-      cwd: run.workdir,
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    entry.child = child;
+  run.status = 'running';
+  writeRunJson(run);
+  entry.eventLog.emit({ type: 'status', status: 'running' });
 
-    run.status = 'running';
-    persistRunJson(run);
-    onEvent({ runId: run.runId, event: { type: 'status', status: 'running' } });
-
-    let buffer = '';
-    let stderrBuffer = '';
-
-    child.stdout?.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString('utf8');
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const event = JSON.parse(trimmed) as Record<string, unknown>;
-          handleClaudeEvent(event, {
-            onSession: (id) => {
-              capturedSessionId = id;
-              run.sessionId = id;
-            },
-            onText: (text) => {
-              assistantText += text;
-              onEvent({ runId: run.runId, event: { type: 'text', text } });
-            },
-            onTool: (name, display) => {
-              tools.push({ name, display });
-              onEvent({ runId: run.runId, event: { type: 'tool', name, display } });
-            },
-            onUsage: (tokens) => {
-              run.tokensUsed += tokens;
-              onEvent({ runId: run.runId, event: { type: 'tokens', tokensUsed: run.tokensUsed } });
-            },
-          });
-        } catch {
-          // Not a JSON line — ignore
-        }
-      }
-    });
-
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderrBuffer += chunk.toString('utf8');
-    });
-
-    child.on('close', (code) => {
-      exitCode = code ?? 0;
-      if (exitCode !== 0 && stderrBuffer.trim()) {
-        errorMessage = stderrBuffer.trim().slice(-500);
-      }
-      resolve();
-    });
-
-    child.on('error', (err) => {
-      exitCode = 1;
-      errorMessage = err.message.includes('ENOENT')
-        ? '`claude` CLI not found. Make sure Claude Code is installed and on PATH.'
-        : err.message;
-      resolve();
-    });
+  const result = await spawnClaudeTurn({
+    workdir: run.workdir,
+    cliArgs,
+    onChildSpawned: (c) => { entry.child = c; },
+    isKilled: () => entry.killed,
+    onSession: (id) => { run.sessionId = id; },
+    onText: (text) => {
+      assistantText += text;
+      entry.eventLog.emit({ type: 'text', text });
+    },
+    onTool: (name, display) => {
+      tools.push({ name, display });
+      entry.eventLog.emit({ type: 'tool', name, display });
+    },
+    onUsage: (tokens) => {
+      run.tokensUsed += tokens;
+      entry.eventLog.emit({ type: 'tokens', tokensUsed: run.tokensUsed });
+    },
   });
 
-  const ended = Date.now();
-  run.durationMs += ended - started;
-  run.sessionId = capturedSessionId;
+  run.durationMs += Date.now() - started;
   run.turns.push({
     role: 'assistant',
     content: assistantText,
@@ -584,20 +508,18 @@ async function executeTurn(
   });
   entry.child = null;
 
-  if (exitCode !== 0 || errorMessage) {
+  if (result.exitCode !== 0 || result.error) {
     run.status = 'failed';
-    run.error = errorMessage;
+    run.error = result.error;
     run.finishedAt = new Date().toISOString();
-    cleanupRunIsolation(run);
-    persistRunJson(run);
+    writeRunJson(run);
     saveTimingJson(run);
-    onEvent({ runId: run.runId, event: { type: 'done', exitCode, error: errorMessage ?? undefined } });
+    entry.eventLog.emit({ type: 'done', exitCode: result.exitCode, error: result.error ?? undefined });
+    entry.eventLog.destroy();
+    // Iteration workdir stays (grading artefacts), but the Claude project
+    // entry is redundant once the run has failed — drop it.
+    deleteClaudeProjectEntry(run.workdir);
   }
-}
-
-function cleanupRunIsolation(_run: SkillEvalRun): void {
-  // No-op — we no longer use an isolated HOME.
-  // Skill isolation for without_skill runs is done via settings.local.json deny list.
 }
 
 function allOutputFilesExist(run: SkillEvalRun): boolean {
@@ -609,24 +531,28 @@ function allOutputFilesExist(run: SkillEvalRun): boolean {
 }
 
 async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Promise<void> {
-  const { run, onEvent } = entry;
+  const { run } = entry;
 
   run.finishedAt = new Date().toISOString();
-  cleanupRunIsolation(run);
 
   run.status = 'grading';
-  persistRunJson(run);
-  onEvent({ runId: run.runId, event: { type: 'status', status: 'grading' } });
+  writeRunJson(run);
+  entry.eventLog.emit({ type: 'status', status: 'grading' });
 
   await gradeRun(run, definition);
 
   run.status = 'completed';
-  persistRunJson(run);
+  writeRunJson(run);
   saveTimingJson(run);
-  onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
-  onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+  entry.eventLog.emit({ type: 'status', status: 'completed' });
+  entry.eventLog.emit({ type: 'done', exitCode: 0 });
 
-  // Refresh benchmark.json so the UI picks up this run's results immediately
+  // Conversation + events are superseded by grading.json; drop the replay log.
+  entry.eventLog.destroy();
+  // Claude-side project entry is redundant now that run.turns[] + grading.json
+  // capture everything meaningful. Keep the workdir (iteration artefact).
+  deleteClaudeProjectEntry(run.workdir);
+
   try {
     const iterDir = deriveIterDir(run);
     if (iterDir) writeIterationBenchmark(iterDir.skillDir, run.skillName, run.iteration);
@@ -634,7 +560,6 @@ async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Pr
     console.error('[eval-runner] Failed to refresh benchmark.json:', err);
   }
 
-  // Sweep stray eval-produced skills (interactive runs that just finalized)
   cleanupEvalArtifacts();
 }
 
@@ -648,10 +573,31 @@ function deriveIterDir(run: SkillEvalRun): { skillDir: string; iterDir: string }
 }
 
 /**
- * Send a user message to a run that is waiting_for_input (interactive mode).
- * Resumes the claude session, executes a new turn, then re-evaluates completion.
+ * Re-point the entry's event log broadcast to the current caller's onEvent.
+ * Preserves the in-memory replay buffer.
  */
-export async function sendUserMessage(runId: string, message: string, skillDir: string, definition: SkillEvalDefinition): Promise<void> {
+function rebindEventLog(entry: RunEntry, onEvent: (event: EvalRunEvent) => void): void {
+  const buffered = entry.eventLog.getBuffered();
+  entry.eventLog = new EventLog<EvalRunEvent['event']>({
+    workdir: entry.run.workdir,
+    broadcast: (event) => onEvent({ runId: entry.run.runId, event }),
+  });
+  for (const ev of buffered) {
+    (entry.eventLog as unknown as { buffer: unknown[] }).buffer.push(ev);
+  }
+  entry.onEvent = onEvent;
+}
+
+/**
+ * Send a user message to a run that is waiting_for_input (interactive mode).
+ */
+export async function sendUserMessage(
+  runId: string,
+  message: string,
+  skillDir: string,
+  definition: SkillEvalDefinition,
+  onEvent: (event: EvalRunEvent) => void,
+): Promise<void> {
   const entry = runs.get(runId);
   if (!entry) throw new Error(`Run not found: ${runId}`);
   const { run } = entry;
@@ -659,6 +605,7 @@ export async function sendUserMessage(runId: string, message: string, skillDir: 
     throw new Error(`Run ${runId} is not waiting for input (status=${run.status})`);
   }
 
+  rebindEventLog(entry, onEvent);
   await executeTurn(entry, skillDir, message, /* isFirstTurn */ false);
 
   const currentStatus = run.status as EvalRunStatus;
@@ -666,10 +613,10 @@ export async function sendUserMessage(runId: string, message: string, skillDir: 
 
   if (run.mode === 'interactive' && !allOutputFilesExist(run)) {
     run.status = 'waiting_for_input';
-    persistRunJson(run);
+    writeRunJson(run);
     const lastAssistantText = run.turns[run.turns.length - 1]?.content ?? '';
-    entry.onEvent({ runId, event: { type: 'status', status: 'waiting_for_input' } });
-    entry.onEvent({ runId, event: { type: 'waiting_for_input', lastAssistantText } });
+    entry.eventLog.emit({ type: 'status', status: 'waiting_for_input' });
+    entry.eventLog.emit({ type: 'waiting_for_input', lastAssistantText });
     return;
   }
 
@@ -687,67 +634,6 @@ export async function finishWaitingRun(runId: string, definition: SkillEvalDefin
   await finalizeRun(entry, definition);
 }
 
-// ─── Claude stream event handler ────────────────────────────────────────────
-
-interface ClaudeEventHandlers {
-  onSession(id: string): void;
-  onText(text: string): void;
-  onTool(name: string, display: string): void;
-  onUsage(totalTokens: number): void;
-}
-
-function handleClaudeEvent(event: Record<string, unknown>, handlers: ClaudeEventHandlers): void {
-  const type = event['type'] as string;
-
-  if (type === 'system') {
-    const sessionId = event['session_id'] as string | undefined;
-    if (sessionId) handlers.onSession(sessionId);
-    return;
-  }
-
-  if (type === 'assistant') {
-    const sessionId = event['session_id'] as string | undefined;
-    if (sessionId) handlers.onSession(sessionId);
-    const message = event['message'] as { content?: unknown[] } | undefined;
-    if (!Array.isArray(message?.content)) return;
-    for (const block of message!.content) {
-      const b = block as { type?: string; text?: string; name?: string; input?: Record<string, unknown> };
-      if (b.type === 'text' && b.text) {
-        handlers.onText(b.text);
-      } else if (b.type === 'tool_use' && b.name) {
-        handlers.onTool(b.name, formatTool(b.name, b.input ?? {}));
-      }
-    }
-    return;
-  }
-
-  if (type === 'result') {
-    const usage = event['usage'] as { input_tokens?: number; output_tokens?: number; total_tokens?: number } | undefined;
-    if (usage) {
-      const total = usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
-      handlers.onUsage(total);
-    }
-    const sessionId = event['session_id'] as string | undefined;
-    if (sessionId) handlers.onSession(sessionId);
-    return;
-  }
-}
-
-function formatTool(name: string, input: Record<string, unknown>): string {
-  const s = (v: unknown) => String(v ?? '');
-  const truncate = (str: string, max = 72) => (str.length > max ? str.slice(0, max) + '…' : str);
-  switch (name) {
-    case 'Read': return `Reading ${s(input['file_path'])}`;
-    case 'Write': return `Writing ${s(input['file_path'])}`;
-    case 'Edit':
-    case 'MultiEdit': return `Editing ${s(input['file_path'])}`;
-    case 'Bash': return `$ ${truncate(s(input['command']))}`;
-    case 'Glob': return `Glob: ${s(input['pattern'])}`;
-    case 'Grep': return `Grep: ${s(input['pattern'])}`;
-    default: return name;
-  }
-}
-
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export function listRuns(): SkillEvalRun[] {
@@ -756,6 +642,13 @@ export function listRuns(): SkillEvalRun[] {
 
 export function getRun(runId: string): SkillEvalRun | null {
   return runs.get(runId)?.run ?? null;
+}
+
+/**
+ * Return the buffered stream events for the current (in-flight) turn of an eval run.
+ */
+export function getEvalBufferedEvents(runId: string): EvalRunEvent['event'][] {
+  return runs.get(runId)?.eventLog.getBuffered() ?? [];
 }
 
 export function stopRun(runId: string): void {
@@ -768,15 +661,15 @@ export function stopRun(runId: string): void {
   if (entry.run.status === 'running' || entry.run.status === 'starting' || entry.run.status === 'queued') {
     entry.run.status = 'stopped';
     entry.run.finishedAt = new Date().toISOString();
-    persistRunJson(entry.run);
-    entry.onEvent({ runId, event: { type: 'status', status: 'stopped' } });
+    writeRunJson(entry.run);
+    entry.eventLog.emit({ type: 'status', status: 'stopped' });
+    entry.eventLog.destroy();
+    deleteClaudeProjectEntry(entry.run.workdir);
   }
 }
 
 /**
  * Load all runs from a skill's workspace iterations into the in-memory registry.
- * Useful when the app boots to surface previously-run results in the UI.
- * Called once per view render; deduplicates by workdir.
  */
 export function loadPersistedRuns(skillDir: string): SkillEvalRun[] {
   const workspaceDir = join(skillDir, 'evals', 'workspace');

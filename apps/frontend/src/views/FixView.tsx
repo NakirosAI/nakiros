@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   ArrowLeft,
   CheckCircle,
@@ -24,10 +26,12 @@ import type {
   FixBenchmarkSnapshot,
   SkillAgentTempFileEntry,
   SkillAgentTempFileContent,
+  SkillDiffFilePayload,
 } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui';
 import EvalRunsView from './EvalRunsView';
 import { isImagePath } from '../utils/file-types';
+import FixReviewPanel from '../components/fix/FixReviewPanel';
 
 interface Props {
   scope: 'project' | 'nakiros-bundled' | 'claude-global';
@@ -47,7 +51,35 @@ type LiveEvent =
   | { type: 'text'; text: string; ts: number }
   | { type: 'tool'; name: string; display: string; ts: number };
 
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick(): void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition-colors',
+        active
+          ? 'bg-[var(--bg-card)] text-[var(--text-primary)]'
+          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]',
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
 export default function FixView({ scope, projectId, skillName, initialRun, mode = 'fix', onClose }: Props) {
+  const { t } = useTranslation('fix');
   const isCreate = mode === 'create';
   // Resolve the right IPC surface based on mode — the runtime is identical,
   // only the channel names and a few labels differ.
@@ -87,6 +119,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
    */
   const [evalSession, setEvalSession] = useState<{ runIds: string[]; iteration: number } | null>(null);
   const [evalsOpen, setEvalsOpen] = useState(false);
+  const [viewTab, setViewTab] = useState<'conversation' | 'review'>('conversation');
 
   // Poll the run state every 500ms
   useEffect(() => {
@@ -185,7 +218,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
       await api.sendUserMessage(initialRun.runId, trimmed);
       setUserInput('');
     } catch (err) {
-      alert(`Failed to send: ${(err as Error).message}`);
+      alert(t('errors.sendFailed', { message: (err as Error).message }));
     } finally {
       setSending(false);
     }
@@ -194,21 +227,21 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
   async function handleSync() {
     if (sending) return;
     const prompt = isCreate
-      ? `Create the skill "${skillName}" from the current temp workdir? This copies every file produced by the agent into the new skill directory.`
-      : `Sync the current fix changes to the real skill "${skillName}"? This copies the temp workdir onto the real skill directory.`;
+      ? t('prompts.syncCreate', { name: skillName })
+      : t('prompts.syncFix', { name: skillName });
     if (!confirm(prompt)) return;
     setSending(true);
     try {
       await api.finish(initialRun.runId);
     } catch (err) {
-      alert(`Failed to sync: ${(err as Error).message}`);
+      alert(t('errors.syncFailed', { message: (err as Error).message }));
     } finally {
       setSending(false);
     }
   }
 
   async function handleDiscard() {
-    if (!confirm(isCreate ? 'Discard this create session? The draft skill will be lost.' : 'Discard this fix session? All changes in the temp workdir will be lost.')) return;
+    if (!confirm(isCreate ? t('prompts.discardCreate') : t('prompts.discardFix'))) return;
     await api.stop(initialRun.runId);
   }
 
@@ -227,7 +260,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
       setEvalsOpen(true);
     } catch (err) {
       setEvalsRunning(false);
-      alert(`Failed to start evals: ${(err as Error).message}`);
+      alert(t('errors.evalsStartFailed', { message: (err as Error).message }));
     } finally {
       setEvalsLoading(false);
     }
@@ -235,7 +268,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
 
   return (
     <>
-    <div className="fixed inset-0 z-[300] flex flex-col bg-[var(--bg-base)]">
+    <div className="fixed inset-0 z-[300] flex flex-col bg-[var(--bg)]">
       {/* Header */}
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--line)] bg-[var(--bg-soft)] px-4">
         <button
@@ -243,16 +276,16 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
           className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
         >
           <ArrowLeft size={14} />
-          Back
+          {t('back')}
         </button>
         {isCreate ? <Plus size={14} className="text-emerald-400" /> : <Wrench size={14} className="text-amber-400" />}
         <span className="text-sm font-semibold text-[var(--text-primary)]">
-          {isCreate ? 'Create' : 'Fix'} — {skillName}
+          {isCreate ? t('title.create') : t('title.fix')} — {skillName}
         </span>
-        <StatusPill status={run.status} />
+        <StatusPill status={run.status} t={t} />
 
         <div className="ml-auto flex items-center gap-3 text-xs text-[var(--text-muted)]">
-          <span>{formatTokens(run.tokensUsed)}</span>
+          <span>{formatTokens(run.tokensUsed, t)}</span>
           <span>·</span>
           <span>{formatDuration(isTerminal ? run.durationMs : elapsed)}</span>
           {isWaiting && !isCreate && (
@@ -260,30 +293,30 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
               onClick={handleRunEvalsInTemp}
               disabled={evalsLoading || evalsRunning}
               className="ml-2 flex items-center gap-1 rounded bg-[var(--primary-soft)] px-2 py-1 text-[var(--primary)] transition-colors hover:bg-[var(--primary-soft)]/80 disabled:opacity-50"
-              title="Run the skill's evals against the in-progress fix copy"
+              title={t('header.runEvalsTooltip')}
             >
               {evalsRunning ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-              {evalsRunning ? 'Evaluating…' : 'Run evals'}
+              {evalsRunning ? t('header.evaluating') : t('header.runEvals')}
             </button>
           )}
           {evalSession && !evalsOpen && (
             <button
               onClick={() => setEvalsOpen(true)}
               className="flex items-center gap-1 rounded bg-[var(--bg-card)] border border-[var(--line)] px-2 py-1 text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-muted)]"
-              title="Reopen the eval runs panel"
+              title={t('header.openEvalsTooltip')}
             >
               <Play size={12} />
-              Open evals ({evalSession.runIds.length})
+              {t('header.openEvals', { count: evalSession.runIds.length })}
             </button>
           )}
           {(isWaiting || isRunning) && (
             <button
               onClick={handleDiscard}
               className="flex items-center gap-1 rounded bg-red-500/20 px-2 py-1 text-red-400 transition-colors hover:bg-red-500/30"
-              title="Abandon this fix session — discard all temp changes"
+              title={t('header.discardTooltip')}
             >
               <Trash2 size={12} />
-              Discard
+              {t('header.discard')}
             </button>
           )}
           {(isWaiting || isRunning) && (
@@ -291,10 +324,10 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
               onClick={handleSync}
               disabled={sending}
               className="flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-1 text-emerald-400 transition-colors hover:bg-emerald-500/30 disabled:opacity-50"
-              title={isCreate ? 'Create the skill — copy the temp workdir into the skill directory' : 'Sync the temp workdir back to the real skill directory'}
+              title={isCreate ? t('header.syncTooltip.create') : t('header.syncTooltip.fix')}
             >
               <UploadCloud size={12} />
-              {isCreate ? 'Create skill' : 'Sync to skill'}
+              {isCreate ? t('header.syncLabel.create') : t('header.syncLabel.fix')}
             </button>
           )}
         </div>
@@ -306,21 +339,44 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
           benchmarks={benchmarks}
           evalsRunning={evalsRunning}
           onRefresh={refreshBenchmarks}
+          t={t}
         />
       )}
 
-      {/* Draft files — preview what's in the temp workdir before Sync/Create */}
-      <DraftFilesPanel runId={initialRun.runId} defaultOpen={isCreate} />
+      {/* Tab switcher — conversation vs review */}
+      <div className="flex shrink-0 items-center gap-1 border-b border-[var(--line)] bg-[var(--bg-soft)] px-4 py-1.5">
+        <TabButton
+          active={viewTab === 'conversation'}
+          onClick={() => setViewTab('conversation')}
+          icon={<MessageSquare size={12} />}
+          label={t('tabs.conversation', 'Conversation')}
+        />
+        <TabButton
+          active={viewTab === 'review'}
+          onClick={() => setViewTab('review')}
+          icon={<FileText size={12} />}
+          label={t('tabs.review', 'Review changes')}
+        />
+      </div>
 
       {/* Body */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <ConversationPanel run={run} liveEvents={liveEvents} liveScrollRef={liveScrollRef} isStreaming={isRunning} />
+        {viewTab === 'conversation' ? (
+          <ConversationPanel run={run} liveEvents={liveEvents} liveScrollRef={liveScrollRef} isStreaming={isRunning} t={t} />
+        ) : (
+          <FixReviewPanel
+            runId={initialRun.runId}
+            mode={mode}
+            // Force re-fetch whenever the status changes (run might have finished, new files staged, etc.)
+            refreshKey={`${run.status}:${run.durationMs}`}
+          />
+        )}
 
         {run.error && (
           <div className="mx-4 mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
             <div className="mb-1 flex items-center gap-1.5 font-semibold">
               <AlertTriangle size={12} />
-              Error
+              {t('errors.heading')}
             </div>
             <pre className="whitespace-pre-wrap break-all font-mono">{run.error}</pre>
           </div>
@@ -333,9 +389,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
           {isWaiting && (
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-amber-400">
               <MessageSquare size={12} />
-              {isCreate
-                ? 'Reply to the agent, then click "Create skill" when the draft is ready or "Discard" to abandon.'
-                : 'Reply to iterate, Run evals to validate, then Sync to skill or Discard'}
+              {isCreate ? t('input.waitingCreate') : t('input.waitingFix')}
             </div>
           )}
           <div className="flex gap-2">
@@ -345,7 +399,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleSend();
               }}
-              placeholder={isRunning ? "Wait for the agent to finish the current turn..." : "Type your response... (⌘/Ctrl+Enter to send)"}
+              placeholder={isRunning ? t('input.placeholderRunning') : t('input.placeholderIdle')}
               disabled={isRunning}
               className="min-h-[60px] flex-1 resize-none rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)] disabled:opacity-50"
               autoFocus={isWaiting}
@@ -356,7 +410,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
               className="flex items-start gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
             >
               <Send size={12} />
-              Send
+              {t('input.send')}
             </button>
           </div>
         </div>
@@ -366,7 +420,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
     {/* Evals overlay — sits above FixView (z-[400] > FixView's z-[300]).
         Closing it does NOT stop the runs; they keep streaming and we can reopen. */}
     {evalsOpen && evalSession && (
-      <div className="fixed inset-0 z-[400] flex flex-col bg-[var(--bg-base)]">
+      <div className="fixed inset-0 z-[400] flex flex-col bg-[var(--bg)]">
         <EvalRunsView
           scope={scope}
           projectId={projectId}
@@ -386,11 +440,13 @@ function ConversationPanel({
   liveEvents,
   liveScrollRef,
   isStreaming,
+  t,
 }: {
   run: AuditRun;
   liveEvents: LiveEvent[];
   liveScrollRef: React.RefObject<HTMLDivElement | null>;
   isStreaming: boolean;
+  t: TFunction<'fix'>;
 }) {
   return (
     <div className="flex-1 overflow-y-auto p-4">
@@ -399,7 +455,7 @@ function ConversationPanel({
           <TurnBubble key={i} turn={turn} />
         ))}
 
-        {isStreaming && <LiveActivity events={liveEvents} scrollRef={liveScrollRef} />}
+        {isStreaming && <LiveActivity events={liveEvents} scrollRef={liveScrollRef} t={t} />}
       </div>
     </div>
   );
@@ -441,17 +497,17 @@ function TurnBubble({ turn }: { turn: AuditRun['turns'][number] }) {
   );
 }
 
-function LiveActivity({ events, scrollRef }: { events: LiveEvent[]; scrollRef: React.RefObject<HTMLDivElement | null> }) {
+function LiveActivity({ events, scrollRef, t }: { events: LiveEvent[]; scrollRef: React.RefObject<HTMLDivElement | null>; t: TFunction<'fix'> }) {
   return (
     <div className="mr-12 rounded-lg border border-amber-400/30 bg-amber-500/5 px-4 py-3">
       <div className="mb-2 flex items-center gap-2 text-xs text-amber-400">
         <Loader2 size={12} className="animate-spin" />
-        <span className="font-semibold">Streaming…</span>
-        <span className="text-[var(--text-muted)]">{events.length} events</span>
+        <span className="font-semibold">{t('live.streaming')}</span>
+        <span className="text-[var(--text-muted)]">{t('live.events', { count: events.length })}</span>
       </div>
-      <div ref={scrollRef} className="max-h-[400px] overflow-y-auto rounded bg-[var(--bg-base)] p-2">
+      <div ref={scrollRef} className="max-h-[400px] overflow-y-auto rounded bg-[var(--bg)] p-2">
         {events.length === 0 ? (
-          <span className="text-xs text-[var(--text-muted)]">Waiting for first chunk...</span>
+          <span className="text-xs text-[var(--text-muted)]">{t('live.waitingFirstChunk')}</span>
         ) : (
           <div className="flex flex-col gap-1.5 font-mono text-xs">
             {events.map((event, i) => (
@@ -478,16 +534,16 @@ function LiveEventLine({ event }: { event: LiveEvent }) {
   return <div className="whitespace-pre-wrap text-[var(--text-muted)]">{event.text}</div>;
 }
 
-function StatusPill({ status }: { status: AuditRun['status'] }) {
+function StatusPill({ status, t }: { status: AuditRun['status']; t: TFunction<'fix'> }) {
   const conf =
     status === 'completed'
-      ? { icon: <CheckCircle size={12} />, label: 'completed', className: 'bg-emerald-500/20 text-emerald-400' }
+      ? { icon: <CheckCircle size={12} />, label: t('status.completed'), className: 'bg-emerald-500/20 text-emerald-400' }
       : status === 'failed'
-        ? { icon: <XCircle size={12} />, label: 'failed', className: 'bg-red-500/20 text-red-400' }
+        ? { icon: <XCircle size={12} />, label: t('status.failed'), className: 'bg-red-500/20 text-red-400' }
         : status === 'stopped'
-          ? { icon: <Square size={12} />, label: 'stopped', className: 'bg-[var(--bg-muted)] text-[var(--text-muted)]' }
+          ? { icon: <Square size={12} />, label: t('status.stopped'), className: 'bg-[var(--bg-muted)] text-[var(--text-muted)]' }
           : status === 'waiting_for_input'
-            ? { icon: <MessageSquare size={12} />, label: 'waiting', className: 'bg-amber-500/20 text-amber-400' }
+            ? { icon: <MessageSquare size={12} />, label: t('status.waiting'), className: 'bg-amber-500/20 text-amber-400' }
             : { icon: <Loader2 size={12} className="animate-spin" />, label: status, className: 'bg-[var(--primary-soft)] text-[var(--primary)]' };
 
   return (
@@ -498,9 +554,10 @@ function StatusPill({ status }: { status: AuditRun['status'] }) {
   );
 }
 
-function formatTokens(n: number): string {
-  if (n < 1000) return `${n} tok`;
-  return `${(n / 1000).toFixed(1)}k tok`;
+function formatTokens(n: number, t: TFunction<'fix'>): string {
+  const unit = t('units.tokens');
+  if (n < 1000) return `${n} ${unit}`;
+  return `${(n / 1000).toFixed(1)}k ${unit}`;
 }
 
 function formatDuration(ms: number): string {
@@ -515,10 +572,12 @@ function BenchmarkComparePanel({
   benchmarks,
   evalsRunning,
   onRefresh,
+  t,
 }: {
   benchmarks: FixBenchmarks | null;
   evalsRunning: boolean;
   onRefresh(): void;
+  t: TFunction<'fix'>;
 }) {
   if (!benchmarks || (!benchmarks.real && !benchmarks.temp)) return null;
 
@@ -532,11 +591,11 @@ function BenchmarkComparePanel({
       <div className="mx-auto flex max-w-[900px] items-center gap-4">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)]">
           <CheckCircle size={12} />
-          Benchmarks
+          {t('benchmarks.heading')}
         </div>
-        <BenchmarkBlock label="Real skill" snapshot={benchmarks.real} />
+        <BenchmarkBlock label={t('benchmarks.realLabel')} snapshot={benchmarks.real} t={t} />
         <span className="text-[var(--text-muted)]">→</span>
-        <BenchmarkBlock label="In-progress fix" snapshot={benchmarks.temp} highlight />
+        <BenchmarkBlock label={t('benchmarks.tempLabel')} snapshot={benchmarks.temp} highlight t={t} />
         {delta !== null && (
           <span
             className={clsx(
@@ -547,7 +606,7 @@ function BenchmarkComparePanel({
                   ? 'bg-red-500/20 text-red-400'
                   : 'bg-[var(--bg-muted)] text-[var(--text-muted)]',
             )}
-            title="Delta pass-rate (temp vs real)"
+            title={t('benchmarks.deltaTooltip')}
           >
             {delta > 0 ? '+' : ''}
             {(delta * 100).toFixed(1)}%
@@ -557,10 +616,10 @@ function BenchmarkComparePanel({
           onClick={onRefresh}
           disabled={evalsRunning}
           className="ml-auto flex items-center gap-1 rounded border border-[var(--line)] bg-[var(--bg-card)] px-2 py-0.5 text-[11px] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
-          title="Refresh benchmarks"
+          title={t('benchmarks.refreshTooltip')}
         >
           <RefreshCw size={10} className={evalsRunning ? 'animate-spin' : ''} />
-          {evalsRunning ? 'Running…' : 'Refresh'}
+          {evalsRunning ? t('benchmarks.running') : t('benchmarks.refresh')}
         </button>
       </div>
     </div>
@@ -571,10 +630,12 @@ function BenchmarkBlock({
   label,
   snapshot,
   highlight,
+  t,
 }: {
   label: string;
   snapshot: FixBenchmarkSnapshot | null;
   highlight?: boolean;
+  t: TFunction<'fix'>;
 }) {
   if (!snapshot) {
     return (
@@ -588,7 +649,7 @@ function BenchmarkBlock({
   return (
     <div className="flex flex-col leading-tight">
       <span className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
-        {label} · iter {snapshot.iteration}
+        {label} · {t('benchmarks.iteration', { iteration: snapshot.iteration })}
       </span>
       <span className={clsx('text-xs font-semibold', highlight ? 'text-[var(--primary)]' : 'text-[var(--text-primary)]')}>
         {pct}% ({snapshot.withSkill.passedAssertions}/{snapshot.withSkill.totalAssertions})
@@ -608,7 +669,7 @@ function formatBytes(n: number): string {
  * The user needs this to review what the agent produced before clicking
  * "Create skill" / "Sync to skill" — otherwise they're agreeing blind.
  */
-function DraftFilesPanel({ runId, defaultOpen }: { runId: string; defaultOpen: boolean }) {
+function DraftFilesPanel({ runId, defaultOpen, t }: { runId: string; defaultOpen: boolean; t: TFunction<'fix'> }) {
   const [open, setOpen] = useState(defaultOpen);
   const [entries, setEntries] = useState<SkillAgentTempFileEntry[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -665,8 +726,8 @@ function DraftFilesPanel({ runId, defaultOpen }: { runId: string; defaultOpen: b
         className="flex w-full items-center gap-2 px-4 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
       >
         <FileText size={12} />
-        <span className="font-semibold">Draft files ({entries.length})</span>
-        <span className="text-[var(--text-muted)]">— click to {open ? 'hide' : 'preview what will be written'}</span>
+        <span className="font-semibold">{t('draftFiles.heading', { count: entries.length })}</span>
+        <span className="text-[var(--text-muted)]">{open ? t('draftFiles.hintHide') : t('draftFiles.hintPreview')}</span>
         <span className="ml-auto text-[10px]">{open ? '▲' : '▼'}</span>
       </button>
 
@@ -676,15 +737,15 @@ function DraftFilesPanel({ runId, defaultOpen }: { runId: string; defaultOpen: b
           <div className="w-[240px] shrink-0 overflow-y-auto border-r border-[var(--line)]">
             {error ? (
               <div className="p-3 text-xs text-red-400">
-                <div className="font-semibold">IPC error</div>
+                <div className="font-semibold">{t('draftFiles.ipcErrorTitle')}</div>
                 <div className="mt-1 break-all font-mono">{error}</div>
                 <div className="mt-2 text-[var(--text-muted)]">
-                  The main process likely needs a restart — quit and relaunch the app.
+                  {t('draftFiles.ipcErrorHint')}
                 </div>
               </div>
             ) : entries.length === 0 ? (
               <div className="p-3 text-xs text-[var(--text-muted)]">
-                No files written yet. Poll refreshes every 3s while the panel is open.
+                {t('draftFiles.emptyList')}
               </div>
             ) : (
               entries.map((entry) => (
@@ -708,16 +769,16 @@ function DraftFilesPanel({ runId, defaultOpen }: { runId: string; defaultOpen: b
 
           {/* Viewer */}
           <div className="min-w-0 flex-1 overflow-y-auto p-3">
-            {!selected && <div className="text-xs text-[var(--text-muted)]">Select a file.</div>}
+            {!selected && <div className="text-xs text-[var(--text-muted)]">{t('draftFiles.selectFile')}</div>}
             {selected && loading && (
               <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
                 <Loader2 size={12} className="animate-spin" />
-                Loading…
+                {t('draftFiles.loading')}
               </div>
             )}
             {selected && !loading && content && content.kind === 'missing' && (
               <div className="text-xs text-[var(--text-muted)]">
-                File no longer exists. The agent may have moved or deleted it.
+                {t('draftFiles.missing')}
               </div>
             )}
             {selected && !loading && content && content.kind === 'image' && (
@@ -727,7 +788,7 @@ function DraftFilesPanel({ runId, defaultOpen }: { runId: string; defaultOpen: b
             )}
             {selected && !loading && content && content.kind === 'binary' && (
               <div className="text-xs text-[var(--text-muted)]">
-                Binary file ({formatBytes(content.sizeBytes)}). Preview disabled.
+                {t('draftFiles.binary', { size: formatBytes(content.sizeBytes) })}
               </div>
             )}
             {selected && !loading && content && content.kind === 'text' && (

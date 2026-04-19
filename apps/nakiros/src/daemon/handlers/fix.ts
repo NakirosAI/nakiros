@@ -15,6 +15,8 @@ import {
   getFixRealSkillDir,
   listActiveFixRuns,
   getFixBufferedEvents,
+  listFixDiff,
+  readFixDiffFile,
 } from '../../services/fix-runner.js';
 import { startEvalRuns } from '../../services/eval-runner.js';
 import { readLatestIterationBenchmark } from '../../services/eval-benchmark.js';
@@ -112,4 +114,7 @@ export const fixHandlers: HandlerRegistry = {
       temp: tempDir ? readLatestIterationBenchmark(tempDir) : null,
     };
   },
+
+  'fix:listDiff': (args) => listFixDiff(args[0] as string),
+  'fix:readDiffFile': (args) => readFixDiffFile(args[0] as string, args[1] as string),
 };

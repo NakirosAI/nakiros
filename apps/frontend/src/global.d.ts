@@ -4,6 +4,12 @@ import type {
   AgentInstallStatus,
   AgentInstallRequest,
   AgentInstallSummary,
+  BundledSkillConflict,
+  BundledSkillConflictFileDiff,
+  BundledSkillConflictResolution,
+  SkillDiffEntry,
+  SkillDiffFilePayload,
+  VersionInfo,
   ResolvedLanguage,
   Project,
   ProjectConversation,
@@ -72,6 +78,9 @@ declare global {
       // Generic shell / clipboard
       openPath(path: string): Promise<void>;
       writeClipboard(text: string): Promise<void>;
+
+      // Meta
+      getVersionInfo(options?: { force?: boolean }): Promise<VersionInfo>;
 
       // Preferences
       getPreferences(): Promise<AppPreferences>;
@@ -145,6 +154,15 @@ declare global {
       readBundledSkillFile(skillName: string, relativePath: string): Promise<string | null>;
       saveBundledSkillFile(skillName: string, relativePath: string, content: string): Promise<void>;
       promoteBundledSkill(skillName: string): Promise<string>;
+      listBundledSkillConflicts(): Promise<BundledSkillConflict[]>;
+      resolveBundledSkillConflict(
+        skillName: string,
+        resolution: BundledSkillConflictResolution,
+      ): Promise<void>;
+      readBundledSkillConflictDiff(
+        skillName: string,
+        relativePath: string,
+      ): Promise<BundledSkillConflictFileDiff>;
 
       // User-global skills (~/.claude/skills/, excluding our symlinks)
       listClaudeGlobalSkills(): Promise<Skill[]>;
@@ -191,6 +209,8 @@ declare global {
       listActiveFixRuns(): Promise<AuditRun[]>;
       getFixBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onFixEvent(cb: (event: AuditRunEvent) => void): () => void;
+      listFixDiff(runId: string): Promise<SkillDiffEntry[]>;
+      readFixDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
 
       // Create (skill-factory "create" command)
       startCreate(request: StartAuditRequest): Promise<AuditRun>;
@@ -201,6 +221,8 @@ declare global {
       listActiveCreateRuns(): Promise<AuditRun[]>;
       getCreateBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onCreateEvent(cb: (event: AuditRunEvent) => void): () => void;
+      listCreateDiff(runId: string): Promise<SkillDiffEntry[]>;
+      readCreateDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
 
       // Draft files (temp workdir preview for fix + create)
       listSkillAgentTempFiles(runId: string): Promise<SkillAgentTempFileEntry[]>;

@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@nakiros/shared": "workspace:*",
+    "@types/diff": "^8.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "diff": "^9.0.0",
     "i18next": "^25.8.14",
     "lucide-react": "^0.575.0",
     "mermaid": "^11.13.0",

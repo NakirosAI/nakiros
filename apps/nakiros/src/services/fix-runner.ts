@@ -6,6 +6,8 @@ import { homedir } from 'os';
 import type {
   AuditRun,
   AuditRunEvent,
+  SkillDiffEntry,
+  SkillDiffFilePayload,
   StartAuditRequest,
 } from '@nakiros/shared';
 
@@ -729,4 +731,122 @@ export function listActiveFixRuns(): AuditRun[] {
 /** List all active (non-terminal) create runs. */
 export function listActiveCreateRuns(): AuditRun[] {
   return listActive('create');
+}
+
+// ─── Review diff API ─────────────────────────────────────────────────────────
+
+/**
+ * Walk a skill directory and return every file path (relative to the root)
+ * that is NOT runtime-only. Used on both real skill and temp workdir so the
+ * comparison sees the same things the sync step would actually copy.
+ */
+function listSyncableFiles(root: string): string[] {
+  const results: string[] = [];
+  function walk(dir: string): void {
+    let entries: import('fs').Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true }) as import('fs').Dirent[];
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      const rel = relative(root, fullPath);
+      if (isRuntimeOnlyPath(rel)) continue;
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        results.push(rel);
+      }
+    }
+  }
+  walk(root);
+  results.sort();
+  return results;
+}
+
+function isLikelyBinary(buffer: Buffer): boolean {
+  const sample = buffer.subarray(0, Math.min(4096, buffer.length));
+  for (const byte of sample) {
+    if (byte === 0) return true;
+  }
+  return false;
+}
+
+function readPair(relativePath: string, originalDir: string | null, modifiedDir: string): SkillDiffFilePayload {
+  let originalContent: string | null = null;
+  let modifiedContent: string | null = null;
+  let isBinary = false;
+
+  if (originalDir) {
+    const origPath = join(originalDir, relativePath);
+    if (existsSync(origPath)) {
+      const buf = readFileSync(origPath);
+      if (isLikelyBinary(buf)) isBinary = true;
+      else originalContent = buf.toString('utf8');
+    }
+  }
+
+  const modPath = join(modifiedDir, relativePath);
+  if (existsSync(modPath)) {
+    const buf = readFileSync(modPath);
+    if (isLikelyBinary(buf)) isBinary = true;
+    else modifiedContent = buf.toString('utf8');
+  }
+
+  return {
+    relativePath,
+    originalContent: isBinary ? null : originalContent,
+    modifiedContent: isBinary ? null : modifiedContent,
+    isBinary,
+  };
+}
+
+/**
+ * List the files that would differ between the real skill (before-state) and
+ * the current temp workdir (after-state). Files that are identical are excluded.
+ * `create` runs surface every file in the temp workdir since the original does
+ * not exist yet.
+ */
+export function listFixDiff(runId: string): SkillDiffEntry[] {
+  const entry = fixes.get(runId);
+  if (!entry) return [];
+  const realDir = entry.realSkillDir;
+  const tempDir = entry.tempWorkdir;
+  const isCreate = entry.mode === 'create';
+
+  const originalExists = !isCreate && existsSync(realDir);
+  const originalPaths = originalExists ? new Set(listSyncableFiles(realDir)) : new Set<string>();
+  const modifiedPaths = new Set(listSyncableFiles(tempDir));
+
+  const all = new Set<string>([...originalPaths, ...modifiedPaths]);
+  const diffs: SkillDiffEntry[] = [];
+  for (const rel of [...all].sort()) {
+    const inOriginal = originalPaths.has(rel);
+    const inModified = modifiedPaths.has(rel);
+    if (inOriginal && inModified) {
+      // Skip bytewise-identical files to keep the list focused on real changes.
+      try {
+        const a = readFileSync(join(realDir, rel));
+        const b = readFileSync(join(tempDir, rel));
+        if (a.equals(b)) continue;
+      } catch {
+        // surface as a diff entry if we can't read — UI will show the error
+      }
+    }
+    diffs.push({ relativePath: rel, inOriginal, inModified });
+  }
+  return diffs;
+}
+
+export function readFixDiffFile(runId: string, relativePath: string): SkillDiffFilePayload {
+  const entry = fixes.get(runId);
+  if (!entry) throw new Error(`Unknown run: ${runId}`);
+  if (relativePath.includes('..')) throw new Error(`Refused suspicious path: ${relativePath}`);
+  if (isRuntimeOnlyPath(relativePath)) {
+    throw new Error(`Refused runtime-only path: ${relativePath}`);
+  }
+  const realDir = entry.realSkillDir;
+  const originalDir = entry.mode === 'create' ? null : existsSync(realDir) ? realDir : null;
+  return readPair(relativePath, originalDir, entry.tempWorkdir);
 }

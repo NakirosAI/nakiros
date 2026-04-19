@@ -10,4 +10,7 @@ export * from './types/collab.js';
 export * from './types/getting-started.js';
 export * from './types/artifact-review.js';
 export * from './types/file-change-review.js';
+export * from './types/bundled-skill-conflict.js';
+export * from './types/skill-diff.js';
+export * from './types/version-info.js';
 export * from './ipc-channels.js';

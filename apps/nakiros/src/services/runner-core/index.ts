@@ -17,3 +17,13 @@ export {
   encodeProjectPath,
   type SweepResult,
 } from './claude-projects.js';
+export {
+  findGitRoot,
+  createEvalSandbox,
+  captureSandboxDiff,
+  listSandboxUntracked,
+  destroyEvalSandbox,
+  sweepOrphanSandboxes,
+  sandboxRoot,
+  type CreateSandboxResult,
+} from './git-worktree.js';

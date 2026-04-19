@@ -68,6 +68,7 @@ export const IPC_CHANNELS = {
   'eval:saveFeedback': 'eval:saveFeedback',
   'eval:listOutputs': 'eval:listOutputs',
   'eval:readOutput': 'eval:readOutput',
+  'eval:readDiffPatch': 'eval:readDiffPatch',
 
   // Audit runner
   'audit:start': 'audit:start',

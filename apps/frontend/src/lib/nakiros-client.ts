@@ -237,6 +237,7 @@ const client = {
   saveEvalFeedback: (request: unknown) => invoke('eval:saveFeedback', request),
   listEvalRunOutputs: (runId: string) => invoke('eval:listOutputs', runId),
   readEvalRunOutput: (runId: string, relativePath: string) => invoke('eval:readOutput', runId, relativePath),
+  readEvalRunDiffPatch: (runId: string) => invoke('eval:readDiffPatch', runId),
 
   // Audit
   startAudit: (request: unknown) => invoke('audit:start', request),

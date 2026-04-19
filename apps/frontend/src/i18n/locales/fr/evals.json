@@ -15,6 +15,7 @@
   "errorLabel": "Erreur",
   "promptTitle": "Prompt",
   "streaming": "Streaming…",
+  "streamHistory": "Stream",
   "events_one": "{{count}} événement",
   "events_other": "{{count}} événements",
   "waitingFirstChunk": "En attente du premier chunk...",

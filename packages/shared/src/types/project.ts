@@ -71,9 +71,7 @@ export interface SkillFileEntry {
  * - `project`       → <project>/.claude/skills/<name>
  * - `nakiros-bundled` → ~/.nakiros/skills/<name>
  * - `claude-global` → ~/.claude/skills/<name>
- * - `plugin`        → ~/.claude/plugins/<pluginName>/skills/<name>
- *                     (or <project>/.claude/plugins/<pluginName>/skills/<name>
- *                     when `projectId` is also provided)
+ * - `plugin`        → ~/.claude/plugins/marketplaces/<marketplaceName>/plugins/<pluginName>/skills/<name>
  */
 export type SkillScope = 'project' | 'nakiros-bundled' | 'claude-global' | 'plugin';
 
@@ -89,17 +87,10 @@ export interface Skill {
   evals: SkillEvalSuite | null;
   /** Number of archived audit reports in {skill}/audits/. */
   auditCount: number;
-  /**
-   * Only set for `scope: 'plugin'` — the parent plugin directory name under
-   * ~/.claude/plugins/. Undefined on project / global / bundled skills.
-   */
+  /** Only set for `scope: 'plugin'` — the plugin directory name. */
   pluginName?: string;
-  /**
-   * Only set for `scope: 'plugin'` — 'user' when the plugin lives under
-   * ~/.claude/plugins/, 'project' when it lives under
-   * <project>/.claude/plugins/.
-   */
-  pluginOrigin?: 'user' | 'project';
+  /** Only set for `scope: 'plugin'` — the marketplace directory name (parent of the plugin). */
+  marketplaceName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +242,8 @@ export interface SkillEvalRun {
   scope: SkillScope;
   /** Parent plugin name when scope is 'plugin'. */
   pluginName?: string;
+  /** Parent marketplace name when scope is 'plugin'. */
+  marketplaceName?: string;
   /** Absolute path to the eval artefact directory (grading.json, outputs/, diff.patch, run.json). */
   workdir: string;
   /**
@@ -320,6 +313,8 @@ export interface StartEvalRunRequest {
   scope: SkillScope;
   /** Parent plugin name when scope is 'plugin'. */
   pluginName?: string;
+  /** Parent marketplace name when scope is 'plugin'. */
+  marketplaceName?: string;
   projectId?: string;
   skillName: string;
   evalNames?: string[];
@@ -372,6 +367,8 @@ export interface AuditRun {
   scope: SkillScope;
   /** Parent plugin name when scope is 'plugin'. */
   pluginName?: string;
+  /** Parent marketplace name when scope is 'plugin'. */
+  marketplaceName?: string;
   projectId?: string;
   /** The skill being audited. */
   skillName: string;
@@ -403,6 +400,8 @@ export interface StartAuditRequest {
   scope: SkillScope;
   /** Parent plugin name when scope is 'plugin'. */
   pluginName?: string;
+  /** Parent marketplace name when scope is 'plugin'. */
+  marketplaceName?: string;
   projectId?: string;
   skillName: string;
 }

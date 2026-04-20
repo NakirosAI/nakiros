@@ -5,7 +5,6 @@ import { homedir } from 'os';
 import type { Skill, SkillFileEntry } from '@nakiros/shared';
 
 import { parseSkillEvals } from './eval-parser.js';
-import { listProjects } from './project-scanner.js';
 
 const HIDDEN_PATHS = new Set(['evals/workspace']);
 
@@ -17,123 +16,63 @@ function shouldHide(relativePath: string): boolean {
 }
 
 /**
- * Discover the root plugin directories Nakiros knows about.
- *
- * The canonical location is ~/.claude/plugins/<plugin>/skills/<name>/ — Claude
- * Code's user-global plugin registry. We also scan every tracked project for a
- * local override at <projectPath>/.claude/plugins/<plugin>/skills/<name>/ so a
- * team can ship a plugin alongside the repo, even if that path is uncommon in
- * practice.
+ * Claude Code clones each plugin marketplace to
+ * ~/.claude/plugins/marketplaces/<marketplace>/ and the plugins themselves
+ * live at <marketplace>/plugins/<plugin>/, with skills under
+ * <plugin>/skills/<skill>/SKILL.md. Not every plugin ships skills (some only
+ * have agents/ or commands/), so we tolerate missing skills/ dirs silently.
  */
 export interface PluginSkillLocation {
+  marketplaceName: string;
   pluginName: string;
   skillName: string;
   skillDir: string;
-  origin: 'user' | 'project';
-  /** Present when origin === 'project'. */
-  projectId?: string;
 }
 
-function listUserPluginSkillLocations(): PluginSkillLocation[] {
-  const root = join(homedir(), '.claude', 'plugins');
-  if (!existsSync(root)) return [];
-
-  const out: PluginSkillLocation[] = [];
-  let plugins: import('fs').Dirent[];
+function safeReaddir(path: string): import('fs').Dirent[] {
   try {
-    plugins = readdirSync(root, { withFileTypes: true }) as import('fs').Dirent[];
+    return readdirSync(path, { withFileTypes: true }) as import('fs').Dirent[];
   } catch {
     return [];
   }
-
-  for (const plugin of plugins) {
-    const pluginPath = join(root, plugin.name);
-    let isDir = false;
-    try {
-      isDir = statSync(pluginPath).isDirectory();
-    } catch {
-      continue;
-    }
-    if (!isDir) continue;
-
-    const skillsDir = join(pluginPath, 'skills');
-    if (!existsSync(skillsDir)) continue;
-
-    let skillEntries: import('fs').Dirent[];
-    try {
-      skillEntries = readdirSync(skillsDir, { withFileTypes: true }) as import('fs').Dirent[];
-    } catch {
-      continue;
-    }
-
-    for (const skillEntry of skillEntries) {
-      const skillDir = join(skillsDir, skillEntry.name);
-      let skillIsDir = false;
-      try {
-        skillIsDir = statSync(skillDir).isDirectory();
-      } catch {
-        continue;
-      }
-      if (!skillIsDir) continue;
-      out.push({
-        pluginName: plugin.name,
-        skillName: skillEntry.name,
-        skillDir,
-        origin: 'user',
-      });
-    }
-  }
-  return out;
 }
 
-function listProjectPluginSkillLocations(): PluginSkillLocation[] {
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function listPluginSkillLocations(): PluginSkillLocation[] {
+  const marketplacesRoot = join(homedir(), '.claude', 'plugins', 'marketplaces');
+  if (!existsSync(marketplacesRoot)) return [];
+
   const out: PluginSkillLocation[] = [];
-  for (const project of listProjects()) {
-    const root = join(project.projectPath, '.claude', 'plugins');
-    if (!existsSync(root)) continue;
 
-    let plugins: import('fs').Dirent[];
-    try {
-      plugins = readdirSync(root, { withFileTypes: true }) as import('fs').Dirent[];
-    } catch {
-      continue;
-    }
+  for (const mkt of safeReaddir(marketplacesRoot)) {
+    const mktPath = join(marketplacesRoot, mkt.name);
+    if (!isDirectory(mktPath)) continue;
 
-    for (const plugin of plugins) {
-      const pluginPath = join(root, plugin.name);
-      let isDir = false;
-      try {
-        isDir = statSync(pluginPath).isDirectory();
-      } catch {
-        continue;
-      }
-      if (!isDir) continue;
+    const pluginsRoot = join(mktPath, 'plugins');
+    if (!existsSync(pluginsRoot)) continue;
+
+    for (const plugin of safeReaddir(pluginsRoot)) {
+      const pluginPath = join(pluginsRoot, plugin.name);
+      if (!isDirectory(pluginPath)) continue;
 
       const skillsDir = join(pluginPath, 'skills');
       if (!existsSync(skillsDir)) continue;
 
-      let skillEntries: import('fs').Dirent[];
-      try {
-        skillEntries = readdirSync(skillsDir, { withFileTypes: true }) as import('fs').Dirent[];
-      } catch {
-        continue;
-      }
-
-      for (const skillEntry of skillEntries) {
+      for (const skillEntry of safeReaddir(skillsDir)) {
         const skillDir = join(skillsDir, skillEntry.name);
-        let skillIsDir = false;
-        try {
-          skillIsDir = statSync(skillDir).isDirectory();
-        } catch {
-          continue;
-        }
-        if (!skillIsDir) continue;
+        if (!isDirectory(skillDir)) continue;
         out.push({
+          marketplaceName: mkt.name,
           pluginName: plugin.name,
           skillName: skillEntry.name,
           skillDir,
-          origin: 'project',
-          projectId: project.id,
         });
       }
     }
@@ -141,29 +80,26 @@ function listProjectPluginSkillLocations(): PluginSkillLocation[] {
   return out;
 }
 
-export function listPluginSkillLocations(): PluginSkillLocation[] {
-  return [...listUserPluginSkillLocations(), ...listProjectPluginSkillLocations()];
-}
-
 export function resolvePluginSkillDir(
+  marketplaceName: string,
   pluginName: string,
   skillName: string,
-  projectPath?: string,
 ): string {
-  if (projectPath) {
-    return join(projectPath, '.claude', 'plugins', pluginName, 'skills', skillName);
-  }
-  return join(homedir(), '.claude', 'plugins', pluginName, 'skills', skillName);
+  return join(
+    homedir(),
+    '.claude',
+    'plugins',
+    'marketplaces',
+    marketplaceName,
+    'plugins',
+    pluginName,
+    'skills',
+    skillName,
+  );
 }
 
 function scanDirectory(dirPath: string, basePath: string): SkillFileEntry[] {
-  let entries: import('fs').Dirent[];
-  try {
-    entries = readdirSync(dirPath, { withFileTypes: true }) as import('fs').Dirent[];
-  } catch {
-    return [];
-  }
-
+  const entries = safeReaddir(dirPath);
   const result: SkillFileEntry[] = [];
   for (const entry of entries) {
     const fullPath = join(dirPath, entry.name);
@@ -223,7 +159,7 @@ function buildSkill(loc: PluginSkillLocation): Skill {
 
   return {
     name: loc.skillName,
-    projectId: loc.origin === 'project' && loc.projectId ? loc.projectId : 'claude-plugin',
+    projectId: 'claude-plugin',
     skillPath: loc.skillDir,
     content,
     hasEvals: existsSync(join(loc.skillDir, 'evals')),
@@ -233,37 +169,52 @@ function buildSkill(loc: PluginSkillLocation): Skill {
     evals: parseSkillEvals(loc.skillDir, loc.skillName),
     auditCount: countAudits(loc.skillDir),
     pluginName: loc.pluginName,
-    pluginOrigin: loc.origin,
+    marketplaceName: loc.marketplaceName,
   };
 }
 
 export function listPluginSkills(): Skill[] {
   const skills = listPluginSkillLocations().map(buildSkill);
   skills.sort((a, b) => {
-    const pn = (a.pluginName ?? '').localeCompare(b.pluginName ?? '');
-    if (pn !== 0) return pn;
+    const m = (a.marketplaceName ?? '').localeCompare(b.marketplaceName ?? '');
+    if (m !== 0) return m;
+    const p = (a.pluginName ?? '').localeCompare(b.pluginName ?? '');
+    if (p !== 0) return p;
     return a.name.localeCompare(b.name);
   });
   return skills;
 }
 
-export function readPluginSkill(pluginName: string, skillName: string): Skill | null {
-  const locations = listPluginSkillLocations();
-  const loc = locations.find(
-    (l) => l.pluginName === pluginName && l.skillName === skillName,
+function findLocation(
+  marketplaceName: string,
+  pluginName: string,
+  skillName: string,
+): PluginSkillLocation | undefined {
+  return listPluginSkillLocations().find(
+    (l) =>
+      l.marketplaceName === marketplaceName &&
+      l.pluginName === pluginName &&
+      l.skillName === skillName,
   );
+}
+
+export function readPluginSkill(
+  marketplaceName: string,
+  pluginName: string,
+  skillName: string,
+): Skill | null {
+  const loc = findLocation(marketplaceName, pluginName, skillName);
   if (!loc) return null;
   return buildSkill(loc);
 }
 
 export function readPluginSkillFile(
+  marketplaceName: string,
   pluginName: string,
   skillName: string,
   relativePath: string,
 ): string | null {
-  const loc = listPluginSkillLocations().find(
-    (l) => l.pluginName === pluginName && l.skillName === skillName,
-  );
+  const loc = findLocation(marketplaceName, pluginName, skillName);
   if (!loc) return null;
   const filePath = join(loc.skillDir, relativePath);
   if (!filePath.startsWith(loc.skillDir)) return null;
@@ -276,14 +227,13 @@ export function readPluginSkillFile(
 }
 
 export function savePluginSkillFile(
+  marketplaceName: string,
   pluginName: string,
   skillName: string,
   relativePath: string,
   content: string,
 ): void {
-  const loc = listPluginSkillLocations().find(
-    (l) => l.pluginName === pluginName && l.skillName === skillName,
-  );
+  const loc = findLocation(marketplaceName, pluginName, skillName);
   if (!loc) return;
   const filePath = join(loc.skillDir, relativePath);
   if (!filePath.startsWith(loc.skillDir)) return;

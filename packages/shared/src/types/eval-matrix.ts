@@ -133,6 +133,7 @@ export interface GetEvalMatrixRequest {
   scope: import('./project.js').SkillScope;
   projectId?: string;
   pluginName?: string;
+  marketplaceName?: string;
   skillName: string;
   /**
    * Direct path to a skill directory, overriding the scope-based resolution.
@@ -146,6 +147,7 @@ export interface LoadIterationRunRequest {
   scope: import('./project.js').SkillScope;
   projectId?: string;
   pluginName?: string;
+  marketplaceName?: string;
   skillName: string;
   iteration: number;
   evalName: string;

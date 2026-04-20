@@ -9,10 +9,17 @@ interface Props {
   scope: SkillScope;
   projectId?: string;
   pluginName?: string;
+  marketplaceName?: string;
   skillName: string;
 }
 
-export default function SkillAuditsTab({ scope, projectId, pluginName, skillName }: Props) {
+export default function SkillAuditsTab({
+  scope,
+  projectId,
+  pluginName,
+  marketplaceName,
+  skillName,
+}: Props) {
   const { t } = useTranslation('audit');
   const [history, setHistory] = useState<AuditHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,7 +31,7 @@ export default function SkillAuditsTab({ scope, projectId, pluginName, skillName
     let mounted = true;
     setLoading(true);
     window.nakiros
-      .listAuditHistory({ scope, projectId, pluginName, skillName })
+      .listAuditHistory({ scope, projectId, pluginName, marketplaceName, skillName })
       .then((entries) => {
         if (!mounted) return;
         setHistory(entries);
@@ -33,7 +40,7 @@ export default function SkillAuditsTab({ scope, projectId, pluginName, skillName
     return () => {
       mounted = false;
     };
-  }, [scope, projectId, pluginName, skillName]);
+  }, [scope, projectId, pluginName, marketplaceName, skillName]);
 
   async function openAudit(entry: AuditHistoryEntry) {
     setSelected(entry);

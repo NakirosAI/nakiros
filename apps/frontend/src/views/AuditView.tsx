@@ -29,6 +29,7 @@ interface Props {
   scope: SkillScope;
   projectId?: string;
   pluginName?: string;
+  marketplaceName?: string;
   skillName: string;
   initialRun: AuditRun;
   onClose(): void;

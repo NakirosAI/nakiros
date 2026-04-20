@@ -25,6 +25,7 @@ interface ReadFileRequest {
   scope: SkillScope;
   projectId?: string;
   pluginName?: string;
+  marketplaceName?: string;
   skillName: string;
   relativePath: string;
 }
@@ -37,12 +38,10 @@ function resolveSkillDir(request: ReadFileRequest): string {
     return join(getClaudeGlobalSkillsDir(), request.skillName);
   }
   if (request.scope === 'plugin') {
-    const pluginName = request.pluginName;
+    const { marketplaceName, pluginName } = request;
+    if (!marketplaceName) throw new Error('marketplaceName required for plugin scope');
     if (!pluginName) throw new Error('pluginName required for plugin scope');
-    const projectPath = request.projectId
-      ? getProject(request.projectId)?.projectPath
-      : undefined;
-    return resolvePluginSkillDir(pluginName, request.skillName, projectPath);
+    return resolvePluginSkillDir(marketplaceName, pluginName, request.skillName);
   }
   const projectId = request.projectId;
   if (!projectId) throw new Error('projectId required for project scope');

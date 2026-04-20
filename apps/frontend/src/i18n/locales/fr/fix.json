@@ -37,14 +37,16 @@
     "waitingCreate": "Réponds à l'agent, puis clique sur « Créer le skill » quand le brouillon est prêt, ou « Abandonner » pour tout jeter.",
     "waitingFix": "Réponds pour itérer, lance les evals pour valider, puis synchronise vers le skill ou abandonne",
     "placeholderRunning": "Attends que l'agent termine le tour en cours...",
-    "placeholderIdle": "Tape ta réponse... (⌘/Ctrl+Entrée pour envoyer)",
+    "placeholderIdle": "Tape ta réponse... (Entrée pour envoyer, Maj+Entrée pour nouvelle ligne)",
     "send": "Envoyer"
   },
   "status": {
     "completed": "terminé",
     "failed": "échoué",
     "stopped": "arrêté",
-    "waiting": "en attente"
+    "waiting": "en attente",
+    "running": "en cours",
+    "starting": "démarrage"
   },
   "units": {
     "tokens": "tok"
@@ -54,6 +56,17 @@
     "events_one": "{{count}} événement",
     "events_other": "{{count}} événements",
     "waitingFirstChunk": "En attente du premier chunk..."
+  },
+  "thinking": {
+    "verbs": [
+      "Réflexion sur la correction…",
+      "Lecture des fichiers…",
+      "Écriture du brouillon…",
+      "Mise à jour des exemples…",
+      "Application du patch…",
+      "Vérification des changements…",
+      "Consolidation du skill…"
+    ]
   },
   "benchmarks": {
     "heading": "Benchmarks",

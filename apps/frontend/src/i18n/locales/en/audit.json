@@ -18,7 +18,7 @@
   },
   "input": {
     "waitingForInput": "Agent is waiting for your input",
-    "placeholder": "Type your response... (⌘/Ctrl+Enter to send)",
+    "placeholder": "Type your response... (Enter to send, Shift+Enter for new line)",
     "send": "Send",
     "sendFailed": "Failed to send: {{message}}"
   },
@@ -27,6 +27,17 @@
     "events_one": "{{count}} event",
     "events_other": "{{count}} events",
     "waitingFirstChunk": "Waiting for first chunk..."
+  },
+  "thinking": {
+    "verbs": [
+      "Analyzing the skill…",
+      "Reading examples…",
+      "Reviewing instructions…",
+      "Identifying friction points…",
+      "Checking coverage…",
+      "Drafting the report…",
+      "Shaping the findings…"
+    ]
   },
   "status": {
     "completed": "completed",

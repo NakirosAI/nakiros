@@ -27,6 +27,7 @@
   "fixStarting": "Démarrage...",
   "fixResumeTooltip": "Une session de fix est déjà en cours pour ce skill — clique pour reprendre",
   "fixTooltip": "Appliquer les fixes à ce skill d'après le dernier audit + résultats d'eval + feedback",
+  "fixNoAuditTooltip": "Lance d'abord un audit — le fix s'appuie sur son rapport",
   "resumeEvals": "Reprendre ({{count}} en cours)",
   "includeBaseline": "Inclure baseline",
   "baselineTooltip": "Lancer aussi chaque eval sans le skill chargé, pour mesurer la vraie valeur du skill via delta",

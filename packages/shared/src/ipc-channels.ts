@@ -61,6 +61,12 @@ export const IPC_CHANNELS = {
   'claudeGlobal:readSkillFile': 'claudeGlobal:readSkillFile',
   'claudeGlobal:saveSkillFile': 'claudeGlobal:saveSkillFile',
 
+  // Plugin skills (~/.claude/plugins/<plugin>/skills/, plus project-local plugins)
+  'pluginSkills:list': 'pluginSkills:list',
+  'pluginSkills:getSkill': 'pluginSkills:getSkill',
+  'pluginSkills:readSkillFile': 'pluginSkills:readSkillFile',
+  'pluginSkills:saveSkillFile': 'pluginSkills:saveSkillFile',
+
   // Eval runner
   'eval:startRuns': 'eval:startRuns',
   'eval:stopRun': 'eval:stopRun',

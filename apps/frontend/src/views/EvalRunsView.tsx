@@ -25,11 +25,12 @@ import {
   endsOnAssistant,
   type LiveStreamEvent,
 } from '../components/ConversationTurn';
-import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry } from '@nakiros/shared';
+import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry, SkillScope } from '@nakiros/shared';
 
 interface Props {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
   projectId?: string;
+  pluginName?: string;
   skillName: string;
   initialRunIds: string[];
   iteration: number;
@@ -38,7 +39,7 @@ interface Props {
 
 type LiveEvent = LiveStreamEvent;
 
-export default function EvalRunsView({ scope, projectId, skillName, initialRunIds, iteration, onClose }: Props) {
+export default function EvalRunsView({ scope, projectId, pluginName, skillName, initialRunIds, iteration, onClose }: Props) {
   const { t } = useTranslation('evals');
   const [runs, setRuns] = useState<Map<string, SkillEvalRun>>(new Map());
   const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRunIds[0] ?? null);
@@ -49,12 +50,12 @@ export default function EvalRunsView({ scope, projectId, skillName, initialRunId
 
   // Load feedback for this iteration
   useEffect(() => {
-    void window.nakiros.getEvalFeedback({ scope, projectId, skillName, iteration }).then(setFeedback);
-  }, [scope, projectId, skillName, iteration]);
+    void window.nakiros.getEvalFeedback({ scope, projectId, pluginName, skillName, iteration }).then(setFeedback);
+  }, [scope, projectId, pluginName, skillName, iteration]);
 
   async function saveFeedback(evalName: string, text: string) {
     setFeedback((prev) => ({ ...prev, [evalName]: text }));
-    await window.nakiros.saveEvalFeedback({ scope, projectId, skillName, iteration, evalName, feedback: text });
+    await window.nakiros.saveEvalFeedback({ scope, projectId, pluginName, skillName, iteration, evalName, feedback: text });
   }
 
   // Poll runs every 500ms while any run is not terminal, in addition to listening for events

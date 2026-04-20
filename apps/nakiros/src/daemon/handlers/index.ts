@@ -5,6 +5,7 @@ import { metaHandlers } from './meta.js';
 import { projectHandlers } from './projects.js';
 import { bundledSkillsHandlers } from './bundled-skills.js';
 import { claudeGlobalHandlers } from './claude-global.js';
+import { pluginSkillsHandlers } from './plugin-skills.js';
 import { skillsCommonHandlers } from './skills-common.js';
 import { agentsHandlers } from './agents.js';
 import { onboardingHandlers } from './onboarding.js';
@@ -26,6 +27,7 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...projectHandlers,
     ...bundledSkillsHandlers,
     ...claudeGlobalHandlers,
+    ...pluginSkillsHandlers,
     ...skillsCommonHandlers,
     ...agentsHandlers,
     ...onboardingHandlers,

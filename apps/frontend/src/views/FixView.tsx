@@ -27,6 +27,7 @@ import type {
   SkillAgentTempFileEntry,
   SkillAgentTempFileContent,
   SkillDiffFilePayload,
+  SkillScope,
 } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui';
 import {
@@ -42,8 +43,9 @@ import FixReviewPanel from '../components/fix/FixReviewPanel';
 import { EvalMatrix } from '../components/eval-matrix';
 
 interface Props {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
   projectId?: string;
+  pluginName?: string;
   skillName: string;
   initialRun: AuditRun;
   /**
@@ -84,7 +86,7 @@ function TabButton({
   );
 }
 
-export default function FixView({ scope, projectId, skillName, initialRun, mode = 'fix', onClose }: Props) {
+export default function FixView({ scope, projectId, pluginName, skillName, initialRun, mode = 'fix', onClose }: Props) {
   const { t } = useTranslation('fix');
   const isCreate = mode === 'create';
   // Resolve the right IPC surface based on mode — the runtime is identical,
@@ -350,7 +352,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
       {!isCreate && (
         <div className="shrink-0 border-b border-[var(--line)] bg-[var(--bg-soft)] px-4 py-2">
           <EvalMatrix
-            request={{ scope, projectId, skillName, skillDirOverride: run.workdir }}
+            request={{ scope, projectId, pluginName, skillName, skillDirOverride: run.workdir }}
             refreshKey={matrixRefreshKey}
             collapsible
             defaultCollapsed

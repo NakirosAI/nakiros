@@ -6,6 +6,7 @@ import ScanView from './views/ScanView';
 import Dashboard from './views/Dashboard';
 import NakirosSkillsView from './views/NakirosSkillsView';
 import GlobalSkillsView from './views/GlobalSkillsView';
+import PluginSkillsView from './views/PluginSkillsView';
 import BundledSkillConflictsView from './views/BundledSkillConflictsView';
 import { resolveLanguage } from './utils/language';
 import i18n from './i18n/index';
@@ -24,7 +25,8 @@ type View =
   | { name: 'home' }
   | { name: 'dashboard' }
   | { name: 'nakiros-skills' }
-  | { name: 'global-skills' };
+  | { name: 'global-skills' }
+  | { name: 'plugin-skills' };
 
 export default function App() {
   const { t } = useTranslation('common');
@@ -197,6 +199,7 @@ export default function App() {
           onDismissProject={handleDismissProject}
           onOpenNakirosSkills={() => setView({ name: 'nakiros-skills' })}
           onOpenGlobalSkills={() => setView({ name: 'global-skills' })}
+          onOpenPluginSkills={() => setView({ name: 'plugin-skills' })}
         />
       );
     }
@@ -207,6 +210,10 @@ export default function App() {
 
     if (view.name === 'global-skills') {
       return <GlobalSkillsView onBack={() => setView({ name: 'home' })} />;
+    }
+
+    if (view.name === 'plugin-skills') {
+      return <PluginSkillsView onBack={() => setView({ name: 'home' })} />;
     }
 
     const project = activeProjectId

@@ -15,6 +15,7 @@ import type {
   ProjectConversation,
   ConversationMessage,
   Skill,
+  SkillScope,
   ScanProgress,
   StartEvalRunRequest,
   StartEvalRunResponse,
@@ -173,19 +174,25 @@ declare global {
       getClaudeGlobalSkill(skillName: string): Promise<Skill | null>;
       readClaudeGlobalSkillFile(skillName: string, relativePath: string): Promise<string | null>;
       saveClaudeGlobalSkillFile(skillName: string, relativePath: string, content: string): Promise<void>;
-      readSkillFileAsDataUrl(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string; relativePath: string }): Promise<string | null>;
+
+      // Plugin skills (~/.claude/plugins/<plugin>/skills/, plus project-local plugins)
+      listPluginSkills(): Promise<Skill[]>;
+      getPluginSkill(pluginName: string, skillName: string): Promise<Skill | null>;
+      readPluginSkillFile(pluginName: string, skillName: string, relativePath: string): Promise<string | null>;
+      savePluginSkillFile(pluginName: string, skillName: string, relativePath: string, content: string): Promise<void>;
+      readSkillFileAsDataUrl(request: { scope: SkillScope; pluginName?: string; projectId?: string; skillName: string; relativePath: string }): Promise<string | null>;
 
       // Eval runner
       startEvalRuns(request: StartEvalRunRequest): Promise<StartEvalRunResponse>;
       stopEvalRun(runId: string): Promise<void>;
       listEvalRuns(): Promise<SkillEvalRun[]>;
-      loadPersistedEvalRuns(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string }): Promise<SkillEvalRun[]>;
+      loadPersistedEvalRuns(request: { scope: SkillScope; pluginName?: string; projectId?: string; skillName: string }): Promise<SkillEvalRun[]>;
       onEvalEvent(cb: (event: EvalRunEvent) => void): () => void;
       sendEvalUserMessage(runId: string, message: string): Promise<void>;
       finishEvalRun(runId: string): Promise<void>;
       getEvalBufferedEvents(runId: string): Promise<EvalRunEvent['event'][]>;
-      getEvalFeedback(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string; iteration: number }): Promise<Record<string, string>>;
-      saveEvalFeedback(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string; iteration: number; evalName: string; feedback: string }): Promise<void>;
+      getEvalFeedback(request: { scope: SkillScope; pluginName?: string; projectId?: string; skillName: string; iteration: number }): Promise<Record<string, string>>;
+      saveEvalFeedback(request: { scope: SkillScope; pluginName?: string; projectId?: string; skillName: string; iteration: number; evalName: string; feedback: string }): Promise<void>;
       listEvalRunOutputs(runId: string): Promise<EvalRunOutputEntry[]>;
       readEvalRunOutput(runId: string, relativePath: string): Promise<string | null>;
       readEvalRunDiffPatch(runId: string): Promise<string | null>;
@@ -198,7 +205,7 @@ declare global {
       getAuditRun(runId: string): Promise<AuditRun | null>;
       sendAuditUserMessage(runId: string, message: string): Promise<void>;
       finishAudit(runId: string): Promise<void>;
-      listAuditHistory(request: { scope: 'project' | 'nakiros-bundled' | 'claude-global'; projectId?: string; skillName: string }): Promise<AuditHistoryEntry[]>;
+      listAuditHistory(request: { scope: SkillScope; pluginName?: string; projectId?: string; skillName: string }): Promise<AuditHistoryEntry[]>;
       readAuditReport(path: string): Promise<string | null>;
       listActiveAuditRuns(): Promise<AuditRun[]>;
       getAuditBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;

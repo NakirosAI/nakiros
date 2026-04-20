@@ -14,7 +14,7 @@ import {
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import type { AuditRun, AuditRunEvent } from '@nakiros/shared';
+import type { AuditRun, AuditRunEvent, SkillScope } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui';
 import {
   ConversationTurn,
@@ -25,8 +25,9 @@ import {
 } from '../components/ConversationTurn';
 
 interface Props {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
   projectId?: string;
+  pluginName?: string;
   skillName: string;
   initialRun: AuditRun;
   onClose(): void;

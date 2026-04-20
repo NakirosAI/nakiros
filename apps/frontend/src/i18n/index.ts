@@ -25,6 +25,7 @@ import frEvals from './locales/fr/evals.json';
 import frFix from './locales/fr/fix.json';
 import frNakirosSkills from './locales/fr/nakiros-skills.json';
 import frGlobalSkills from './locales/fr/global-skills.json';
+import frPluginSkills from './locales/fr/plugin-skills.json';
 import frBundledConflicts from './locales/fr/bundled-conflicts.json';
 import frVersion from './locales/fr/version.json';
 
@@ -52,6 +53,7 @@ import enEvals from './locales/en/evals.json';
 import enFix from './locales/en/fix.json';
 import enNakirosSkills from './locales/en/nakiros-skills.json';
 import enGlobalSkills from './locales/en/global-skills.json';
+import enPluginSkills from './locales/en/plugin-skills.json';
 import enBundledConflicts from './locales/en/bundled-conflicts.json';
 import enVersion from './locales/en/version.json';
 import { resolveLanguage } from '../utils/language';
@@ -83,6 +85,7 @@ const resources = {
     fix: frFix,
     'nakiros-skills': frNakirosSkills,
     'global-skills': frGlobalSkills,
+    'plugin-skills': frPluginSkills,
     'bundled-conflicts': frBundledConflicts,
     version: frVersion,
   },
@@ -111,6 +114,7 @@ const resources = {
     fix: enFix,
     'nakiros-skills': enNakirosSkills,
     'global-skills': enGlobalSkills,
+    'plugin-skills': enPluginSkills,
     'bundled-conflicts': enBundledConflicts,
     version: enVersion,
   },

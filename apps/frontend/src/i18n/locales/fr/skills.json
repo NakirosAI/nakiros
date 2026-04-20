@@ -40,9 +40,6 @@
   "loadingFile": "Chargement…",
   "imageError": "Impossible d'afficher l'image",
   "selectFile": "Sélectionne un fichier à afficher",
-  "alertEvalFailed": "Échec du lancement des evals : {{message}}",
-  "alertAuditFailed": "Échec du lancement de l'audit : {{message}}",
-  "alertFixFailed": "Échec du lancement du fix : {{message}}",
   "modal": {
     "title": "Créer un nouveau skill",
     "hint": "Choisis un nom court en kebab-case. Le skill-factory te posera des questions de design avant d'écrire le moindre fichier.",

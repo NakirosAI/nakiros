@@ -1,5 +1,6 @@
 import type {
   AuditRunEvent,
+  EvalRunEvent,
   FixBenchmarks,
   StartAuditRequest,
   StartEvalRunRequest,
@@ -20,17 +21,12 @@ import {
 } from '../../services/fix-runner.js';
 import { startEvalRuns } from '../../services/eval-runner.js';
 import { readLatestIterationBenchmark } from '../../services/eval-benchmark.js';
-import { eventBus } from '../event-bus.js';
 import { resolveEvalSkillDir } from './skill-dir.js';
+import { createEventBroadcaster, getRunOrThrow, resolveSkillDirForRun } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
-function broadcastFixEvent(event: AuditRunEvent): void {
-  eventBus.broadcast('fix:event', event);
-}
-
-function broadcastEvalEvent(event: import('@nakiros/shared').EvalRunEvent): void {
-  eventBus.broadcast('eval:event', event);
-}
+const broadcastFixEvent = createEventBroadcaster<AuditRunEvent>('fix:event');
+const broadcastEvalEvent = createEventBroadcaster<EvalRunEvent>('eval:event');
 
 export const fixHandlers: HandlerRegistry = {
   'fix:start': (args) => {
@@ -48,25 +44,15 @@ export const fixHandlers: HandlerRegistry = {
   'fix:sendUserMessage': async (args) => {
     const runId = args[0] as string;
     const message = args[1] as string;
-    const run = getFixRun(runId);
-    if (!run) throw new Error(`Fix run not found: ${runId}`);
-    const skillDir = resolveEvalSkillDir({
-      scope: run.scope,
-      projectId: run.projectId,
-      skillName: run.skillName,
-    } as StartEvalRunRequest);
+    const run = getRunOrThrow(getFixRun, runId, 'Fix');
+    const skillDir = resolveSkillDirForRun(run);
     await sendFixUserMessage(runId, message, { skillDir, onEvent: broadcastFixEvent });
   },
 
   'fix:finish': (args) => {
     const runId = args[0] as string;
-    const run = getFixRun(runId);
-    if (!run) throw new Error(`Fix run not found: ${runId}`);
-    const skillDir = resolveEvalSkillDir({
-      scope: run.scope,
-      projectId: run.projectId,
-      skillName: run.skillName,
-    } as StartEvalRunRequest);
+    const run = getRunOrThrow(getFixRun, runId, 'Fix');
+    const skillDir = resolveSkillDirForRun(run);
     finishFix(runId, { skillDir, onEvent: broadcastFixEvent });
   },
 
@@ -81,8 +67,7 @@ export const fixHandlers: HandlerRegistry = {
       evalNames?: string[];
       includeBaseline?: boolean;
     };
-    const run = getFixRun(request.runId);
-    if (!run) throw new Error(`Fix run not found: ${request.runId}`);
+    const run = getRunOrThrow(getFixRun, request.runId, 'Fix');
     const tempDir = getFixTempWorkdir(request.runId);
     if (!tempDir) throw new Error(`No temp workdir for fix ${request.runId}`);
     return startEvalRuns(

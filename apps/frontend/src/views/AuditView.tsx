@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   CheckCircle,
@@ -24,6 +24,9 @@ import {
   type LiveStreamEvent,
 } from '../components/ConversationTurn';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
+import { useElapsedTimer } from '../hooks/useElapsedTimer';
+import { useRunState } from '../hooks/useRunState';
+import { TabButton } from './skills/components';
 
 interface Props {
   scope: SkillScope;
@@ -39,81 +42,33 @@ type Tab = 'conversation' | 'report';
 
 type LiveEvent = LiveStreamEvent;
 
+const AUDIT_RUN_API = {
+  getRun: (id: string) => window.nakiros.getAuditRun(id),
+  getBufferedEvents: (id: string) => window.nakiros.getAuditBufferedEvents(id),
+  onEvent: window.nakiros.onAuditEvent,
+};
+
 export default function AuditView({ scope, projectId, skillName, initialRun, onClose }: Props) {
   const { t } = useTranslation('audit');
-  const [run, setRun] = useState<AuditRun>(initialRun);
   const [reportContent, setReportContent] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('conversation');
   const [userInput, setUserInput] = useState('');
   const [sending, setSending] = useState(false);
-  // Anchor elapsed on the run's real start time so re-opening mid-run doesn't
-  // reset the counter to zero.
-  const startTime = useRef(new Date(initialRun.startedAt).getTime());
-  const [elapsed, setElapsed] = useState(() => Math.max(0, Date.now() - new Date(initialRun.startedAt).getTime()));
-  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
-  const liveScrollRef = useRef<HTMLDivElement>(null);
 
-  // Poll the run state every 500ms (in addition to event stream)
-  useEffect(() => {
-    let mounted = true;
-    async function refresh() {
-      const fresh = await window.nakiros.getAuditRun(initialRun.runId);
-      if (mounted && fresh) setRun(fresh);
-    }
-    void refresh();
-    const interval = setInterval(refresh, 500);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [initialRun.runId]);
-
-  // Replay any events the daemon buffered for the in-flight turn so the stream
-  // is populated instead of starting empty when remounting mid-turn.
-  useEffect(() => {
-    void window.nakiros.getAuditBufferedEvents(initialRun.runId).then((buffered) => {
-      const now = Date.now();
-      const replay: LiveEvent[] = [];
-      for (const ev of buffered) {
-        if (ev.type === 'text') replay.push({ type: 'text', text: ev.text, ts: now });
-        else if (ev.type === 'tool') replay.push({ type: 'tool', name: ev.name, display: ev.display, ts: now });
-      }
-      if (replay.length > 0) setLiveEvents(replay);
-    });
-  }, [initialRun.runId]);
-
-  // Subscribe to live events: capture text/tool for the live activity panel
-  useEffect(() => {
-    return window.nakiros.onAuditEvent((event: AuditRunEvent) => {
-      if (event.runId !== initialRun.runId) return;
-      const inner = event.event;
-      if (inner.type === 'text') {
-        setLiveEvents((prev) => [...prev, { type: 'text', text: inner.text, ts: Date.now() }]);
-      } else if (inner.type === 'tool') {
-        setLiveEvents((prev) => [...prev, { type: 'tool', name: inner.name, display: inner.display, ts: Date.now() }]);
-      } else if (inner.type === 'status') {
-        // Reset the live stream when a fresh turn starts (the previous turn is now in run.turns)
-        if (inner.status === 'starting') {
-          setLiveEvents([]);
-        }
-        // Reflect status changes immediately rather than waiting for the next
-        // poll — critical for Stop feedback, also correct for all other transitions.
-        setRun((prev) => ({ ...prev, status: inner.status }));
-      } else if (inner.type === 'done' && inner.reportPath) {
+  const { run, liveEvents, liveScrollRef } = useRunState<AuditRun, AuditRunEvent['event']>(
+    initialRun.runId,
+    initialRun,
+    AUDIT_RUN_API,
+    (inner) => {
+      if (inner.type === 'done' && inner.reportPath) {
         void window.nakiros.readAuditReport(inner.reportPath).then((content) => {
           if (content !== null) setReportContent(content);
         });
         setTab('report');
       }
-    });
-  }, [initialRun.runId]);
-
-  // Auto-scroll live activity panel to bottom on new events
-  useEffect(() => {
-    if (liveScrollRef.current) {
-      liveScrollRef.current.scrollTop = liveScrollRef.current.scrollHeight;
-    }
-  }, [liveEvents]);
+    },
+  );
+  const elapsed = useElapsedTimer(initialRun.startedAt);
 
   // When run completes, fetch the report
   useEffect(() => {
@@ -123,12 +78,6 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
       });
     }
   }, [run.status, run.reportPath, reportContent]);
-
-  // Elapsed timer
-  useEffect(() => {
-    const t = setInterval(() => setElapsed(Date.now() - startTime.current), 500);
-    return () => clearInterval(t);
-  }, []);
 
   const isRunning = run.status === 'running' || run.status === 'starting';
   const isWaiting = run.status === 'waiting_for_input';
@@ -358,33 +307,6 @@ function StatusPill({ status, t }: { status: AuditRun['status']; t: TFunction<'a
       {conf.icon}
       {conf.label}
     </span>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  disabled,
-  children,
-}: {
-  active: boolean;
-  onClick(): void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={clsx(
-        'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
-        active
-          ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]'
-          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]',
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

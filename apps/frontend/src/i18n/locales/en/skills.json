@@ -40,9 +40,6 @@
   "loadingFile": "Loading…",
   "imageError": "Unable to display image",
   "selectFile": "Select a file to view",
-  "alertEvalFailed": "Failed to start eval runs: {{message}}",
-  "alertAuditFailed": "Failed to start audit: {{message}}",
-  "alertFixFailed": "Failed to start fix: {{message}}",
   "modal": {
     "title": "Create a new skill",
     "hint": "Pick a short, kebab-case name. The skill-factory will ask design questions before writing any file.",

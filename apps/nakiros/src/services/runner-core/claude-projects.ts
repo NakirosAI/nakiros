@@ -39,6 +39,20 @@ export function deleteClaudeProjectEntry(cwd: string): void {
 }
 
 /**
+ * Tear down a run's workdir: remove the directory itself and the matching
+ * Claude-Code project entry. Both steps are best-effort; missing dirs are
+ * fine. Used by audit/fix/create at end-of-run.
+ */
+export function cleanupRunWorkdir(workdir: string): void {
+  try {
+    rmSync(workdir, { recursive: true, force: true });
+  } catch {
+    // ignore — best-effort
+  }
+  deleteClaudeProjectEntry(workdir);
+}
+
+/**
  * Decoded project path guess: `~/.claude/projects/-Users-x--nakiros-runs-…`
  * back to `/Users/x/.nakiros/runs/…`. The `/` ↔ `.` collision makes perfect
  * reversal impossible, so this is a best-effort reconstruction. Caller gates

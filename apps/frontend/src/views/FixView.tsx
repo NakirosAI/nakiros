@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
@@ -38,6 +38,8 @@ import {
   type LiveStreamEvent,
 } from '../components/ConversationTurn';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
+import { useElapsedTimer } from '../hooks/useElapsedTimer';
+import { useRunState } from '../hooks/useRunState';
 import EvalRunsView from './EvalRunsView';
 import { isImagePath } from '../utils/file-types';
 import FixReviewPanel from '../components/fix/FixReviewPanel';
@@ -119,15 +121,14 @@ export default function FixView({
         getBufferedEvents: window.nakiros.getFixBufferedEvents,
         onEvent: window.nakiros.onFixEvent,
       };
-  const [run, setRun] = useState<AuditRun>(initialRun);
+  const { run, liveEvents, liveScrollRef } = useRunState<AuditRun, AuditRunEvent['event']>(
+    initialRun.runId,
+    initialRun,
+    api,
+  );
+  const elapsed = useElapsedTimer(initialRun.startedAt);
   const [userInput, setUserInput] = useState('');
   const [sending, setSending] = useState(false);
-  // Elapsed time is anchored on the run's real start time, so resuming a run
-  // that started 10 minutes ago doesn't reset the counter to zero.
-  const startTime = useRef(new Date(initialRun.startedAt).getTime());
-  const [elapsed, setElapsed] = useState(() => Math.max(0, Date.now() - new Date(initialRun.startedAt).getTime()));
-  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
-  const liveScrollRef = useRef<HTMLDivElement>(null);
   const [benchmarks, setBenchmarks] = useState<FixBenchmarks | null>(null);
   // Bumped whenever evals finish running so the matrix re-fetches its data.
   const [matrixRefreshKey, setMatrixRefreshKey] = useState(0);
@@ -141,66 +142,6 @@ export default function FixView({
   const [evalSession, setEvalSession] = useState<{ runIds: string[]; iteration: number } | null>(null);
   const [evalsOpen, setEvalsOpen] = useState(false);
   const [viewTab, setViewTab] = useState<'conversation' | 'review'>('conversation');
-
-  // Poll the run state every 500ms
-  useEffect(() => {
-    let mounted = true;
-    async function refresh() {
-      const fresh = await api.getRun(initialRun.runId);
-      if (mounted && fresh) setRun(fresh);
-    }
-    void refresh();
-    const interval = setInterval(refresh, 500);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [initialRun.runId]);
-
-  // Replay any events the main process buffered for the current in-flight turn,
-  // so the live stream is populated instead of starting empty when we resume.
-  useEffect(() => {
-    void api.getBufferedEvents(initialRun.runId).then((buffered) => {
-      const now = Date.now();
-      const replay: LiveEvent[] = [];
-      for (const ev of buffered) {
-        if (ev.type === 'text') replay.push({ type: 'text', text: ev.text, ts: now });
-        else if (ev.type === 'tool') replay.push({ type: 'tool', name: ev.name, display: ev.display, ts: now });
-      }
-      if (replay.length > 0) setLiveEvents(replay);
-    });
-  }, [initialRun.runId]);
-
-  // Subscribe to live events
-  useEffect(() => {
-    return api.onEvent((event: AuditRunEvent) => {
-      if (event.runId !== initialRun.runId) return;
-      const inner = event.event;
-      if (inner.type === 'text') {
-        setLiveEvents((prev) => [...prev, { type: 'text', text: inner.text, ts: Date.now() }]);
-      } else if (inner.type === 'tool') {
-        setLiveEvents((prev) => [...prev, { type: 'tool', name: inner.name, display: inner.display, ts: Date.now() }]);
-      } else if (inner.type === 'status') {
-        if (inner.status === 'starting') {
-          setLiveEvents([]);
-        }
-        // Mirror status changes into local state so Stop / completion etc.
-        // are reflected immediately without waiting for the 500ms poll.
-        setRun((prev) => ({ ...prev, status: inner.status }));
-      }
-    });
-  }, [initialRun.runId]);
-
-  useEffect(() => {
-    if (liveScrollRef.current) {
-      liveScrollRef.current.scrollTop = liveScrollRef.current.scrollHeight;
-    }
-  }, [liveEvents]);
-
-  useEffect(() => {
-    const t = setInterval(() => setElapsed(Date.now() - startTime.current), 500);
-    return () => clearInterval(t);
-  }, []);
 
   const refreshBenchmarks = useCallback(async () => {
     if (isCreate) return; // No benchmarks exist while the skill is still being created

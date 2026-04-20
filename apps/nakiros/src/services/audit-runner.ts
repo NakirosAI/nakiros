@@ -19,6 +19,7 @@ import {
   loadRunJson,
   persistRunJson,
   spawnClaudeTurn,
+  writeExecutionSettings,
 } from './runner-core/index.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
@@ -61,24 +62,10 @@ function prepareWorkdir(skillDir: string, skillName: string, runId: string): str
   mkdirSync(workdir, { recursive: true });
   mkdirSync(join(workdir, 'outputs'), { recursive: true });
 
-  const claudeDir = join(workdir, '.claude');
-  mkdirSync(claudeDir, { recursive: true });
-  writeFileSync(
-    join(claudeDir, 'settings.local.json'),
-    JSON.stringify(
-      {
-        permissions: {
-          defaultMode: 'acceptEdits',
-          allow: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
-        },
-      },
-      null,
-      2,
-    ),
-    'utf8',
-  );
+  writeExecutionSettings(workdir);
 
   // Symlink the skill being audited so /nakiros-skill-factory can find it via cwd
+  const claudeDir = join(workdir, '.claude');
   const skillsDir = join(claudeDir, 'skills');
   mkdirSync(skillsDir, { recursive: true });
   const linkPath = join(skillsDir, skillName);

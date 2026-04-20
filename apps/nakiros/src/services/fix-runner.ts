@@ -20,6 +20,7 @@ import {
   loadRunJson,
   persistRunJson,
   spawnClaudeTurn,
+  writeExecutionSettings,
 } from './runner-core/index.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
@@ -328,17 +329,7 @@ function prepareWorkdir(mode: SkillAgentMode, realSkillDir: string, runId: strin
 
   // Auto-accept edits inside the workdir (explicit — even though we pass
   // --dangerously-skip-permissions too, keep this for potential future tightening).
-  const claudeDir = join(workdir, '.claude');
-  mkdirSync(claudeDir, { recursive: true });
-  writeFileSync(
-    join(claudeDir, 'settings.local.json'),
-    JSON.stringify(
-      { permissions: { defaultMode: 'acceptEdits', allow: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'] } },
-      null,
-      2,
-    ),
-    'utf8',
-  );
+  writeExecutionSettings(workdir);
 
   return { workdir, latestAuditFile, latestIteration };
 }

@@ -1,5 +1,5 @@
 import { type ChildProcess } from 'child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'fs';
 import { join, basename } from 'path';
 import { homedir } from 'os';
 
@@ -13,8 +13,9 @@ import type {
 import {
   EventLog,
   buildClaudeArgs,
-  deleteClaudeProjectEntry,
+  cleanupRunWorkdir,
   generateRunId,
+  isActiveRunStatus,
   loadRunJson,
   persistRunJson,
   spawnClaudeTurn,
@@ -88,18 +89,6 @@ function prepareWorkdir(skillDir: string, skillName: string, runId: string): str
   return workdir;
 }
 
-function cleanupWorkdir(workdir: string): void {
-  try {
-    rmSync(workdir, { recursive: true, force: true });
-  } catch {
-    // ignore
-  }
-  // Every `claude` run registered this workdir as a project in
-  // `~/.claude/projects/`; drop that entry too so the user's project list
-  // doesn't accumulate a row per audit.
-  deleteClaudeProjectEntry(workdir);
-}
-
 function writeRunJson(entry: AuditEntry): void {
   persistRunJson(entry.run.workdir, {
     ...entry.run,
@@ -133,19 +122,19 @@ export function restoreOrCleanupAuditWorkdirs(): void {
     const workdir = join(root, name);
     const blob = loadRunJson<AuditRun & { _skillDir?: string }>(workdir);
     if (!blob || !blob.runId || !blob._skillDir) {
-      cleanupWorkdir(workdir);
+      cleanupRunWorkdir(workdir);
       continue;
     }
 
     // Stopped/failed are genuinely disposable.
     if (blob.status === 'stopped' || blob.status === 'failed') {
-      cleanupWorkdir(workdir);
+      cleanupRunWorkdir(workdir);
       continue;
     }
 
     // Running/starting with no sessionId → can't resume meaningfully; drop.
     if ((blob.status === 'starting' || blob.status === 'running') && !blob.sessionId) {
-      cleanupWorkdir(workdir);
+      cleanupRunWorkdir(workdir);
       continue;
     }
 
@@ -222,7 +211,7 @@ function findActiveAuditForSkill(
     if (run.scope !== scope) continue;
     if (run.projectId !== projectId) continue;
     if (run.skillName !== skillName) continue;
-    if (run.status === 'starting' || run.status === 'running' || run.status === 'waiting_for_input') {
+    if (isActiveRunStatus(run.status)) {
       return entry;
     }
   }
@@ -233,8 +222,7 @@ function findActiveAuditForSkill(
 export function listActiveAuditRuns(): AuditRun[] {
   const out: AuditRun[] = [];
   for (const entry of audits.values()) {
-    const s = entry.run.status;
-    if (s === 'starting' || s === 'running' || s === 'waiting_for_input') {
+    if (isActiveRunStatus(entry.run.status)) {
       out.push(entry.run);
     }
   }
@@ -447,7 +435,7 @@ export function stopAudit(runId: string): void {
   // {skillDir}/audits/). The entry stays in the registry so the UI can keep
   // rendering the stopped run until the user navigates away.
   entry.eventLog.destroy();
-  cleanupWorkdir(entry.run.workdir);
+  cleanupRunWorkdir(entry.run.workdir);
 }
 
 /**
@@ -458,7 +446,7 @@ export function finishAudit(runId: string): void {
   const entry = audits.get(runId);
   if (!entry) return;
   entry.eventLog.destroy();
-  cleanupWorkdir(entry.run.workdir);
+  cleanupRunWorkdir(entry.run.workdir);
   audits.delete(runId);
 }
 

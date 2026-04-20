@@ -25,13 +25,11 @@ import {
 } from '../../services/eval-runner.js';
 import { readIterationFeedback, saveEvalFeedback } from '../../services/eval-feedback.js';
 import { buildEvalMatrix } from '../../services/eval-matrix.js';
-import { eventBus } from '../event-bus.js';
 import { resolveEvalSkillDir } from './skill-dir.js';
+import { createEventBroadcaster, getRunOrThrow } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
-function broadcastEvalEvent(event: EvalRunEvent): void {
-  eventBus.broadcast('eval:event', event);
-}
+const broadcastEvalEvent = createEventBroadcaster<EvalRunEvent>('eval:event');
 
 /**
  * Derive the skill directory + definition for a given run by inspecting its workdir.
@@ -91,16 +89,14 @@ export const evalHandlers: HandlerRegistry = {
   'eval:sendUserMessage': async (args) => {
     const runId = args[0] as string;
     const message = args[1] as string;
-    const run = getEvalRun(runId);
-    if (!run) throw new Error(`Run not found: ${runId}`);
+    const run = getRunOrThrow(getEvalRun, runId, 'Eval');
     const { skillDir, definition } = getDefinitionForRun(run);
     await sendEvalUserMessage(runId, message, skillDir, definition, broadcastEvalEvent);
   },
 
   'eval:finishRun': async (args) => {
     const runId = args[0] as string;
-    const run = getEvalRun(runId);
-    if (!run) throw new Error(`Run not found: ${runId}`);
+    const run = getRunOrThrow(getEvalRun, runId, 'Eval');
     const { definition } = getDefinitionForRun(run);
     await finishEvalWaitingRun(runId, definition);
   },
@@ -125,8 +121,7 @@ export const evalHandlers: HandlerRegistry = {
 
   'eval:listOutputs': (args): EvalRunOutputEntry[] => {
     const runId = args[0] as string;
-    const run = getEvalRun(runId);
-    if (!run) throw new Error(`Run not found: ${runId}`);
+    const run = getRunOrThrow(getEvalRun, runId, 'Eval');
     const outputsDir = join(run.workdir, 'outputs');
     if (!existsSync(outputsDir)) return [];
 
@@ -164,8 +159,7 @@ export const evalHandlers: HandlerRegistry = {
   'eval:readOutput': (args): string | null => {
     const runId = args[0] as string;
     const relativePath = args[1] as string;
-    const run = getEvalRun(runId);
-    if (!run) throw new Error(`Run not found: ${runId}`);
+    const run = getRunOrThrow(getEvalRun, runId, 'Eval');
     const outputsDir = join(run.workdir, 'outputs');
     const abs = resolve(outputsDir, relativePath);
     if (!abs.startsWith(outputsDir + '/') && abs !== outputsDir) {
@@ -185,8 +179,7 @@ export const evalHandlers: HandlerRegistry = {
    */
   'eval:readDiffPatch': (args): string | null => {
     const runId = args[0] as string;
-    const run = getEvalRun(runId);
-    if (!run) throw new Error(`Run not found: ${runId}`);
+    const run = getRunOrThrow(getEvalRun, runId, 'Eval');
     const path = join(run.workdir, 'diff.patch');
     if (!existsSync(path)) return null;
     try {

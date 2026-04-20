@@ -1,5 +1,5 @@
 import { type ChildProcess } from 'child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, relative } from 'path';
 import { homedir } from 'os';
 
@@ -14,8 +14,9 @@ import type {
 import {
   EventLog,
   buildClaudeArgs,
-  deleteClaudeProjectEntry,
+  cleanupRunWorkdir,
   generateRunId,
+  isActiveRunStatus,
   loadRunJson,
   persistRunJson,
   spawnClaudeTurn,
@@ -211,17 +212,6 @@ function syncBackToSkill(tempDir: string, realSkillDir: string): { filesCopied: 
   return { filesCopied };
 }
 
-function cleanupTempWorkdir(tempDir: string): void {
-  try {
-    rmSync(tempDir, { recursive: true, force: true });
-  } catch {
-    // ignore
-  }
-  // The claude CLI registered `tempDir` as a project under
-  // `~/.claude/projects/`; drop that entry so we don't leak one row per run.
-  deleteClaudeProjectEntry(tempDir);
-}
-
 /**
  * Boot-time recovery: scan `~/.nakiros/tmp-skills/*` and either:
  *  - rehydrate a live fix/create entry when the temp workdir contains a `run.json`
@@ -250,17 +240,17 @@ export function restoreOrCleanupTempWorkdirs(): void {
     const workdir = join(tempRoot, name);
     const blob = loadRunJson<AuditRun & { _mode?: SkillAgentMode; _realSkillDir?: string }>(workdir);
     if (!blob) {
-      cleanupTempWorkdir(workdir);
+      cleanupRunWorkdir(workdir);
       continue;
     }
     if (!blob.runId || !blob._mode || !blob._realSkillDir) {
-      cleanupTempWorkdir(workdir);
+      cleanupRunWorkdir(workdir);
       continue;
     }
 
     // Terminal runs that somehow didn't clean up — discard.
     if (blob.status === 'completed' || blob.status === 'failed' || blob.status === 'stopped') {
-      cleanupTempWorkdir(workdir);
+      cleanupRunWorkdir(workdir);
       continue;
     }
 
@@ -390,7 +380,7 @@ function findActiveForSkill(
     if (run.scope !== scope) continue;
     if (run.projectId !== projectId) continue;
     if (run.skillName !== skillName) continue;
-    if (run.status === 'starting' || run.status === 'running' || run.status === 'waiting_for_input') {
+    if (isActiveRunStatus(run.status)) {
       return entry;
     }
   }
@@ -591,7 +581,7 @@ async function executeTurn(
     run.finishedAt = new Date().toISOString();
     // Discard temp modifications on failure — same policy as stop
     entry.eventLog.destroy();
-    cleanupTempWorkdir(entry.tempWorkdir);
+    cleanupRunWorkdir(entry.tempWorkdir);
     writeRunJson(entry);
     entry.eventLog.emit({ type: 'done', exitCode: result.exitCode, error: result.error ?? undefined });
   }
@@ -654,7 +644,7 @@ export function finishFix(runId: string, opts: RunOpts): void {
   }
 
   entry.eventLog.destroy();
-  cleanupTempWorkdir(entry.tempWorkdir);
+  cleanupRunWorkdir(entry.tempWorkdir);
 
   entry.run.status = 'completed';
   entry.run.finishedAt = new Date().toISOString();
@@ -688,7 +678,7 @@ export function stopFix(runId: string): void {
 
   // Stopped runs do NOT sync back — the temp modifications are discarded.
   entry.eventLog.destroy();
-  cleanupTempWorkdir(entry.tempWorkdir);
+  cleanupRunWorkdir(entry.tempWorkdir);
 }
 
 export function getFixRun(runId: string): AuditRun | null {
@@ -722,8 +712,7 @@ function listActive(mode: SkillAgentMode): AuditRun[] {
   const out: AuditRun[] = [];
   for (const entry of fixes.values()) {
     if (entry.mode !== mode) continue;
-    const s = entry.run.status;
-    if (s === 'starting' || s === 'running' || s === 'waiting_for_input') {
+    if (isActiveRunStatus(entry.run.status)) {
       out.push(entry.run);
     }
   }

@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  # Cancel in-flight runs for the same ref — saves minutes on force-pushes.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck — nakiros (daemon)
+        run: pnpm -F @nakirosai/nakiros exec tsc --noEmit
+
+      - name: Typecheck — frontend
+        run: pnpm -F @nakiros/frontend exec tsc --noEmit
+
+      - name: Typecheck — landing
+        run: pnpm -F @nakiros/landing exec tsc --noEmit
+
+      - name: Build
+        run: pnpm turbo build

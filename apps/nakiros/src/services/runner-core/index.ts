@@ -12,6 +12,7 @@ export {
 export { EventLog, type EventLogOptions } from './event-log.js';
 export { persistRunJson, loadRunJson } from './run-store.js';
 export {
+  cleanupRunWorkdir,
   deleteClaudeProjectEntry,
   sweepOrphanNakirosProjectEntries,
   encodeProjectPath,
@@ -34,3 +35,4 @@ export {
   type CreateTmpSandboxResult,
 } from './tmp-sandbox.js';
 export { createIsolatedHome, destroyIsolatedHome, type IsolatedHome } from './isolated-home.js';
+export { isActiveRunStatus } from './run-status.js';

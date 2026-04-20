@@ -15,13 +15,11 @@ import {
   finishAudit,
   getAuditBufferedEvents,
 } from '../../services/audit-runner.js';
-import { eventBus } from '../event-bus.js';
 import { resolveEvalSkillDir } from './skill-dir.js';
+import { createEventBroadcaster, getRunOrThrow, resolveSkillDirForRun } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
-function broadcastAuditEvent(event: AuditRunEvent): void {
-  eventBus.broadcast('audit:event', event);
-}
+const broadcastAuditEvent = createEventBroadcaster<AuditRunEvent>('audit:event');
 
 export const auditHandlers: HandlerRegistry = {
   'audit:start': (args) => {
@@ -39,13 +37,8 @@ export const auditHandlers: HandlerRegistry = {
   'audit:sendUserMessage': async (args) => {
     const runId = args[0] as string;
     const message = args[1] as string;
-    const run = getAuditRun(runId);
-    if (!run) throw new Error(`Audit run not found: ${runId}`);
-    const skillDir = resolveEvalSkillDir({
-      scope: run.scope,
-      projectId: run.projectId,
-      skillName: run.skillName,
-    } as StartEvalRunRequest);
+    const run = getRunOrThrow(getAuditRun, runId, 'Audit');
+    const skillDir = resolveSkillDirForRun(run);
     await sendAuditUserMessage(runId, message, {
       skillDir,
       onEvent: broadcastAuditEvent,

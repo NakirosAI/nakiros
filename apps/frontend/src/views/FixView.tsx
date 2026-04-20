@@ -27,6 +27,7 @@ import type {
   SkillAgentTempFileEntry,
   SkillAgentTempFileContent,
   SkillDiffFilePayload,
+  SkillScope,
 } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui';
 import {
@@ -36,14 +37,16 @@ import {
   endsOnAssistant,
   type LiveStreamEvent,
 } from '../components/ConversationTurn';
+import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import EvalRunsView from './EvalRunsView';
 import { isImagePath } from '../utils/file-types';
 import FixReviewPanel from '../components/fix/FixReviewPanel';
 import { EvalMatrix } from '../components/eval-matrix';
 
 interface Props {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
   projectId?: string;
+  pluginName?: string;
   skillName: string;
   initialRun: AuditRun;
   /**
@@ -84,7 +87,7 @@ function TabButton({
   );
 }
 
-export default function FixView({ scope, projectId, skillName, initialRun, mode = 'fix', onClose }: Props) {
+export default function FixView({ scope, projectId, pluginName, skillName, initialRun, mode = 'fix', onClose }: Props) {
   const { t } = useTranslation('fix');
   const isCreate = mode === 'create';
   // Resolve the right IPC surface based on mode — the runtime is identical,
@@ -224,10 +227,11 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
     const trimmed = userInput.trim();
     if (!trimmed || sending) return;
     setSending(true);
+    setUserInput('');
     try {
       await api.sendUserMessage(initialRun.runId, trimmed);
-      setUserInput('');
     } catch (err) {
+      setUserInput(trimmed);
       alert(t('errors.sendFailed', { message: (err as Error).message }));
     } finally {
       setSending(false);
@@ -350,7 +354,7 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
       {!isCreate && (
         <div className="shrink-0 border-b border-[var(--line)] bg-[var(--bg-soft)] px-4 py-2">
           <EvalMatrix
-            request={{ scope, projectId, skillName, skillDirOverride: run.workdir }}
+            request={{ scope, projectId, pluginName, skillName, skillDirOverride: run.workdir }}
             refreshKey={matrixRefreshKey}
             collapsible
             defaultCollapsed
@@ -422,7 +426,10 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleSend();
+                if (e.key === 'Enter' && !e.shiftKey && !isRunning) {
+                  e.preventDefault();
+                  void handleSend();
+                }
               }}
               placeholder={isRunning ? t('input.placeholderRunning') : t('input.placeholderIdle')}
               disabled={isRunning}
@@ -432,10 +439,11 @@ export default function FixView({ scope, projectId, skillName, initialRun, mode 
             <button
               onClick={handleSend}
               disabled={!userInput.trim() || sending || isRunning}
-              className="flex items-start gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
+              aria-label={t('input.send')}
+              title={t('input.send')}
+              className="flex shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] p-2.5 text-white transition-colors hover:bg-[var(--primary)]/90 disabled:opacity-50"
             >
-              <Send size={12} />
-              {t('input.send')}
+              <Send size={16} />
             </button>
           </div>
         </div>
@@ -465,6 +473,7 @@ function ConversationPanel({
   liveEvents,
   liveScrollRef,
   isStreaming,
+  t,
 }: {
   run: AuditRun;
   liveEvents: LiveEvent[];
@@ -500,6 +509,12 @@ function ConversationPanel({
               scrollRef={liveScrollRef}
             />
           )}
+
+        {isStreaming && liveEvents.length === 0 && !endsOnAssistant(run.turns) && (
+          <ThinkingIndicator
+            verbs={t('thinking.verbs', { returnObjects: true }) as string[]}
+          />
+        )}
       </div>
     </div>
   );
@@ -515,7 +530,7 @@ function StatusPill({ status, t }: { status: AuditRun['status']; t: TFunction<'f
           ? { icon: <Square size={12} />, label: t('status.stopped'), className: 'bg-[var(--bg-muted)] text-[var(--text-muted)]' }
           : status === 'waiting_for_input'
             ? { icon: <MessageSquare size={12} />, label: t('status.waiting'), className: 'bg-amber-500/20 text-amber-400' }
-            : { icon: <Loader2 size={12} className="animate-spin" />, label: status, className: 'bg-[var(--primary-soft)] text-[var(--primary)]' };
+            : { icon: <Loader2 size={12} className="animate-spin" />, label: t(`status.${status}` as 'status.running' | 'status.starting'), className: 'bg-[var(--primary-soft)] text-[var(--primary)]' };
 
   return (
     <span className={clsx('flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold', conf.className)}>

@@ -19,7 +19,7 @@ import {
   Package,
 } from 'lucide-react';
 import clsx from 'clsx';
-import type { AuditRun, Skill, SkillFileEntry, SkillEvalGrading, SkillEvalGradingRun } from '@nakiros/shared';
+import type { AuditRun, Skill, SkillFileEntry, SkillEvalGrading, SkillEvalGradingRun, SkillScope } from '@nakiros/shared';
 import { Checkbox, MarkdownViewer } from '../components/ui';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
@@ -284,51 +284,57 @@ export default function NakirosSkillsView({ onBack }: Props) {
 
           <div className="flex-1" />
 
-          <button
-            onClick={() => {
-              const active = activeAuditBySkill.get(skill.name);
-              if (active) setActiveAudit({ run: active, skillName: skill.name });
-              else handleStartAudit(skill.name);
-            }}
-            disabled={auditing}
-            className={clsx(
-              'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
-              activeAuditBySkill.has(skill.name)
-                ? 'border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)] hover:bg-[var(--primary-soft)]/80'
-                : 'border-[var(--line)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:border-[var(--primary)] hover:text-[var(--primary)]',
-            )}
-            title={
-              activeAuditBySkill.has(skill.name)
-                ? t('auditResumeTooltip')
-                : t('auditTooltip')
-            }
-          >
-            {activeAuditBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-            {activeAuditBySkill.has(skill.name) ? t('auditRunning') : auditing ? t('auditStarting') : t('audit')}
-          </button>
+          {detailTab === 'audits' && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const active = activeAuditBySkill.get(skill.name);
+                  if (active) setActiveAudit({ run: active, skillName: skill.name });
+                  else handleStartAudit(skill.name);
+                }}
+                disabled={auditing}
+                className={clsx(
+                  'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                  activeAuditBySkill.has(skill.name)
+                    ? 'border border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)] hover:bg-[var(--primary-soft)]/80'
+                    : 'bg-[var(--primary)] text-white hover:opacity-90',
+                )}
+                title={
+                  activeAuditBySkill.has(skill.name)
+                    ? t('auditResumeTooltip')
+                    : t('auditTooltip')
+                }
+              >
+                {activeAuditBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                {activeAuditBySkill.has(skill.name) ? t('auditRunning') : auditing ? t('auditStarting') : t('audit')}
+              </button>
 
-          <button
-            onClick={() => {
-              const active = activeFixBySkill.get(skill.name);
-              if (active) setActiveFix({ run: active, skillName: skill.name });
-              else handleStartFix(skill.name);
-            }}
-            disabled={fixing}
-            className={clsx(
-              'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
-              activeFixBySkill.has(skill.name)
-                ? 'border-amber-400 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
-                : 'border-[var(--line)] bg-[var(--bg-card)] text-[var(--text-muted)] hover:border-amber-400 hover:text-amber-400',
-            )}
-            title={
-              activeFixBySkill.has(skill.name)
-                ? t('fixResumeTooltip')
-                : t('fixTooltip')
-            }
-          >
-            {activeFixBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
-            {activeFixBySkill.has(skill.name) ? t('fixRunning') : fixing ? t('fixStarting') : t('fix')}
-          </button>
+              <button
+                onClick={() => {
+                  const active = activeFixBySkill.get(skill.name);
+                  if (active) setActiveFix({ run: active, skillName: skill.name });
+                  else handleStartFix(skill.name);
+                }}
+                disabled={fixing || (!activeFixBySkill.has(skill.name) && skill.auditCount === 0)}
+                className={clsx(
+                  'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                  activeFixBySkill.has(skill.name)
+                    ? 'border border-amber-400 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+                    : 'bg-amber-500 text-white hover:opacity-90',
+                )}
+                title={
+                  activeFixBySkill.has(skill.name)
+                    ? t('fixResumeTooltip')
+                    : skill.auditCount === 0
+                      ? t('fixNoAuditTooltip')
+                      : t('fixTooltip')
+                }
+              >
+                {activeFixBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
+                {activeFixBySkill.has(skill.name) ? t('fixRunning') : fixing ? t('fixStarting') : t('fix')}
+              </button>
+            </div>
+          )}
 
           {detailTab === 'evals' && skill.evals && skill.evals.definitions.length > 0 && (
             <div className="flex items-center gap-2">
@@ -546,7 +552,7 @@ function EvalsPanel({
   t,
 }: {
   skill: Skill;
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
   t: TFunction<'nakiros-skills'>;
 }) {
   const [expandedIter, setExpandedIter] = useState<number | null>(

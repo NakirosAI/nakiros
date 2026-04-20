@@ -2,8 +2,11 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 
+import type { SkillScope } from '@nakiros/shared';
+
 import { getProject } from '../../services/project-scanner.js';
 import { getClaudeGlobalSkillsDir } from '../../services/claude-global-skills-reader.js';
+import { resolvePluginSkillDir } from '../../services/plugin-skills-reader.js';
 import type { HandlerRegistry } from './index.js';
 
 const DATA_URL_MIME_BY_EXT: Record<string, string> = {
@@ -19,8 +22,9 @@ const DATA_URL_MIME_BY_EXT: Record<string, string> = {
 };
 
 interface ReadFileRequest {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
   projectId?: string;
+  pluginName?: string;
   skillName: string;
   relativePath: string;
 }
@@ -31,6 +35,14 @@ function resolveSkillDir(request: ReadFileRequest): string {
   }
   if (request.scope === 'claude-global') {
     return join(getClaudeGlobalSkillsDir(), request.skillName);
+  }
+  if (request.scope === 'plugin') {
+    const pluginName = request.pluginName;
+    if (!pluginName) throw new Error('pluginName required for plugin scope');
+    const projectPath = request.projectId
+      ? getProject(request.projectId)?.projectPath
+      : undefined;
+    return resolvePluginSkillDir(pluginName, request.skillName, projectPath);
   }
   const projectId = request.projectId;
   if (!projectId) throw new Error('projectId required for project scope');

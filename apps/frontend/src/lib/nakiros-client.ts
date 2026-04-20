@@ -227,6 +227,16 @@ const client = {
     invoke('claudeGlobal:readSkillFile', skillName, relativePath),
   saveClaudeGlobalSkillFile: (skillName: string, relativePath: string, content: string) =>
     invoke('claudeGlobal:saveSkillFile', skillName, relativePath, content),
+
+  // Plugin skills (~/.claude/plugins/<plugin>/skills/, plus project-local plugins)
+  listPluginSkills: () => invoke('pluginSkills:list'),
+  getPluginSkill: (pluginName: string, skillName: string) =>
+    invoke('pluginSkills:getSkill', pluginName, skillName),
+  readPluginSkillFile: (pluginName: string, skillName: string, relativePath: string) =>
+    invoke('pluginSkills:readSkillFile', pluginName, skillName, relativePath),
+  savePluginSkillFile: (pluginName: string, skillName: string, relativePath: string, content: string) =>
+    invoke('pluginSkills:saveSkillFile', pluginName, skillName, relativePath, content),
+
   readSkillFileAsDataUrl: (request: unknown) => invoke('skill:readFileAsDataUrl', request),
 
   // Eval runner

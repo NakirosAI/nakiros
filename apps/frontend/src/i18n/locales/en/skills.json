@@ -27,6 +27,7 @@
   "fixStarting": "Starting…",
   "fixResumeTooltip": "A fix session is already running for this skill — click to resume",
   "fixTooltip": "Apply fixes based on the latest audit + eval results + feedback",
+  "fixNoAuditTooltip": "Run an audit first — fix relies on its report",
   "resumeEvals": "Resume ({{count}} running)",
   "includeBaseline": "Include baseline",
   "baselineTooltip": "Also run each eval without the skill loaded, to measure real skill value via delta",

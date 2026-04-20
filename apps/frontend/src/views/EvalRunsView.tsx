@@ -25,11 +25,13 @@ import {
   endsOnAssistant,
   type LiveStreamEvent,
 } from '../components/ConversationTurn';
-import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry } from '@nakiros/shared';
+import { ThinkingIndicator } from '../components/ThinkingIndicator';
+import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry, SkillScope } from '@nakiros/shared';
 
 interface Props {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
   projectId?: string;
+  pluginName?: string;
   skillName: string;
   initialRunIds: string[];
   iteration: number;
@@ -38,7 +40,7 @@ interface Props {
 
 type LiveEvent = LiveStreamEvent;
 
-export default function EvalRunsView({ scope, projectId, skillName, initialRunIds, iteration, onClose }: Props) {
+export default function EvalRunsView({ scope, projectId, pluginName, skillName, initialRunIds, iteration, onClose }: Props) {
   const { t } = useTranslation('evals');
   const [runs, setRuns] = useState<Map<string, SkillEvalRun>>(new Map());
   const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRunIds[0] ?? null);
@@ -49,12 +51,12 @@ export default function EvalRunsView({ scope, projectId, skillName, initialRunId
 
   // Load feedback for this iteration
   useEffect(() => {
-    void window.nakiros.getEvalFeedback({ scope, projectId, skillName, iteration }).then(setFeedback);
-  }, [scope, projectId, skillName, iteration]);
+    void window.nakiros.getEvalFeedback({ scope, projectId, pluginName, skillName, iteration }).then(setFeedback);
+  }, [scope, projectId, pluginName, skillName, iteration]);
 
   async function saveFeedback(evalName: string, text: string) {
     setFeedback((prev) => ({ ...prev, [evalName]: text }));
-    await window.nakiros.saveEvalFeedback({ scope, projectId, skillName, iteration, evalName, feedback: text });
+    await window.nakiros.saveEvalFeedback({ scope, projectId, pluginName, skillName, iteration, evalName, feedback: text });
   }
 
   // Poll runs every 500ms while any run is not terminal, in addition to listening for events
@@ -326,10 +328,11 @@ function RunDetail({
     const trimmed = userInput.trim();
     if (!trimmed || sending) return;
     setSending(true);
+    setUserInput('');
     try {
       await window.nakiros.sendEvalUserMessage(run.runId, trimmed);
-      setUserInput('');
     } catch (err) {
+      setUserInput(trimmed);
       alert(t('alertSendFailed', { message: (err as Error).message }));
     } finally {
       setSending(false);
@@ -449,6 +452,14 @@ function RunDetail({
                   scrollRef={liveScrollRef}
                 />
               )}
+
+            {isRunning &&
+              liveEvents.length === 0 &&
+              !endsOnAssistant(run.turns) && (
+                <ThinkingIndicator
+                  verbs={t('thinking.verbs', { returnObjects: true }) as string[]}
+                />
+              )}
           </div>
         )}
 
@@ -500,7 +511,8 @@ function RunDetail({
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
                   void handleSend();
                 }
               }}
@@ -512,19 +524,20 @@ function RunDetail({
               <button
                 onClick={handleSend}
                 disabled={!userInput.trim() || sending}
-                className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
+                aria-label={t('send')}
+                title={t('send')}
+                className="flex shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] p-2.5 text-white transition-colors hover:bg-[var(--primary)]/90 disabled:opacity-50"
               >
-                <Send size={12} />
-                {t('send')}
+                <Send size={16} />
               </button>
               <button
                 onClick={handleFinish}
                 disabled={sending}
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
+                aria-label={t('finish')}
+                className="flex shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
                 title={t('finishTooltip')}
               >
-                <Flag size={12} />
-                {t('finish')}
+                <Flag size={16} />
               </button>
             </div>
           </div>

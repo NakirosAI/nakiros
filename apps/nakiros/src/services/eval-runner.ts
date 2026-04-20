@@ -549,6 +549,8 @@ export async function startEvalRuns(
         status: 'queued',
         sessionId: null,
         scope: request.scope,
+        pluginName: request.pluginName,
+        marketplaceName: request.marketplaceName,
         workdir: artifactDir,
         executionDir,
         usesSandbox: sandbox !== null,

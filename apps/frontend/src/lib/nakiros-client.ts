@@ -228,14 +228,31 @@ const client = {
   saveClaudeGlobalSkillFile: (skillName: string, relativePath: string, content: string) =>
     invoke('claudeGlobal:saveSkillFile', skillName, relativePath, content),
 
-  // Plugin skills (~/.claude/plugins/<plugin>/skills/, plus project-local plugins)
+  // Plugin skills (~/.claude/plugins/marketplaces/<mkt>/plugins/<plugin>/skills/)
   listPluginSkills: () => invoke('pluginSkills:list'),
-  getPluginSkill: (pluginName: string, skillName: string) =>
-    invoke('pluginSkills:getSkill', pluginName, skillName),
-  readPluginSkillFile: (pluginName: string, skillName: string, relativePath: string) =>
-    invoke('pluginSkills:readSkillFile', pluginName, skillName, relativePath),
-  savePluginSkillFile: (pluginName: string, skillName: string, relativePath: string, content: string) =>
-    invoke('pluginSkills:saveSkillFile', pluginName, skillName, relativePath, content),
+  getPluginSkill: (marketplaceName: string, pluginName: string, skillName: string) =>
+    invoke('pluginSkills:getSkill', marketplaceName, pluginName, skillName),
+  readPluginSkillFile: (
+    marketplaceName: string,
+    pluginName: string,
+    skillName: string,
+    relativePath: string,
+  ) => invoke('pluginSkills:readSkillFile', marketplaceName, pluginName, skillName, relativePath),
+  savePluginSkillFile: (
+    marketplaceName: string,
+    pluginName: string,
+    skillName: string,
+    relativePath: string,
+    content: string,
+  ) =>
+    invoke(
+      'pluginSkills:saveSkillFile',
+      marketplaceName,
+      pluginName,
+      skillName,
+      relativePath,
+      content,
+    ),
 
   readSkillFileAsDataUrl: (request: unknown) => invoke('skill:readFileAsDataUrl', request),
 

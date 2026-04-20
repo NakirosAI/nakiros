@@ -130,8 +130,9 @@ export interface EvalMatrix {
 }
 
 export interface GetEvalMatrixRequest {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: import('./project.js').SkillScope;
   projectId?: string;
+  pluginName?: string;
   skillName: string;
   /**
    * Direct path to a skill directory, overriding the scope-based resolution.
@@ -142,8 +143,9 @@ export interface GetEvalMatrixRequest {
 }
 
 export interface LoadIterationRunRequest {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: import('./project.js').SkillScope;
   projectId?: string;
+  pluginName?: string;
   skillName: string;
   iteration: number;
   evalName: string;

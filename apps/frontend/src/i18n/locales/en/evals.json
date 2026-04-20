@@ -19,6 +19,17 @@
   "events_one": "{{count}} event",
   "events_other": "{{count}} events",
   "waitingFirstChunk": "Waiting for first chunk...",
+  "thinking": {
+    "verbs": [
+      "Running the eval…",
+      "Calling the agent…",
+      "Reading context…",
+      "Running tools…",
+      "Generating the response…",
+      "Validating output…",
+      "Scoring the output…"
+    ]
+  },
   "feedback": {
     "title": "Your feedback",
     "emptyHint": "— empty means \"passed review\"",
@@ -28,7 +39,7 @@
     "placeholder": "What did you notice about this output? Be specific — actionable comments help fix the skill."
   },
   "waitingForInput": "Agent is waiting for your input",
-  "userInputPlaceholder": "Type your response... (⌘/Ctrl+Enter to send)",
+  "userInputPlaceholder": "Type your response... (Enter to send, Shift+Enter for new line)",
   "send": "Send",
   "finish": "Finish",
   "finishTooltip": "Finish the run without answering (useful for 'should NOT do X' assertions)",

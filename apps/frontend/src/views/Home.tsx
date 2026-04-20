@@ -2,8 +2,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Project } from '@nakiros/shared';
 import appIcon from '../assets/icon.svg';
-import { AlertTriangle, Globe, Package, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, Globe, Package, Plug, RefreshCw, X } from 'lucide-react';
 import VersionIndicator from '../components/VersionIndicator';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
+
+type HomeTab = 'projects' | 'plugins' | 'globals';
 
 interface Props {
   projects: Project[];
@@ -12,6 +15,7 @@ interface Props {
   onDismissProject(id: string): void;
   onOpenNakirosSkills(): void;
   onOpenGlobalSkills(): void;
+  onOpenPluginSkills(): void;
   bootError?: string;
 }
 
@@ -22,11 +26,20 @@ export default function Home({
   onDismissProject,
   onOpenNakirosSkills,
   onOpenGlobalSkills,
+  onOpenPluginSkills,
   bootError,
 }: Props) {
   const { t } = useTranslation('home');
   const [showAll, setShowAll] = useState(false);
+  const [activeTab, setActiveTab] = useState<HomeTab>('projects');
   const RECENT_LIMIT = 8;
+
+  function handleTabChange(value: string) {
+    const tab = value as HomeTab;
+    setActiveTab(tab);
+    if (tab === 'plugins') onOpenPluginSkills();
+    else if (tab === 'globals') onOpenGlobalSkills();
+  }
 
   function timeAgo(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
@@ -84,14 +97,6 @@ export default function Home({
               {t('nakirosSkills')}
             </button>
             <button
-              onClick={onOpenGlobalSkills}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-emerald-400 hover:text-emerald-400"
-              title={t('globalSkillsTooltip')}
-            >
-              <Globe size={14} />
-              {t('globalSkills')}
-            </button>
-            <button
               onClick={onRescan}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--primary)] hover:text-[var(--primary)]"
             >
@@ -100,6 +105,23 @@ export default function Home({
             </button>
           </div>
         </div>
+
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="mb-5">
+          <TabsList>
+            <TabsTrigger value="projects">
+              <Package size={14} className="mr-1.5" />
+              {t('tabProjects')}
+            </TabsTrigger>
+            <TabsTrigger value="plugins">
+              <Plug size={14} className="mr-1.5" />
+              {t('tabPlugins')}
+            </TabsTrigger>
+            <TabsTrigger value="globals">
+              <Globe size={14} className="mr-1.5" />
+              {t('tabGlobals')}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {bootError && (
           <div className="mb-4 rounded-[10px] border border-[#f1b5b5] bg-[#fff3f3] px-3 py-2.5 text-[13px] text-[#8b1f1f]">

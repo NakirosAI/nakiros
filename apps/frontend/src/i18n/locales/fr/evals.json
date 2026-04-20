@@ -19,6 +19,17 @@
   "events_one": "{{count}} événement",
   "events_other": "{{count}} événements",
   "waitingFirstChunk": "En attente du premier chunk...",
+  "thinking": {
+    "verbs": [
+      "Exécution de l'éval…",
+      "Appel de l'agent…",
+      "Lecture du contexte…",
+      "Exécution des outils…",
+      "Génération de la réponse…",
+      "Validation du résultat…",
+      "Notation de la sortie…"
+    ]
+  },
   "feedback": {
     "title": "Votre retour",
     "emptyHint": "— vide signifie « revue validée »",
@@ -28,7 +39,7 @@
     "placeholder": "Qu'avez-vous remarqué sur ce résultat ? Soyez précis — des commentaires actionnables aident à corriger le skill."
   },
   "waitingForInput": "L'agent attend votre réponse",
-  "userInputPlaceholder": "Tapez votre réponse... (⌘/Ctrl+Entrée pour envoyer)",
+  "userInputPlaceholder": "Tapez votre réponse... (Entrée pour envoyer, Maj+Entrée pour nouvelle ligne)",
   "send": "Envoyer",
   "finish": "Terminer",
   "finishTooltip": "Terminer l'exécution sans répondre (utile pour les assertions « ne doit PAS faire X »)",

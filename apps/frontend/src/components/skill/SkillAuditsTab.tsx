@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, FileText, Search } from 'lucide-react';
-import type { AuditHistoryEntry } from '@nakiros/shared';
+import type { AuditHistoryEntry, SkillScope } from '@nakiros/shared';
 import type { TFunction } from 'i18next';
 import { MarkdownViewer } from '../ui';
 
 interface Props {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
   projectId?: string;
+  pluginName?: string;
   skillName: string;
 }
 
-export default function SkillAuditsTab({ scope, projectId, skillName }: Props) {
+export default function SkillAuditsTab({ scope, projectId, pluginName, skillName }: Props) {
   const { t } = useTranslation('audit');
   const [history, setHistory] = useState<AuditHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,7 +24,7 @@ export default function SkillAuditsTab({ scope, projectId, skillName }: Props) {
     let mounted = true;
     setLoading(true);
     window.nakiros
-      .listAuditHistory({ scope, projectId, skillName })
+      .listAuditHistory({ scope, projectId, pluginName, skillName })
       .then((entries) => {
         if (!mounted) return;
         setHistory(entries);
@@ -32,7 +33,7 @@ export default function SkillAuditsTab({ scope, projectId, skillName }: Props) {
     return () => {
       mounted = false;
     };
-  }, [scope, projectId, skillName]);
+  }, [scope, projectId, pluginName, skillName]);
 
   async function openAudit(entry: AuditHistoryEntry) {
     setSelected(entry);

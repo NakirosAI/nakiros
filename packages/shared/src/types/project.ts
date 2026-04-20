@@ -63,6 +63,20 @@ export interface SkillFileEntry {
   sizeBytes?: number;
 }
 
+/**
+ * Unified scope discriminator for every skill-bound operation
+ * (list, read, eval, audit, fix, create). Keep in sync with
+ * `resolveEvalSkillDir` + `resolveSkillDir` on the daemon side.
+ *
+ * - `project`       → <project>/.claude/skills/<name>
+ * - `nakiros-bundled` → ~/.nakiros/skills/<name>
+ * - `claude-global` → ~/.claude/skills/<name>
+ * - `plugin`        → ~/.claude/plugins/<pluginName>/skills/<name>
+ *                     (or <project>/.claude/plugins/<pluginName>/skills/<name>
+ *                     when `projectId` is also provided)
+ */
+export type SkillScope = 'project' | 'nakiros-bundled' | 'claude-global' | 'plugin';
+
 export interface Skill {
   name: string;
   projectId: string;
@@ -75,6 +89,17 @@ export interface Skill {
   evals: SkillEvalSuite | null;
   /** Number of archived audit reports in {skill}/audits/. */
   auditCount: number;
+  /**
+   * Only set for `scope: 'plugin'` — the parent plugin directory name under
+   * ~/.claude/plugins/. Undefined on project / global / bundled skills.
+   */
+  pluginName?: string;
+  /**
+   * Only set for `scope: 'plugin'` — 'user' when the plugin lives under
+   * ~/.claude/plugins/, 'project' when it lives under
+   * <project>/.claude/plugins/.
+   */
+  pluginOrigin?: 'user' | 'project';
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +248,9 @@ export interface SkillEvalRun {
   /** The Claude CLI session id for --resume on interactive runs. */
   sessionId: string | null;
   /** Scope: whether launched from a project or from bundled Nakiros skills. */
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
+  /** Parent plugin name when scope is 'plugin'. */
+  pluginName?: string;
   /** Absolute path to the eval artefact directory (grading.json, outputs/, diff.patch, run.json). */
   workdir: string;
   /**
@@ -290,7 +317,9 @@ export interface EvalRunEvent {
  * If evalNames is empty/undefined, runs all evals defined for the skill.
  */
 export interface StartEvalRunRequest {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
+  /** Parent plugin name when scope is 'plugin'. */
+  pluginName?: string;
   projectId?: string;
   skillName: string;
   evalNames?: string[];
@@ -340,7 +369,9 @@ export interface AuditRunTurn {
 
 export interface AuditRun {
   runId: string;
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
+  /** Parent plugin name when scope is 'plugin'. */
+  pluginName?: string;
   projectId?: string;
   /** The skill being audited. */
   skillName: string;
@@ -369,7 +400,9 @@ export interface AuditRunEvent {
 }
 
 export interface StartAuditRequest {
-  scope: 'project' | 'nakiros-bundled' | 'claude-global';
+  scope: SkillScope;
+  /** Parent plugin name when scope is 'plugin'. */
+  pluginName?: string;
   projectId?: string;
   skillName: string;
 }

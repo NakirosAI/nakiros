@@ -41,9 +41,6 @@
   "loadingFile": "Chargement...",
   "imageError": "Impossible d'afficher l'image",
   "selectFile": "Sélectionne un fichier à afficher",
-  "alertEvalFailed": "Échec du lancement des evals : {{message}}",
-  "alertAuditFailed": "Échec du lancement de l'audit : {{message}}",
-  "alertFixFailed": "Échec du lancement du fix : {{message}}",
   "evals": {
     "noEvals": "Aucun eval défini pour ce skill",
     "definitionsHeading": "Définitions d'eval ({{count}})",

@@ -20,6 +20,7 @@ import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
 import FixView from './FixView';
 import SkillAuditsTab from '../components/skill/SkillAuditsTab';
+import { useSkillActionErrorHandlers } from '../hooks/useSkillActionErrorHandlers';
 import { useSkillsViewState } from './skills/useSkillsViewState';
 import type { SkillsViewConfig } from './skills/types';
 import {
@@ -54,9 +55,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
   );
 
   const s = useSkillsViewState(config);
-  const onEvalFailure = (message: string) => alert(t('alertEvalFailed', { message }));
-  const onAuditFailure = (message: string) => alert(t('alertAuditFailed', { message }));
-  const onFixFailure = (message: string) => alert(t('alertFixFailed', { message }));
+  const { onEvalFailure, onAuditFailure, onFixFailure } = useSkillActionErrorHandlers();
 
   // Show eval runs overlay
   if (s.activeRuns) {

@@ -1,0 +1,5 @@
+{
+  "alertEvalFailed": "Failed to start eval runs: {{message}}",
+  "alertAuditFailed": "Failed to start audit: {{message}}",
+  "alertFixFailed": "Failed to start fix: {{message}}"
+}

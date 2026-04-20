@@ -41,9 +41,6 @@
   "loadingFile": "Loading...",
   "imageError": "Unable to display image",
   "selectFile": "Select a file to view",
-  "alertEvalFailed": "Failed to start eval runs: {{message}}",
-  "alertAuditFailed": "Failed to start audit: {{message}}",
-  "alertFixFailed": "Failed to start fix: {{message}}",
   "evals": {
     "noEvals": "No evals defined for this skill",
     "definitionsHeading": "Eval Definitions ({{count}})",

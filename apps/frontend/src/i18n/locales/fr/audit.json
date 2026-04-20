@@ -18,7 +18,7 @@
   },
   "input": {
     "waitingForInput": "L'agent attend ta réponse",
-    "placeholder": "Tape ta réponse... (⌘/Ctrl+Entrée pour envoyer)",
+    "placeholder": "Tape ta réponse... (Entrée pour envoyer, Maj+Entrée pour nouvelle ligne)",
     "send": "Envoyer",
     "sendFailed": "Échec de l'envoi : {{message}}"
   },
@@ -27,6 +27,17 @@
     "events_one": "{{count}} événement",
     "events_other": "{{count}} événements",
     "waitingFirstChunk": "En attente du premier chunk..."
+  },
+  "thinking": {
+    "verbs": [
+      "Analyse du skill…",
+      "Lecture des exemples…",
+      "Revue des instructions…",
+      "Identification des points de friction…",
+      "Vérification de la couverture…",
+      "Rédaction du rapport…",
+      "Mise en forme des observations…"
+    ]
   },
   "status": {
     "completed": "terminé",

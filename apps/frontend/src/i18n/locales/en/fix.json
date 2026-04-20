@@ -37,14 +37,16 @@
     "waitingCreate": "Reply to the agent, then click \"Create skill\" when the draft is ready or \"Discard\" to abandon.",
     "waitingFix": "Reply to iterate, Run evals to validate, then Sync to skill or Discard",
     "placeholderRunning": "Wait for the agent to finish the current turn...",
-    "placeholderIdle": "Type your response... (⌘/Ctrl+Enter to send)",
+    "placeholderIdle": "Type your response... (Enter to send, Shift+Enter for new line)",
     "send": "Send"
   },
   "status": {
     "completed": "completed",
     "failed": "failed",
     "stopped": "stopped",
-    "waiting": "waiting"
+    "waiting": "waiting",
+    "running": "running",
+    "starting": "starting"
   },
   "units": {
     "tokens": "tok"
@@ -54,6 +56,17 @@
     "events_one": "{{count}} event",
     "events_other": "{{count}} events",
     "waitingFirstChunk": "Waiting for first chunk..."
+  },
+  "thinking": {
+    "verbs": [
+      "Thinking about the fix…",
+      "Reading files…",
+      "Writing the draft…",
+      "Updating examples…",
+      "Applying the patch…",
+      "Checking changes…",
+      "Polishing the skill…"
+    ]
   },
   "benchmarks": {
     "heading": "Benchmarks",

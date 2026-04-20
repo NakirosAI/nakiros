@@ -23,6 +23,7 @@ import {
   endsOnAssistant,
   type LiveStreamEvent,
 } from '../components/ConversationTurn';
+import { ThinkingIndicator } from '../components/ThinkingIndicator';
 
 interface Props {
   scope: SkillScope;
@@ -136,10 +137,11 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
     const trimmed = userInput.trim();
     if (!trimmed || sending) return;
     setSending(true);
+    setUserInput('');
     try {
       await window.nakiros.sendAuditUserMessage(initialRun.runId, trimmed);
-      setUserInput('');
     } catch (err) {
+      setUserInput(trimmed);
       alert(t('input.sendFailed', { message: (err as Error).message }));
     } finally {
       setSending(false);
@@ -261,7 +263,10 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void handleSend();
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSend();
+                }
               }}
               placeholder={t('input.placeholder')}
               className="min-h-[60px] flex-1 resize-none rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
@@ -270,10 +275,11 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
             <button
               onClick={handleSend}
               disabled={!userInput.trim() || sending}
-              className="flex items-start gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
+              aria-label={t('input.send')}
+              title={t('input.send')}
+              className="flex shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] p-2.5 text-white transition-colors hover:bg-[var(--primary)]/90 disabled:opacity-50"
             >
-              <Send size={12} />
-              {t('input.send')}
+              <Send size={16} />
             </button>
           </div>
         </div>
@@ -287,6 +293,7 @@ function ConversationPanel({
   liveEvents,
   liveScrollRef,
   isStreaming,
+  t,
 }: {
   run: AuditRun;
   liveEvents: LiveEvent[];
@@ -322,6 +329,12 @@ function ConversationPanel({
               scrollRef={liveScrollRef}
             />
           )}
+
+        {isStreaming && liveEvents.length === 0 && !endsOnAssistant(run.turns) && (
+          <ThinkingIndicator
+            verbs={t('thinking.verbs', { returnObjects: true }) as string[]}
+          />
+        )}
       </div>
     </div>
   );

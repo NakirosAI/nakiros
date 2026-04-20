@@ -1,0 +1,5 @@
+{
+  "alertEvalFailed": "Échec du lancement des evals : {{message}}",
+  "alertAuditFailed": "Échec du lancement de l'audit : {{message}}",
+  "alertFixFailed": "Échec du lancement du fix : {{message}}"
+}

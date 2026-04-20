@@ -422,6 +422,8 @@ function startSkillAgent(mode: SkillAgentMode, request: StartAuditRequest, opts:
     runId,
     scope: request.scope,
     projectId: request.projectId,
+    pluginName: request.pluginName,
+    marketplaceName: request.marketplaceName,
     skillName: request.skillName,
     status: 'starting',
     sessionId: null,

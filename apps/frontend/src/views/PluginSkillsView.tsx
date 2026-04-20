@@ -41,15 +41,16 @@ interface Props {
   onBack(): void;
 }
 
-/** Composite identity: a plugin skill is uniquely identified by `<pluginName>::<skillName>`. */
-function skillKey(skill: Pick<Skill, 'pluginName' | 'name'>): string {
-  return `${skill.pluginName ?? ''}::${skill.name}`;
+/** Composite identity: `<marketplace>::<plugin>::<skill>`. */
+function skillKey(skill: Pick<Skill, 'marketplaceName' | 'pluginName' | 'name'>): string {
+  return `${skill.marketplaceName ?? ''}::${skill.pluginName ?? ''}::${skill.name}`;
 }
 
 export default function PluginSkillsView({ onBack }: Props) {
   const { t } = useTranslation('plugin-skills');
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedMarketplace, setSelectedMarketplace] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<SkillDetailTab>('files');
 
@@ -89,8 +90,12 @@ export default function PluginSkillsView({ onBack }: Props) {
   useEffect(() => {
     const terminalStatuses = new Set(['completed', 'failed', 'stopped']);
 
-    function keyOf(run: { pluginName?: string; skillName: string }): string {
-      return `${run.pluginName ?? ''}::${run.skillName}`;
+    function keyOf(run: {
+      marketplaceName?: string;
+      pluginName?: string;
+      skillName: string;
+    }): string {
+      return `${run.marketplaceName ?? ''}::${run.pluginName ?? ''}::${run.skillName}`;
     }
 
     async function pollOngoing() {
@@ -149,13 +154,14 @@ export default function PluginSkillsView({ onBack }: Props) {
   const selectedSkill = selectedKey ? skills.find((s) => skillKey(s) === selectedKey) : null;
 
   async function openFile(relativePath: string) {
-    if (!selectedSkill || !selectedSkill.pluginName) return;
+    if (!selectedSkill?.pluginName || !selectedSkill.marketplaceName) return;
     setLoadingFile(true);
     setSelectedFile(relativePath);
     setImageDataUrl(null);
     if (isImagePath(relativePath)) {
       const dataUrl = await window.nakiros.readSkillFileAsDataUrl({
         scope: 'plugin',
+        marketplaceName: selectedSkill.marketplaceName,
         pluginName: selectedSkill.pluginName,
         skillName: selectedSkill.name,
         relativePath,
@@ -165,6 +171,7 @@ export default function PluginSkillsView({ onBack }: Props) {
       setOriginalContent('');
     } else {
       const content = await window.nakiros.readPluginSkillFile(
+        selectedSkill.marketplaceName,
         selectedSkill.pluginName,
         selectedSkill.name,
         relativePath,
@@ -177,9 +184,10 @@ export default function PluginSkillsView({ onBack }: Props) {
   }
 
   async function handleSave() {
-    if (!selectedSkill || !selectedSkill.pluginName || !selectedFile) return;
+    if (!selectedSkill?.pluginName || !selectedSkill.marketplaceName || !selectedFile) return;
     setSaving(true);
     await window.nakiros.savePluginSkillFile(
+      selectedSkill.marketplaceName,
       selectedSkill.pluginName,
       selectedSkill.name,
       selectedFile,
@@ -190,11 +198,12 @@ export default function PluginSkillsView({ onBack }: Props) {
   }
 
   async function handleRunEvals(skill: Skill) {
-    if (starting || !skill.pluginName) return;
+    if (starting || !skill.pluginName || !skill.marketplaceName) return;
     setStarting(true);
     try {
       const response = await window.nakiros.startEvalRuns({
         scope: 'plugin',
+        marketplaceName: skill.marketplaceName,
         pluginName: skill.pluginName,
         skillName: skill.name,
         includeBaseline,
@@ -209,11 +218,12 @@ export default function PluginSkillsView({ onBack }: Props) {
   }
 
   async function handleStartAudit(skill: Skill) {
-    if (auditing || !skill.pluginName) return;
+    if (auditing || !skill.pluginName || !skill.marketplaceName) return;
     setAuditing(true);
     try {
       const run = await window.nakiros.startAudit({
         scope: 'plugin',
+        marketplaceName: skill.marketplaceName,
         pluginName: skill.pluginName,
         skillName: skill.name,
       });
@@ -226,11 +236,12 @@ export default function PluginSkillsView({ onBack }: Props) {
   }
 
   async function handleStartFix(skill: Skill) {
-    if (fixing || !skill.pluginName) return;
+    if (fixing || !skill.pluginName || !skill.marketplaceName) return;
     setFixing(true);
     try {
       const run = await window.nakiros.startFix({
         scope: 'plugin',
+        marketplaceName: skill.marketplaceName,
         pluginName: skill.pluginName,
         skillName: skill.name,
       });
@@ -255,6 +266,7 @@ export default function PluginSkillsView({ onBack }: Props) {
     return (
       <EvalRunsView
         scope="plugin"
+        marketplaceName={activeRuns.skill.marketplaceName}
         pluginName={activeRuns.skill.pluginName}
         skillName={activeRuns.skill.name}
         initialRunIds={activeRuns.runIds}
@@ -271,6 +283,7 @@ export default function PluginSkillsView({ onBack }: Props) {
     return (
       <AuditView
         scope="plugin"
+        marketplaceName={activeAudit.skill.marketplaceName}
         pluginName={activeAudit.skill.pluginName}
         skillName={activeAudit.skill.name}
         initialRun={activeAudit.run}
@@ -286,6 +299,7 @@ export default function PluginSkillsView({ onBack }: Props) {
     return (
       <FixView
         scope="plugin"
+        marketplaceName={activeFix.skill.marketplaceName}
         pluginName={activeFix.skill.pluginName}
         skillName={activeFix.skill.name}
         initialRun={activeFix.run}
@@ -323,12 +337,10 @@ export default function PluginSkillsView({ onBack }: Props) {
           <span className="font-semibold text-[var(--text-primary)]">{skill.name}</span>
           {skill.pluginName && (
             <span className="rounded bg-[var(--bg-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-              {t('pluginBadge', { name: skill.pluginName })}
-            </span>
-          )}
-          {skill.pluginOrigin === 'project' && (
-            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">
-              {t('projectPluginBadge')}
+              {t('pluginBadge', {
+                marketplace: skill.marketplaceName ?? '',
+                plugin: skill.pluginName,
+              })}
             </span>
           )}
 
@@ -455,6 +467,7 @@ export default function PluginSkillsView({ onBack }: Props) {
         {detailTab === 'audits' && (
           <SkillAuditsTab
             scope="plugin"
+            marketplaceName={skill.marketplaceName}
             pluginName={skill.pluginName}
             skillName={skill.name}
           />
@@ -539,7 +552,9 @@ export default function PluginSkillsView({ onBack }: Props) {
           </div>
           <p className="mb-6 text-sm text-[var(--text-muted)]">
             {t('descriptionStart')}{' '}
-            <code className="rounded bg-[var(--bg-muted)] px-1">~/.claude/plugins/&lt;plugin&gt;/skills/</code>
+            <code className="rounded bg-[var(--bg-muted)] px-1">
+              ~/.claude/plugins/marketplaces/&lt;mkt&gt;/plugins/&lt;plugin&gt;/skills/
+            </code>
             . {t('descriptionMiddle')}
           </p>
 
@@ -547,66 +562,114 @@ export default function PluginSkillsView({ onBack }: Props) {
             <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
               {t('noSkills')}
             </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {skills.map((skill) => {
-                const currentKey = skillKey(skill);
+          ) : selectedMarketplace === null ? (
+            <div className="grid grid-cols-2 gap-4">
+              {groupByMarketplace(skills).map(([marketplaceName, mktSkills]) => {
+                const pluginCount = new Set(mktSkills.map((s) => s.pluginName ?? '')).size;
                 return (
                   <button
-                    key={currentKey}
-                    onClick={() => openSkill(skill)}
-                    className="flex flex-col items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-4 text-left transition-colors hover:border-[var(--primary)]"
+                    key={marketplaceName}
+                    onClick={() => setSelectedMarketplace(marketplaceName)}
+                    className="flex items-center gap-4 rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-5 text-left transition-colors hover:border-[var(--primary)]"
                   >
-                    <div className="flex w-full items-center justify-between">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Sparkles size={16} className="text-[var(--primary)]" />
-                        <span className="truncate text-sm font-bold text-[var(--text-primary)]">
-                          {skill.name}
-                        </span>
-                        {ongoingRunsByKey.has(currentKey) && (
-                          <span
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              resumeOngoing(skill);
-                            }}
-                            className="flex cursor-pointer items-center gap-1 rounded bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-bold text-white hover:opacity-90"
-                          >
-                            <Loader2 size={10} className="animate-spin" />
-                            {t('running')}
-                          </span>
-                        )}
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+                      <Plug size={22} className="text-amber-400" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-base font-bold text-[var(--text-primary)]">
+                        {marketplaceName || t('unknownMarketplace')}
                       </div>
-                      {skill.evals?.latestPassRate != null && (
-                        <PassRateBadge rate={skill.evals.latestPassRate} size="sm" />
-                      )}
+                      <div className="mt-0.5 text-xs text-[var(--text-muted)]">
+                        {t('marketplaceCount', { count: mktSkills.length })} ·{' '}
+                        {t('marketplacePluginCount', { count: pluginCount })}
+                      </div>
                     </div>
-                    {skill.pluginName && (
-                      <span className="rounded bg-[var(--bg-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-                        {t('pluginBadge', { name: skill.pluginName })}
-                        {skill.pluginOrigin === 'project' && ` · ${t('projectPluginBadge')}`}
-                      </span>
-                    )}
-                    {skill.content && (
-                      <p className="line-clamp-2 text-xs text-[var(--text-muted)]">
-                        {skill.content.slice(0, 200)}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-1.5">
-                      {skill.hasEvals && (
-                        <Badge
-                          label={t('evalsBadge', { count: skill.evals?.definitions.length ?? 0 })}
-                        />
-                      )}
-                      {skill.auditCount > 0 && (
-                        <Badge label={t('auditsBadge', { count: skill.auditCount })} />
-                      )}
-                      {skill.hasReferences && <Badge label={t('refsBadge')} />}
-                      {skill.hasTemplates && <Badge label={t('templatesBadge')} />}
-                      <Badge label={t('filesBadge', { count: countFiles(skill.files) })} />
-                    </div>
+                    <ChevronRight size={18} className="shrink-0 text-[var(--text-muted)]" />
                   </button>
                 );
               })}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedMarketplace(null)}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+                >
+                  <ArrowLeft size={14} />
+                  {t('marketplacesBack')}
+                </button>
+                <Plug size={14} className="text-amber-400" />
+                <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                  {selectedMarketplace || t('unknownMarketplace')}
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {(() => {
+                  const mktSkills = skills.filter(
+                    (s) => (s.marketplaceName ?? '') === selectedMarketplace,
+                  );
+                  return mktSkills.map((skill) => {
+                      const currentKey = skillKey(skill);
+                      return (
+                        <button
+                          key={currentKey}
+                          onClick={() => openSkill(skill)}
+                          className="flex flex-col items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-4 text-left transition-colors hover:border-[var(--primary)]"
+                        >
+                          <div className="flex w-full items-center justify-between">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Sparkles size={16} className="text-[var(--primary)]" />
+                              <span className="truncate text-sm font-bold text-[var(--text-primary)]">
+                                {skill.name}
+                              </span>
+                              {ongoingRunsByKey.has(currentKey) && (
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    resumeOngoing(skill);
+                                  }}
+                                  className="flex cursor-pointer items-center gap-1 rounded bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-bold text-white hover:opacity-90"
+                                >
+                                  <Loader2 size={10} className="animate-spin" />
+                                  {t('running')}
+                                </span>
+                              )}
+                            </div>
+                            {skill.evals?.latestPassRate != null && (
+                              <PassRateBadge rate={skill.evals.latestPassRate} size="sm" />
+                            )}
+                          </div>
+                          {skill.pluginName && (
+                            <span className="rounded bg-[var(--bg-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
+                              {t('pluginOnlyBadge', { plugin: skill.pluginName })}
+                            </span>
+                          )}
+                          {skill.content && (
+                            <p className="line-clamp-2 text-xs text-[var(--text-muted)]">
+                              {skill.content.slice(0, 200)}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-1.5">
+                            {skill.hasEvals && (
+                              <Badge
+                                label={t('evalsBadge', {
+                                  count: skill.evals?.definitions.length ?? 0,
+                                })}
+                              />
+                            )}
+                            {skill.auditCount > 0 && (
+                              <Badge label={t('auditsBadge', { count: skill.auditCount })} />
+                            )}
+                            {skill.hasReferences && <Badge label={t('refsBadge')} />}
+                            {skill.hasTemplates && <Badge label={t('templatesBadge')} />}
+                            <Badge label={t('filesBadge', { count: countFiles(skill.files) })} />
+                          </div>
+                        </button>
+                      );
+                    });
+                })()}
+              </div>
             </div>
           )}
         </div>
@@ -687,6 +750,7 @@ function EvalsPanel({
       <EvalMatrix
         request={{
           scope,
+          marketplaceName: skill.marketplaceName,
           pluginName: skill.pluginName,
           skillName: skill.name,
         }}
@@ -843,6 +907,17 @@ function TabButton({
       {children}
     </button>
   );
+}
+
+function groupByMarketplace(skills: Skill[]): [string, Skill[]][] {
+  const groups = new Map<string, Skill[]>();
+  for (const skill of skills) {
+    const key = skill.marketplaceName ?? '';
+    const bucket = groups.get(key) ?? [];
+    bucket.push(skill);
+    groups.set(key, bucket);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
 function countFiles(entries: SkillFileEntry[]): number {

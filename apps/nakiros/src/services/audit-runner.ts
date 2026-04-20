@@ -255,6 +255,8 @@ export function startAudit(request: StartAuditRequest, opts: RunOpts): AuditRun 
     runId,
     scope: request.scope,
     projectId: request.projectId,
+    pluginName: request.pluginName,
+    marketplaceName: request.marketplaceName,
     skillName: request.skillName,
     status: 'starting',
     sessionId: null,

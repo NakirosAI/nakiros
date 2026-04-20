@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / discussion
+    url: https://github.com/NakirosAI/nakiros/discussions
+    about: For open-ended questions, usage help, or design discussions.

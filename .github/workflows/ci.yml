@@ -30,6 +30,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # @nakiros/shared is a workspace package exported from dist/. The
+      # consumer typechecks can't resolve it until it has been built.
+      - name: Build workspace packages
+        run: pnpm turbo build --filter @nakiros/shared
+
       - name: Typecheck — nakiros (daemon)
         run: pnpm -F @nakirosai/nakiros exec tsc --noEmit
 

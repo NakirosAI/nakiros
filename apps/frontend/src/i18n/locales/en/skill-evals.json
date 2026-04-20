@@ -1,0 +1,26 @@
+{
+  "noEvals": "No evals defined for this skill",
+  "definitionsHeading": "Eval Definitions ({{count}})",
+  "assertionsBadge_one": "{{count}} assertion",
+  "assertionsBadge_other": "{{count}} assertions",
+  "iterationsHeading": "Iterations ({{count}})",
+  "iterationLabel": "Iteration {{number}}",
+  "latestBadge": "latest",
+  "noBaselineBadge": "no baseline",
+  "noBaselineTooltip": "No baseline (without_skill) — absolute pass rate alone is weak evidence",
+  "with": "with:",
+  "without": "without:",
+  "withSkill": "With skill",
+  "withoutSkillBaseline": "Without skill (baseline)",
+  "delta": "Delta (skill value)",
+  "notRun": "not run — delta unavailable",
+  "table": {
+    "name": "Eval",
+    "with": "With",
+    "without": "Without",
+    "delta": "Δ"
+  },
+  "humanReview": "human review",
+  "humanReviewHeading": "Human review",
+  "grader": "grader: {{model}}"
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
@@ -19,7 +19,7 @@ import {
   Package,
 } from 'lucide-react';
 import clsx from 'clsx';
-import type { AuditRun, Skill, SkillFileEntry, SkillEvalGrading, SkillEvalGradingRun, SkillScope } from '@nakiros/shared';
+import type { Skill, SkillFileEntry, SkillEvalGrading, SkillEvalGradingRun, SkillScope } from '@nakiros/shared';
 import { Checkbox, MarkdownViewer } from '../components/ui';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
@@ -27,8 +27,8 @@ import AuditView from './AuditView';
 import FixView from './FixView';
 import SkillAuditsTab from '../components/skill/SkillAuditsTab';
 import { EvalMatrix } from '../components/eval-matrix';
-
-type SkillDetailTab = 'files' | 'evals' | 'audits';
+import { useSkillsViewState } from './skills/useSkillsViewState';
+import type { SkillsViewConfig } from './skills/types';
 
 interface Props {
   onBack(): void;
@@ -36,225 +36,74 @@ interface Props {
 
 export default function NakirosSkillsView({ onBack }: Props) {
   const { t } = useTranslation('nakiros-skills');
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<SkillDetailTab>('files');
 
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [fileContent, setFileContent] = useState('');
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
-  const [originalContent, setOriginalContent] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [loadingFile, setLoadingFile] = useState(false);
+  const config = useMemo<SkillsViewConfig>(
+    () => ({
+      scope: 'nakiros-bundled',
+      keyOf: (sk) => sk.name,
+      keyOfRun: (r) => r.skillName,
+      identityOf: (sk) => ({ scope: 'nakiros-bundled', skillName: sk.name }),
+      matchesScope: (r) => r.scope === 'nakiros-bundled',
+      listSkills: () => window.nakiros.listBundledSkills(),
+      readFile: (sk, p) => window.nakiros.readBundledSkillFile(sk.name, p),
+      saveFile: (sk, p, c) =>
+        window.nakiros.saveBundledSkillFile(sk.name, p, c).then(() => undefined),
+    }),
+    [],
+  );
 
-  const [activeRuns, setActiveRuns] = useState<{ runIds: string[]; iteration: number; skillName: string } | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [includeBaseline, setIncludeBaseline] = useState(true);
-  const [activeAudit, setActiveAudit] = useState<{ run: AuditRun; skillName: string } | null>(null);
-  const [auditing, setAuditing] = useState(false);
-  const [activeFix, setActiveFix] = useState<{ run: AuditRun; skillName: string } | null>(null);
-  const [fixing, setFixing] = useState(false);
-  const [ongoingRunsBySkill, setOngoingRunsBySkill] = useState<Map<string, { runIds: string[]; iteration: number }>>(new Map());
-  /** Active (non-terminal) fix runs, keyed by skill name. */
-  const [activeFixBySkill, setActiveFixBySkill] = useState<Map<string, AuditRun>>(new Map());
-  /** Active (non-terminal) audit runs, keyed by skill name. */
-  const [activeAuditBySkill, setActiveAuditBySkill] = useState<Map<string, AuditRun>>(new Map());
-
-  useEffect(() => {
-    setLoading(true);
-    window.nakiros.listBundledSkills().then((sk) => {
-      setSkills(sk);
-      setLoading(false);
-    });
-  }, []);
-
-  // Poll for ongoing (non-terminal) runs across all bundled skills
-  useEffect(() => {
-    const terminalStatuses = new Set(['completed', 'failed', 'stopped']);
-
-    async function pollOngoing() {
-      const all = await window.nakiros.listEvalRuns();
-      const bundledActive = all.filter((r) => r.scope === 'nakiros-bundled' && !terminalStatuses.has(r.status));
-      const map = new Map<string, { runIds: string[]; iteration: number }>();
-      for (const run of bundledActive) {
-        const entry = map.get(run.skillName) ?? { runIds: [], iteration: run.iteration };
-        entry.runIds.push(run.runId);
-        map.set(run.skillName, entry);
-      }
-      setOngoingRunsBySkill(map);
-    }
-
-    async function pollFixes() {
-      const all = await window.nakiros.listActiveFixRuns();
-      const map = new Map<string, AuditRun>();
-      for (const run of all) {
-        if (run.scope !== 'nakiros-bundled') continue;
-        map.set(run.skillName, run);
-      }
-      setActiveFixBySkill(map);
-    }
-
-    async function pollAudits() {
-      const all = await window.nakiros.listActiveAuditRuns();
-      const map = new Map<string, AuditRun>();
-      for (const run of all) {
-        if (run.scope !== 'nakiros-bundled') continue;
-        map.set(run.skillName, run);
-      }
-      setActiveAuditBySkill(map);
-    }
-
-    void pollOngoing();
-    void pollFixes();
-    void pollAudits();
-    const interval = setInterval(() => {
-      void pollOngoing();
-      void pollFixes();
-      void pollAudits();
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
-  function openSkill(name: string) {
-    setSelectedSkill(name);
-    setDetailTab('files');
-    setSelectedFile(null);
-    setFileContent('');
-  }
-
-  async function openFile(relativePath: string) {
-    if (!selectedSkill) return;
-    setLoadingFile(true);
-    setSelectedFile(relativePath);
-    setImageDataUrl(null);
-    if (isImagePath(relativePath)) {
-      const dataUrl = await window.nakiros.readSkillFileAsDataUrl({
-        scope: 'nakiros-bundled',
-        skillName: selectedSkill,
-        relativePath,
-      });
-      setImageDataUrl(dataUrl);
-      setFileContent('');
-      setOriginalContent('');
-    } else {
-      const content = await window.nakiros.readBundledSkillFile(selectedSkill, relativePath);
-      const text = content ?? '';
-      setFileContent(text);
-      setOriginalContent(text);
-    }
-    setLoadingFile(false);
-  }
-
-  async function handleSave() {
-    if (!selectedSkill || !selectedFile) return;
-    setSaving(true);
-    await window.nakiros.saveBundledSkillFile(selectedSkill, selectedFile, fileContent);
-    setOriginalContent(fileContent);
-    setSaving(false);
-  }
-
-  async function handleRunEvals(skillName: string) {
-    if (starting) return;
-    setStarting(true);
-    try {
-      const response = await window.nakiros.startEvalRuns({
-        scope: 'nakiros-bundled',
-        skillName,
-        includeBaseline,
-      });
-      setActiveRuns({ runIds: response.runIds, iteration: response.iteration, skillName });
-    } catch (err) {
-      console.error(err);
-      alert(t('alertEvalFailed', { message: (err as Error).message }));
-    } finally {
-      setStarting(false);
-    }
-  }
-
-  async function handleStartAudit(skillName: string) {
-    if (auditing) return;
-    setAuditing(true);
-    try {
-      const run = await window.nakiros.startAudit({ scope: 'nakiros-bundled', skillName });
-      setActiveAudit({ run, skillName });
-    } catch (err) {
-      alert(t('alertAuditFailed', { message: (err as Error).message }));
-    } finally {
-      setAuditing(false);
-    }
-  }
-
-  async function handleStartFix(skillName: string) {
-    if (fixing) return;
-    setFixing(true);
-    try {
-      const run = await window.nakiros.startFix({ scope: 'nakiros-bundled', skillName });
-      setActiveFix({ run, skillName });
-    } catch (err) {
-      alert(t('alertFixFailed', { message: (err as Error).message }));
-    } finally {
-      setFixing(false);
-    }
-  }
-
-
-  const dirty = fileContent !== originalContent;
-  const isMarkdown = selectedFile?.endsWith('.md') ?? false;
-
-  function resumeOngoing(skillName: string) {
-    const ongoing = ongoingRunsBySkill.get(skillName);
-    if (!ongoing) return;
-    setActiveRuns({ runIds: ongoing.runIds, iteration: ongoing.iteration, skillName });
-  }
+  const s = useSkillsViewState(config);
+  const onEvalFailure = (message: string) => alert(t('alertEvalFailed', { message }));
+  const onAuditFailure = (message: string) => alert(t('alertAuditFailed', { message }));
+  const onFixFailure = (message: string) => alert(t('alertFixFailed', { message }));
 
   // Show eval runs overlay
-  if (activeRuns) {
+  if (s.activeRuns) {
     return (
       <EvalRunsView
         scope="nakiros-bundled"
-        skillName={activeRuns.skillName}
-        initialRunIds={activeRuns.runIds}
-        iteration={activeRuns.iteration}
+        skillName={s.activeRuns.skill.name}
+        initialRunIds={s.activeRuns.runIds}
+        iteration={s.activeRuns.iteration}
         onClose={() => {
-          setActiveRuns(null);
-          window.nakiros.listBundledSkills().then(setSkills);
+          s.setActiveRuns(null);
+          void s.refreshSkills();
         }}
       />
     );
   }
 
   // Show audit overlay
-  if (activeAudit) {
+  if (s.activeAudit) {
     return (
       <AuditView
         scope="nakiros-bundled"
-        skillName={activeAudit.skillName}
-        initialRun={activeAudit.run}
+        skillName={s.activeAudit.skill.name}
+        initialRun={s.activeAudit.run}
         onClose={() => {
-          setActiveAudit(null);
-          window.nakiros.listBundledSkills().then(setSkills);
+          s.setActiveAudit(null);
+          void s.refreshSkills();
         }}
       />
     );
   }
 
   // Show fix overlay
-  if (activeFix) {
+  if (s.activeFix) {
     return (
       <FixView
         scope="nakiros-bundled"
-        skillName={activeFix.skillName}
-        initialRun={activeFix.run}
+        skillName={s.activeFix.skill.name}
+        initialRun={s.activeFix.run}
         onClose={() => {
-          setActiveFix(null);
-          window.nakiros.listBundledSkills().then(setSkills);
+          s.setActiveFix(null);
+          void s.refreshSkills();
         }}
       />
     );
   }
 
-  if (loading) {
+  if (s.loading) {
     return (
       <div className="flex h-screen items-center justify-center text-[var(--text-muted)]">
         {t('loading')}
@@ -263,16 +112,15 @@ export default function NakirosSkillsView({ onBack }: Props) {
   }
 
   // ─── Skill detail ──────────────────────────────────────────────────────────
-  if (selectedSkill) {
-    const skill = skills.find((s) => s.name === selectedSkill);
-    if (!skill) return null;
+  if (s.selectedSkill) {
+    const skill = s.selectedSkill;
 
     return (
       <div className="flex h-screen flex-col overflow-hidden">
         <TopBar onBack={onBack} title={t('topBar.title')} backLabel={t('topBar.back')} />
         <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-2.5">
           <button
-            onClick={() => setSelectedSkill(null)}
+            onClick={() => s.closeSkill()}
             className="rounded p-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--text-primary)]"
           >
             <ArrowLeft size={16} />
@@ -284,67 +132,67 @@ export default function NakirosSkillsView({ onBack }: Props) {
 
           <div className="flex-1" />
 
-          {detailTab === 'audits' && (
+          {s.detailTab === 'audits' && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  const active = activeAuditBySkill.get(skill.name);
-                  if (active) setActiveAudit({ run: active, skillName: skill.name });
-                  else handleStartAudit(skill.name);
+                  const active = s.activeAuditByKey.get(skill.name);
+                  if (active) s.setActiveAudit({ run: active, skill });
+                  else void s.handleStartAudit(skill, onAuditFailure);
                 }}
-                disabled={auditing}
+                disabled={s.auditing}
                 className={clsx(
                   'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
-                  activeAuditBySkill.has(skill.name)
+                  s.activeAuditByKey.has(skill.name)
                     ? 'border border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--primary)] hover:bg-[var(--primary-soft)]/80'
                     : 'bg-[var(--primary)] text-white hover:opacity-90',
                 )}
                 title={
-                  activeAuditBySkill.has(skill.name)
+                  s.activeAuditByKey.has(skill.name)
                     ? t('auditResumeTooltip')
                     : t('auditTooltip')
                 }
               >
-                {activeAuditBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-                {activeAuditBySkill.has(skill.name) ? t('auditRunning') : auditing ? t('auditStarting') : t('audit')}
+                {s.activeAuditByKey.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                {s.activeAuditByKey.has(skill.name) ? t('auditRunning') : s.auditing ? t('auditStarting') : t('audit')}
               </button>
 
               <button
                 onClick={() => {
-                  const active = activeFixBySkill.get(skill.name);
-                  if (active) setActiveFix({ run: active, skillName: skill.name });
-                  else handleStartFix(skill.name);
+                  const active = s.activeFixByKey.get(skill.name);
+                  if (active) s.setActiveFix({ run: active, skill });
+                  else void s.handleStartFix(skill, onFixFailure);
                 }}
-                disabled={fixing || (!activeFixBySkill.has(skill.name) && skill.auditCount === 0)}
+                disabled={s.fixing || (!s.activeFixByKey.has(skill.name) && skill.auditCount === 0)}
                 className={clsx(
                   'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
-                  activeFixBySkill.has(skill.name)
+                  s.activeFixByKey.has(skill.name)
                     ? 'border border-amber-400 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
                     : 'bg-amber-500 text-white hover:opacity-90',
                 )}
                 title={
-                  activeFixBySkill.has(skill.name)
+                  s.activeFixByKey.has(skill.name)
                     ? t('fixResumeTooltip')
                     : skill.auditCount === 0
                       ? t('fixNoAuditTooltip')
                       : t('fixTooltip')
                 }
               >
-                {activeFixBySkill.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
-                {activeFixBySkill.has(skill.name) ? t('fixRunning') : fixing ? t('fixStarting') : t('fix')}
+                {s.activeFixByKey.has(skill.name) ? <Loader2 size={12} className="animate-spin" /> : <Wrench size={12} />}
+                {s.activeFixByKey.has(skill.name) ? t('fixRunning') : s.fixing ? t('fixStarting') : t('fix')}
               </button>
             </div>
           )}
 
-          {detailTab === 'evals' && skill.evals && skill.evals.definitions.length > 0 && (
+          {s.detailTab === 'evals' && skill.evals && skill.evals.definitions.length > 0 && (
             <div className="flex items-center gap-2">
-              {ongoingRunsBySkill.has(skill.name) ? (
+              {s.ongoingByKey.has(skill.name) ? (
                 <button
-                  onClick={() => resumeOngoing(skill.name)}
+                  onClick={() => s.resumeOngoing(skill)}
                   className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white"
                 >
                   <Loader2 size={12} className="animate-spin" />
-                  {t('resumeEvals', { count: ongoingRunsBySkill.get(skill.name)!.runIds.length })}
+                  {t('resumeEvals', { count: s.ongoingByKey.get(skill.name)!.runIds.length })}
                 </button>
               ) : (
                 <>
@@ -353,18 +201,18 @@ export default function NakirosSkillsView({ onBack }: Props) {
                     title={t('baselineTooltip')}
                   >
                     <Checkbox
-                      checked={includeBaseline}
-                      onCheckedChange={(checked) => setIncludeBaseline(checked === true)}
+                      checked={s.includeBaseline}
+                      onCheckedChange={(checked) => s.setIncludeBaseline(checked === true)}
                     />
                     {t('includeBaseline')}
                   </label>
                   <button
-                    onClick={() => handleRunEvals(skill.name)}
-                    disabled={starting}
+                    onClick={() => void s.handleRunEvals(skill, onEvalFailure)}
+                    disabled={s.starting}
                     className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white transition-colors disabled:opacity-50"
                   >
                     <Play size={12} />
-                    {starting ? t('runEvalsStarting') : t('runEvals')}
+                    {s.starting ? t('runEvalsStarting') : t('runEvals')}
                   </button>
                 </>
               )}
@@ -372,70 +220,70 @@ export default function NakirosSkillsView({ onBack }: Props) {
           )}
 
           <div className="flex rounded-lg border border-[var(--line)] bg-[var(--bg-soft)]">
-            <TabButton active={detailTab === 'files'} onClick={() => setDetailTab('files')}>
+            <TabButton active={s.detailTab === 'files'} onClick={() => s.setDetailTab('files')}>
               {t('tabFiles')}
             </TabButton>
-            <TabButton active={detailTab === 'evals'} onClick={() => setDetailTab('evals')}>
+            <TabButton active={s.detailTab === 'evals'} onClick={() => s.setDetailTab('evals')}>
               <FlaskConical size={12} />
               {t('tabEvals')} {skill.evals && `(${skill.evals.definitions.length})`}
             </TabButton>
-            <TabButton active={detailTab === 'audits'} onClick={() => setDetailTab('audits')}>
+            <TabButton active={s.detailTab === 'audits'} onClick={() => s.setDetailTab('audits')}>
               <Search size={12} />
               {t('tabAudits')} {skill.auditCount > 0 && `(${skill.auditCount})`}
             </TabButton>
           </div>
         </div>
 
-        {detailTab === 'audits' && (
+        {s.detailTab === 'audits' && (
           <SkillAuditsTab scope="nakiros-bundled" skillName={skill.name} />
         )}
 
-        {detailTab === 'files' && (
+        {s.detailTab === 'files' && (
           <div className="flex flex-1 overflow-hidden">
             <div className="flex w-[260px] shrink-0 flex-col border-r border-[var(--line)] bg-[var(--bg-soft)]">
               <div className="flex-1 overflow-y-auto py-1">
-                <FileTree entries={skill.files} selectedPath={selectedFile} onSelect={openFile} />
+                <FileTree entries={skill.files} selectedPath={s.selectedFile} onSelect={s.openFile} />
               </div>
             </div>
 
             <div className="flex flex-1 flex-col overflow-hidden">
-              {selectedFile ? (
+              {s.selectedFile ? (
                 <>
                   <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2">
-                    <span className="text-xs text-[var(--text-muted)]">{selectedFile}</span>
+                    <span className="text-xs text-[var(--text-muted)]">{s.selectedFile}</span>
                     <button
-                      onClick={handleSave}
-                      disabled={!dirty || saving}
+                      onClick={s.handleSave}
+                      disabled={!s.dirty || s.saving}
                       className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-1 text-xs font-medium text-white transition-colors disabled:opacity-50"
                     >
                       <Save size={12} />
-                      {saving ? t('saving') : t('save')}
+                      {s.saving ? t('saving') : t('save')}
                     </button>
                   </div>
-                  {loadingFile ? (
+                  {s.loadingFile ? (
                     <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
                       {t('loadingFile')}
                     </div>
-                  ) : imageDataUrl ? (
+                  ) : s.imageDataUrl ? (
                     <div className="flex flex-1 items-center justify-center overflow-auto bg-[var(--bg-muted)] p-6">
                       <img
-                        src={imageDataUrl}
-                        alt={selectedFile ?? ''}
+                        src={s.imageDataUrl}
+                        alt={s.selectedFile ?? ''}
                         className="max-h-full max-w-full object-contain"
                       />
                     </div>
-                  ) : selectedFile && isImagePath(selectedFile) ? (
+                  ) : s.selectedFile && isImagePath(s.selectedFile) ? (
                     <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
                       {t('imageError')}
                     </div>
-                  ) : isMarkdown && !dirty ? (
+                  ) : s.isMarkdown && !s.dirty ? (
                     <div className="flex-1 overflow-y-auto p-6">
-                      <MarkdownViewer content={fileContent} />
+                      <MarkdownViewer content={s.fileContent} />
                     </div>
                   ) : (
                     <textarea
-                      value={fileContent}
-                      onChange={(e) => setFileContent(e.target.value)}
+                      value={s.fileContent}
+                      onChange={(e) => s.setFileContent(e.target.value)}
                       className="flex-1 resize-none border-none bg-[var(--bg)] p-4 font-mono text-sm text-[var(--text-primary)] outline-none"
                       spellCheck={false}
                     />
@@ -451,7 +299,7 @@ export default function NakirosSkillsView({ onBack }: Props) {
           </div>
         )}
 
-        {detailTab === 'evals' && <EvalsPanel skill={skill} scope="nakiros-bundled" t={t} />}
+        {s.detailTab === 'evals' && <EvalsPanel skill={skill} scope="nakiros-bundled" t={t} />}
       </div>
     );
   }
@@ -465,34 +313,34 @@ export default function NakirosSkillsView({ onBack }: Props) {
           <div className="mb-4 flex items-center gap-2">
             <Package size={18} className="text-[var(--primary)]" />
             <h2 className="text-lg font-bold text-[var(--text-primary)]">
-              {t('heading', { count: skills.length })}
+              {t('heading', { count: s.skills.length })}
             </h2>
           </div>
           <p className="mb-6 text-sm text-[var(--text-muted)]">
             {t('descriptionBefore')} <code className="rounded bg-[var(--bg-muted)] px-1">~/.claude/skills/</code> {t('descriptionAfter')}
           </p>
 
-          {skills.length === 0 ? (
+          {s.skills.length === 0 ? (
             <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
               {t('noSkills')}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {skills.map((skill) => (
+              {s.skills.map((skill) => (
                 <button
                   key={skill.name}
-                  onClick={() => openSkill(skill.name)}
+                  onClick={() => s.openSkill(skill)}
                   className="flex flex-col items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-4 text-left transition-colors hover:border-[var(--primary)]"
                 >
                   <div className="flex w-full items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Sparkles size={16} className="text-[var(--primary)]" />
                       <span className="text-sm font-bold text-[var(--text-primary)]">{skill.name}</span>
-                      {ongoingRunsBySkill.has(skill.name) && (
+                      {s.ongoingByKey.has(skill.name) && (
                         <span
                           onClick={(e) => {
                             e.stopPropagation();
-                            resumeOngoing(skill.name);
+                            s.resumeOngoing(skill);
                           }}
                           className="flex cursor-pointer items-center gap-1 rounded bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-bold text-white hover:opacity-90"
                         >

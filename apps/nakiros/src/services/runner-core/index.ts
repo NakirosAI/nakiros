@@ -36,3 +36,7 @@ export {
 } from './tmp-sandbox.js';
 export { createIsolatedHome, destroyIsolatedHome, type IsolatedHome } from './isolated-home.js';
 export { isActiveRunStatus } from './run-status.js';
+export {
+  writeExecutionSettings,
+  type ExecutionSettingsOptions,
+} from './execution-settings.js';

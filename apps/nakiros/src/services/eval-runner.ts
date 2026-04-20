@@ -21,6 +21,7 @@ import {
   listSandboxUntracked,
   persistRunJson,
   spawnClaudeTurn,
+  writeExecutionSettings,
 } from './runner-core/index.js';
 
 import type {
@@ -101,32 +102,11 @@ function prepareArtifactDir(
   return dir;
 }
 
-/**
- * Write `.claude/settings.local.json` at `dir/.claude/` so the claude CLI
- * running with `cwd=dir` auto-accepts edits and (for without_skill baselines)
- * cannot invoke any skill even if auto-discovery would match one.
- */
-function writeExecutionSettings(dir: string, config: EvalRunConfig): void {
-  const claudeDir = join(dir, '.claude');
-  mkdirSync(claudeDir, { recursive: true });
-  const settingsPath = join(claudeDir, 'settings.local.json');
-  if (existsSync(settingsPath)) return;
-  const settings: {
-    permissions: {
-      defaultMode: string;
-      allow: string[];
-      deny?: string[];
-    };
-  } = {
-    permissions: {
-      defaultMode: 'acceptEdits',
-      allow: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'],
-    },
-  };
-  if (config === 'without_skill') {
-    settings.permissions.deny = ['Skill'];
-  }
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+function writeEvalExecutionSettings(dir: string, config: EvalRunConfig): void {
+  writeExecutionSettings(dir, {
+    denySkill: config === 'without_skill',
+    skipIfExists: true,
+  });
 }
 
 /**
@@ -528,7 +508,7 @@ export async function startEvalRuns(
 
       // Fixtures + permission settings go where the agent will actually run.
       copyFixtures(skillDir, executionDir, def.files);
-      writeExecutionSettings(executionDir, config);
+      writeEvalExecutionSettings(executionDir, config);
       // outputs/ in the execution dir — the agent writes here, we copy back
       // to artefactDir on finalise so the grader + UI still find it.
       mkdirSync(join(executionDir, 'outputs'), { recursive: true });

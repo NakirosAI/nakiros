@@ -4,33 +4,24 @@ import type { TFunction } from 'i18next';
 import {
   ArrowLeft,
   ChevronRight,
-  ChevronDown,
   File,
   Loader2,
   Play,
   Save,
   Search,
   Sparkles,
-  CheckCircle,
   Wrench,
-  XCircle,
   FlaskConical,
   Plug,
 } from 'lucide-react';
 import clsx from 'clsx';
-import type {
-  Skill,
-  SkillEvalGrading,
-  SkillEvalGradingRun,
-  SkillScope,
-} from '@nakiros/shared';
+import type { Skill } from '@nakiros/shared';
 import { Checkbox, MarkdownViewer } from '../components/ui';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
 import FixView from './FixView';
 import SkillAuditsTab from '../components/skill/SkillAuditsTab';
-import { EvalMatrix } from '../components/eval-matrix';
 import { useSkillsViewState } from './skills/useSkillsViewState';
 import type { SkillsViewConfig } from './skills/types';
 import {
@@ -40,6 +31,7 @@ import {
   TabButton,
   countFiles,
 } from './skills/components';
+import { SkillEvalsPanel } from './skills/EvalsPanel';
 
 interface Props {
   onBack(): void;
@@ -362,7 +354,14 @@ export default function PluginSkillsView({ onBack }: Props) {
           </div>
         )}
 
-        {s.detailTab === 'evals' && <EvalsPanel skill={skill} scope="plugin" t={t} />}
+        {s.detailTab === 'evals' && (
+          <SkillEvalsPanel
+            skill={skill}
+            scope="plugin"
+            marketplaceName={skill.marketplaceName}
+            pluginName={skill.pluginName}
+          />
+        )}
       </div>
     );
   }
@@ -525,169 +524,6 @@ function TopBar({
         {t('topBarBack')}
       </button>
       <span className="text-sm font-semibold text-[var(--text-primary)]">{title}</span>
-    </div>
-  );
-}
-
-function EvalsPanel({
-  skill,
-  scope,
-  t,
-}: {
-  skill: Skill;
-  scope: SkillScope;
-  t: TFunction<'plugin-skills'>;
-}) {
-  const [expandedEval, setExpandedEval] = useState<string | null>(null);
-  void expandedEval;
-  void setExpandedEval;
-
-  if (!skill.evals || skill.evals.definitions.length === 0) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
-        <FlaskConical size={32} />
-        <p className="text-sm">—</p>
-      </div>
-    );
-  }
-
-  const { definitions } = skill.evals;
-
-  return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="mb-6">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-          {definitions.length} evals
-        </h3>
-        <div className="flex flex-col gap-1.5">
-          {definitions.map((def) => (
-            <div
-              key={def.id}
-              className="rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-2"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-[var(--text-primary)]">{def.name}</span>
-                <Badge label={`${def.assertions.length} assertions`} />
-              </div>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">{def.prompt}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <EvalMatrix
-        request={{
-          scope,
-          marketplaceName: skill.marketplaceName,
-          pluginName: skill.pluginName,
-          skillName: skill.name,
-        }}
-      />
-    </div>
-  );
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function _EvalRow({
-  grading,
-  expanded,
-  onToggle,
-}: {
-  grading: SkillEvalGrading;
-  expanded: boolean;
-  onToggle(): void;
-}) {
-  const { withSkill, withoutSkill, deltaPassRate, humanFeedback } = grading;
-
-  return (
-    <>
-      <tr
-        onClick={onToggle}
-        className="cursor-pointer border-t border-[var(--line)] transition-colors hover:bg-[var(--bg-muted)]"
-      >
-        <td className="py-2 text-sm text-[var(--text-primary)]">
-          <div className="flex items-center gap-1.5">
-            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            {grading.evalName}
-          </div>
-        </td>
-        <td className="py-2 text-center">
-          {withSkill ? (
-            <span className="text-xs">
-              <span className="text-emerald-400">{withSkill.passed}✓</span>
-              {withSkill.failed > 0 && (
-                <span className="ml-1 text-red-400">{withSkill.failed}✗</span>
-              )}
-            </span>
-          ) : (
-            <span className="text-xs text-[var(--text-muted)]">—</span>
-          )}
-        </td>
-        <td className="py-2 text-center">
-          {withoutSkill ? (
-            <span className="text-xs">
-              <span className="text-emerald-400">{withoutSkill.passed}✓</span>
-              {withoutSkill.failed > 0 && (
-                <span className="ml-1 text-red-400">{withoutSkill.failed}✗</span>
-              )}
-            </span>
-          ) : (
-            <span className="text-xs text-amber-400">—</span>
-          )}
-        </td>
-        <td className="py-2 text-right">
-          {deltaPassRate != null ? (
-            <span
-              className={clsx(
-                'text-xs font-bold',
-                deltaPassRate > 0
-                  ? 'text-emerald-400'
-                  : deltaPassRate < 0
-                    ? 'text-red-400'
-                    : 'text-[var(--text-muted)]',
-              )}
-            >
-              {deltaPassRate > 0 ? '+' : ''}
-              {(deltaPassRate * 100).toFixed(0)}%
-            </span>
-          ) : (
-            <span className="text-xs text-[var(--text-muted)]">—</span>
-          )}
-        </td>
-      </tr>
-      {expanded && humanFeedback && (
-        <tr>
-          <td colSpan={4} className="pb-3">
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
-              <p className="text-[var(--text-primary)]">{humanFeedback}</p>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function _RunBlock({ title, run }: { title: string; run: SkillEvalGradingRun }) {
-  return (
-    <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-xs font-semibold text-[var(--text-primary)]">{title}</span>
-        <PassRateBadge rate={run.passRate} size="sm" />
-      </div>
-      <div className="flex flex-col gap-1">
-        {run.assertions.map((a, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs">
-            {a.passed ? (
-              <CheckCircle size={12} className="mt-0.5 shrink-0 text-emerald-400" />
-            ) : (
-              <XCircle size={12} className="mt-0.5 shrink-0 text-red-400" />
-            )}
-            <span className="text-[var(--text-primary)]">{a.text}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

@@ -1,31 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
   ArrowLeft,
-  ChevronRight,
-  ChevronDown,
   File,
   Loader2,
   Play,
   Save,
   Search,
   Sparkles,
-  CheckCircle,
   Wrench,
-  XCircle,
   FlaskConical,
   Package,
 } from 'lucide-react';
 import clsx from 'clsx';
-import type { Skill, SkillEvalGrading, SkillEvalGradingRun, SkillScope } from '@nakiros/shared';
 import { Checkbox, MarkdownViewer } from '../components/ui';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
 import FixView from './FixView';
 import SkillAuditsTab from '../components/skill/SkillAuditsTab';
-import { EvalMatrix } from '../components/eval-matrix';
 import { useSkillsViewState } from './skills/useSkillsViewState';
 import type { SkillsViewConfig } from './skills/types';
 import {
@@ -34,9 +28,8 @@ import {
   PassRateBadge,
   TabButton,
   countFiles,
-  formatDuration,
-  formatTokens,
 } from './skills/components';
+import { SkillEvalsPanel } from './skills/EvalsPanel';
 
 interface Props {
   onBack(): void;
@@ -307,7 +300,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
           </div>
         )}
 
-        {s.detailTab === 'evals' && <EvalsPanel skill={skill} scope="claude-global" t={t} />}
+        {s.detailTab === 'evals' && <SkillEvalsPanel skill={skill} scope="claude-global" />}
       </div>
     );
   }
@@ -396,347 +389,6 @@ function TopBar({ onBack, title, t }: { onBack(): void; title: string; t: TFunct
         {t('topBarBack')}
       </button>
       <span className="text-sm font-semibold text-[var(--text-primary)]">{title}</span>
-    </div>
-  );
-}
-
-// ─── Evals panel (duplicated from SkillsView) ──────────────────────────────
-
-function EvalsPanel({
-  skill,
-  scope,
-  t,
-}: {
-  skill: Skill;
-  scope: SkillScope;
-  t: TFunction<'global-skills'>;
-}) {
-  const [expandedIter, setExpandedIter] = useState<number | null>(
-    skill.evals?.iterations.length
-      ? skill.evals.iterations[skill.evals.iterations.length - 1].number
-      : null,
-  );
-  const [expandedEval, setExpandedEval] = useState<string | null>(null);
-  void expandedIter; void setExpandedIter; void expandedEval; void setExpandedEval;
-
-  if (!skill.evals || skill.evals.definitions.length === 0) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
-        <FlaskConical size={32} />
-        <p className="text-sm">{t('evals.noEvals')}</p>
-      </div>
-    );
-  }
-
-  const { definitions, iterations } = skill.evals;
-  void iterations;
-
-  return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="mb-6">
-        <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-          {t('evals.definitionsHeading', { count: definitions.length })}
-        </h3>
-        <div className="flex flex-col gap-1.5">
-          {definitions.map((def) => (
-            <div key={def.id} className="rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-3 py-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-[var(--text-primary)]">{def.name}</span>
-                <Badge label={t('evals.assertionsBadge', { count: def.assertions.length })} />
-              </div>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">{def.prompt}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Evolution matrix — replaces the old iteration accordion. Old code guarded
-          behind `{false && ...}` for a quick revert if needed. */}
-      <EvalMatrix request={{ scope, skillName: skill.name }} />
-
-      {/* eslint-disable-next-line @typescript-eslint/no-constant-binary-expression, @typescript-eslint/no-unused-expressions */}
-      {false && (iterations.length > 0 ? (
-        <div>
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--text-muted)]">
-            {t('evals.iterationsHeading', { count: iterations.length })}
-          </h3>
-          <div className="flex flex-col gap-2">
-            {[...iterations].reverse().map((iter) => {
-              const isExpanded = expandedIter === iter.number;
-              const isLatest = iter.number === iterations[iterations.length - 1].number;
-              const hasBaseline = iter.withoutSkill != null;
-
-              return (
-                <div key={iter.number} className="rounded-lg border border-[var(--line)] bg-[var(--bg-card)]">
-                  <button
-                    onClick={() => setExpandedIter(isExpanded ? null : iter.number)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left"
-                  >
-                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    <span className="text-sm font-semibold text-[var(--text-primary)]">
-                      {t('evals.iterationLabel', { number: iter.number })}
-                    </span>
-                    {isLatest && (
-                      <span className="rounded bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-bold text-white">
-                        {t('evals.latestBadge')}
-                      </span>
-                    )}
-                    {!hasBaseline && (
-                      <span
-                        className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400"
-                        title={t('evals.noBaselineTooltip')}
-                      >
-                        {t('evals.noBaselineBadge')}
-                      </span>
-                    )}
-                    <span className="ml-auto flex items-center gap-3 text-xs text-[var(--text-muted)]">
-                      <span>
-                        {t('evals.with')} <PassRateBadge rate={iter.withSkill.passRate} size="sm" />
-                      </span>
-                      {hasBaseline && iter.withoutSkill && (
-                        <span>
-                          {t('evals.without')} <PassRateBadge rate={iter.withoutSkill.passRate} size="sm" />
-                        </span>
-                      )}
-                      {iter.delta.passRate != null && (
-                        <span
-                          className={clsx(
-                            'font-bold',
-                            iter.delta.passRate > 0
-                              ? 'text-emerald-400'
-                              : iter.delta.passRate < 0
-                                ? 'text-red-400'
-                                : 'text-[var(--text-muted)]',
-                          )}
-                        >
-                          Δ {iter.delta.passRate > 0 ? '+' : ''}
-                          {(iter.delta.passRate * 100).toFixed(0)}%
-                        </span>
-                      )}
-                    </span>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="border-t border-[var(--line)] px-4 py-3">
-                      <div className="mb-3 grid grid-cols-3 gap-3 rounded bg-[var(--bg-muted)] p-3 text-xs">
-                        <div>
-                          <div className="mb-0.5 text-[var(--text-muted)]">{t('evals.withSkill')}</div>
-                          <div className="font-semibold">
-                            {iter.withSkill.passedAssertions}/{iter.withSkill.totalAssertions} ·{' '}
-                            {formatTokens(iter.withSkill.tokens)} · {formatDuration(iter.withSkill.durationMs)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="mb-0.5 text-[var(--text-muted)]">{t('evals.withoutSkillBaseline')}</div>
-                          <div className="font-semibold">
-                            {iter.withoutSkill ? (
-                              <>
-                                {iter.withoutSkill.passedAssertions}/{iter.withoutSkill.totalAssertions} ·{' '}
-                                {formatTokens(iter.withoutSkill.tokens)} · {formatDuration(iter.withoutSkill.durationMs)}
-                              </>
-                            ) : (
-                              <span className="text-amber-400">{t('evals.notRun')}</span>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="mb-0.5 text-[var(--text-muted)]">{t('evals.delta')}</div>
-                          <div className="font-semibold">
-                            {iter.delta.passRate != null
-                              ? `${iter.delta.passRate > 0 ? '+' : ''}${(iter.delta.passRate * 100).toFixed(0)}%`
-                              : '—'}
-                            {iter.delta.tokens != null &&
-                              ` · ${iter.delta.tokens > 0 ? '+' : ''}${formatTokens(iter.delta.tokens)}`}
-                          </div>
-                        </div>
-                      </div>
-
-                      <table className="w-full">
-                        <thead>
-                          <tr className="text-left text-xs text-[var(--text-muted)]">
-                            <th className="pb-2 font-medium">{t('evals.table.name')}</th>
-                            <th className="pb-2 text-center font-medium">{t('evals.table.with')}</th>
-                            <th className="pb-2 text-center font-medium">{t('evals.table.without')}</th>
-                            <th className="pb-2 text-right font-medium">{t('evals.table.delta')}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {iter.gradings.map((grading) => (
-                            <EvalRow
-                              key={grading.evalName}
-                              grading={grading}
-                              expanded={expandedEval === `${iter.number}-${grading.evalName}`}
-                              onToggle={() =>
-                                setExpandedEval(
-                                  expandedEval === `${iter.number}-${grading.evalName}`
-                                    ? null
-                                    : `${iter.number}-${grading.evalName}`,
-                                )
-                              }
-                              t={t}
-                            />
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-          {t('evals.noIterationsHintStart')}{' '}
-          <code className="rounded bg-[var(--bg-muted)] px-1">{t('evals.noIterationsHintCommand', { name: skill.name })}</code> {t('evals.noIterationsHintEnd')}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EvalRow({
-  grading,
-  expanded,
-  onToggle,
-  t,
-}: {
-  grading: SkillEvalGrading;
-  expanded: boolean;
-  onToggle(): void;
-  t: TFunction<'global-skills'>;
-}) {
-  const { withSkill, withoutSkill, deltaPassRate, humanFeedback } = grading;
-
-  return (
-    <>
-      <tr
-        onClick={onToggle}
-        className="cursor-pointer border-t border-[var(--line)] transition-colors hover:bg-[var(--bg-muted)]"
-      >
-        <td className="py-2 text-sm text-[var(--text-primary)]">
-          <div className="flex items-center gap-1.5">
-            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            {grading.evalName}
-            {humanFeedback && (
-              <span
-                title={humanFeedback}
-                className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] text-amber-400"
-              >
-                {t('evals.humanReview')}
-              </span>
-            )}
-          </div>
-        </td>
-        <td className="py-2 text-center">
-          {withSkill ? (
-            <span className="text-xs">
-              <span className="text-emerald-400">{withSkill.passed}✓</span>
-              {withSkill.failed > 0 && <span className="ml-1 text-red-400">{withSkill.failed}✗</span>}
-            </span>
-          ) : (
-            <span className="text-xs text-[var(--text-muted)]">—</span>
-          )}
-        </td>
-        <td className="py-2 text-center">
-          {withoutSkill ? (
-            <span className="text-xs">
-              <span className="text-emerald-400">{withoutSkill.passed}✓</span>
-              {withoutSkill.failed > 0 && <span className="ml-1 text-red-400">{withoutSkill.failed}✗</span>}
-            </span>
-          ) : (
-            <span className="text-xs text-amber-400">—</span>
-          )}
-        </td>
-        <td className="py-2 text-right">
-          {deltaPassRate != null ? (
-            <span
-              className={clsx(
-                'text-xs font-bold',
-                deltaPassRate > 0
-                  ? 'text-emerald-400'
-                  : deltaPassRate < 0
-                    ? 'text-red-400'
-                    : 'text-[var(--text-muted)]',
-              )}
-            >
-              {deltaPassRate > 0 ? '+' : ''}
-              {(deltaPassRate * 100).toFixed(0)}%
-            </span>
-          ) : (
-            <span className="text-xs text-[var(--text-muted)]">—</span>
-          )}
-        </td>
-      </tr>
-      {expanded && (
-        <tr>
-          <td colSpan={4} className="pb-3">
-            <div className="ml-5 mt-1 flex flex-col gap-3">
-              {withSkill && <RunBlock title={t('evals.withSkill')} run={withSkill} t={t} />}
-              {withoutSkill && <RunBlock title={t('evals.withoutSkillBaseline')} run={withoutSkill} t={t} />}
-              {humanFeedback && (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
-                  <div className="mb-1 font-semibold text-amber-400">{t('evals.humanReviewHeading')}</div>
-                  <p className="text-[var(--text-primary)]">{humanFeedback}</p>
-                </div>
-              )}
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-
-function RunBlock({ title, run, t }: { title: string; run: SkillEvalGradingRun; t: TFunction<'global-skills'> }) {
-  return (
-    <div className="rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-xs font-semibold text-[var(--text-primary)]">{title}</span>
-        <PassRateBadge rate={run.passRate} size="sm" />
-        {run.timing && (
-          <span className="text-[10px] text-[var(--text-muted)]">
-            {formatTokens(run.timing.totalTokens)} · {formatDuration(run.timing.durationMs)}
-          </span>
-        )}
-        {run.graderModel && (
-          <span className="ml-auto rounded bg-[var(--bg-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-            {t('evals.grader', { model: run.graderModel })}
-          </span>
-        )}
-      </div>
-      <div className="flex flex-col gap-1">
-        {run.assertions.map((a, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs">
-            {a.passed ? (
-              <CheckCircle size={12} className="mt-0.5 shrink-0 text-emerald-400" />
-            ) : (
-              <XCircle size={12} className="mt-0.5 shrink-0 text-red-400" />
-            )}
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                {a.type && (
-                  <span
-                    className={clsx(
-                      'rounded px-1 py-0 text-[9px]',
-                      a.type === 'script' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400',
-                    )}
-                  >
-                    {a.type}
-                  </span>
-                )}
-                <span className="text-[var(--text-primary)]">{a.text}</span>
-              </div>
-              {a.evidence && <p className="mt-0.5 text-[var(--text-muted)]">{a.evidence}</p>}
-            </div>
-          </div>
-        ))}
-        {run.notes && (
-          <p className="mt-1 rounded bg-[var(--bg-muted)] px-2 py-1 text-[10px] text-[var(--text-muted)]">
-            {run.notes}
-          </p>
-        )}
-      </div>
     </div>
   );
 }

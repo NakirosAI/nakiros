@@ -1,6 +1,7 @@
 {
   "back": "Retour",
   "headerTitle": "Exécutions d'évals — {{skillName}} · Itération {{iteration}}",
+  "headerTitleComparison": "Exécutions d'évals — {{skillName}} · Comparaison de {{count}} modèles",
   "completeCount": "{{completed}}/{{total}} terminées",
   "runningCount": "{{count}} en cours",
   "elapsed": "{{duration}} écoulées",
@@ -9,6 +10,7 @@
   "stop": "Arrêter",
   "withSkill": "avec skill",
   "withoutBaseline": "sans (baseline)",
+  "defaultModel": "Modèle par défaut",
   "selectRun": "Sélectionnez une exécution",
   "configWithSkill": "Avec skill",
   "configWithoutSkill": "Sans skill (baseline)",

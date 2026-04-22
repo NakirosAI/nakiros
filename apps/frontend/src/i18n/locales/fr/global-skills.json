@@ -23,6 +23,8 @@
   "resumeEvals": "Reprendre ({{count}} en cours)",
   "includeBaseline": "Inclure baseline",
   "baselineTooltip": "Aussi lancer chaque eval sans le skill chargé, pour mesurer la vraie valeur du skill via delta",
+  "model": "Modèle",
+  "modelTooltip": "Modèle Claude utilisé pour lancer les évals. Le grader reste sur Sonnet quel que soit le choix.",
   "runEvals": "Lancer les evals",
   "evalStarting": "Démarrage…",
   "tabFiles": "Fichiers",

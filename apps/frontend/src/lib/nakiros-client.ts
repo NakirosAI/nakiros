@@ -281,6 +281,12 @@ const client = {
   getEvalMatrix: (request: unknown) => invoke('eval:getMatrix', request),
   loadIterationRun: (request: unknown) => invoke('eval:loadIterationRun', request),
 
+  // Eval model comparison
+  runModelComparison: (request: unknown) => invoke('comparison:run', request),
+  listModelComparisons: (request: unknown) => invoke('comparison:list', request),
+  getModelComparison: (request: unknown) => invoke('comparison:getMatrix', request),
+  getComparisonFingerprintStatus: (request: unknown) => invoke('comparison:getFingerprintStatus', request),
+
   // Audit
   startAudit: (request: unknown) => invoke('audit:start', request),
   stopAudit: (runId: string) => invoke('audit:stopRun', runId),

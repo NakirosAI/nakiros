@@ -1,6 +1,6 @@
 {
-  "title": "Recommandations",
-  "bodyPrefix": "L'analyse des conversations de ",
-  "bodySuffix": " pour détecter les points de friction et proposer des améliorations de skills arrive bientôt.",
-  "comingSoon": "Phase 4 — Bientôt disponible"
+  "title": "Insights",
+  "bodyPrefix": "L'analyse LLM des conversations de ",
+  "bodySuffix": " pour proposer des améliorations de skills au-delà des patterns déterministes arrive bientôt.",
+  "comingSoon": "Bientôt disponible"
 }

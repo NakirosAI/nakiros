@@ -1,10 +1,132 @@
 {
-  "loading": "Chargement des conversations…",
-  "loadingMessages": "Chargement des messages…",
-  "heading": "Conversations ({{count}})",
+  "loading": "Analyse des conversations…",
   "empty": "Aucune conversation trouvée pour ce projet.",
+  "headingAnalysis": "Conversations — {{count}} analysées",
+  "sort": {
+    "label": "Tri",
+    "score": "Par santé (critiques d'abord)",
+    "recent": "Plus récentes",
+    "longest": "Plus longues"
+  },
+  "filter": {
+    "label": "Filtre",
+    "all": "Toutes",
+    "critical": "Critiques seulement",
+    "compactions": "Avec compactions",
+    "friction": "Avec friction",
+    "cacheWaste": "Avec gaspillage cache",
+    "toolErrors": "Avec erreurs outils"
+  },
+  "health": {
+    "healthy": "saine",
+    "watch": "à surveiller",
+    "degraded": "dégradée"
+  },
+  "badge": {
+    "compactions_one": "{{count}} compaction",
+    "compactions_other": "{{count}} compactions",
+    "tokens": "{{k}}k tokens",
+    "friction_one": "{{count}} friction",
+    "friction_other": "{{count}} frictions",
+    "toolErrors_one": "{{count}} erreur outil",
+    "toolErrors_other": "{{count}} erreurs outils",
+    "cacheMisses_one": "{{count}} cache miss",
+    "cacheMisses_other": "{{count}} cache misses",
+    "hotFiles_one": "{{count}} fichier chaud",
+    "hotFiles_other": "{{count}} fichiers chauds"
+  },
+  "diagnostic": {
+    "healthy": "Conversation saine — pas de signal notable"
+  },
+  "drawer": {
+    "title": "Diagnostic",
+    "close": "Fermer",
+    "timeline": "Chronologie du contexte",
+    "timelineLegend": "tokens par tour · compactions · frictions · erreurs outils",
+    "overview": "Vue d'ensemble",
+    "context": "Contexte",
+    "cache": "Efficacité du cache",
+    "tools": "Top outils",
+    "hotFiles": "Fichiers chauds (≥ 3 éditions)",
+    "tips": "À faire la prochaine fois",
+    "tipsEmpty": "Rien à suggérer — cette conversation est saine",
+    "deepTitle": "Analyse approfondie (LLM)",
+    "rawLink": "Voir les messages bruts",
+    "fields": {
+      "score": "Score",
+      "duration": "Durée",
+      "messages": "Messages",
+      "tokensTotal": "Tokens totaux",
+      "maxContext": "Contexte max",
+      "cacheRead": "Cache hits",
+      "cacheCreation": "Cache writes",
+      "wasted": "Gaspillage évitable",
+      "cacheMisses": "Pauses > 5 min"
+    }
+  },
+  "loadingMessages": "Chargement des messages bruts…",
+  "rawMessages": "Messages bruts",
   "messageCount_one": "{{count}} message",
   "messageCount_other": "{{count}} messages",
-  "toolsUsed_one": "{{count}} outil utilisé",
-  "toolsUsed_other": "{{count}} outils utilisés"
+  "deepAnalysis": {
+    "title": "Analyse approfondie",
+    "checking": "Vérification du cache…",
+    "pitch": "Lance une analyse narrative par LLM pour détecter la frustration implicite, la dérive contextuelle, et recevoir des recommandations concrètes.",
+    "estimate": "Modèle prévu : {{model}} · contexte ~{{tokensK}}k tokens · résultat mis en cache après le run",
+    "run": "Lancer l'analyse approfondie",
+    "running": "Analyse en cours…",
+    "runningHint": "Claude lit la conversation et rédige le rapport — quelques secondes à quelques dizaines de secondes selon la taille.",
+    "rerun": "Relancer",
+    "generated": "{{model}} · ~{{tokensK}}k tokens · {{date}}"
+  },
+  "tips": {
+    "split-sessions": {
+      "title": "Découper en plusieurs sessions",
+      "body": "{{count}} compactions — le contexte a été reconstruit à partir d'un résumé plusieurs fois, le modèle perd en précision à chaque passe. La prochaine fois, démarre une nouvelle conversation quand tu passes à un sujet différent."
+    },
+    "restate-after-compaction": {
+      "title": "Reformuler l'intent après une compaction",
+      "body": "Après une compaction, le modèle travaille sur un résumé de la conversation. Si tu continues, commence par restater l'objectif et les contraintes clés pour éviter qu'il dérive."
+    },
+    "clear-before-degraded": {
+      "title": "Nettoyer le contexte avant qu'il ne sature",
+      "body": "Contexte à {{ctxPct}}% de la fenêtre — on entre dans la zone où la qualité des réponses chute (lost in the middle). Utilise /clear ou démarre une nouvelle session avant ce seuil."
+    },
+    "watch-context-growth": {
+      "title": "Surveiller la croissance du contexte",
+      "body": "Contexte à {{ctxPct}}% de la fenêtre — pas encore critique mais la dégradation commence. Reste attentif aux signaux de dérive (réponses qui ignorent le début de la conv)."
+    },
+    "use-extended-cache": {
+      "title": "Activer le cache étendu 1h",
+      "body": "{{cacheMisses}} pauses > 5 min ont coûté ~{{wastedK}}k tokens de cache rewrite. Sur une session aussi étalée, le cache beta 1h (`extended-cache-ttl-2025-04-11`) est largement rentable."
+    },
+    "keep-session-continuous": {
+      "title": "Garder la session continue",
+      "body": "{{cacheMisses}} pauses > 5 min ont fait expirer le cache — ~{{wastedK}}k tokens rewrites évitables. Quand tu sais que tu vas pauser, envoie un message court pour rafraîchir le TTL."
+    },
+    "restate-intent-mid": {
+      "title": "Restater l'intent en milieu de session",
+      "body": "{{count}} frictions dans la 2e moitié — probable drift contextuel. Quand tu sens que Claude dérive sur un long contexte, fais une pause pour reformuler l'objectif."
+    },
+    "frequent-corrections": {
+      "title": "Skill ou contexte initial à améliorer",
+      "body": "{{count}} corrections dans la conversation. Si le pattern se répète sur ce type de tâche, ça vaut le coup d'ajouter un skill dédié ou d'enrichir CLAUDE.md avec les contraintes manquantes."
+    },
+    "flaky-tool": {
+      "title": "Outil {{tool}} instable",
+      "body": "{{errors}} erreurs sur {{tool}}. Vérifie les permissions, l'environnement, ou ajoute l'outil à la config pour éviter les retries."
+    },
+    "decompose-heavy-file": {
+      "title": "Découper le travail sur {{file}}",
+      "body": "{{file}} a été édité {{count}} fois — ça sent le tâtonnement. Planifie les changements avant d'attaquer, ou découpe en tâches plus petites avec un checkpoint entre chaque."
+    },
+    "delegate-exploration": {
+      "title": "Déléguer l'exploration à un subagent",
+      "body": "Beaucoup d'outils appelés sur un gros contexte, aucun subagent. Le pattern `Agent` pour explorer/chercher protège le contexte principal — à utiliser sur les tâches de recherche."
+    },
+    "consider-custom-skill": {
+      "title": "Créer un skill dédié à ce workflow",
+      "body": "Session de {{durationMin}} min avec frictions et aucun skill invoqué. Si ce type de tâche revient, créer un skill (via nakiros-skill-factory) standardise les bonnes pratiques et réduit les corrections."
+    }
+  }
 }

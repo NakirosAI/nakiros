@@ -35,6 +35,14 @@ import type {
   GetEvalMatrixRequest,
   IterationRunArtifact,
   LoadIterationRunRequest,
+  ComparisonFingerprintStatus,
+  ComparisonMatrix,
+  ComparisonSummary,
+  GetComparisonFingerprintStatusRequest,
+  GetComparisonMatrixRequest,
+  ListComparisonsRequest,
+  RunComparisonRequest,
+  RunComparisonResponse,
 } from '@nakiros/shared';
 
 declare global {
@@ -204,6 +212,12 @@ declare global {
       readEvalRunDiffPatch(runId: string): Promise<string | null>;
       getEvalMatrix(request: GetEvalMatrixRequest): Promise<EvalMatrix>;
       loadIterationRun(request: LoadIterationRunRequest): Promise<IterationRunArtifact>;
+      runModelComparison(request: RunComparisonRequest): Promise<RunComparisonResponse>;
+      listModelComparisons(request: ListComparisonsRequest): Promise<ComparisonSummary[]>;
+      getModelComparison(request: GetComparisonMatrixRequest): Promise<ComparisonMatrix | null>;
+      getComparisonFingerprintStatus(
+        request: GetComparisonFingerprintStatusRequest,
+      ): Promise<ComparisonFingerprintStatus>;
 
       // Audit
       startAudit(request: StartAuditRequest): Promise<AuditRun>;

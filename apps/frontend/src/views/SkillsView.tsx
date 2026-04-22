@@ -359,7 +359,14 @@ export default function SkillsView({ project }: Props) {
         )}
 
         {s.detailTab === 'evals' && (
-          <SkillEvalsPanel skill={skill} scope="project" projectId={project.id} />
+          <SkillEvalsPanel
+            skill={skill}
+            scope="project"
+            projectId={project.id}
+            onComparisonLaunched={(runIds) =>
+              s.setActiveRuns({ runIds, iteration: 0, skill })
+            }
+          />
         )}
       </div>
     );

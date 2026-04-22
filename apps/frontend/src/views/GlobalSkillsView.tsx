@@ -307,7 +307,15 @@ export default function GlobalSkillsView({ onBack }: Props) {
           </div>
         )}
 
-        {s.detailTab === 'evals' && <SkillEvalsPanel skill={skill} scope="claude-global" />}
+        {s.detailTab === 'evals' && (
+          <SkillEvalsPanel
+            skill={skill}
+            scope="claude-global"
+            onComparisonLaunched={(runIds) =>
+              s.setActiveRuns({ runIds, iteration: 0, skill })
+            }
+          />
+        )}
       </div>
     );
   }

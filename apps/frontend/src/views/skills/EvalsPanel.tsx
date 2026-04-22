@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlaskConical } from 'lucide-react';
 import type { Skill, SkillScope } from '@nakiros/shared';
-import { EvalMatrix } from '../../components/eval-matrix';
-import { Badge } from './components';
+import { EvalMatrix, ModelComparison } from '../../components/eval-matrix';
+import { Badge, TabButton } from './components';
 
 interface Props {
   skill: Skill;
@@ -10,6 +11,8 @@ interface Props {
   projectId?: string;
   marketplaceName?: string;
   pluginName?: string;
+  /** Forwarded to ModelComparison so the skill-view shell can open EvalRunsView. */
+  onComparisonLaunched?(runIds: string[]): void;
 }
 
 /**
@@ -21,8 +24,16 @@ interface Props {
  * ...}` guard. It was deleted when EvalMatrix replaced it — see git history
  * pre-2026-04-20 to revive if ever needed.
  */
-export function SkillEvalsPanel({ skill, scope, projectId, marketplaceName, pluginName }: Props) {
+export function SkillEvalsPanel({
+  skill,
+  scope,
+  projectId,
+  marketplaceName,
+  pluginName,
+  onComparisonLaunched,
+}: Props) {
   const { t } = useTranslation('skill-evals');
+  const [view, setView] = useState<'evolution' | 'models'>('evolution');
 
   if (!skill.evals || skill.evals.definitions.length === 0) {
     return (
@@ -34,6 +45,7 @@ export function SkillEvalsPanel({ skill, scope, projectId, marketplaceName, plug
   }
 
   const { definitions } = skill.evals;
+  const skillIdentity = { scope, projectId, marketplaceName, pluginName, skillName: skill.name };
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -54,9 +66,20 @@ export function SkillEvalsPanel({ skill, scope, projectId, marketplaceName, plug
         </div>
       </div>
 
-      <EvalMatrix
-        request={{ scope, projectId, marketplaceName, pluginName, skillName: skill.name }}
-      />
+      <div className="mb-3 flex w-fit rounded-lg border border-[var(--line)] bg-[var(--bg-soft)]">
+        <TabButton active={view === 'evolution'} onClick={() => setView('evolution')}>
+          {t('viewEvolution')}
+        </TabButton>
+        <TabButton active={view === 'models'} onClick={() => setView('models')}>
+          {t('viewModels')}
+        </TabButton>
+      </div>
+
+      {view === 'evolution' ? (
+        <EvalMatrix request={skillIdentity} />
+      ) : (
+        <ModelComparison request={skillIdentity} onRunsLaunched={onComparisonLaunched} />
+      )}
     </div>
   );
 }

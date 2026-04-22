@@ -306,7 +306,15 @@ export default function NakirosSkillsView({ onBack }: Props) {
           </div>
         )}
 
-        {s.detailTab === 'evals' && <SkillEvalsPanel skill={skill} scope="nakiros-bundled" />}
+        {s.detailTab === 'evals' && (
+          <SkillEvalsPanel
+            skill={skill}
+            scope="nakiros-bundled"
+            onComparisonLaunched={(runIds) =>
+              s.setActiveRuns({ runIds, iteration: 0, skill })
+            }
+          />
+        )}
       </div>
     );
   }

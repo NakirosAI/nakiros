@@ -1,6 +1,7 @@
 {
   "back": "Back",
   "headerTitle": "Eval Runs — {{skillName}} · Iteration {{iteration}}",
+  "headerTitleComparison": "Eval Runs — {{skillName}} · Comparing {{count}} models",
   "completeCount": "{{completed}}/{{total}} complete",
   "runningCount": "{{count}} running",
   "elapsed": "{{duration}} elapsed",
@@ -9,6 +10,7 @@
   "stop": "Stop",
   "withSkill": "with skill",
   "withoutBaseline": "without (baseline)",
+  "defaultModel": "Default model",
   "selectRun": "Select a run",
   "configWithSkill": "With skill",
   "configWithoutSkill": "Without skill (baseline)",

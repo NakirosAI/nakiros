@@ -21,7 +21,7 @@ interface TimingFile {
   model?: string;
 }
 
-interface EvalConfigStats {
+export interface EvalConfigStats {
   passed: number;
   failed: number;
   total: number;
@@ -54,7 +54,11 @@ function readJson<T>(path: string): T | null {
   }
 }
 
-function collectConfigStats(evalDir: string, config: 'with_skill' | 'without_skill'): EvalConfigStats | undefined {
+/**
+ * Read `grading.json` + `timing.json` for a single eval/config cell and flatten
+ * into the stats shape. Shared with the comparison runner.
+ */
+export function collectConfigStats(evalDir: string, config: 'with_skill' | 'without_skill'): EvalConfigStats | undefined {
   const configDir = join(evalDir, config);
   if (!existsSync(configDir)) return undefined;
   const grading = readJson<GradingFile>(join(configDir, 'grading.json'));

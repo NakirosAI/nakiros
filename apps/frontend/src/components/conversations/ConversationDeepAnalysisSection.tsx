@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Sparkles, RefreshCcw } from 'lucide-react';
+import { Sparkles, RefreshCcw, Loader2 } from 'lucide-react';
 import type { ConversationAnalysis, ConversationDeepAnalysis, Project } from '@nakiros/shared';
 import { MarkdownViewer } from '../ui/MarkdownViewer';
 
@@ -89,10 +89,22 @@ export function ConversationDeepAnalysisSection({ project, analysis }: Props) {
           type="button"
           onClick={run}
           disabled={running}
-          className="rounded border border-[var(--primary)] bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded border border-[var(--primary)] bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:cursor-not-allowed"
         >
-          {running ? t('deepAnalysis.running') : t('deepAnalysis.run')}
+          {running ? (
+            <>
+              <Loader2 size={12} className="animate-spin" />
+              {t('deepAnalysis.running')}
+            </>
+          ) : (
+            t('deepAnalysis.run')
+          )}
         </button>
+        {running && (
+          <div className="mt-2 text-[11px] text-[var(--text-muted)]">
+            {t('deepAnalysis.runningHint')}
+          </div>
+        )}
         {error && (
           <div className="mt-2 text-xs text-[var(--danger)]">{error}</div>
         )}
@@ -121,10 +133,14 @@ export function ConversationDeepAnalysisSection({ project, analysis }: Props) {
             type="button"
             onClick={run}
             disabled={running}
-            className="flex items-center gap-1 rounded border border-[var(--line)] px-2 py-0.5 hover:border-[var(--primary)] disabled:opacity-50"
+            className="flex items-center gap-1 rounded border border-[var(--line)] px-2 py-0.5 hover:border-[var(--primary)] disabled:cursor-not-allowed"
             title={t('deepAnalysis.rerun')}
           >
-            <RefreshCcw size={10} />
+            {running ? (
+              <Loader2 size={10} className="animate-spin" />
+            ) : (
+              <RefreshCcw size={10} />
+            )}
             {running ? t('deepAnalysis.running') : t('deepAnalysis.rerun')}
           </button>
         </div>

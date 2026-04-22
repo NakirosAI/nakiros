@@ -74,6 +74,7 @@
     "estimate": "Likely model: {{model}} · context ~{{tokensK}}k tokens · cached after the run",
     "run": "Run deep analysis",
     "running": "Analyzing…",
+    "runningHint": "Claude is reading the conversation and drafting the report — seconds to tens of seconds depending on size.",
     "rerun": "Re-run",
     "generated": "{{model}} · ~{{tokensK}}k tokens · {{date}}"
   },

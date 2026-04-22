@@ -75,6 +75,7 @@
     "estimate": "Modèle prévu : {{model}} · contexte ~{{tokensK}}k tokens · résultat mis en cache après le run",
     "run": "Lancer l'analyse approfondie",
     "running": "Analyse en cours…",
+    "runningHint": "Claude lit la conversation et rédige le rapport — quelques secondes à quelques dizaines de secondes selon la taille.",
     "rerun": "Relancer",
     "generated": "{{model}} · ~{{tokensK}}k tokens · {{date}}"
   },

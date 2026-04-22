@@ -241,10 +241,11 @@ function writeRunJson(run: SkillEvalRun): void {
 
 function saveTimingJson(run: SkillEvalRun): void {
   const timingPath = join(run.workdir, 'timing.json');
-  const payload = {
+  const payload: Record<string, unknown> = {
     total_tokens: run.tokensUsed,
     duration_ms: run.durationMs,
   };
+  if (run.model) payload['model'] = run.model;
   writeFileSync(timingPath, JSON.stringify(payload, null, 2), 'utf8');
 }
 
@@ -538,6 +539,7 @@ export async function startEvalRuns(
         mode: def.mode ?? 'autonomous',
         outputFiles: def.outputFiles,
         isolatedHome: null,
+        model: request.model ?? null,
         turns: [],
         tokensUsed: 0,
         durationMs: 0,
@@ -664,6 +666,7 @@ async function executeTurn(
     prompt: userMessage,
     addDirs,
     resumeSessionId: isFirstTurn ? undefined : (run.sessionId ?? undefined),
+    model: run.model ?? undefined,
     // No skipPermissions: eval runs rely on execution-dir-scoped settings.local.json
     // so baseline (without_skill) runs can't load any skill.
   });

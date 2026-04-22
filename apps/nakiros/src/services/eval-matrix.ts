@@ -47,6 +47,8 @@ interface BenchmarkFile {
   iteration: number;
   timestamp?: string;
   skill_fingerprint?: string | null;
+  /** Claude model id used for the iteration — null on pre-selector runs. */
+  model?: string | null;
   per_eval: Record<string, BenchmarkPerEval>;
 }
 
@@ -65,6 +67,7 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
       skillName,
       iterations: [],
       fingerprints: [],
+      models: [],
       rows: [],
       metrics: emptyMetrics(),
     };
@@ -72,6 +75,7 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
 
   const iterations = benchmarks.map((b) => b.iteration);
   const fingerprints = benchmarks.map((b) => b.skill_fingerprint ?? null);
+  const models = benchmarks.map((b) => b.model ?? null);
 
   // Collect every eval name that ever appeared so the matrix can show
   // "introduced at iter N" via null cells before that point.
@@ -101,7 +105,7 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
   }
 
   const metrics = computeMetrics(iterations, rows);
-  return { skillName, iterations, fingerprints, rows, metrics };
+  return { skillName, iterations, fingerprints, models, rows, metrics };
 }
 
 // ─── Benchmark loading ──────────────────────────────────────────────────────

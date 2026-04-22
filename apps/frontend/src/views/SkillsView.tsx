@@ -14,6 +14,7 @@ import { useSkillsViewState } from './skills/useSkillsViewState';
 import type { SkillsViewConfig } from './skills/types';
 import {
   Badge,
+  EvalModelSelector,
   FileTree,
   PassRateBadge,
   TabButton,
@@ -245,6 +246,13 @@ export default function SkillsView({ project }: Props) {
                 </button>
               ) : (
                 <>
+                  <EvalModelSelector
+                    value={s.selectedModel}
+                    onChange={s.setSelectedModel}
+                    disabled={s.starting}
+                    label={t('model')}
+                    title={t('modelTooltip')}
+                  />
                   <label
                     className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--text-muted)]"
                     title={t('baselineTooltip')}

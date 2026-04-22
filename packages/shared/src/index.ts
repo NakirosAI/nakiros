@@ -14,4 +14,5 @@ export * from './types/bundled-skill-conflict.js';
 export * from './types/skill-diff.js';
 export * from './types/version-info.js';
 export * from './types/eval-matrix.js';
+export * from './constants/claude-models.js';
 export * from './ipc-channels.js';

@@ -31,6 +31,8 @@
   "resumeEvals": "Resume ({{count}} running)",
   "includeBaseline": "Include baseline",
   "baselineTooltip": "Also run each eval without the skill loaded, to measure real skill value via delta",
+  "model": "Model",
+  "modelTooltip": "Claude model used to run the evals. Grading always uses Sonnet regardless.",
   "runEvals": "Run evals",
   "tabFiles": "Files",
   "tabEvals": "Evals",

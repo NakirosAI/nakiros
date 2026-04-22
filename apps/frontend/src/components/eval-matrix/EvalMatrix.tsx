@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import type { EvalMatrix as Matrix, GetEvalMatrixRequest, LoadIterationRunRequest } from '@nakiros/shared';
+import { CLAUDE_MODEL_LABELS, isClaudeModelId } from '@nakiros/shared';
 import { EvalMatrixHeader } from './EvalMatrixHeader';
 import { EvalMatrixCellView } from './EvalMatrixCell';
 import { EvalMatrixTagBadge } from './EvalMatrixTag';
@@ -108,14 +109,28 @@ export function EvalMatrix({
               <th className="sticky left-0 z-10 bg-[var(--bg-card)] px-2 text-left text-[10px] font-semibold uppercase text-[var(--text-muted)]">
                 Eval
               </th>
-              {matrix.iterations.map((iter) => (
-                <th
-                  key={iter}
-                  className="px-1 pb-1 text-center text-[10px] font-semibold text-[var(--text-muted)]"
-                >
-                  iter {iter}
-                </th>
-              ))}
+              {matrix.iterations.map((iter, i) => {
+                const rawModel = matrix.models[i];
+                const modelLabel = isClaudeModelId(rawModel)
+                  ? CLAUDE_MODEL_LABELS[rawModel]
+                  : rawModel;
+                return (
+                  <th
+                    key={iter}
+                    className="px-1 pb-1 text-center text-[10px] font-semibold text-[var(--text-muted)]"
+                  >
+                    <div>iter {iter}</div>
+                    {modelLabel ? (
+                      <div
+                        className="mt-0.5 text-[9px] font-normal uppercase tracking-wide text-[var(--text-muted)] opacity-70"
+                        title={rawModel ?? undefined}
+                      >
+                        {modelLabel}
+                      </div>
+                    ) : null}
+                  </th>
+                );
+              })}
               <th className="px-2 pb-1 text-left text-[10px] font-semibold uppercase text-[var(--text-muted)]">
                 Status
               </th>

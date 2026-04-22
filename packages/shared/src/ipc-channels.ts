@@ -37,6 +37,8 @@ export const IPC_CHANNELS = {
   'project:getConversationMessages': 'project:getConversationMessages',
   'project:analyzeConversation': 'project:analyzeConversation',
   'project:listConversationsWithAnalysis': 'project:listConversationsWithAnalysis',
+  'project:deepAnalyzeConversation': 'project:deepAnalyzeConversation',
+  'project:loadDeepAnalysis': 'project:loadDeepAnalysis',
   'project:listSkills': 'project:listSkills',
   'project:getSkill': 'project:getSkill',
   'project:saveSkill': 'project:saveSkill',

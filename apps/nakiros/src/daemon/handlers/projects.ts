@@ -7,6 +7,10 @@ import {
 import { listConversations, getConversationMessages } from '../../services/conversation-parser.js';
 import { analyzeConversation } from '../../services/conversation-analyzer.js';
 import {
+  loadDeepAnalysis,
+  runDeepAnalysis,
+} from '../../services/conversation-deep-analyzer.js';
+import {
   listSkills,
   getSkill,
   saveSkill,
@@ -65,6 +69,21 @@ export const projectHandlers: HandlerRegistry = {
     return convs
       .map((c) => analyzeConversation(project.providerProjectDir, c.sessionId, projectId))
       .filter((x): x is NonNullable<typeof x> => x !== null);
+  },
+
+  'project:loadDeepAnalysis': (args) => {
+    const sessionId = args[1] as string;
+    return loadDeepAnalysis(sessionId);
+  },
+
+  'project:deepAnalyzeConversation': async (args) => {
+    const projectId = args[0] as string;
+    const sessionId = args[1] as string;
+    const project = getProject(projectId);
+    if (!project) {
+      throw new Error(`Project ${projectId} not found`);
+    }
+    return runDeepAnalysis(project.providerProjectDir, sessionId, projectId);
   },
 
   'project:listSkills': (args) => {

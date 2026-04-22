@@ -1,10 +1,68 @@
 {
-  "loading": "Chargement des conversations…",
-  "loadingMessages": "Chargement des messages…",
-  "heading": "Conversations ({{count}})",
+  "loading": "Analyse des conversations…",
   "empty": "Aucune conversation trouvée pour ce projet.",
+  "headingAnalysis": "Conversations — {{count}} analysées",
+  "sort": {
+    "label": "Tri",
+    "score": "Par score (plus intéressant)",
+    "recent": "Plus récentes",
+    "longest": "Plus longues"
+  },
+  "filter": {
+    "label": "Filtre",
+    "all": "Toutes",
+    "critical": "Critiques seulement",
+    "compactions": "Avec compactions",
+    "friction": "Avec friction",
+    "cacheWaste": "Avec gaspillage cache",
+    "toolErrors": "Avec erreurs outils"
+  },
+  "health": {
+    "healthy": "saine",
+    "watch": "à surveiller",
+    "degraded": "dégradée"
+  },
+  "badge": {
+    "compactions_one": "{{count}} compaction",
+    "compactions_other": "{{count}} compactions",
+    "tokens": "{{k}}k tokens",
+    "friction_one": "{{count}} friction",
+    "friction_other": "{{count}} frictions",
+    "toolErrors_one": "{{count}} erreur outil",
+    "toolErrors_other": "{{count}} erreurs outils",
+    "cacheMisses_one": "{{count}} cache miss",
+    "cacheMisses_other": "{{count}} cache misses",
+    "hotFiles_one": "{{count}} fichier chaud",
+    "hotFiles_other": "{{count}} fichiers chauds"
+  },
+  "diagnostic": {
+    "healthy": "Conversation saine — pas de signal notable"
+  },
+  "drawer": {
+    "title": "Diagnostic",
+    "close": "Fermer",
+    "timeline": "Chronologie du contexte",
+    "timelineLegend": "tokens par tour · compactions · frictions · erreurs outils",
+    "overview": "Vue d'ensemble",
+    "context": "Contexte",
+    "cache": "Efficacité du cache",
+    "tools": "Top outils",
+    "hotFiles": "Fichiers chauds (≥ 3 éditions)",
+    "rawLink": "Voir les messages bruts",
+    "fields": {
+      "score": "Score",
+      "duration": "Durée",
+      "messages": "Messages",
+      "tokensTotal": "Tokens totaux",
+      "maxContext": "Contexte max",
+      "cacheRead": "Cache hits",
+      "cacheCreation": "Cache writes",
+      "wasted": "Gaspillage évitable",
+      "cacheMisses": "Pauses > 5 min"
+    }
+  },
+  "loadingMessages": "Chargement des messages bruts…",
+  "rawMessages": "Messages bruts",
   "messageCount_one": "{{count}} message",
-  "messageCount_other": "{{count}} messages",
-  "toolsUsed_one": "{{count}} outil utilisé",
-  "toolsUsed_other": "{{count}} outils utilisés"
+  "messageCount_other": "{{count}} messages"
 }

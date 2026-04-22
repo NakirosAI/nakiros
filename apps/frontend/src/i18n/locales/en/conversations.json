@@ -48,6 +48,8 @@
     "cache": "Cache efficiency",
     "tools": "Top tools",
     "hotFiles": "Hot files (≥ 3 edits)",
+    "tips": "What to do next time",
+    "tipsEmpty": "Nothing to suggest — this conversation is healthy",
     "rawLink": "View raw messages",
     "fields": {
       "score": "Score",
@@ -64,5 +66,55 @@
   "loadingMessages": "Loading raw messages…",
   "rawMessages": "Raw messages",
   "messageCount_one": "{{count}} message",
-  "messageCount_other": "{{count}} messages"
+  "messageCount_other": "{{count}} messages",
+  "tips": {
+    "split-sessions": {
+      "title": "Split into separate sessions",
+      "body": "{{count}} compactions — the context was rebuilt from a summary multiple times, and the model loses precision each pass. Next time, start a new conversation when you switch to a different topic."
+    },
+    "restate-after-compaction": {
+      "title": "Restate intent after a compaction",
+      "body": "After a compaction the model works from a summary of the conversation. If you continue, restate the goal and key constraints so it doesn't drift."
+    },
+    "clear-before-degraded": {
+      "title": "Clear context before it saturates",
+      "body": "Context at {{ctxPct}}% of window — entering the zone where answer quality drops (lost in the middle). Use /clear or start a new session before that threshold."
+    },
+    "watch-context-growth": {
+      "title": "Watch the context growth",
+      "body": "Context at {{ctxPct}}% of window — not critical yet but degradation starts here. Watch for drift signals (answers that ignore the start of the conversation)."
+    },
+    "use-extended-cache": {
+      "title": "Enable the 1h extended cache",
+      "body": "{{cacheMisses}} pauses > 5 min cost ~{{wastedK}}k tokens in cache rewrites. On a session this spread out, the 1h cache beta (`extended-cache-ttl-2025-04-11`) pays for itself."
+    },
+    "keep-session-continuous": {
+      "title": "Keep the session continuous",
+      "body": "{{cacheMisses}} pauses > 5 min expired the cache — ~{{wastedK}}k tokens in avoidable rewrites. If you know a pause is coming, send a short message to refresh the TTL."
+    },
+    "restate-intent-mid": {
+      "title": "Restate intent mid-session",
+      "body": "{{count}} frictions in the second half — likely contextual drift. When Claude feels off on a long context, pause and rephrase the goal."
+    },
+    "frequent-corrections": {
+      "title": "Skill or initial context to improve",
+      "body": "{{count}} corrections across the conversation. If the pattern repeats on this kind of task, a dedicated skill or richer CLAUDE.md constraints would help."
+    },
+    "flaky-tool": {
+      "title": "{{tool}} is flaky",
+      "body": "{{errors}} errors on {{tool}}. Check permissions, environment, or add the tool to config to avoid retries."
+    },
+    "decompose-heavy-file": {
+      "title": "Decompose the work on {{file}}",
+      "body": "{{file}} was edited {{count}} times — that's trial-and-error. Plan changes up front, or break into smaller tasks with a checkpoint between each."
+    },
+    "delegate-exploration": {
+      "title": "Delegate exploration to a subagent",
+      "body": "Many tool calls on a large context, no subagent used. The `Agent` pattern for exploration/search protects the main context — use it for research tasks."
+    },
+    "consider-custom-skill": {
+      "title": "Create a dedicated skill for this workflow",
+      "body": "{{durationMin}} min session with frictions and no skill invoked. If this kind of task recurs, a skill (via nakiros-skill-factory) standardises good practice and reduces corrections."
+    }
+  }
 }

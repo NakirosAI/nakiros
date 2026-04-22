@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ConversationAnalysis, ConversationMessage, Project } from '@nakiros/shared';
+import type {
+  ConversationAnalysis,
+  ConversationMessage,
+  ConversationTip,
+  Project,
+} from '@nakiros/shared';
+import { Lightbulb, AlertTriangle, AlertCircle } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { ConversationTimeline } from './ConversationTimeline';
 import { ConversationHealthBadges } from './ConversationHealthBadges';
@@ -54,6 +60,10 @@ export function ConversationDiagnosticPanel({ project, analysis, onClose }: Prop
         <p className="text-sm leading-relaxed text-[var(--text-primary)]">
           {analysis.diagnostic}
         </p>
+
+        {/* Actionable tips — the whole point of the analyzer. */}
+        <TipsSection tips={analysis.tips} />
+
 
         {/* Timeline */}
         <section>
@@ -191,6 +201,79 @@ export function ConversationDiagnosticPanel({ project, analysis, onClose }: Prop
 // ---------------------------------------------------------------------------
 // Subcomponents
 // ---------------------------------------------------------------------------
+
+function TipsSection({ tips }: { tips: ConversationTip[] }) {
+  const { t } = useTranslation('conversations');
+  if (tips.length === 0) {
+    return (
+      <section>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          {t('drawer.tips')}
+        </h3>
+        <div className="rounded border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2 text-xs text-[var(--text-muted)]">
+          {t('drawer.tipsEmpty')}
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+        {t('drawer.tips')}
+      </h3>
+      <ul className="flex flex-col gap-2">
+        {tips.map((tip) => (
+          <TipItem key={tip.id} tip={tip} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function TipItem({ tip }: { tip: ConversationTip }) {
+  const { t } = useTranslation('conversations');
+  const { icon, tone } = severityStyle(tip.severity);
+  return (
+    <li
+      className={
+        'flex items-start gap-3 rounded-lg border px-3 py-2.5 text-xs ' + tone
+      }
+    >
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <div className="mb-0.5 text-sm font-semibold text-[var(--text-primary)]">
+          {t(`tips.${tip.id}.title`, tip.data)}
+        </div>
+        <div className="leading-relaxed text-[var(--text-muted)]">
+          {t(`tips.${tip.id}.body`, tip.data)}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function severityStyle(severity: ConversationTip['severity']): {
+  icon: React.ReactNode;
+  tone: string;
+} {
+  switch (severity) {
+    case 'critical':
+      return {
+        icon: <AlertCircle size={16} className="text-[var(--danger)]" />,
+        tone: 'border-[var(--danger)] bg-[var(--bg-soft)]',
+      };
+    case 'warning':
+      return {
+        icon: <AlertTriangle size={16} className="text-[var(--warning)]" />,
+        tone: 'border-[var(--warning)] bg-[var(--bg-soft)]',
+      };
+    default:
+      return {
+        icon: <Lightbulb size={16} className="text-[var(--primary)]" />,
+        tone: 'border-[var(--line)] bg-[var(--bg-soft)]',
+      };
+  }
+}
 
 function Field({
   label,

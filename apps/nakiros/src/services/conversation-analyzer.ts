@@ -7,6 +7,7 @@ import type {
   ConversationFrictionPoint,
   ConversationHealthZone,
   ConversationHotFile,
+  ConversationTip,
   ConversationToolStats,
 } from '@nakiros/shared';
 
@@ -418,6 +419,22 @@ export function analyzeConversation(
     wastedCacheTokens,
   });
 
+  const tips = buildTips({
+    compactions,
+    healthZone,
+    maxContextTokens,
+    contextWindow,
+    frictionPoints,
+    toolStats,
+    toolErrorCount,
+    hotFiles,
+    cacheMissTurns,
+    wastedCacheTokens,
+    durationMs,
+    slashCommands: Array.from(slashCommandSet),
+    sidechainCount,
+  });
+
   return {
     sessionId,
     projectId,
@@ -452,6 +469,7 @@ export function analyzeConversation(
 
     score,
     diagnostic,
+    tips,
   };
 }
 
@@ -516,4 +534,156 @@ function buildDiagnostic(args: {
   if (parts.length === 0) return 'Conversation saine — pas de signal notable';
 
   return parts.join(' · ');
+}
+
+// ---------------------------------------------------------------------------
+// Tip generator — rules-based, language-neutral (emits ids + data for i18n).
+// Rules are ordered by severity inside each category so the UI can show the
+// most actionable advice first.
+// ---------------------------------------------------------------------------
+
+function buildTips(args: {
+  compactions: ConversationCompaction[];
+  healthZone: ConversationHealthZone;
+  maxContextTokens: number;
+  contextWindow: number;
+  frictionPoints: ConversationFrictionPoint[];
+  toolStats: Record<string, ConversationToolStats>;
+  toolErrorCount: number;
+  hotFiles: ConversationHotFile[];
+  cacheMissTurns: number;
+  wastedCacheTokens: number;
+  durationMs: number;
+  slashCommands: string[];
+  sidechainCount: number;
+}): ConversationTip[] {
+  const tips: ConversationTip[] = [];
+  const ctxPct = Math.round((args.maxContextTokens / args.contextWindow) * 100);
+  const wastedK = Math.round(args.wastedCacheTokens / 1000);
+
+  // --- Context management ------------------------------------------------
+  if (args.compactions.length >= 2) {
+    tips.push({
+      id: 'split-sessions',
+      category: 'context',
+      severity: 'critical',
+      data: { count: args.compactions.length },
+    });
+  } else if (args.compactions.length === 1) {
+    tips.push({
+      id: 'restate-after-compaction',
+      category: 'context',
+      severity: 'warning',
+      data: {},
+    });
+  } else if (args.healthZone === 'degraded') {
+    tips.push({
+      id: 'clear-before-degraded',
+      category: 'context',
+      severity: 'warning',
+      data: { ctxPct },
+    });
+  } else if (args.healthZone === 'watch') {
+    tips.push({
+      id: 'watch-context-growth',
+      category: 'context',
+      severity: 'info',
+      data: { ctxPct },
+    });
+  }
+
+  // --- Cache efficiency --------------------------------------------------
+  if (args.wastedCacheTokens >= 500_000) {
+    tips.push({
+      id: 'use-extended-cache',
+      category: 'cache',
+      severity: 'warning',
+      data: { cacheMisses: args.cacheMissTurns, wastedK },
+    });
+  } else if (args.cacheMissTurns >= 5) {
+    tips.push({
+      id: 'keep-session-continuous',
+      category: 'cache',
+      severity: 'info',
+      data: { cacheMisses: args.cacheMissTurns, wastedK },
+    });
+  }
+
+  // --- Friction / intent drift ------------------------------------------
+  const lateFriction = args.frictionPoints.filter((f) => f.offsetPct > 0.5).length;
+  if (lateFriction >= 2 && args.healthZone !== 'healthy') {
+    tips.push({
+      id: 'restate-intent-mid',
+      category: 'friction',
+      severity: 'warning',
+      data: { count: lateFriction },
+    });
+  } else if (args.frictionPoints.length >= 3) {
+    tips.push({
+      id: 'frequent-corrections',
+      category: 'friction',
+      severity: 'info',
+      data: { count: args.frictionPoints.length },
+    });
+  }
+
+  // --- Tools -------------------------------------------------------------
+  const worstTool = Object.entries(args.toolStats)
+    .filter(([, s]) => s.errorCount >= 3)
+    .sort((a, b) => b[1].errorCount - a[1].errorCount)[0];
+  if (worstTool) {
+    tips.push({
+      id: 'flaky-tool',
+      category: 'tools',
+      severity: worstTool[1].errorCount >= 5 ? 'warning' : 'info',
+      data: { tool: worstTool[0], errors: worstTool[1].errorCount },
+    });
+  }
+
+  // --- Workflow / decomposition ----------------------------------------
+  const hottest = args.hotFiles[0];
+  if (hottest && hottest.editCount >= 15) {
+    tips.push({
+      id: 'decompose-heavy-file',
+      category: 'workflow',
+      severity: 'info',
+      data: { file: shortenFile(hottest.path), count: hottest.editCount },
+    });
+  }
+
+  if (
+    args.sidechainCount === 0 &&
+    args.maxContextTokens > args.contextWindow * 0.5 &&
+    Object.values(args.toolStats).some((s) => s.count >= 30)
+  ) {
+    tips.push({
+      id: 'delegate-exploration',
+      category: 'workflow',
+      severity: 'info',
+      data: {},
+    });
+  }
+
+  // --- Skills gap -------------------------------------------------------
+  const durationMin = args.durationMs / 60_000;
+  if (args.slashCommands.length === 0 && durationMin >= 45 && args.frictionPoints.length >= 2) {
+    tips.push({
+      id: 'consider-custom-skill',
+      category: 'skills',
+      severity: 'info',
+      data: { durationMin: Math.round(durationMin) },
+    });
+  }
+
+  // Severity order: critical > warning > info
+  const weight = { critical: 0, warning: 1, info: 2 } as const;
+  tips.sort((a, b) => weight[a.severity] - weight[b.severity]);
+
+  // Cap — too many tips is noise, first 5 is actionable.
+  return tips.slice(0, 5);
+}
+
+function shortenFile(path: string): string {
+  const parts = path.split('/').filter(Boolean);
+  return parts.length <= 2 ? path : parts.slice(-2).join('/');
 }

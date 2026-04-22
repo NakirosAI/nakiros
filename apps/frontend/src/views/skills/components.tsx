@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { ChevronDown, ChevronRight, File as FileIcon, Folder } from 'lucide-react';
-import type { SkillFileEntry } from '@nakiros/shared';
+import type { ClaudeModelId, SkillFileEntry } from '@nakiros/shared';
+import { CLAUDE_MODEL_IDS, CLAUDE_MODEL_LABELS } from '@nakiros/shared';
 
 /** Coloured pill rendering an eval pass rate (0–1). */
 export function PassRateBadge({ rate, size = 'md' }: { rate: number; size?: 'sm' | 'md' }) {
@@ -174,4 +175,43 @@ export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${Math.floor(ms / 60000)}m${Math.floor((ms % 60000) / 1000)}s`;
+}
+
+/**
+ * Inline selector for the Claude model used to run evals. Rendered next to the
+ * baseline checkbox so the Run eval bar stays single-line.
+ */
+export function EvalModelSelector({
+  value,
+  onChange,
+  disabled,
+  label,
+  title,
+}: {
+  value: ClaudeModelId;
+  onChange(value: ClaudeModelId): void;
+  disabled?: boolean;
+  label: string;
+  title?: string;
+}) {
+  return (
+    <label
+      className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--text-muted)]"
+      title={title}
+    >
+      <span>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as ClaudeModelId)}
+        disabled={disabled}
+        className="rounded border border-[var(--line)] bg-[var(--bg-soft)] px-1.5 py-0.5 text-xs text-[var(--text-primary)] focus:border-[var(--primary)] focus:outline-none disabled:opacity-50"
+      >
+        {CLAUDE_MODEL_IDS.map((id) => (
+          <option key={id} value={id}>
+            {CLAUDE_MODEL_LABELS[id]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }

@@ -55,11 +55,17 @@ export interface BuildArgsOptions {
    * an already-confirmed temp workdir. Audit + eval rely on workdir-scoped settings.
    */
   skipPermissions?: boolean;
+  /**
+   * Claude model id (`claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5`,
+   * …). Forwarded as `--model <id>`. Omit to let the CLI use its default.
+   */
+  model?: string;
 }
 
 export function buildClaudeArgs(opts: BuildArgsOptions): string[] {
   const args: string[] = ['--output-format', 'stream-json', '--verbose'];
   if (opts.skipPermissions) args.push('--dangerously-skip-permissions');
+  if (opts.model) args.push('--model', opts.model);
   if (opts.addDirs) {
     for (const d of opts.addDirs) {
       args.push('--add-dir', d);

@@ -408,6 +408,12 @@ export interface SkillEvalRun {
   isolatedHome: string | null;
   /** Conversation turns (user + agent). */
   turns: EvalRunTurn[];
+  /**
+   * Claude model id passed to the CLI for this run (e.g. `claude-opus-4-7`).
+   * Null on runs created before the selector existed — the eval matrix will
+   * display an "unknown model" badge for those legacy iterations.
+   */
+  model?: string | null;
   /** Token/duration stats captured from Claude's result event. */
   tokensUsed: number;
   durationMs: number;
@@ -468,6 +474,13 @@ export interface StartEvalRunRequest {
    * When set, the eval runs write results into this directory's evals/workspace/.
    */
   skillDirOverride?: string;
+  /**
+   * Claude model id to pass as `--model` to the CLI subprocess (e.g.
+   * `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5`). When omitted
+   * the CLI uses its own default — callers should pass the model explicitly
+   * so the iteration can be tagged with it in the eval matrix.
+   */
+  model?: string;
 }
 
 export interface StartEvalRunResponse {

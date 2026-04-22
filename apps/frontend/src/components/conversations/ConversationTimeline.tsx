@@ -42,15 +42,36 @@ export function ConversationTimeline({ analysis }: Props) {
     PAD_TOP + plotH - (Math.min(tokens, yMax) / yMax) * plotH;
   const xFor = (pct: number) => PAD_X + pct * plotW;
 
-  const path = useMemo(() => {
+  /**
+   * Build the sparkline as a list of coloured segments. Each segment is
+   * tinted by the zone its *endpoint* falls into — the eye follows the line
+   * from green (healthy) into amber and red (degraded) as context grows.
+   */
+  const segments = useMemo(() => {
     const samples = downsample(analysis.contextSamples, MAX_SAMPLES);
-    let d = '';
-    samples.forEach((s, i) => {
-      const x = xFor(s.offsetPct);
-      const y = yFor(s.tokens);
-      d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
-    });
-    return d.trim();
+    if (samples.length < 2) return [] as Array<{ d: string; stroke: string }>;
+
+    const zoneColor = (tokens: number) => {
+      const pct = tokens / yMax;
+      if (pct > WATCH_PCT) return '#dc2626'; // red-600
+      if (pct > HEALTHY_PCT) return '#d97706'; // amber-600
+      return '#16a34a'; // green-600
+    };
+
+    const segs: Array<{ d: string; stroke: string }> = [];
+    for (let i = 1; i < samples.length; i++) {
+      const a = samples[i - 1];
+      const b = samples[i];
+      const x1 = xFor(a.offsetPct).toFixed(1);
+      const y1 = yFor(a.tokens).toFixed(1);
+      const x2 = xFor(b.offsetPct).toFixed(1);
+      const y2 = yFor(b.tokens).toFixed(1);
+      segs.push({
+        d: `M${x1},${y1} L${x2},${y2}`,
+        stroke: zoneColor(b.tokens),
+      });
+    }
+    return segs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis.contextSamples, analysis.contextWindow]);
 
@@ -138,16 +159,32 @@ export function ConversationTimeline({ analysis }: Props) {
           window {windowLabel}
         </text>
 
-        {/* Sparkline — dark stroke so it reads over any zone */}
-        {path && (
-          <path
-            d={path}
-            fill="none"
-            stroke="var(--text-primary)"
-            strokeOpacity={0.85}
-            strokeWidth={1.5}
-            strokeLinejoin="round"
-          />
+        {/* Sparkline — segments coloured by the zone their endpoint falls
+            into, with a dark backbone for contrast. */}
+        {segments.length > 0 && (
+          <g>
+            {segments.map((s, i) => (
+              <path
+                key={'bg' + i}
+                d={s.d}
+                fill="none"
+                stroke="#0f172a"
+                strokeOpacity={0.45}
+                strokeWidth={3}
+                strokeLinecap="round"
+              />
+            ))}
+            {segments.map((s, i) => (
+              <path
+                key={'fg' + i}
+                d={s.d}
+                fill="none"
+                stroke={s.stroke}
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+            ))}
+          </g>
         )}
 
         {/* Compaction boundaries */}

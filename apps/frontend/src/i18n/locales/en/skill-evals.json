@@ -22,5 +22,7 @@
   },
   "humanReview": "human review",
   "humanReviewHeading": "Human review",
-  "grader": "grader: {{model}}"
+  "grader": "grader: {{model}}",
+  "viewEvolution": "Evolution",
+  "viewModels": "Models"
 }

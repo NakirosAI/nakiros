@@ -367,6 +367,9 @@ export default function PluginSkillsView({ onBack }: Props) {
             scope="plugin"
             marketplaceName={skill.marketplaceName}
             pluginName={skill.pluginName}
+            onComparisonLaunched={(runIds) =>
+              s.setActiveRuns({ runIds, iteration: 0, skill })
+            }
           />
         )}
       </div>

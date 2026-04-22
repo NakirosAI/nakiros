@@ -15,8 +15,19 @@ import type {
 // ---------------------------------------------------------------------------
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // default Anthropic prompt cache TTL
-const HEALTHY_CTX_MAX = 50_000;
-const WATCH_CTX_MAX = 150_000;
+
+// Context window detection — Claude Code can opt into the 1M context for
+// Opus 4.x via beta, and we can't read that header from the JSONL. Fall back
+// to the observed peak: anything substantially past standard = assume 1M.
+const STANDARD_WINDOW = 200_000;
+const EXTENDED_WINDOW = 1_000_000;
+const EXTENDED_WINDOW_TRIGGER = 250_000;
+
+// Health zones are expressed as a fraction of the active context window so
+// they scale with the model. 25% / 75% roughly map to the empirical
+// "lost in the middle" curve: low pressure, watch, degraded.
+const HEALTHY_ZONE_PCT = 0.25;
+const WATCH_ZONE_PCT = 0.75;
 
 // User-message patterns that indicate friction. Matched case-insensitively on
 // a lowercased prefix of the message to catch the common tip-of-the-tongue
@@ -352,36 +363,49 @@ export function analyzeConversation(
     .map(([path, editCount]) => ({ path, editCount }))
     .sort((a, b) => b.editCount - a.editCount);
 
+  // --- Context window + zones (fraction of effective window) ---
+  const peakObserved = Math.max(
+    maxContextTokens,
+    ...compactions.map((c) => c.preTokens),
+    0,
+  );
+  const contextWindow =
+    peakObserved > EXTENDED_WINDOW_TRIGGER ? EXTENDED_WINDOW : STANDARD_WINDOW;
+  const ctxFraction = contextWindow > 0 ? maxContextTokens / contextWindow : 0;
+
   const healthZone: ConversationHealthZone =
-    maxContextTokens > WATCH_CTX_MAX
+    ctxFraction > WATCH_ZONE_PCT
       ? 'degraded'
-      : maxContextTokens > HEALTHY_CTX_MAX
+      : ctxFraction > HEALTHY_ZONE_PCT
         ? 'watch'
         : 'healthy';
 
-  // --- Score & diagnostic --------------------------------------------------
-  let score = 0;
-  if (compactions.length >= 1) score += SCORE_WEIGHTS.compactionFirst;
+  // --- Score (100 = healthy, 0 = critical — subtract penalties) ---
+  let penalty = 0;
+  if (compactions.length >= 1) penalty += SCORE_WEIGHTS.compactionFirst;
   if (compactions.length >= 2) {
-    score += SCORE_WEIGHTS.compactionExtra * (compactions.length - 1);
+    penalty += SCORE_WEIGHTS.compactionExtra * (compactions.length - 1);
   }
-  if (healthZone === 'degraded') score += SCORE_WEIGHTS.degradedCtx;
-  else if (healthZone === 'watch') score += SCORE_WEIGHTS.watchCtx;
+  if (healthZone === 'degraded') penalty += SCORE_WEIGHTS.degradedCtx;
+  else if (healthZone === 'watch') penalty += SCORE_WEIGHTS.watchCtx;
 
-  score += Math.min(
+  penalty += Math.min(
     frictionPoints.length * SCORE_WEIGHTS.frictionPer,
     SCORE_WEIGHTS.frictionCap,
   );
-  score += Math.min(toolErrorCount * SCORE_WEIGHTS.toolErrorPer, SCORE_WEIGHTS.toolErrorCap);
-  score += Math.min(hotFiles.length * SCORE_WEIGHTS.hotFilePer, SCORE_WEIGHTS.hotFileCap);
+  penalty += Math.min(
+    toolErrorCount * SCORE_WEIGHTS.toolErrorPer,
+    SCORE_WEIGHTS.toolErrorCap,
+  );
+  penalty += Math.min(hotFiles.length * SCORE_WEIGHTS.hotFilePer, SCORE_WEIGHTS.hotFileCap);
 
   // Cache waste: scale by share of total cache tokens written wastefully.
   if (cacheCreationTokens > 0 && wastedCacheTokens > 0) {
     const wasteRatio = wastedCacheTokens / cacheCreationTokens;
-    score += Math.round(wasteRatio * SCORE_WEIGHTS.cacheMissCap);
+    penalty += Math.round(wasteRatio * SCORE_WEIGHTS.cacheMissCap);
   }
 
-  score = Math.min(100, Math.round(score));
+  const score = Math.max(0, Math.min(100, Math.round(100 - penalty)));
 
   const diagnostic = buildDiagnostic({
     compactions,
@@ -407,6 +431,7 @@ export function analyzeConversation(
     compactions,
     totalTokens,
     maxContextTokens,
+    contextWindow,
     healthZone,
     contextSamples,
 

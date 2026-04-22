@@ -4,7 +4,7 @@
   "headingAnalysis": "Conversations — {{count}} analyzed",
   "sort": {
     "label": "Sort",
-    "score": "By score (most interesting)",
+    "score": "By health (critical first)",
     "recent": "Most recent",
     "longest": "Longest"
   },

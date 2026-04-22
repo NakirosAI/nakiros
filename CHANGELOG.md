@@ -5,6 +5,60 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-04-22
+
+Conversation-centric release. Nakiros now analyses your Claude Code
+sessions end to end — from a zero-token deterministic scan to an
+opt-in LLM narrative diagnosis — and surfaces the patterns across a
+whole project.
+
+### Added
+
+- **Conversation health analyzer.** New deterministic pass over each
+  Claude Code JSONL session extracts signals from `message.usage`:
+  compactions (with pre/post token metadata), per-turn context size,
+  friction patterns, cache misses with avoidable-waste estimation,
+  tool errors, hot files, sidechains, and slash commands. Produces a
+  composite health score (100 = healthy, 0 = critical) and a one-line
+  rule-based diagnostic. Zero token cost.
+- **Health-first Conversations view.** Sorted list with score chip,
+  signal badges, sort/filter controls (critical only, compactions,
+  friction, cache waste, tool errors). Replaces the raw message viewer
+  as the primary surface — raw messages moved behind a "view raw" link.
+- **Diagnostic drawer with context timeline.** Per-conversation
+  drawer shows a sparkline of per-turn context tokens over three
+  colour-coded zones (healthy / watch / degraded, as a fraction of the
+  detected context window — 200k or 1M auto-detected), compaction
+  flags, friction markers, top tools with error counts, hot files,
+  and a cache-efficiency panel with directly-computed avoidable waste.
+- **Actionable tips per conversation.** Rules-based engine emits up to
+  five ranked tips per session — split sessions, restate intent after
+  a compaction, clear before saturation, enable the 1h extended cache,
+  address flaky tools, decompose heavy files, delegate to subagents,
+  create a dedicated skill. i18n-friendly via `tips.<id>.title/body`
+  keys (FR + EN).
+- **Deep (LLM) conversation analysis.** Opt-in narrative diagnosis via
+  the new bundled `nakiros-conversation-analyst` skill, routed to
+  Haiku 4.5 for sessions ≤ 170k tokens and Sonnet 4.6 (1M context
+  natively) for bigger ones. Detects tone-based frustration the regex
+  pass can't catch and surfaces context-drift instances with turn
+  gaps. Results cached to `~/.nakiros/analyses/{sessionId}.json` so
+  re-opens don't re-bill. Live loader animation while running.
+- **Cross-conversation Dashboard.** Project landing aggregates the last
+  10 / 30 / 90 / all analysed sessions into headline metrics (count,
+  avg score, % with compaction, total cache waste), a stacked health
+  distribution bar, detected patterns (high compaction rate,
+  late-session drift, cache-waste pattern, systemic low health),
+  ranked lists of recurring tips / failing tools / hot files, and a
+  drill-down to the five most critical conversations.
+
+### Changed
+
+- Modal header now truncates long titles cleanly (shared across the
+  codebase for future callers).
+- `Insights` tab reduced to a placeholder reserved for future
+  LLM-powered cross-conversation recommendations.
+
 ## [0.4.2] — 2026-04-20
 
 Internal refactor pass — no user-facing feature changes.
@@ -121,6 +175,7 @@ First public beta. Initial scope:
 - `require('fs')` calls replaced with static imports for ESM
   compatibility.
 
+[0.5.0]: https://github.com/NakirosAI/nakiros/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/NakirosAI/nakiros/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/NakirosAI/nakiros/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/NakirosAI/nakiros/compare/v0.3.0...v0.4.0

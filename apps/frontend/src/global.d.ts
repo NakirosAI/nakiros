@@ -14,6 +14,8 @@ import type {
   Project,
   ProjectConversation,
   ConversationMessage,
+  ConversationAnalysis,
+  ConversationDeepAnalysis,
   Skill,
   SkillScope,
   ScanProgress,
@@ -146,6 +148,10 @@ declare global {
 
       listProjectConversations(projectId: string): Promise<ProjectConversation[]>;
       getProjectConversationMessages(projectId: string, sessionId: string): Promise<ConversationMessage[]>;
+      analyzeProjectConversation(projectId: string, sessionId: string): Promise<ConversationAnalysis | null>;
+      listProjectConversationsWithAnalysis(projectId: string): Promise<ConversationAnalysis[]>;
+      loadConversationDeepAnalysis(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis | null>;
+      deepAnalyzeConversation(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis>;
 
       listProjectSkills(projectId: string): Promise<Skill[]>;
       getProjectSkill(projectId: string, skillName: string): Promise<Skill | null>;

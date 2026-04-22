@@ -63,10 +63,12 @@ export function Modal({
       >
         {(title || showCloseButton) && (
           <header className="mb-4 flex items-center justify-between gap-4">
-            <div className="text-sm font-bold text-[var(--text)]">{title}</div>
+            <div className="min-w-0 flex-1 text-sm font-bold text-[var(--text)]">
+              {title}
+            </div>
             {showCloseButton && (
               <button
-                className="rounded border border-transparent px-2 py-0.5 text-lg leading-none text-[var(--text-muted)] hover:border-[var(--line)] hover:text-[var(--text)]"
+                className="shrink-0 rounded border border-transparent px-2 py-0.5 text-lg leading-none text-[var(--text-muted)] hover:border-[var(--line)] hover:text-[var(--text)]"
                 onClick={onClose}
                 type="button"
                 aria-label="Close"

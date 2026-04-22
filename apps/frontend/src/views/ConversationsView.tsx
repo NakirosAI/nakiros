@@ -1,36 +1,61 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, MessageSquare } from 'lucide-react';
-import type { Project, ProjectConversation, ConversationMessage } from '@nakiros/shared';
+import type { ConversationAnalysis, Project } from '@nakiros/shared';
+import { ConversationHealthBadges } from '../components/conversations/ConversationHealthBadges';
+import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
 
 interface Props {
   project: Project;
 }
 
+type SortKey = 'score' | 'recent' | 'longest';
+type FilterKey = 'all' | 'critical' | 'compactions' | 'friction' | 'cacheWaste' | 'toolErrors';
+
 export default function ConversationsView({ project }: Props) {
   const { t } = useTranslation('conversations');
-  const [conversations, setConversations] = useState<ProjectConversation[]>([]);
+  const [analyses, setAnalyses] = useState<ConversationAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSession, setSelectedSession] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ConversationMessage[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [selected, setSelected] = useState<ConversationAnalysis | null>(null);
+  const [sort, setSort] = useState<SortKey>('score');
+  const [filter, setFilter] = useState<FilterKey>('all');
 
   useEffect(() => {
     setLoading(true);
-    window.nakiros.listProjectConversations(project.id).then((convs) => {
-      setConversations(convs);
+    window.nakiros.listProjectConversationsWithAnalysis(project.id).then((data) => {
+      setAnalyses(data);
       setLoading(false);
     });
   }, [project.id]);
 
-  function openConversation(sessionId: string) {
-    setSelectedSession(sessionId);
-    setLoadingMessages(true);
-    window.nakiros.getProjectConversationMessages(project.id, sessionId).then((msgs) => {
-      setMessages(msgs);
-      setLoadingMessages(false);
+  const visible = useMemo(() => {
+    const filtered = analyses.filter((a) => {
+      switch (filter) {
+        case 'critical':
+          return a.score <= 40;
+        case 'compactions':
+          return a.compactions.length > 0;
+        case 'friction':
+          return a.frictionPoints.length > 0;
+        case 'cacheWaste':
+          return a.cacheMissTurns >= 3;
+        case 'toolErrors':
+          return a.toolErrorCount > 0;
+        default:
+          return true;
+      }
     });
-  }
+
+    const sorted = [...filtered];
+    // Lowest health scores first — those are the ones worth investigating.
+    if (sort === 'score') sorted.sort((a, b) => a.score - b.score);
+    else if (sort === 'recent')
+      sorted.sort(
+        (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+      );
+    else sorted.sort((a, b) => b.durationMs - a.durationMs);
+
+    return sorted;
+  }, [analyses, sort, filter]);
 
   if (loading) {
     return (
@@ -40,112 +65,141 @@ export default function ConversationsView({ project }: Props) {
     );
   }
 
-  // Conversation detail
-  if (selectedSession) {
-    const conv = conversations.find((c) => c.sessionId === selectedSession);
-    return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
-          <button
-            onClick={() => setSelectedSession(null)}
-            className="rounded p-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-muted)] hover:text-[var(--text-primary)]"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <div className="text-sm font-medium text-[var(--text-primary)]">
-              {conv?.summary ?? selectedSession}
-            </div>
-            {conv && (
-              <div className="flex gap-3 text-xs text-[var(--text-muted)]">
-                <span>{t('messageCount', { count: conv.messageCount })}</span>
-                <span>{new Date(conv.startedAt).toLocaleString()}</span>
-                {conv.gitBranch && <span>{conv.gitBranch}</span>}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          {loadingMessages ? (
-            <div className="text-center text-[var(--text-muted)]">{t('loadingMessages')}</div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {messages.map((msg) => (
-                <div
-                  key={msg.uuid}
-                  className={`rounded-lg px-4 py-3 ${
-                    msg.type === 'user'
-                      ? 'ml-8 bg-[var(--primary-soft)] text-[var(--text-primary)]'
-                      : msg.type === 'assistant'
-                        ? 'mr-8 border border-[var(--line)] bg-[var(--bg-card)]'
-                        : 'mx-8 bg-[var(--bg-muted)] text-xs text-[var(--text-muted)]'
-                  }`}
-                >
-                  <div className="mb-1 flex items-center gap-2 text-xs text-[var(--text-muted)]">
-                    <span className="font-semibold capitalize">{msg.type}</span>
-                    <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
-                  </div>
-                  <div className="whitespace-pre-wrap text-sm">
-                    {msg.content.slice(0, 2000)}
-                    {msg.content.length > 2000 && '...'}
-                  </div>
-                  {msg.toolUse && msg.toolUse.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {msg.toolUse.map((tool, i) => (
-                        <span
-                          key={i}
-                          className="rounded bg-[var(--bg-muted)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]"
-                        >
-                          {tool.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">
+          {t('headingAnalysis', { count: analyses.length })}
+        </h2>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <label className="flex items-center gap-1 text-[var(--text-muted)]">
+            {t('sort.label')}
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+              className="rounded border border-[var(--line)] bg-[var(--bg-card)] px-2 py-1 text-xs text-[var(--text-primary)]"
+            >
+              <option value="score">{t('sort.score')}</option>
+              <option value="recent">{t('sort.recent')}</option>
+              <option value="longest">{t('sort.longest')}</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-1 text-[var(--text-muted)]">
+            {t('filter.label')}
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as FilterKey)}
+              className="rounded border border-[var(--line)] bg-[var(--bg-card)] px-2 py-1 text-xs text-[var(--text-primary)]"
+            >
+              <option value="all">{t('filter.all')}</option>
+              <option value="critical">{t('filter.critical')}</option>
+              <option value="compactions">{t('filter.compactions')}</option>
+              <option value="friction">{t('filter.friction')}</option>
+              <option value="cacheWaste">{t('filter.cacheWaste')}</option>
+              <option value="toolErrors">{t('filter.toolErrors')}</option>
+            </select>
+          </label>
         </div>
       </div>
-    );
-  }
 
-  // Conversation list
-  return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <h2 className="mb-4 text-lg font-bold text-[var(--text-primary)]">
-        {t('heading', { count: conversations.length })}
-      </h2>
-      {conversations.length === 0 ? (
-        <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-          {t('empty')}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {conversations.map((conv) => (
-            <button
-              key={conv.sessionId}
-              onClick={() => openConversation(conv.sessionId)}
-              className="flex w-full items-start gap-3 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-4 py-3 text-left transition-colors hover:border-[var(--primary)]"
-            >
-              <MessageSquare size={16} className="mt-0.5 shrink-0 text-[var(--text-muted)]" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-[var(--text-primary)]">
-                  {conv.summary}
-                </div>
-                <div className="mt-1 flex flex-wrap gap-3 text-xs text-[var(--text-muted)]">
-                  <span>{t('messageCount', { count: conv.messageCount })}</span>
-                  <span>{new Date(conv.lastMessageAt).toLocaleDateString()}</span>
-                  {conv.gitBranch && <span>{conv.gitBranch}</span>}
-                  {conv.toolsUsed.length > 0 && (
-                    <span>{t('toolsUsed', { count: conv.toolsUsed.length })}</span>
-                  )}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
+      <div className="flex-1 overflow-y-auto p-4">
+        {visible.length === 0 ? (
+          <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
+            {t('empty')}
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {visible.map((a) => (
+              <ConversationRow
+                key={a.sessionId}
+                analysis={a}
+                onClick={() => setSelected(a)}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {selected && (
+        <ConversationDiagnosticPanel
+          project={project}
+          analysis={selected}
+          onClose={() => setSelected(null)}
+        />
       )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Row — health-oriented, not content-oriented.
+// ---------------------------------------------------------------------------
+
+function ConversationRow({
+  analysis,
+  onClick,
+}: {
+  analysis: ConversationAnalysis;
+  onClick: () => void;
+}) {
+  // Higher score = healthier, so red is the LOW end, green is the HIGH end.
+  const scoreTone =
+    analysis.score <= 40
+      ? 'bg-[var(--danger)] text-white'
+      : analysis.score <= 70
+        ? 'bg-[var(--warning)] text-black'
+        : 'bg-[var(--success)] text-white';
+
+  // Dim healthy conversations so the eye skips them.
+  const dimmed = analysis.score >= 80;
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className={
+          'flex w-full items-start gap-3 rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-4 py-3 text-left transition-colors hover:border-[var(--primary)] ' +
+          (dimmed ? 'opacity-60' : '')
+        }
+      >
+        <span
+          className={
+            'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ' +
+            scoreTone
+          }
+          aria-label={`score ${analysis.score}`}
+        >
+          {analysis.score}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-[var(--text-primary)]">
+            {analysis.summary}
+          </div>
+          <div className="mt-0.5 text-xs text-[var(--text-muted)]">
+            {analysis.diagnostic}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-muted)]">
+            <span>{new Date(analysis.lastMessageAt).toLocaleDateString()}</span>
+            <span>{formatDuration(analysis.durationMs)}</span>
+            <span>{analysis.messageCount} msgs</span>
+            {analysis.gitBranch && <span>{analysis.gitBranch}</span>}
+          </div>
+          <div className="mt-2">
+            <ConversationHealthBadges analysis={analysis} />
+          </div>
+        </div>
+      </button>
+    </li>
+  );
+}
+
+function formatDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem === 0 ? `${h}h` : `${h}h${rem}m`;
 }

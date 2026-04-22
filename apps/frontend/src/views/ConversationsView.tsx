@@ -31,7 +31,7 @@ export default function ConversationsView({ project }: Props) {
     const filtered = analyses.filter((a) => {
       switch (filter) {
         case 'critical':
-          return a.score >= 60;
+          return a.score <= 40;
         case 'compactions':
           return a.compactions.length > 0;
         case 'friction':
@@ -46,7 +46,8 @@ export default function ConversationsView({ project }: Props) {
     });
 
     const sorted = [...filtered];
-    if (sort === 'score') sorted.sort((a, b) => b.score - a.score);
+    // Lowest health scores first — those are the ones worth investigating.
+    if (sort === 'score') sorted.sort((a, b) => a.score - b.score);
     else if (sort === 'recent')
       sorted.sort(
         (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
@@ -141,14 +142,16 @@ function ConversationRow({
   analysis: ConversationAnalysis;
   onClick: () => void;
 }) {
+  // Higher score = healthier, so red is the LOW end, green is the HIGH end.
   const scoreTone =
-    analysis.score >= 70
+    analysis.score <= 40
       ? 'bg-[var(--danger)] text-white'
-      : analysis.score >= 40
+      : analysis.score <= 70
         ? 'bg-[var(--warning)] text-black'
-        : 'bg-[var(--bg-soft)] text-[var(--text-muted)] border border-[var(--line)]';
+        : 'bg-[var(--success)] text-white';
 
-  const dimmed = analysis.score < 20;
+  // Dim healthy conversations so the eye skips them.
+  const dimmed = analysis.score >= 80;
 
   return (
     <li>

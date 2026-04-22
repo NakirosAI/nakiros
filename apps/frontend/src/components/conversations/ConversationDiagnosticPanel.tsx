@@ -41,9 +41,11 @@ export function ConversationDiagnosticPanel({ project, analysis, onClose }: Prop
       onClose={onClose}
       size="lg"
       title={
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <ScoreChip score={analysis.score} />
-          <span className="truncate">{analysis.summary || analysis.sessionId}</span>
+          <span className="min-w-0 flex-1 truncate" title={analysis.summary || analysis.sessionId}>
+            {analysis.summary || analysis.sessionId}
+          </span>
         </div>
       }
     >
@@ -217,10 +219,11 @@ function Field({
 }
 
 function ScoreChip({ score }: { score: number }) {
+  // Higher score = healthier (100 = clean, 0 = critical).
   const tone =
-    score >= 70
+    score <= 40
       ? 'bg-[var(--danger)] text-white'
-      : score >= 40
+      : score <= 70
         ? 'bg-[var(--warning)] text-black'
         : 'bg-[var(--success)] text-white';
   return (

@@ -1,10 +1,68 @@
 {
-  "loading": "Loading conversations…",
-  "loadingMessages": "Loading messages…",
-  "heading": "Conversations ({{count}})",
+  "loading": "Analyzing conversations…",
   "empty": "No conversations found for this project.",
+  "headingAnalysis": "Conversations — {{count}} analyzed",
+  "sort": {
+    "label": "Sort",
+    "score": "By score (most interesting)",
+    "recent": "Most recent",
+    "longest": "Longest"
+  },
+  "filter": {
+    "label": "Filter",
+    "all": "All",
+    "critical": "Critical only",
+    "compactions": "With compactions",
+    "friction": "With friction",
+    "cacheWaste": "With cache waste",
+    "toolErrors": "With tool errors"
+  },
+  "health": {
+    "healthy": "healthy",
+    "watch": "watch",
+    "degraded": "degraded"
+  },
+  "badge": {
+    "compactions_one": "{{count}} compaction",
+    "compactions_other": "{{count}} compactions",
+    "tokens": "{{k}}k tokens",
+    "friction_one": "{{count}} friction",
+    "friction_other": "{{count}} frictions",
+    "toolErrors_one": "{{count}} tool error",
+    "toolErrors_other": "{{count}} tool errors",
+    "cacheMisses_one": "{{count}} cache miss",
+    "cacheMisses_other": "{{count}} cache misses",
+    "hotFiles_one": "{{count}} hot file",
+    "hotFiles_other": "{{count}} hot files"
+  },
+  "diagnostic": {
+    "healthy": "Healthy conversation — no notable signal"
+  },
+  "drawer": {
+    "title": "Diagnostic",
+    "close": "Close",
+    "timeline": "Context timeline",
+    "timelineLegend": "tokens per turn · compactions · frictions · tool errors",
+    "overview": "Overview",
+    "context": "Context",
+    "cache": "Cache efficiency",
+    "tools": "Top tools",
+    "hotFiles": "Hot files (≥ 3 edits)",
+    "rawLink": "View raw messages",
+    "fields": {
+      "score": "Score",
+      "duration": "Duration",
+      "messages": "Messages",
+      "tokensTotal": "Total tokens",
+      "maxContext": "Peak context",
+      "cacheRead": "Cache hits",
+      "cacheCreation": "Cache writes",
+      "wasted": "Avoidable waste",
+      "cacheMisses": "Gaps > 5 min"
+    }
+  },
+  "loadingMessages": "Loading raw messages…",
+  "rawMessages": "Raw messages",
   "messageCount_one": "{{count}} message",
-  "messageCount_other": "{{count}} messages",
-  "toolsUsed_one": "{{count}} tool used",
-  "toolsUsed_other": "{{count}} tools used"
+  "messageCount_other": "{{count}} messages"
 }

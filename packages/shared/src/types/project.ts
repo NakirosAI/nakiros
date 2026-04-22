@@ -120,6 +120,8 @@ export interface ConversationAnalysis {
   /** Peak in-context tokens on a single turn (input + cache_read + cache_creation). */
   maxContextTokens: number;
   healthZone: ConversationHealthZone;
+  /** Sampled context size per assistant turn — used by the UI to draw the growth curve. */
+  contextSamples: Array<{ offsetPct: number; tokens: number }>;
 
   // --- Cache efficiency ---
   cacheReadTokens: number;

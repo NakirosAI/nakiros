@@ -105,6 +105,7 @@ export function analyzeConversation(
   let wastedCacheTokens = 0;
   let sidechainCount = 0;
   let toolErrorCount = 0;
+  const contextSamples: Array<{ offsetPct: number; tokens: number }> = [];
 
   // Timestamps used to detect cache misses (>5min since last assistant reply).
   let lastAssistantTimestamp: string | null = null;
@@ -295,6 +296,7 @@ export function analyzeConversation(
 
         const ctxOnThisTurn = input + cacheRead + cacheCreation;
         if (ctxOnThisTurn > maxContextTokens) maxContextTokens = ctxOnThisTurn;
+        contextSamples.push({ offsetPct: entryOffset, tokens: ctxOnThisTurn });
 
         // Attribute waste: cache_creation tokens on a turn that came after a
         // > TTL gap is directly avoidable spend.
@@ -406,6 +408,7 @@ export function analyzeConversation(
     totalTokens,
     maxContextTokens,
     healthZone,
+    contextSamples,
 
     cacheReadTokens,
     cacheCreationTokens,

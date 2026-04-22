@@ -1,62 +1,6 @@
 {
-  "title": "Recommandations",
-  "loading": "Analyse des conversations…",
-  "empty": "Aucune conversation analysée pour {{project}} pour le moment — ouvre la vue Conversations pour lancer la première analyse.",
-  "window": {
-    "label": "Fenêtre",
-    "10": "10 dernières",
-    "30": "30 dernières",
-    "90": "90 dernières",
-    "all": "Toutes"
-  },
-  "stats": {
-    "count": "Conversations",
-    "avgScore": "Score moyen",
-    "compactionRate": "Avec compaction",
-    "cacheWaste": "Cache gaspillé"
-  },
-  "zones": {
-    "healthy": "Saines",
-    "watch": "À surveiller",
-    "degraded": "Dégradées"
-  },
-  "sections": {
-    "distribution": "Répartition santé",
-    "insights": "Patterns détectés",
-    "topTips": "Conseils récurrents",
-    "topTools": "Outils les plus fragiles",
-    "hotFiles": "Fichiers chauds récurrents",
-    "critical": "Conversations critiques à revoir"
-  },
-  "empty.tips": "Pas de conseil récurrent",
-  "empty.tools": "Aucun outil en échec",
-  "empty.files": "Aucun fichier chaud récurrent",
-  "badge": {
-    "convCount_one": "{{count}} conv",
-    "convCount_other": "{{count}} convs"
-  },
-  "toolStat": "{{errors}} erreurs · {{rate}}%",
-  "fileStat": "{{convs}} convs · {{edits}} éditions",
-  "insights": {
-    "high-compaction-rate": {
-      "title": "Sessions trop longues",
-      "body": "{{pct}}% de tes conversations ont subi au moins une compaction ({{count}} sur la fenêtre). Tes sessions dépassent souvent la fenêtre de contexte — envisage /clear plus tôt ou découpe par sujet."
-    },
-    "frequent-degraded-zone": {
-      "title": "Contexte régulièrement dégradé",
-      "body": "{{pct}}% des conversations atteignent la zone dégradée (>75% du contexte). La qualité des réponses chute à ces volumes — les sessions gagneraient à être plus courtes."
-    },
-    "late-session-drift": {
-      "title": "Dérive de fin de session",
-      "body": "{{pct}}% des conversations montrent ≥2 frictions dans la seconde moitié + gros contexte. Pattern classique de lost-in-the-middle : restater l'intent en cours de session aiderait."
-    },
-    "cache-waste-pattern": {
-      "title": "Cache gaspillé en moyenne",
-      "body": "~{{avgK}}k tokens de cache rewrite par conversation ({{totalM}}M cumulés sur la fenêtre). Les pauses > 5 min cassent le cache — session plus continue ou beta cache 1h."
-    },
-    "systemic-low-health": {
-      "title": "Score moyen bas",
-      "body": "Score moyen {{score}}/100 — le workflow actuel déclenche trop de problèmes. Revois les conseils récurrents ci-dessous pour identifier la cause principale."
-    }
-  }
+  "title": "Insights",
+  "bodyPrefix": "L'analyse LLM des conversations de ",
+  "bodySuffix": " pour proposer des améliorations de skills au-delà des patterns déterministes arrive bientôt.",
+  "comingSoon": "Bientôt disponible"
 }

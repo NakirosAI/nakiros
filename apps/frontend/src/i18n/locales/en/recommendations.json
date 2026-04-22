@@ -1,6 +1,62 @@
 {
   "title": "Recommendations",
-  "bodyPrefix": "Analysis of ",
-  "bodySuffix": " conversations to detect friction points and propose skill improvements is coming soon.",
-  "comingSoon": "Phase 4 — Coming soon"
+  "loading": "Analyzing conversations…",
+  "empty": "No conversations analyzed for {{project}} yet — open the Conversations view to run the first analysis.",
+  "window": {
+    "label": "Window",
+    "10": "Last 10",
+    "30": "Last 30",
+    "90": "Last 90",
+    "all": "All"
+  },
+  "stats": {
+    "count": "Conversations",
+    "avgScore": "Avg. score",
+    "compactionRate": "With compaction",
+    "cacheWaste": "Cache wasted"
+  },
+  "zones": {
+    "healthy": "Healthy",
+    "watch": "Watch",
+    "degraded": "Degraded"
+  },
+  "sections": {
+    "distribution": "Health distribution",
+    "insights": "Detected patterns",
+    "topTips": "Recurring tips",
+    "topTools": "Most fragile tools",
+    "hotFiles": "Recurring hot files",
+    "critical": "Critical conversations to revisit"
+  },
+  "empty.tips": "No recurring tip",
+  "empty.tools": "No failing tool",
+  "empty.files": "No recurring hot file",
+  "badge": {
+    "convCount_one": "{{count}} conv",
+    "convCount_other": "{{count}} convs"
+  },
+  "toolStat": "{{errors}} errors · {{rate}}%",
+  "fileStat": "{{convs}} convs · {{edits}} edits",
+  "insights": {
+    "high-compaction-rate": {
+      "title": "Sessions too long",
+      "body": "{{pct}}% of your conversations hit at least one compaction ({{count}} in the window). Sessions often exceed the context window — consider /clear earlier, or split by topic."
+    },
+    "frequent-degraded-zone": {
+      "title": "Regularly in degraded zone",
+      "body": "{{pct}}% of conversations reach the degraded zone (>75% of window). Answer quality drops at these volumes — shorter sessions would help."
+    },
+    "late-session-drift": {
+      "title": "Late-session drift",
+      "body": "{{pct}}% of conversations show ≥2 frictions in the second half + large context. Classic lost-in-the-middle pattern — restating intent mid-session would help."
+    },
+    "cache-waste-pattern": {
+      "title": "Cache waste on average",
+      "body": "~{{avgK}}k tokens of cache rewrite per conversation ({{totalM}}M total over the window). Pauses > 5 min break the cache — more continuous sessions or the 1h cache beta would help."
+    },
+    "systemic-low-health": {
+      "title": "Low average score",
+      "body": "Average score {{score}}/100 — the current workflow triggers too many issues. Review the recurring tips below to identify the main cause."
+    }
+  }
 }

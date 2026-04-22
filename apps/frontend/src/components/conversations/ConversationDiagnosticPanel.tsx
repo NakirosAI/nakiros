@@ -10,6 +10,7 @@ import { Lightbulb, AlertTriangle, AlertCircle } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { ConversationTimeline } from './ConversationTimeline';
 import { ConversationHealthBadges } from './ConversationHealthBadges';
+import { ConversationDeepAnalysisSection } from './ConversationDeepAnalysisSection';
 
 interface Props {
   project: Project;
@@ -63,6 +64,9 @@ export function ConversationDiagnosticPanel({ project, analysis, onClose }: Prop
 
         {/* Actionable tips — the whole point of the analyzer. */}
         <TipsSection tips={analysis.tips} />
+
+        {/* Deep (LLM) analysis — opt-in, cached on disk once run. */}
+        <ConversationDeepAnalysisSection project={project} analysis={analysis} />
 
 
         {/* Timeline */}

@@ -179,6 +179,23 @@ export interface ConversationAnalysis {
   tips: ConversationTip[];
 }
 
+// ---------------------------------------------------------------------------
+// Deep (LLM-powered) conversation analysis — stage 2 narrative report.
+// Runs on demand via the nakiros-conversation-analyst skill, routed to Haiku
+// for small sessions and Sonnet (1M context) for big ones.
+// ---------------------------------------------------------------------------
+
+export interface ConversationDeepAnalysis {
+  sessionId: string;
+  /** Which Claude model produced the report. */
+  model: 'haiku' | 'sonnet';
+  /** Approximate input tokens sent to the model — helps the UI show cost. */
+  inputTokens: number;
+  /** Markdown report emitted by the skill. */
+  report: string;
+  generatedAt: string;
+}
+
 export interface SkillFileEntry {
   name: string;
   relativePath: string;

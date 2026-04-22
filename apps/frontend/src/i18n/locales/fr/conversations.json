@@ -50,6 +50,7 @@
     "hotFiles": "Fichiers chauds (≥ 3 éditions)",
     "tips": "À faire la prochaine fois",
     "tipsEmpty": "Rien à suggérer — cette conversation est saine",
+    "deepTitle": "Analyse approfondie (LLM)",
     "rawLink": "Voir les messages bruts",
     "fields": {
       "score": "Score",
@@ -67,6 +68,16 @@
   "rawMessages": "Messages bruts",
   "messageCount_one": "{{count}} message",
   "messageCount_other": "{{count}} messages",
+  "deepAnalysis": {
+    "title": "Analyse approfondie",
+    "checking": "Vérification du cache…",
+    "pitch": "Lance une analyse narrative par LLM pour détecter la frustration implicite, la dérive contextuelle, et recevoir des recommandations concrètes.",
+    "estimate": "Modèle prévu : {{model}} · contexte ~{{tokensK}}k tokens · résultat mis en cache après le run",
+    "run": "Lancer l'analyse approfondie",
+    "running": "Analyse en cours…",
+    "rerun": "Relancer",
+    "generated": "{{model}} · ~{{tokensK}}k tokens · {{date}}"
+  },
   "tips": {
     "split-sessions": {
       "title": "Découper en plusieurs sessions",

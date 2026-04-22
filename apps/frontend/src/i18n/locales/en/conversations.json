@@ -67,6 +67,16 @@
   "rawMessages": "Raw messages",
   "messageCount_one": "{{count}} message",
   "messageCount_other": "{{count}} messages",
+  "deepAnalysis": {
+    "title": "Deep analysis",
+    "checking": "Checking cache…",
+    "pitch": "Run an LLM-powered narrative analysis to catch implicit frustration, context drift, and get concrete recommendations.",
+    "estimate": "Likely model: {{model}} · context ~{{tokensK}}k tokens · cached after the run",
+    "run": "Run deep analysis",
+    "running": "Analyzing…",
+    "rerun": "Re-run",
+    "generated": "{{model}} · ~{{tokensK}}k tokens · {{date}}"
+  },
   "tips": {
     "split-sessions": {
       "title": "Split into separate sessions",

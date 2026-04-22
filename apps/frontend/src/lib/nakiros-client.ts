@@ -200,6 +200,10 @@ const client = {
     invoke('project:analyzeConversation', projectId, sessionId),
   listProjectConversationsWithAnalysis: (projectId: string) =>
     invoke('project:listConversationsWithAnalysis', projectId),
+  loadConversationDeepAnalysis: (projectId: string, sessionId: string) =>
+    invoke('project:loadDeepAnalysis', projectId, sessionId),
+  deepAnalyzeConversation: (projectId: string, sessionId: string) =>
+    invoke('project:deepAnalyzeConversation', projectId, sessionId),
   listProjectSkills: (projectId: string) => invoke('project:listSkills', projectId),
   getProjectSkill: (projectId: string, skillName: string) => invoke('project:getSkill', projectId, skillName),
   saveProjectSkill: (projectId: string, skillName: string, content: string) =>

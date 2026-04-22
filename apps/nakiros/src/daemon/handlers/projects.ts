@@ -5,6 +5,7 @@ import {
   dismissProject,
 } from '../../services/project-scanner.js';
 import { listConversations, getConversationMessages } from '../../services/conversation-parser.js';
+import { analyzeConversation } from '../../services/conversation-analyzer.js';
 import {
   listSkills,
   getSkill,
@@ -46,6 +47,24 @@ export const projectHandlers: HandlerRegistry = {
     const project = getProject(projectId);
     if (!project) return [];
     return getConversationMessages(project.providerProjectDir, sessionId);
+  },
+
+  'project:analyzeConversation': (args) => {
+    const projectId = args[0] as string;
+    const sessionId = args[1] as string;
+    const project = getProject(projectId);
+    if (!project) return null;
+    return analyzeConversation(project.providerProjectDir, sessionId, projectId);
+  },
+
+  'project:listConversationsWithAnalysis': (args) => {
+    const projectId = args[0] as string;
+    const project = getProject(projectId);
+    if (!project) return [];
+    const convs = listConversations(project.providerProjectDir, projectId);
+    return convs
+      .map((c) => analyzeConversation(project.providerProjectDir, c.sessionId, projectId))
+      .filter((x): x is NonNullable<typeof x> => x !== null);
   },
 
   'project:listSkills': (args) => {

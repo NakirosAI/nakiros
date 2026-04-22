@@ -88,6 +88,12 @@ export const IPC_CHANNELS = {
   'eval:getMatrix': 'eval:getMatrix',
   'eval:loadIterationRun': 'eval:loadIterationRun',
 
+  // Eval model comparison (A/B/C across Haiku/Sonnet/Opus)
+  'comparison:run': 'comparison:run',
+  'comparison:list': 'comparison:list',
+  'comparison:getMatrix': 'comparison:getMatrix',
+  'comparison:getFingerprintStatus': 'comparison:getFingerprintStatus',
+
   // Audit runner
   'audit:start': 'audit:start',
   'audit:stopRun': 'audit:stopRun',

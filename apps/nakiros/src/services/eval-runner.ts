@@ -102,6 +102,21 @@ function prepareArtifactDir(
   return dir;
 }
 
+/**
+ * Same as `prepareArtifactDir` but rooted at an absolute path. Used by the
+ * comparison runner to write under `evals/comparisons/<ts>/<model>/` instead of
+ * the default `evals/workspace/iteration-N/` layout.
+ */
+function prepareArtifactDirAt(
+  rootDir: string,
+  evalName: string,
+  config: EvalRunConfig,
+): string {
+  const dir = join(rootDir, `eval-${evalName}`, config);
+  mkdirSync(join(dir, 'outputs'), { recursive: true });
+  return dir;
+}
+
 function writeEvalExecutionSettings(dir: string, config: EvalRunConfig): void {
   writeExecutionSettings(dir, {
     denySkill: config === 'without_skill',
@@ -241,10 +256,11 @@ function writeRunJson(run: SkillEvalRun): void {
 
 function saveTimingJson(run: SkillEvalRun): void {
   const timingPath = join(run.workdir, 'timing.json');
-  const payload = {
+  const payload: Record<string, unknown> = {
     total_tokens: run.tokensUsed,
     duration_ms: run.durationMs,
   };
+  if (run.model) payload['model'] = run.model;
   writeFileSync(timingPath, JSON.stringify(payload, null, 2), 'utf8');
 }
 
@@ -385,6 +401,24 @@ function normalizeAssertions(
 export interface StartRunsOptions {
   resolveSkillDir(request: StartEvalRunRequest): string;
   onEvent(event: EvalRunEvent): void;
+  /**
+   * Internal-only override used by the comparison runner so runs write into
+   * `evals/comparisons/<timestamp>/<model>/` instead of `evals/workspace/iteration-N/`.
+   * Absolute path. Layout under the root mirrors an iteration dir
+   * (`eval-<name>/<config>/`). When set, `skipBenchmarkWrite` and `fixedIteration`
+   * are expected to be set too.
+   */
+  artifactRootOverride?: string;
+  /**
+   * Skip the automatic `writeIterationBenchmark` call at the end of the batch.
+   * Used by the comparison runner, which writes its own `comparison.json`.
+   */
+  skipBenchmarkWrite?: boolean;
+  /**
+   * Override `computeNextIteration`. Comparison runs pass a stable synthetic
+   * value so the persisted `SkillEvalRun` records are self-describing.
+   */
+  fixedIteration?: number;
 }
 
 /**
@@ -438,7 +472,7 @@ export async function startEvalRuns(
     throw new Error('No matching evals to run');
   }
 
-  const iteration = computeNextIteration(skillDir);
+  const iteration = options.fixedIteration ?? computeNextIteration(skillDir);
   const includeBaseline = request.includeBaseline === true;
   const configs: EvalRunConfig[] = includeBaseline ? ['with_skill', 'without_skill'] : ['with_skill'];
 
@@ -450,7 +484,9 @@ export async function startEvalRuns(
   const createdRuns: SkillEvalRun[] = [];
   for (const def of selectedDefs) {
     for (const config of configs) {
-      const artifactDir = prepareArtifactDir(skillDir, iteration, def.name, config);
+      const artifactDir = options.artifactRootOverride
+        ? prepareArtifactDirAt(options.artifactRootOverride, def.name, config)
+        : prepareArtifactDir(skillDir, iteration, def.name, config);
 
       const runId = generateRunId('run');
 
@@ -538,6 +574,7 @@ export async function startEvalRuns(
         mode: def.mode ?? 'autonomous',
         outputFiles: def.outputFiles,
         isolatedHome: null,
+        model: request.model ?? null,
         turns: [],
         tokensUsed: 0,
         durationMs: 0,
@@ -596,10 +633,12 @@ export async function startEvalRuns(
 
     await Promise.all(workers);
 
-    try {
-      writeIterationBenchmark(skillDir, request.skillName, iteration);
-    } catch (err) {
-      console.error('[eval-runner] Failed to write benchmark.json:', err);
+    if (!options.skipBenchmarkWrite) {
+      try {
+        writeIterationBenchmark(skillDir, request.skillName, iteration);
+      } catch (err) {
+        console.error('[eval-runner] Failed to write benchmark.json:', err);
+      }
     }
 
     cleanupEvalArtifacts();
@@ -664,6 +703,7 @@ async function executeTurn(
     prompt: userMessage,
     addDirs,
     resumeSessionId: isFirstTurn ? undefined : (run.sessionId ?? undefined),
+    model: run.model ?? undefined,
     // No skipPermissions: eval runs rely on execution-dir-scoped settings.local.json
     // so baseline (without_skill) runs can't load any skill.
   });

@@ -18,9 +18,10 @@ interface GradingFile {
 interface TimingFile {
   total_tokens: number;
   duration_ms: number;
+  model?: string;
 }
 
-interface EvalConfigStats {
+export interface EvalConfigStats {
   passed: number;
   failed: number;
   total: number;
@@ -53,7 +54,11 @@ function readJson<T>(path: string): T | null {
   }
 }
 
-function collectConfigStats(evalDir: string, config: 'with_skill' | 'without_skill'): EvalConfigStats | undefined {
+/**
+ * Read `grading.json` + `timing.json` for a single eval/config cell and flatten
+ * into the stats shape. Shared with the comparison runner.
+ */
+export function collectConfigStats(evalDir: string, config: 'with_skill' | 'without_skill'): EvalConfigStats | undefined {
   const configDir = join(evalDir, config);
   if (!existsSync(configDir)) return undefined;
   const grading = readJson<GradingFile>(join(configDir, 'grading.json'));
@@ -119,11 +124,20 @@ export function writeIterationBenchmark(skillDir: string, skillName: string, ite
   }
 
   const perEval: Record<string, EvalStats> = {};
+  // Capture the model used for this iteration. All `with_skill` runs in a
+  // single iteration share the same model by design (the Evolution view is
+  // mono-model) — we read from the first run that has one in its timing.json.
+  let iterationModel: string | null = null;
   for (const evalDirName of evalDirs) {
     const evalName = evalDirName.replace(/^eval-/, '');
     const evalDir = join(iterDir, evalDirName);
     const withSkill = collectConfigStats(evalDir, 'with_skill');
     const withoutSkill = collectConfigStats(evalDir, 'without_skill');
+
+    if (!iterationModel) {
+      const timing = readJson<TimingFile>(join(evalDir, 'with_skill', 'timing.json'));
+      if (timing?.model) iterationModel = timing.model;
+    }
 
     const stats: EvalStats = {};
     if (withSkill) stats.with_skill = withSkill;
@@ -165,6 +179,7 @@ export function writeIterationBenchmark(skillDir: string, skillName: string, ite
     iteration,
     timestamp: new Date().toISOString(),
     skill_fingerprint: skillFingerprint,
+    model: iterationModel,
     run_summary: {
       with_skill: withAgg,
       without_skill: withoutAgg,

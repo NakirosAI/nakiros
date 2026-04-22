@@ -142,17 +142,25 @@ export default function EvalRunsView({
     [runs, initialRunIds],
   );
 
-  // Group runs by eval name (one row = one eval with its with/without pair)
-  const groupedByEval = useMemo(() => {
-    const map = new Map<string, { withSkill?: SkillEvalRun; withoutSkill?: SkillEvalRun }>();
+  // Group runs by (model, eval name) so comparison runs keep every model
+  // visible. For a regular iteration only one model is present → the top-level
+  // map has a single bucket and we hide the model header in the UI.
+  const groupedByModelAndEval = useMemo(() => {
+    type Pair = { withSkill?: SkillEvalRun; withoutSkill?: SkillEvalRun };
+    const byModel = new Map<string, Map<string, Pair>>();
     for (const run of runsList) {
-      const entry = map.get(run.evalName) ?? {};
+      const modelKey = run.model ?? '';
+      const evals = byModel.get(modelKey) ?? new Map<string, Pair>();
+      const entry = evals.get(run.evalName) ?? {};
       if (run.config === 'with_skill') entry.withSkill = run;
       else entry.withoutSkill = run;
-      map.set(run.evalName, entry);
+      evals.set(run.evalName, entry);
+      byModel.set(modelKey, evals);
     }
-    return map;
+    return byModel;
   }, [runsList]);
+
+  const isMultiModel = groupedByModelAndEval.size > 1;
 
   const terminalStatuses: EvalRunStatus[] = ['completed', 'failed', 'stopped'];
   const runningStatuses: EvalRunStatus[] = ['starting', 'running', 'grading'];
@@ -187,7 +195,9 @@ export default function EvalRunsView({
           {t('back')}
         </button>
         <span className="text-sm font-semibold text-[var(--text-primary)]">
-          {t('headerTitle', { skillName, iteration })}
+          {isMultiModel
+            ? t('headerTitleComparison', { skillName, count: groupedByModelAndEval.size })
+            : t('headerTitle', { skillName, iteration })}
         </span>
         <div className="ml-auto flex items-center gap-4 text-xs text-[var(--text-muted)]">
           <span>
@@ -217,36 +227,47 @@ export default function EvalRunsView({
 
       {/* Body: list + detail */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Runs list — grouped by eval with with/without pair */}
+        {/* Runs list — grouped by eval with with/without pair.
+            Multi-model mode (comparisons) adds a per-model section header so
+            the user can tell Opus/Sonnet/Haiku apart at a glance. */}
         <div className="flex w-[380px] shrink-0 flex-col overflow-y-auto border-r border-[var(--line)] bg-[var(--bg-soft)]">
-          {Array.from(groupedByEval.entries()).map(([evalName, pair]) => (
-            <div key={evalName} className="border-b border-[var(--line)]">
-              <div className="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold text-[var(--text-primary)]">
-                {evalName}
-                {feedback[evalName] && (
-                  <span title={feedback[evalName]} className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-400">
-                    💬
-                  </span>
-                )}
-              </div>
-              {pair.withSkill && (
-                <RunListItem
-                  run={pair.withSkill}
-                  label={t('withSkill')}
-                  selected={selectedRunId === pair.withSkill.runId}
-                  onClick={() => setSelectedRunId(pair.withSkill!.runId)}
-                  t={t}
-                />
+          {Array.from(groupedByModelAndEval.entries()).map(([model, evals]) => (
+            <div key={model || 'default'}>
+              {isMultiModel && (
+                <div className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--bg-card)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  {model || t('defaultModel')}
+                </div>
               )}
-              {pair.withoutSkill && (
-                <RunListItem
-                  run={pair.withoutSkill}
-                  label={t('withoutBaseline')}
-                  selected={selectedRunId === pair.withoutSkill.runId}
-                  onClick={() => setSelectedRunId(pair.withoutSkill!.runId)}
-                  t={t}
-                />
-              )}
+              {Array.from(evals.entries()).map(([evalName, pair]) => (
+                <div key={`${model}-${evalName}`} className="border-b border-[var(--line)]">
+                  <div className="flex items-center gap-1.5 px-3 pt-2 text-xs font-semibold text-[var(--text-primary)]">
+                    {evalName}
+                    {feedback[evalName] && (
+                      <span title={feedback[evalName]} className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] text-amber-400">
+                        💬
+                      </span>
+                    )}
+                  </div>
+                  {pair.withSkill && (
+                    <RunListItem
+                      run={pair.withSkill}
+                      label={t('withSkill')}
+                      selected={selectedRunId === pair.withSkill.runId}
+                      onClick={() => setSelectedRunId(pair.withSkill!.runId)}
+                      t={t}
+                    />
+                  )}
+                  {pair.withoutSkill && (
+                    <RunListItem
+                      run={pair.withoutSkill}
+                      label={t('withoutBaseline')}
+                      selected={selectedRunId === pair.withoutSkill.runId}
+                      onClick={() => setSelectedRunId(pair.withoutSkill!.runId)}
+                      t={t}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -387,7 +408,14 @@ function RunDetail({
       <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
         <StatusIcon status={run.status} size="lg" />
         <div className="flex-1">
-          <div className="text-sm font-semibold text-[var(--text-primary)]">{run.evalName}</div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+            <span>{run.evalName}</span>
+            {run.model && (
+              <span className="rounded bg-[var(--primary-soft)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--primary)]">
+                {run.model}
+              </span>
+            )}
+          </div>
           <div className="flex gap-2 text-xs text-[var(--text-muted)]">
             <span>{run.config === 'with_skill' ? t('configWithSkill') : t('configWithoutSkill')}</span>
             <span>·</span>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AuditRun, Skill } from '@nakiros/shared';
+import type { AuditRun, ClaudeModelId, Skill } from '@nakiros/shared';
+import { DEFAULT_EVAL_MODEL } from '@nakiros/shared';
 import { isImagePath } from '../../utils/file-types';
 import type { SkillIdentity, SkillsViewConfig } from './types';
 
@@ -28,6 +29,7 @@ export function useSkillsViewState(config: SkillsViewConfig) {
   const [activeRuns, setActiveRuns] = useState<{ runIds: string[]; iteration: number; skill: Skill } | null>(null);
   const [starting, setStarting] = useState(false);
   const [includeBaseline, setIncludeBaseline] = useState(true);
+  const [selectedModel, setSelectedModel] = useState<ClaudeModelId>(DEFAULT_EVAL_MODEL);
 
   const [activeAudit, setActiveAudit] = useState<{ run: AuditRun; skill: Skill } | null>(null);
   const [auditing, setAuditing] = useState(false);
@@ -168,7 +170,7 @@ export function useSkillsViewState(config: SkillsViewConfig) {
     setStarting(true);
     try {
       const identity: SkillIdentity = config.identityOf(skill);
-      const response = await window.nakiros.startEvalRuns({ ...identity, includeBaseline });
+      const response = await window.nakiros.startEvalRuns({ ...identity, includeBaseline, model: selectedModel });
       setActiveRuns({ runIds: response.runIds, iteration: response.iteration, skill });
     } catch (err) {
       onFailure((err as Error).message);
@@ -236,6 +238,8 @@ export function useSkillsViewState(config: SkillsViewConfig) {
     starting,
     includeBaseline,
     setIncludeBaseline,
+    selectedModel,
+    setSelectedModel,
     activeAudit,
     setActiveAudit,
     auditing,

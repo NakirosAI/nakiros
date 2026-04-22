@@ -24,6 +24,7 @@ import { useSkillsViewState } from './skills/useSkillsViewState';
 import type { SkillsViewConfig } from './skills/types';
 import {
   Badge,
+  EvalModelSelector,
   FileTree,
   PassRateBadge,
   TabButton,
@@ -195,6 +196,13 @@ export default function NakirosSkillsView({ onBack }: Props) {
                 </button>
               ) : (
                 <>
+                  <EvalModelSelector
+                    value={s.selectedModel}
+                    onChange={s.setSelectedModel}
+                    disabled={s.starting}
+                    label={t('model')}
+                    title={t('modelTooltip')}
+                  />
                   <label
                     className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--text-muted)]"
                     title={t('baselineTooltip')}
@@ -298,7 +306,15 @@ export default function NakirosSkillsView({ onBack }: Props) {
           </div>
         )}
 
-        {s.detailTab === 'evals' && <SkillEvalsPanel skill={skill} scope="nakiros-bundled" />}
+        {s.detailTab === 'evals' && (
+          <SkillEvalsPanel
+            skill={skill}
+            scope="nakiros-bundled"
+            onComparisonLaunched={(runIds) =>
+              s.setActiveRuns({ runIds, iteration: 0, skill })
+            }
+          />
+        )}
       </div>
     );
   }

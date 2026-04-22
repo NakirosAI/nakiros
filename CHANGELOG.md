@@ -5,6 +5,62 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-04-22
+
+Multi-model release. Evals can now run on a chosen Claude model
+(Haiku / Sonnet / Opus) and a new **Models** tab compares a skill
+snapshot across all three side by side, so users can pick the cheapest
+model that still passes every eval.
+
+### Added
+
+- **Model selector on Run eval.** New dropdown next to the baseline
+  checkbox picks which Claude model the iteration runs on (Haiku /
+  Sonnet / Opus, default Opus — the CLI's previous default). The choice
+  is forwarded as `--model` to the claude subprocess, persisted in
+  `timing.json`, and captured at iteration level in `benchmark.json`.
+- **Model badge on Evolution matrix.** Each `iter N` column header now
+  shows the model that ran that iteration, so the progression over time
+  stays readable when the team experiments with multiple models.
+- **Models tab — A/B/C comparison view.** New tab next to Evolution on
+  every skill page. Pick the models to compare, hit Run, get a compact
+  matrix of evals × models with `+X%` delta vs baseline (same model) per
+  cell and per-model aggregates (pass rate, tokens). Optional "Show
+  baseline" toggle surfaces the without-skill numbers. History selector
+  lets users browse past comparisons.
+- **Intelligent reuse via skill fingerprint.** When the skill hasn't
+  changed since the last Evolution iteration, that iteration's artefacts
+  are physically copied into the comparison folder instead of re-running
+  the same skill on the same model — real savings on Opus. When the
+  fingerprint has changed, the last-iteration's model and its baseline
+  are re-run alongside the others so the comparison stays
+  apples-to-apples. Iterations that never finished grading (stopped /
+  failed) are excluded from reuse so stale data never leaks in.
+- **Model-aware EvalRunsView.** The live runs view now groups the side
+  list by model with sticky section headers (Haiku / Sonnet / Opus) when
+  multiple models are being compared. Each run's detail panel shows the
+  model as a badge next to the eval name. Interactive evals that ask
+  for input work transparently during a comparison.
+
+### Internal
+
+- `StartRunsOptions` gained optional `artifactRootOverride`,
+  `skipBenchmarkWrite` and `fixedIteration` so the new comparison runner
+  can reuse `startEvalRuns` for orchestration without writing into
+  `evals/workspace/iteration-N/` or triggering `benchmark.json` writes.
+- New shared constants module `@nakiros/shared/constants/claude-models`
+  (`CLAUDE_MODEL_IDS`, `CLAUDE_MODEL_LABELS`, `DEFAULT_EVAL_MODEL`,
+  `isClaudeModelId`).
+- Four new IPC channels: `comparison:run`, `comparison:list`,
+  `comparison:getMatrix`, `comparison:getFingerprintStatus`.
+  Comparison runs piggyback on the existing `eval:event` stream.
+- Grading still always runs on Sonnet (`JUDGE_MODEL` unchanged) to avoid
+  self-evaluation bias regardless of the runner's chosen model.
+- Comparisons persisted under
+  `{skillDir}/evals/comparisons/<timestamp>/` — separate from
+  `evals/workspace/iteration-N/` so the Evolution matrix stays
+  mono-model.
+
 ## [0.5.0] — 2026-04-22
 
 Conversation-centric release. Nakiros now analyses your Claude Code

@@ -30,6 +30,7 @@ import frSkillEvals from './locales/fr/skill-evals.json';
 import frSkillActions from './locales/fr/skill-actions.json';
 import frBundledConflicts from './locales/fr/bundled-conflicts.json';
 import frVersion from './locales/fr/version.json';
+import frComparison from './locales/fr/comparison.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -60,6 +61,7 @@ import enSkillEvals from './locales/en/skill-evals.json';
 import enSkillActions from './locales/en/skill-actions.json';
 import enBundledConflicts from './locales/en/bundled-conflicts.json';
 import enVersion from './locales/en/version.json';
+import enComparison from './locales/en/comparison.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -94,6 +96,7 @@ const resources = {
     'skill-actions': frSkillActions,
     'bundled-conflicts': frBundledConflicts,
     version: frVersion,
+    comparison: frComparison,
   },
   en: {
     common: enCommon,
@@ -125,6 +128,7 @@ const resources = {
     'skill-actions': enSkillActions,
     'bundled-conflicts': enBundledConflicts,
     version: enVersion,
+    comparison: enComparison,
   },
 };
 

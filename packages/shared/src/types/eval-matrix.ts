@@ -125,6 +125,12 @@ export interface EvalMatrix {
    * the fingerprint feature. Aligned to `iterations`.
    */
   fingerprints: Array<string | null>;
+  /**
+   * Claude model id used to run each iteration (e.g. `claude-opus-4-7`).
+   * `null` on iterations that pre-date the model selector (the CLI default
+   * was used). Aligned to `iterations`.
+   */
+  models: Array<string | null>;
   rows: EvalMatrixRow[];
   metrics: EvalMatrixMetrics;
 }

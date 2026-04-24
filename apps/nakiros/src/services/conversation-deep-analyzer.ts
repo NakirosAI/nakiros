@@ -28,6 +28,7 @@ const MAX_PROMPT_TOKENS = 950_000; // Sonnet 1M with comfortable margin
 // Where we persist completed reports so re-opening doesn't re-bill.
 const ANALYSES_DIR = join(homedir(), '.nakiros', 'analyses');
 
+/** Alias of {@link ConversationDeepAnalysis} for modules that only import from this file. */
 export type DeepAnalysisResult = ConversationDeepAnalysis;
 
 // ---------------------------------------------------------------------------

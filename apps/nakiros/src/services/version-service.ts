@@ -90,6 +90,14 @@ async function getLatestVersion({ force }: { force: boolean }): Promise<CacheEnt
   return inFlight;
 }
 
+/**
+ * Build the `VersionInfo` payload surfaced by `meta:getVersionInfo`. Current
+ * version comes from the daemon's own `package.json`; latest is fetched from
+ * the npm registry (cached 6h, 4s timeout). `updateAvailable` uses a simple
+ * semver major.minor.patch compare ignoring prereleases.
+ *
+ * @param options.force - bypass the 6h cache and hit npm again
+ */
 export async function getVersionInfo(options?: { force?: boolean }): Promise<VersionInfo> {
   const current = readCurrentVersion();
   const remote = await getLatestVersion({ force: options?.force === true });

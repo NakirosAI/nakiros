@@ -29,6 +29,20 @@ const EXCLUDED_ANYWHERE = new Set(['.DS_Store']);
  */
 const EXCLUDED_RELATIVE_PREFIXES = ['evals/workspace/'];
 
+/**
+ * Compute a deterministic SHA-256 content hash of a skill directory. Used by
+ * the eval matrix to distinguish a real regression (skill actually changed)
+ * from LLM-judge variance (identical skill, different grading). Also used by
+ * the comparison runner to decide whether a previous iteration's artefacts
+ * can be reused verbatim instead of being re-run.
+ *
+ * Walks every file under `skillDir`, skipping volatile subtrees
+ * (`evals/workspace/`, `.git`, `node_modules`, build caches, `.DS_Store`) and
+ * anything larger than 5 MB. Files are sorted by path before hashing so the
+ * order of `readdirSync` doesn't affect the result.
+ *
+ * @returns fingerprint prefixed with `sha256:`
+ */
 export function computeSkillFingerprint(skillDir: string): string {
   const entries: Array<{ rel: string; content: Buffer }> = [];
 

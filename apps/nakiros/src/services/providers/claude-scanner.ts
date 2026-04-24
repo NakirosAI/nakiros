@@ -91,6 +91,14 @@ function countSkills(projectPath: string): number {
   }
 }
 
+/**
+ * Scan `~/.claude/projects/` for Claude Code projects. Decodes each entry's
+ * folder name back to a filesystem path (preferring the `cwd` field from the
+ * most-recent JSONL turn when available), then filters out projects whose
+ * directory no longer exists or whose path matches an eval-iteration artifact
+ * pattern. Tags projects as `inactive` when the last conversation is older
+ * than 30 days. Progress is reported via `onProgress(current, total, name)`.
+ */
 export function scanClaudeProjects(
   onProgress?: (current: number, total: number, name: string | null) => void,
 ): DetectedProject[] {

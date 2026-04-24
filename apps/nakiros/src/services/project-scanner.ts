@@ -43,6 +43,15 @@ function stripInternal(p: StoredProject): Project {
   return p;
 }
 
+/**
+ * Scan every provider's project directory for tracked projects, merge with the
+ * persisted registry, and write the result back. Dismissed projects stay
+ * dismissed across scans; obsolete paths (eval iteration artifacts
+ * auto-recorded by Claude) are purged.
+ *
+ * @param onProgress - optional progress callback: `(current, total, projectName)`
+ * @returns every non-dismissed project, as surfaced to the UI
+ */
 export function scan(
   onProgress?: (current: number, total: number, name: string | null) => void,
 ): Project[] {
@@ -73,15 +82,18 @@ export function scan(
   return all.filter((p) => p.status !== 'dismissed').map(stripInternal);
 }
 
+/** Return every non-dismissed project from the persisted registry (no re-scan). */
 export function listProjects(): Project[] {
   return readAll().filter((p) => p.status !== 'dismissed').map(stripInternal);
 }
 
+/** Look up a project by id in the persisted registry. Returns `null` when unknown. */
 export function getProject(id: string): Project | null {
   const project = readAll().find((p) => p.id === id);
   return project ? stripInternal(project) : null;
 }
 
+/** Mark a project as `dismissed` so it stops appearing in `listProjects` / `scan` results. */
 export function dismissProject(id: string): void {
   const all = readAll();
   const idx = all.findIndex((p) => p.id === id);
@@ -90,6 +102,7 @@ export function dismissProject(id: string): void {
   writeAll(all);
 }
 
+/** True when at least one non-dismissed project exists. Cheap check used by onboarding gates. */
 export function hasProjects(): boolean {
   return readAll().some((p) => p.status !== 'dismissed');
 }

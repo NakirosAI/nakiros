@@ -7,6 +7,7 @@ import type { SkillEvalAssertionDefinition } from '@nakiros/shared';
 const MAX_OUTPUT_FILE_BYTES = 60_000;
 const MAX_TOTAL_OUTPUTS_BYTES = 120_000;
 
+/** Result for a single LLM assertion: pass/fail + short evidence quote (capped 400 chars). */
 export interface LlmGradeResult {
   passed: boolean;
   evidence: string;

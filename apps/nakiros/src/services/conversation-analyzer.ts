@@ -69,6 +69,21 @@ const SCORE_WEIGHTS = {
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * Deterministic (no-LLM) analysis of a single Claude Code JSONL conversation.
+ * Produces the full `ConversationAnalysis` shape: raw metadata, compactions,
+ * context health, cache efficiency, friction points, tool stats + errors,
+ * hot files, sidechain count, slash commands, 0-100 composite score with
+ * rule-based diagnostic + tips.
+ *
+ * Health zones scale with the detected context window (200k standard,
+ * auto-detected 1M when peak usage crosses ~250k). Friction detection uses
+ * a curated FR/EN pattern list anchored to user messages only. Cache waste
+ * is attributed to `cache_creation_input_tokens` written on turns arriving
+ * more than 5 minutes (Anthropic default TTL) after the last assistant reply.
+ *
+ * Returns `null` when the JSONL file is missing or empty.
+ */
 export function analyzeConversation(
   providerProjectDir: string,
   sessionId: string,

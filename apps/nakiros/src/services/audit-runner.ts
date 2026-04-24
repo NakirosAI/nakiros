@@ -216,6 +216,17 @@ export function listActiveAuditRuns(): AuditRun[] {
   return out;
 }
 
+/**
+ * Start (or resume) an audit run for `request.skillName`. Idempotent on the
+ * `(scope, projectId, skillName)` triple — when a non-terminal run already
+ * exists, the event log is re-pointed to the new caller and the existing run
+ * is returned without spawning a new claude subprocess.
+ *
+ * Otherwise prepares the persistent workdir under `~/.nakiros/runs/audit/<runId>/`,
+ * symlinks the target skill into `{workdir}/.claude/skills/<skillName>` so
+ * `/nakiros-skill-factory` can find it via cwd, and launches the first turn
+ * (`/nakiros-skill-factory audit <skillName>`) asynchronously.
+ */
 export function startAudit(request: StartAuditRequest, opts: RunOpts): AuditRun {
   const existing = findActiveAuditForSkill(request.scope, request.projectId, request.skillName);
   if (existing) {
@@ -394,6 +405,13 @@ function finalizeRun(entry: AuditEntry): void {
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
+/**
+ * Forward a user message to an audit run that's in `waiting_for_input`.
+ * Re-points the event log to the current caller, executes one claude turn via
+ * `--resume`, and checks whether the audit report was produced on completion.
+ *
+ * @throws {Error} when the run is unknown or not waiting for input
+ */
 export async function sendAuditUserMessage(runId: string, message: string, opts: RunOpts): Promise<void> {
   const entry = audits.get(runId);
   if (!entry) throw new Error(`Audit run not found: ${runId}`);
@@ -405,6 +423,12 @@ export async function sendAuditUserMessage(runId: string, message: string, opts:
   maybeFinalize(entry);
 }
 
+/**
+ * Cancel an in-flight audit run: `SIGTERM` the child, collapse status to
+ * `stopped`, emit the final events, and tear down the workdir + event log.
+ * The entry stays in the registry so the UI can keep rendering the stopped
+ * run until the user navigates away. No-op when the run is unknown.
+ */
 export function stopAudit(runId: string): void {
   const entry = audits.get(runId);
   if (!entry) return;
@@ -437,6 +461,7 @@ export function finishAudit(runId: string): void {
   audits.delete(runId);
 }
 
+/** Look up an audit run by id. Returns `null` when unknown. */
 export function getAuditRun(runId: string): AuditRun | null {
   return audits.get(runId)?.run ?? null;
 }
@@ -488,6 +513,7 @@ export function listAuditHistory(skillDir: string): AuditHistoryEntry[] {
   return result;
 }
 
+/** Read the content of an archived audit report. Returns `null` on miss or read error. */
 export function readAuditReport(path: string): string | null {
   try {
     return readFileSync(path, 'utf8');

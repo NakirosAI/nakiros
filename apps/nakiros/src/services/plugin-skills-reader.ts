@@ -22,6 +22,7 @@ function shouldHide(relativePath: string): boolean {
  * <plugin>/skills/<skill>/SKILL.md. Not every plugin ships skills (some only
  * have agents/ or commands/), so we tolerate missing skills/ dirs silently.
  */
+/** Fully-qualified location of a plugin skill: marketplace / plugin / skill / absolute dir. */
 export interface PluginSkillLocation {
   marketplaceName: string;
   pluginName: string;
@@ -45,6 +46,11 @@ function isDirectory(path: string): boolean {
   }
 }
 
+/**
+ * Walk `~/.claude/plugins/marketplaces/<mkt>/plugins/<plugin>/skills/` and
+ * return every plugin skill found. Missing `skills/` directories are skipped
+ * silently (plugins without skills are legitimate).
+ */
 export function listPluginSkillLocations(): PluginSkillLocation[] {
   const marketplacesRoot = join(homedir(), '.claude', 'plugins', 'marketplaces');
   if (!existsSync(marketplacesRoot)) return [];
@@ -80,6 +86,10 @@ export function listPluginSkillLocations(): PluginSkillLocation[] {
   return out;
 }
 
+/**
+ * Build the absolute path to a plugin skill given `(marketplace, plugin, skill)`.
+ * Exposed so other modules can resolve plugin skills without walking the tree.
+ */
 export function resolvePluginSkillDir(
   marketplaceName: string,
   pluginName: string,
@@ -173,6 +183,7 @@ function buildSkill(loc: PluginSkillLocation): Skill {
   };
 }
 
+/** List every plugin skill sorted by `(marketplace, plugin, skill)`. */
 export function listPluginSkills(): Skill[] {
   const skills = listPluginSkillLocations().map(buildSkill);
   skills.sort((a, b) => {
@@ -198,6 +209,7 @@ function findLocation(
   );
 }
 
+/** Read one plugin skill by `(marketplace, plugin, skill)`. Returns `null` when unknown. */
 export function readPluginSkill(
   marketplaceName: string,
   pluginName: string,
@@ -208,6 +220,7 @@ export function readPluginSkill(
   return buildSkill(loc);
 }
 
+/** Read an arbitrary file inside a plugin skill. Refuses path-traversal; returns `null` on miss. */
 export function readPluginSkillFile(
   marketplaceName: string,
   pluginName: string,
@@ -226,6 +239,7 @@ export function readPluginSkillFile(
   }
 }
 
+/** Write an arbitrary file inside a plugin skill. Refuses path-traversal silently. */
 export function savePluginSkillFile(
   marketplaceName: string,
   pluginName: string,

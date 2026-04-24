@@ -1,6 +1,56 @@
 {
   "title": "Insights",
-  "bodyPrefix": "LLM-powered analysis of ",
-  "bodySuffix": " conversations to propose skill improvements beyond the deterministic patterns is coming soon.",
-  "comingSoon": "Coming soon"
+  "subtitle": "Skill proposals generated from recurring frictions in your conversations",
+  "refresh": "Refresh",
+  "empty": {
+    "title": "No proposals yet",
+    "subtitle": "Run deep analysis on a few recent conversations. Nakiros detects recurring frictions and proposes new or patched skills once a pattern emerges."
+  },
+  "loading": "Loading proposals…",
+  "error": "Failed to load proposals.",
+  "card": {
+    "typeNew": "New skill",
+    "typePatch": "Patch",
+    "scoreLabel": "Score",
+    "frictionsLabel_one": "1 friction",
+    "frictionsLabel_other": "{{count}} frictions",
+    "targetSkillPrefix": "Target: ",
+    "draftHeader": "Proposed SKILL.md",
+    "evalCasesHeader": "Eval cases",
+    "evalCaseFromFriction": "from friction",
+    "evalCaseSynthetic": "synthetic",
+    "actions": {
+      "accept": "Accept",
+      "reject": "Reject",
+      "runEval": "Run eval",
+      "expand": "Show details",
+      "collapse": "Collapse"
+    },
+    "status": {
+      "draft": "Draft",
+      "eval_running": "Eval running",
+      "eval_done": "Eval done",
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "errors": {
+      "accept": "Failed to accept.",
+      "reject": "Failed to reject.",
+      "runEval": "Failed to start eval."
+    }
+  },
+  "diff": {
+    "filesPanelTitle": "Files",
+    "originalColumn": "Before (current skill)",
+    "modifiedColumn": "After (proposed)",
+    "missingFile": "— file missing",
+    "binaryNotice": "Binary file — diff cannot be displayed.",
+    "identicalNotice": "No differences in this file.",
+    "loading": "Loading diff…",
+    "errorTemplate": "Failed to read diff: {{message}}",
+    "emptyState": "Select a file to see the diff.",
+    "sideOriginalOnly": "Removed",
+    "sideModifiedOnly": "Added",
+    "sideBoth": "Modified"
+  }
 }

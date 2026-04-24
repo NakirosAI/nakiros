@@ -2,6 +2,8 @@
 // Nakiros Agent Team — Project types
 // ---------------------------------------------------------------------------
 
+import type { RawFriction } from './proposals.js';
+
 export type ProviderType = 'claude' | 'gemini' | 'cursor' | 'codex';
 
 export type ProjectStatus = 'active' | 'inactive' | 'dismissed';
@@ -191,10 +193,37 @@ export interface ConversationDeepAnalysis {
   model: 'haiku' | 'sonnet';
   /** Approximate input tokens sent to the model — helps the UI show cost. */
   inputTokens: number;
-  /** Markdown report emitted by the skill. */
+  /**
+   * Markdown report emitted by the skill, stripped of the `nakiros-json` tail.
+   * Safe to render in the UI directly.
+   */
   report: string;
   generatedAt: string;
+  /**
+   * Structured frictions parsed from the `nakiros-json` tail. Null when the
+   * tail was missing or malformed (the Markdown report is still valid).
+   * Consumed by the proposal engine. See types/proposals.ts.
+   */
+  structuredFrictions?: RawFriction[] | null;
 }
+
+/**
+ * Streaming event emitted while `deepAnalyzeConversation` is running.
+ * The frontend filters by `sessionId` (same user may launch analyses on
+ * different conversations concurrently) and renders the text deltas live.
+ */
+export type DeepAnalysisEvent =
+  | {
+      sessionId: string;
+      type: 'started';
+      model: 'haiku' | 'sonnet';
+      inputTokens: number;
+    }
+  | { sessionId: string; type: 'text'; text: string }
+  | { sessionId: string; type: 'tool'; name: string; display: string }
+  | { sessionId: string; type: 'tokens'; tokensUsed: number }
+  | { sessionId: string; type: 'done'; tokensUsed: number; durationMs: number }
+  | { sessionId: string; type: 'error'; message: string };
 
 export interface SkillFileEntry {
   name: string;

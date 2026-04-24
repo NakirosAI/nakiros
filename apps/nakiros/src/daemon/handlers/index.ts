@@ -15,6 +15,7 @@ import { auditHandlers } from './audit.js';
 import { fixHandlers } from './fix.js';
 import { createHandlers } from './create.js';
 import { skillAgentHandlers } from './skill-agent.js';
+import { proposalsHandlers } from './proposals.js';
 
 export type IpcHandler = (args: unknown[]) => Promise<unknown> | unknown;
 
@@ -38,5 +39,6 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...fixHandlers,
     ...createHandlers,
     ...skillAgentHandlers,
+    ...proposalsHandlers,
   };
 }

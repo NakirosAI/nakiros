@@ -20,9 +20,14 @@ Do not ask for additional input. Everything you need is in the prompt.
 
 ## Output
 
-A single Markdown document following the exact template in `assets/templates/analysis-report.md`. No preamble, no "here is the report" line — emit the document directly.
+A single Markdown document following the exact template in `assets/templates/analysis-report.md`, followed by a machine-readable tail consumed by the nakiros proposal engine. No preamble, no "here is the report" line — emit the document directly.
 
-**Output language** — match the **conversation language** (detect it from user messages). If the conversation is in French, write the report in French. If mixed, follow the dominant language used by the user.
+**Two parts, in this order:**
+
+1. **The Markdown report** — human-facing, per the template.
+2. **A final `## Nakiros machine output` section** containing one fenced block with language `nakiros-json`, carrying a structured dump of the same frictions. Schema and rules in `references/machine-output.md`. Always emit it, even when empty (`"frictions": []`).
+
+**Output language** — match the **conversation language** (detect it from user messages) for the Markdown report. If the conversation is in French, write the report in French. If mixed, follow the dominant language used by the user. The JSON `description` field must be in **English** regardless (it is embedded for cross-conversation clustering).
 
 ## Analysis checklist — follow in order
 
@@ -81,8 +86,9 @@ Follow `assets/templates/analysis-report.md` exactly. The sections are:
 5. `## Root causes` — 2-5 items, ordered by impact
 6. `## What would have helped` — concrete recommendations the user can apply next time
 7. `## Skill recommendations` — only if warranted; otherwise omit
+8. `## Nakiros machine output` — **always emit**, contains the `nakiros-json` fenced block. See `references/machine-output.md`.
 
-Do **not** add a "Conclusion" section. The recommendations ARE the conclusion.
+Do **not** add a "Conclusion" section. The recommendations ARE the conclusion. The `## Nakiros machine output` block is the only content allowed after the recommendations.
 
 ## Quality bars
 
@@ -100,6 +106,9 @@ Do **not** add a "Conclusion" section. The recommendations ARE the conclusion.
 - **Do not say "the model" or "Claude"**. Write "the assistant" or "the agent" (the report may apply to any model).
 - **Do not infer frustration from a single ambiguous message**. Frustration detection requires two or more consistent signals in proximity.
 - **If the conversation was cut mid-task** (no clear ending), mention this explicitly — it changes the interpretation of silence.
+- **Do not skip the `## Nakiros machine output` block**. The proposal engine depends on it. An empty `"frictions": []` is valid — omission is not.
+- **Do not change the fence language**. It must be `nakiros-json`, not `json` — the engine greps for that exact token.
+- **Do not add any text after the closing fence** of the `nakiros-json` block. It is the end of the report.
 
 ## Context loading — what you should read before writing
 
@@ -108,5 +117,6 @@ Do **not** add a "Conclusion" section. The recommendations ARE the conclusion.
 | `references/friction-patterns.md` | Always — catalogue of implicit friction patterns |
 | `assets/templates/analysis-report.md` | Always — the exact Markdown shape to produce |
 | `references/output-schema.md` | If unsure about the structure of a section |
+| `references/machine-output.md` | Always — JSON schema for the final `nakiros-json` block |
 
-All three are short. Read them in order before producing output.
+All four are short. Read them in order before producing output.

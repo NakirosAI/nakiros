@@ -8,6 +8,8 @@ interface Props {
   active: SidebarTab;
   onChange(tab: SidebarTab): void;
   labels: Record<SidebarTab, string>;
+  /** Optional per-tab badge count — renders a small pill when > 0. */
+  badges?: Partial<Record<SidebarTab, number>>;
 }
 
 const navTabs: { id: Exclude<SidebarTab, 'settings'>; icon: ReactNode }[] = [
@@ -17,7 +19,7 @@ const navTabs: { id: Exclude<SidebarTab, 'settings'>; icon: ReactNode }[] = [
   { id: 'recommendations', icon: <Lightbulb size={18} /> },
 ];
 
-export default function Sidebar({ active, onChange, labels }: Props) {
+export default function Sidebar({ active, onChange, labels, badges }: Props) {
   return (
     <div className="flex w-[68px] shrink-0 flex-col items-center border-r border-[var(--line)] bg-[var(--bg-soft)] py-2.5">
       <div className="flex flex-col items-center gap-0.5">
@@ -28,6 +30,7 @@ export default function Sidebar({ active, onChange, labels }: Props) {
             label={labels[tab.id]}
             active={active === tab.id}
             onClick={() => onChange(tab.id)}
+            badgeCount={badges?.[tab.id]}
           />
         ))}
       </div>
@@ -40,6 +43,7 @@ export default function Sidebar({ active, onChange, labels }: Props) {
           label={labels.settings}
           active={active === 'settings'}
           onClick={() => onChange('settings')}
+          badgeCount={badges?.settings}
         />
       </div>
     </div>
@@ -51,12 +55,15 @@ function SidebarButton({
   label,
   active,
   onClick,
+  badgeCount,
 }: {
   icon: ReactNode;
   label: string;
   active: boolean;
   onClick(): void;
+  badgeCount?: number;
 }) {
+  const showBadge = typeof badgeCount === 'number' && badgeCount > 0;
   return (
     <button
       onClick={onClick}
@@ -68,6 +75,14 @@ function SidebarButton({
           : 'border-transparent bg-transparent text-[var(--text-muted)]',
       )}
     >
+      {showBadge && (
+        <span
+          className="absolute right-1 top-1 flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-[var(--primary)] px-[3px] text-[9px] font-bold text-white"
+          aria-label={`${badgeCount}`}
+        >
+          {badgeCount > 9 ? '9+' : badgeCount}
+        </span>
+      )}
       {icon}
       <span
         className={clsx(

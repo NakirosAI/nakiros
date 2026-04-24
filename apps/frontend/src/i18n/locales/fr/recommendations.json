@@ -1,6 +1,56 @@
 {
   "title": "Insights",
-  "bodyPrefix": "L'analyse LLM des conversations de ",
-  "bodySuffix": " pour proposer des améliorations de skills au-delà des patterns déterministes arrive bientôt.",
-  "comingSoon": "Bientôt disponible"
+  "subtitle": "Propositions de skills générées à partir des frictions détectées dans tes conversations",
+  "refresh": "Rafraîchir",
+  "empty": {
+    "title": "Aucune proposition pour l'instant",
+    "subtitle": "Lance l'analyse approfondie sur quelques conversations récentes. Nakiros détecte les frictions récurrentes et propose des skills nouveaux ou patchés quand un pattern émerge."
+  },
+  "loading": "Chargement des propositions…",
+  "error": "Impossible de charger les propositions.",
+  "card": {
+    "typeNew": "Nouveau skill",
+    "typePatch": "Patch",
+    "scoreLabel": "Score",
+    "frictionsLabel_one": "1 friction",
+    "frictionsLabel_other": "{{count}} frictions",
+    "targetSkillPrefix": "Cible : ",
+    "draftHeader": "SKILL.md proposé",
+    "evalCasesHeader": "Cas d'évaluation",
+    "evalCaseFromFriction": "issu d'une friction",
+    "evalCaseSynthetic": "synthétique",
+    "actions": {
+      "accept": "Accepter",
+      "reject": "Rejeter",
+      "runEval": "Lancer l'éval",
+      "expand": "Voir le détail",
+      "collapse": "Replier"
+    },
+    "status": {
+      "draft": "Brouillon",
+      "eval_running": "Éval en cours",
+      "eval_done": "Éval terminée",
+      "accepted": "Accepté",
+      "rejected": "Rejeté"
+    },
+    "errors": {
+      "accept": "Échec de l'acceptation.",
+      "reject": "Échec du rejet.",
+      "runEval": "Échec du lancement de l'éval."
+    }
+  },
+  "diff": {
+    "filesPanelTitle": "Fichiers",
+    "originalColumn": "Avant (skill actuel)",
+    "modifiedColumn": "Après (proposé)",
+    "missingFile": "— fichier absent",
+    "binaryNotice": "Fichier binaire — diff non affichable.",
+    "identicalNotice": "Aucune différence sur ce fichier.",
+    "loading": "Chargement du diff…",
+    "errorTemplate": "Impossible de lire le diff : {{message}}",
+    "emptyState": "Sélectionne un fichier pour voir le diff.",
+    "sideOriginalOnly": "Supprimé",
+    "sideModifiedOnly": "Ajouté",
+    "sideBoth": "Modifié"
+  }
 }

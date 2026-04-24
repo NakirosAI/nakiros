@@ -135,6 +135,18 @@ export const IPC_CHANNELS = {
   // Draft files (shared by fix + create — reads from the run's temp workdir)
   'skillAgent:listTempFiles': 'skillAgent:listTempFiles',
   'skillAgent:readTempFile': 'skillAgent:readTempFile',
+
+  // Friction → Skill proposals (closes the analyzer → eval loop)
+  'proposals:list': 'proposals:list',
+  'proposals:get': 'proposals:get',
+  'proposals:accept': 'proposals:accept',
+  'proposals:reject': 'proposals:reject',
+  'proposals:runEval': 'proposals:runEval',
+  'proposals:new': 'proposals:new',
+  /** Broadcast when a deep analysis completes with structured frictions attached. */
+  'conversation:analyzed': 'conversation:analyzed',
+  /** Streaming events emitted while `deepAnalyzeConversation` is running. */
+  'deepAnalysis:event': 'deepAnalysis:event',
 } as const;
 
 export type IpcChannel = keyof typeof IPC_CHANNELS;

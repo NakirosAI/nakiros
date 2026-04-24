@@ -80,7 +80,9 @@
     "apps/nakiros/src/services/providers/claude-scanner.ts": "f4b0e8e8a1bc352182d03f91bc5a4404bb162c19b7d4dd632b83035be0e80853",
     "apps/nakiros/src/services/skill-fingerprint.ts": "f133dc0274bf7aee3060eeebe75b6ca18c6990586f6ce6fc2b664f736862e1ec",
     "apps/nakiros/src/services/skill-reader.ts": "07e0fb66f99796905d771d16409d57c9288b8346ba584171caf2056d790fd076",
-    "apps/nakiros/src/services/version-service.ts": "0a402da45bfc8e2bc41c851c8031b3fa840e5792a82d548b57946ab8a36c348a"
+    "apps/nakiros/src/services/version-service.ts": "0a402da45bfc8e2bc41c851c8031b3fa840e5792a82d548b57946ab8a36c348a",
+    "apps/nakiros/src/index.ts": "3186920306773cbe94294e841c9df802eb0b09df97ced94f397e714651f622e2",
+    "apps/nakiros/src/utils/nakiros-dir.ts": "93e0892d6d6b84f2cea7c011cc6212f7c673c226dd9ee7432ddb73a386e9132e"
   },
-  "updated_at": "2026-04-24T20:51:45.851Z"
+  "updated_at": "2026-04-24T20:53:53.887Z"
 }

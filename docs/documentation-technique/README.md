@@ -6,7 +6,7 @@ Generated TSDoc mirror for the Nakiros monorepo. Read the index closest to your 
 
 ## Subfolders
 
-- [apps/](./apps/README.md) — Standalone apps (Nakiros daemon, frontend, landing). Currently only `apps/nakiros/src/daemon` is documented.
+- [apps/](./apps/README.md) — Standalone apps. `apps/nakiros` is fully documented; `apps/frontend` and `apps/landing` are not yet.
 - [packages/](./packages/README.md) — Internal workspace packages (shared types + IPC channel registry).
 
-Other roots (`apps/nakiros/src/services`, `apps/nakiros/src/utils`, `apps/frontend/src`, `apps/landing/src`) have not been documented yet — run `/code-documentation <path>` with a scope under those trees to generate their mirrors.
+`apps/frontend/src` and `apps/landing/src` have not been documented yet — run `/code-documentation <path>` with a scope under those trees to generate their mirrors.

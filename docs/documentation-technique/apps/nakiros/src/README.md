@@ -8,5 +8,8 @@ Source root of the `@nakirosai/nakiros` app — the Node ESM daemon that exposes
 
 - [daemon/](./daemon/README.md) — The Fastify HTTP + WebSocket server and the IPC handlers. Charnière du projet.
 - [services/](./services/README.md) — Service layer: run-kind runners, readers/parsers/analyzers, and the shared `runner-core/` primitives.
+- [utils/](./utils/README.md) — Cross-cutting utilities (currently only the `~/.nakiros/` path helpers).
 
-Other roots (`utils/`, `index.ts`) and most of `services/` have not been documented yet — run `/code-documentation <path>` with a scope under them.
+## Files
+
+- [index.ts](./index.md) — Public npm entry point — re-exports `createDaemonServer`, `findFreePort`, `DEFAULT_PORT`.

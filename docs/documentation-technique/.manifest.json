@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "files": {
+    "packages/shared/src/constants/claude-models.ts": "bd50a71f750afb8b4f65c7d1f27a4295ea26567a8c78586d5a8dd5c9aef2e03c",
+    "packages/shared/src/index.ts": "c569453ca4771eaa2eb5d541ae8e66f9722f2b1a3d2d9cbd71f44da22fb9994b",
+    "packages/shared/src/ipc-channels.ts": "492cd708bbaace60b413e3a90c79ca50bb6f3183a5d129ae91780a11132c03d4",
+    "packages/shared/src/types/artifact-review.ts": "bea8bc800140287ad85bdf2d1d586bf7d78b68915c1790e04a421cbdff4372a7",
+    "packages/shared/src/types/bundled-skill-conflict.ts": "7e3c163c26dd6a490fea794e6a418c3747b8edcb70baf215c706a57ad7a35043",
+    "packages/shared/src/types/collab.ts": "b3731c26066576d3247f6484add633d573ccf3f5180486b1ad370e758cea9bbf",
+    "packages/shared/src/types/conversation.ts": "5a36983da67aedd832e5bf122f88a849c0ea0b66d4aa685271726c80f6ad9186",
+    "packages/shared/src/types/electron.ts": "c3f5dc59295b6a5d29bc63e4647d23dfd9de0634fbd24f212ddbf4f7e850b27a",
+    "packages/shared/src/types/eval-comparison.ts": "7dcc1eaaf0a27298b5f620e28a54288a19b19a19198b96cd00b41238118d4b6e",
+    "packages/shared/src/types/eval-matrix.ts": "e75685bb5d69e952ef26f490c4a40283a3bac2145091310aab0ce1d44033ee0a",
+    "packages/shared/src/types/file-change-review.ts": "c39d569467ed16d511eea0805029da63331886f2ec52d7460a3f1f9ecc308e4b",
+    "packages/shared/src/types/getting-started.ts": "06de8d720fb93cca48a792e21b145269fcf10260e9860abcfd09ca7bbb25e4c3",
+    "packages/shared/src/types/installer.ts": "cd832c291fe0a05e5356c09830c2bfbae219715547d74238c93e310fdfca6949",
+    "packages/shared/src/types/preferences.ts": "c1ffa0fb2aea01798103c08ed8af3f279390d551eac1bd2e0d21fa0c9afc7d89",
+    "packages/shared/src/types/project.ts": "ac0ed11f531d45626621c751ace5d486bf78108a75735bef3e8f3eecb62d414a",
+    "packages/shared/src/types/server.ts": "b95e08c4c86bc7c81015932abdea87bcc38915e889bd8b05a14ac99daa9d6070",
+    "packages/shared/src/types/skill-diff.ts": "d2a22ab5ff45cee1cf7bdfa32c2dac93bfd68d3647e46c642151f17991a7896b",
+    "packages/shared/src/types/version-info.ts": "188f160c573dd7cc2bd421d4d9be19ac55545abaecb6823bc52a03992f31a734",
+    "packages/shared/src/types/workspace-settings.ts": "72b4e67451add85d0bad5a064b7a77c83a04e02cf8936bce2c8b98930aed707a",
+    "packages/shared/src/types/workspace.ts": "4dc1e50f51d07fb25a33e27765729aae162456bf0d1e350f575dfb69bff012c6"
+  },
+  "updated_at": "2026-04-24T20:16:44.212Z"
+}

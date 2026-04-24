@@ -1,4 +1,16 @@
-/** Ambient context captured for a single repo (architecture, stack, conventions, API, LLM docs). */
+# server.ts
+
+**Path:** `packages/shared/src/types/server.ts`
+
+Ambient-context types populated by the context-generation workflow and consumed by agents when answering workspace-scoped prompts.
+
+## Exports
+
+### `interface RepoContext`
+
+Ambient context captured for a single repo (architecture, stack, conventions, API, LLM docs).
+
+```ts
 export interface RepoContext {
   architecture?: string;
   stack?: string;
@@ -8,12 +20,13 @@ export interface RepoContext {
   updatedAt?: string;
   updatedBy?: string;
 }
+```
 
-/**
- * Ambient context for a whole workspace: shared fields at the top level plus
- * per-repo subcontexts in `repos`. Populated by the context-generation
- * workflow and consumed by agents when answering workspace-scoped prompts.
- */
+### `interface WorkspaceContext`
+
+Ambient context for a whole workspace: shared fields at the top level plus per-repo subcontexts in `repos`.
+
+```ts
 export interface WorkspaceContext {
   architecture?: string;
   conventions?: string;
@@ -27,3 +40,4 @@ export interface WorkspaceContext {
   brainstorming?: string;
   repos?: Record<string, RepoContext>;
 }
+```

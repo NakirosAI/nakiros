@@ -35,6 +35,7 @@ export interface RunComparisonRequest {
   maxConcurrent?: number;
 }
 
+/** Response returned by the comparison runner when a new comparison is launched. */
 export interface RunComparisonResponse {
   /** Folder name under `evals/comparisons/` (timestamp-based). */
   comparisonId: string;
@@ -44,6 +45,7 @@ export interface RunComparisonResponse {
   reuseSummary: ComparisonReuseSummary;
 }
 
+/** Summary of which models the comparison reused from prior Evolution iterations. */
 export interface ComparisonReuseSummary {
   /** Model alias → `iteration` we copied from (null when launched fresh). */
   reusedFromIteration: Record<string, number | null>;
@@ -90,6 +92,7 @@ export interface ComparisonCell {
   reusedFromIteration?: number | null;
 }
 
+/** One row of the comparison matrix — all per-model cells for a single eval. */
 export interface ComparisonRow {
   evalName: string;
   /** Per-model cells for the `with_skill` config, aligned to `ComparisonMatrix.models`. */
@@ -98,6 +101,7 @@ export interface ComparisonRow {
   withoutSkill: Array<ComparisonCell | null>;
 }
 
+/** Aggregated comparison matrix consumed by the A/B/C view in the UI. */
 export interface ComparisonMatrix {
   skillName: string;
   /** Folder name under `evals/comparisons/`. */
@@ -118,6 +122,7 @@ export interface ComparisonMatrix {
   }>;
 }
 
+/** Compact summary of a comparison, used by the list view tile. */
 export interface ComparisonSummary {
   comparisonId: string;
   timestamp: string;
@@ -128,6 +133,7 @@ export interface ComparisonSummary {
 
 // ─── IPC request/response shapes ────────────────────────────────────────────
 
+/** Request payload for the `comparison:getMatrix` IPC channel. */
 export interface GetComparisonMatrixRequest {
   scope: SkillScope;
   pluginName?: string;
@@ -138,6 +144,7 @@ export interface GetComparisonMatrixRequest {
   skillDirOverride?: string;
 }
 
+/** Request payload for the `comparison:list` IPC channel. */
 export interface ListComparisonsRequest {
   scope: SkillScope;
   pluginName?: string;
@@ -147,6 +154,7 @@ export interface ListComparisonsRequest {
   skillDirOverride?: string;
 }
 
+/** Request payload for the `comparison:getFingerprintStatus` IPC channel. */
 export interface GetComparisonFingerprintStatusRequest {
   scope: SkillScope;
   pluginName?: string;

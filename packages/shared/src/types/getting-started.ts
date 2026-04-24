@@ -1,10 +1,12 @@
 import type { ArtifactContext } from './artifact-review.js';
 
+/** Per-step state for the onboarding checklist (completion timestamp + launched conversation id). */
 export interface WorkspaceGettingStartedStepState {
   completedAt: string | null;
   launchedConversationId: string | null;
 }
 
+/** Full onboarding checklist state persisted per workspace. */
 export interface WorkspaceGettingStartedState {
   step1: WorkspaceGettingStartedStepState;
   step2: WorkspaceGettingStartedStepState;

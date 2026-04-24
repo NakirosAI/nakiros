@@ -1,8 +1,16 @@
-import type { AgentProfile } from './workspace.js';
-import type { WorkspaceMCP, WorkspaceDoc } from './workspace-settings.js';
-import type { WorkspaceContext } from './server.js';
+# installer.ts
 
-/** Persisted repo entry inside a {@link StoredWorkspace}. */
+**Path:** `packages/shared/src/types/installer.ts`
+
+Persisted workspace record types (stored under `~/.nakiros/`). Holds the repo list, optional PM tool integration, workspace-level docs, MCP servers, and rendered workspace context.
+
+## Exports
+
+### `interface StoredRepo`
+
+Persisted repo entry inside a `StoredWorkspace`.
+
+```ts
 export interface StoredRepo {
   name: string;
   localPath: string;
@@ -11,12 +19,13 @@ export interface StoredRepo {
   profile: AgentProfile;
   llmDocs: string[];
 }
+```
 
-/**
- * Workspace record persisted on disk (under `~/.nakiros/`). Holds the repos,
- * optional PM tool integration, workspace-level docs, MCPs, and rendered
- * workspace context.
- */
+### `interface StoredWorkspace`
+
+Workspace record persisted on disk. Holds the repos, optional PM tool integration, workspace-level docs, MCPs, and rendered workspace context.
+
+```ts
 export interface StoredWorkspace {
   id: string;
   name: string;
@@ -36,3 +45,4 @@ export interface StoredWorkspace {
   pmBoardId?: string;
   context?: WorkspaceContext;
 }
+```

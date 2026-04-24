@@ -1,3 +1,12 @@
+/**
+ * Canonical IPC channel registry shared between the daemon, the HTTP client
+ * used by the frontend, and `global.d.ts`. Every handler, client call, and
+ * type declaration MUST reference names from this map — no hardcoded channel
+ * strings elsewhere. Enforced by `CLAUDE.md`.
+ *
+ * Each key equals its value so the object acts as a string enum while giving
+ * the compiler stable literal-type inference.
+ */
 export const IPC_CHANNELS = {
   // Generic
   'shell:openPath': 'shell:openPath',
@@ -137,4 +146,5 @@ export const IPC_CHANNELS = {
   'skillAgent:readTempFile': 'skillAgent:readTempFile',
 } as const;
 
+/** Union of every IPC channel key declared in {@link IPC_CHANNELS}. */
 export type IpcChannel = keyof typeof IPC_CHANNELS;

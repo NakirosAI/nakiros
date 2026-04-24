@@ -2,10 +2,13 @@
 // Nakiros Agent Team — Project types
 // ---------------------------------------------------------------------------
 
+/** Supported AI coding agents that Nakiros can scan for projects and skills. */
 export type ProviderType = 'claude' | 'gemini' | 'cursor' | 'codex';
 
+/** Lifecycle status of a project tracked by Nakiros. */
 export type ProjectStatus = 'active' | 'inactive' | 'dismissed';
 
+/** Persisted project record: scanned from a provider project directory + user metadata. */
 export interface Project {
   id: string;
   name: string;
@@ -20,6 +23,11 @@ export interface Project {
   createdAt: string;
 }
 
+/**
+ * Project freshly detected by the scanner, not yet persisted. The `status`
+ * field is still populated so the UI can filter already-dismissed projects
+ * from a re-scan.
+ */
 export interface DetectedProject {
   id: string;
   name: string;
@@ -32,6 +40,7 @@ export interface DetectedProject {
   status: ProjectStatus;
 }
 
+/** Compact metadata extracted from a single Claude Code JSONL conversation. */
 export interface ProjectConversation {
   sessionId: string;
   projectId: string;
@@ -45,6 +54,7 @@ export interface ProjectConversation {
   summary: string;
 }
 
+/** Normalized message extracted from a Claude Code JSONL entry. */
 export interface ConversationMessage {
   uuid: string;
   parentUuid: string | null;
@@ -60,8 +70,10 @@ export interface ConversationMessage {
 // Powers the health-oriented ConversationsView (score, badges, diagnostic).
 // ---------------------------------------------------------------------------
 
+/** Health zone displayed in the UI for a conversation's overall score. */
 export type ConversationHealthZone = 'healthy' | 'watch' | 'degraded';
 
+/** A single compaction event (auto or manual) detected in the JSONL stream. */
 export interface ConversationCompaction {
   /** Wall-clock timestamp of the compact_boundary entry. */
   timestamp: string;
@@ -75,6 +87,7 @@ export interface ConversationCompaction {
   offsetPct: number;
 }
 
+/** User-message moment flagged as friction (correction / frustration / abort). */
 export interface ConversationFrictionPoint {
   /** Position in the conversation (0-1) — tied to lost-in-the-middle zone. */
   offsetPct: number;
@@ -87,6 +100,7 @@ export interface ConversationFrictionPoint {
   precedingTool: string | null;
 }
 
+/** Per-tool usage stats aggregated across a conversation. */
 export interface ConversationToolStats {
   /** Total tool_use invocations for this tool. */
   count: number;
@@ -94,6 +108,7 @@ export interface ConversationToolStats {
   errorCount: number;
 }
 
+/** File touched repeatedly by Edit / Write / NotebookEdit — candidate for rework pattern. */
 export interface ConversationHotFile {
   /** Absolute path (or relative if that's what the tool received). */
   path: string;
@@ -101,6 +116,7 @@ export interface ConversationHotFile {
   editCount: number;
 }
 
+/** Category a {@link ConversationTip} belongs to — drives grouping in the UI. */
 export type ConversationTipCategory =
   | 'context'
   | 'cache'
@@ -109,8 +125,10 @@ export type ConversationTipCategory =
   | 'workflow'
   | 'skills';
 
+/** Severity of a {@link ConversationTip}, used for sorting and badge colour. */
 export type ConversationTipSeverity = 'info' | 'warning' | 'critical';
 
+/** One actionable tip surfaced by the rule-based conversation analyzer. */
 export interface ConversationTip {
   /** Stable id mapping to i18n keys `tips.<id>.title` and `tips.<id>.body`. */
   id: string;
@@ -120,6 +138,11 @@ export interface ConversationTip {
   data: Record<string, string | number>;
 }
 
+/**
+ * Full deterministic analysis of a single conversation: metadata, context
+ * health, cache efficiency, friction, tool usage, composite score and tips.
+ * Consumed by the ConversationsView table and the diagnostic panel.
+ */
 export interface ConversationAnalysis {
   sessionId: string;
   projectId: string;
@@ -185,6 +208,7 @@ export interface ConversationAnalysis {
 // for small sessions and Sonnet (1M context) for big ones.
 // ---------------------------------------------------------------------------
 
+/** LLM-generated narrative report produced by the deep-analysis skill. */
 export interface ConversationDeepAnalysis {
   sessionId: string;
   /** Which Claude model produced the report. */
@@ -196,6 +220,7 @@ export interface ConversationDeepAnalysis {
   generatedAt: string;
 }
 
+/** Directory entry inside a skill folder — file or nested directory with children. */
 export interface SkillFileEntry {
   name: string;
   relativePath: string;
@@ -216,6 +241,7 @@ export interface SkillFileEntry {
  */
 export type SkillScope = 'project' | 'nakiros-bundled' | 'claude-global' | 'plugin';
 
+/** Complete skill record: content, directory tree, eval suite, audit count. */
 export interface Skill {
   name: string;
   projectId: string;
@@ -238,8 +264,10 @@ export interface Skill {
 // Eval types
 // ---------------------------------------------------------------------------
 
+/** Type of an assertion in an eval definition — deterministic script, LLM judge, or manual review. */
 export type SkillEvalAssertionType = 'script' | 'llm' | 'manual';
 
+/** Single assertion result produced by the grader for one eval run. */
 export interface SkillEvalAssertion {
   type?: SkillEvalAssertionType;
   text: string;
@@ -247,6 +275,7 @@ export interface SkillEvalAssertion {
   evidence: string;
 }
 
+/** Token/duration stats captured from a single eval run's `timing.json`. */
 export interface SkillEvalTiming {
   totalTokens: number;
   durationMs: number;
@@ -255,6 +284,7 @@ export interface SkillEvalTiming {
   model?: string;
 }
 
+/** Grading payload for one eval run (with_skill or without_skill baseline). */
 export interface SkillEvalGradingRun {
   config: 'with_skill' | 'without_skill';
   passed: number;
@@ -267,6 +297,7 @@ export interface SkillEvalGradingRun {
   graderModel: string | null;
 }
 
+/** Paired grading for one eval at one iteration — with_skill + baseline + deltas. */
 export interface SkillEvalGrading {
   evalName: string;
   withSkill: SkillEvalGradingRun | null;
@@ -277,6 +308,7 @@ export interface SkillEvalGrading {
   humanFeedback: string | null;
 }
 
+/** Compact per-run summary used inside {@link SkillEvalIteration}. */
 export interface SkillEvalRunSummary {
   passRate: number;
   totalAssertions: number;
@@ -286,6 +318,7 @@ export interface SkillEvalRunSummary {
   durationMs: number;
 }
 
+/** One iteration (a full eval round) for a skill — aggregates every eval + baseline. */
 export interface SkillEvalIteration {
   number: number;
   timestamp: string | null;
@@ -300,14 +333,17 @@ export interface SkillEvalIteration {
   gradings: SkillEvalGrading[];
 }
 
+/** Assertion declaration from the eval's definition file (script/llm/manual + text). */
 export interface SkillEvalAssertionDefinition {
   type: SkillEvalAssertionType;
   text: string;
   script?: string;
 }
 
+/** Execution mode: `autonomous` (single --print turn) vs `interactive` (multi-turn via --resume). */
 export type SkillEvalMode = 'autonomous' | 'interactive';
 
+/** Complete eval definition as declared in the skill's evals folder. */
 export interface SkillEvalDefinition {
   id: number;
   name: string;
@@ -320,6 +356,7 @@ export interface SkillEvalDefinition {
   assertions: SkillEvalAssertionDefinition[] | string[];
 }
 
+/** Full eval suite for a skill: static definitions + history of iteration results. */
 export interface SkillEvalSuite {
   skillName: string;
   definitions: SkillEvalDefinition[];
@@ -332,6 +369,7 @@ export interface SkillEvalSuite {
 // Eval Run execution (live state)
 // ---------------------------------------------------------------------------
 
+/** Lifecycle status of a single eval run. */
 export type EvalRunStatus =
   | 'queued'
   | 'starting'
@@ -342,12 +380,15 @@ export type EvalRunStatus =
   | 'failed'
   | 'stopped';
 
+/** Config flavour of an eval run — `with_skill` loads the skill, `without_skill` is the baseline. */
 export type EvalRunConfig = 'with_skill' | 'without_skill';
 
+/** Ordered block inside an eval turn — text or tool invocation, in stream order. */
 export type EvalRunTurnBlock =
   | { type: 'text'; text: string }
   | { type: 'tool'; name: string; display: string };
 
+/** One turn (user or assistant message) in an eval run. */
 export interface EvalRunTurn {
   role: 'user' | 'assistant';
   /** Joined text of all text-blocks. Kept for backward compat + grading which aggregates text. */
@@ -364,6 +405,7 @@ export interface EvalRunTurn {
   blocks?: EvalRunTurnBlock[];
 }
 
+/** Full in-memory state of a single eval run — status, turns, tokens, artefact paths. */
 export interface SkillEvalRun {
   /** Unique id for this specific run process (local in-memory). */
   runId: string;
@@ -424,6 +466,7 @@ export interface SkillEvalRun {
   error: string | null;
 }
 
+/** Output file metadata surfaced in the eval UI (size + mtime, no content). */
 export interface EvalRunOutputEntry {
   /** Path relative to the run's outputs/ directory. */
   relativePath: string;
@@ -432,6 +475,7 @@ export interface EvalRunOutputEntry {
   modifiedAt: string;
 }
 
+/** Progress snapshot emitted while an eval run is active. */
 export interface EvalRunProgress {
   runId: string;
   status: EvalRunStatus;
@@ -441,6 +485,7 @@ export interface EvalRunProgress {
   latestTool?: string;
 }
 
+/** Event broadcast on `eval:event` while an eval run is alive. */
 export interface EvalRunEvent {
   runId: string;
   event:
@@ -483,6 +528,7 @@ export interface StartEvalRunRequest {
   model?: string;
 }
 
+/** Response from `eval:startRuns` — the iteration index + the per-run runIds. */
 export interface StartEvalRunResponse {
   iteration: number;
   runIds: string[];
@@ -492,6 +538,7 @@ export interface StartEvalRunResponse {
 // Audit run (static review of a skill via /nakiros-skill-factory audit)
 // ---------------------------------------------------------------------------
 
+/** Lifecycle status of an audit run. */
 export type AuditRunStatus =
   | 'starting'
   | 'running'
@@ -500,6 +547,7 @@ export type AuditRunStatus =
   | 'failed'
   | 'stopped';
 
+/** One turn (user or assistant) inside an audit run conversation. */
 export interface AuditRunTurn {
   role: 'user' | 'assistant';
   /** Joined text-block content. Kept for backward compat + grading. */
@@ -516,6 +564,7 @@ export interface AuditRunTurn {
   blocks?: EvalRunTurnBlock[];
 }
 
+/** Full in-memory state of an audit run — mirror of {@link SkillEvalRun} for the audit flow. */
 export interface AuditRun {
   runId: string;
   scope: SkillScope;
@@ -539,6 +588,7 @@ export interface AuditRun {
   error: string | null;
 }
 
+/** Event broadcast on `audit:event` while an audit run is alive. */
 export interface AuditRunEvent {
   runId: string;
   event:
@@ -550,6 +600,7 @@ export interface AuditRunEvent {
     | { type: 'done'; exitCode: number; error?: string; reportPath?: string };
 }
 
+/** Request payload for the `audit:start` IPC channel. */
 export interface StartAuditRequest {
   scope: SkillScope;
   /** Parent plugin name when scope is 'plugin'. */
@@ -565,6 +616,7 @@ export interface StartAuditRequest {
 // the fix workdir's latest iteration.
 // ---------------------------------------------------------------------------
 
+/** Single benchmark snapshot: one iteration's pass/tokens for with_skill + baseline. */
 export interface FixBenchmarkSnapshot {
   iteration: number;
   timestamp: string | null;
@@ -572,6 +624,7 @@ export interface FixBenchmarkSnapshot {
   withoutSkill: SkillEvalRunSummary | null;
 }
 
+/** Paired benchmarks used by the fix UI to compare real vs temp skill performance. */
 export interface FixBenchmarks {
   real: FixBenchmarkSnapshot | null;
   temp: FixBenchmarkSnapshot | null;
@@ -595,6 +648,7 @@ export type SkillAgentTempFileContent =
   | { kind: 'binary'; sizeBytes: number }
   | { kind: 'missing' };
 
+/** Historical audit report entry listed by `audit:listHistory`. */
 export interface AuditHistoryEntry {
   /** Filename like `audit-2026-04-17T10-00-00.md`. */
   fileName: string;
@@ -605,6 +659,7 @@ export interface AuditHistoryEntry {
   sizeBytes: number;
 }
 
+/** Per-project stats tile: total sessions, messages, tool frequency, top skills. */
 export interface ProjectStats {
   totalSessions: number;
   totalMessages: number;
@@ -614,6 +669,7 @@ export interface ProjectStats {
   topSkills: string[];
 }
 
+/** Aggregate stats across every tracked project, used for the Home dashboard. */
 export interface GlobalStats {
   totalProjects: number;
   totalSessions: number;
@@ -621,6 +677,7 @@ export interface GlobalStats {
   providerBreakdown: Record<ProviderType, number>;
 }
 
+/** Recommendation surfaced by the proposal engine: missing skill, friction point, or optimization. */
 export interface SkillRecommendation {
   type: 'missing-skill' | 'friction-point' | 'optimization';
   title: string;
@@ -630,6 +687,7 @@ export interface SkillRecommendation {
   projectId: string;
 }
 
+/** Progress event broadcast on `project:scanProgress` while the scanner walks provider dirs. */
 export interface ScanProgress {
   provider: ProviderType;
   current: number;

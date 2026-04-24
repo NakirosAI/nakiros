@@ -1,3 +1,7 @@
+/**
+ * Version info surfaced to the UI: installed Nakiros version plus the latest
+ * version published on npm. Powers the "update available" banner in the app.
+ */
 export interface VersionInfo {
   /** Installed Nakiros version (from the package.json at runtime). */
   current: string;

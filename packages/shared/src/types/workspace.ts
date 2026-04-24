@@ -1,3 +1,4 @@
+/** Predefined agent profile used to tune prompts and tool access per repo type. */
 export type AgentProfile =
   | 'frontend-react'
   | 'frontend-vue'
@@ -10,6 +11,7 @@ export type AgentProfile =
   | 'fullstack'
   | 'generic';
 
+/** Repo entry inside a workspace config file (pre-storage shape, before {@link StoredRepo}). */
 export interface RepoConfig {
   name: string;
   url: string;
@@ -18,6 +20,7 @@ export interface RepoConfig {
   llmDocs?: string[];
 }
 
+/** Top-level workspace configuration loaded from the canonical YAML. */
 export interface WorkspaceConfig {
   name: string;
   repos: RepoConfig[];
@@ -25,8 +28,10 @@ export interface WorkspaceConfig {
   projectKey?: string;
 }
 
+/** Mono-repo (one repo) vs multi-repo (several repos) workspace shape. */
 export type WorkspaceStructure = 'mono-repo' | 'multi-repo';
 
+/** Repo descriptor as serialised in the canonical `workspace.yaml`. */
 export interface WorkspaceYamlRepo {
   name: string;
   role: string;
@@ -35,6 +40,7 @@ export interface WorkspaceYamlRepo {
 }
 
 
+/** Canonical YAML schema for a workspace descriptor persisted on disk. */
 export interface CanonicalWorkspaceYaml {
   name: string;
   slug: string;

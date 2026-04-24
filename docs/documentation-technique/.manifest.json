@@ -42,7 +42,19 @@
     "apps/nakiros/src/daemon/handlers/skill-dir.ts": "17d239a6744c87302c292c02892be8dc8d6d8fbf5fb48642b4de3cac9d03736f",
     "apps/nakiros/src/daemon/handlers/skills-common.ts": "4a8bc61bdf0bc56fb339bae69a428e2cb3898b3310a0e341e53fff9d84b02a8a",
     "apps/nakiros/src/daemon/port.ts": "49b156f00bc0cd38a25db189c3bde54086e4a70ed3162ecbb6c28fab7e8a6ad1",
-    "apps/nakiros/src/daemon/server.ts": "369448def85efcc4a2f3d7f2361b1fa1c7359ee2dbb547ade970e3027f3e75e0"
+    "apps/nakiros/src/daemon/server.ts": "369448def85efcc4a2f3d7f2361b1fa1c7359ee2dbb547ade970e3027f3e75e0",
+    "apps/nakiros/src/services/runner-core/claude-projects.ts": "057bd79e4e4db2880aef7e7f2ea5d651f7ef101ece0f156dbd618e48df8f63ed",
+    "apps/nakiros/src/services/runner-core/claude-stream.ts": "a8f2ed7f8e4c3bd292fbe91a81cce0020cf31292afee11220c60538c0ad96421",
+    "apps/nakiros/src/services/runner-core/event-log.ts": "81c4270d9742337fe856bc6e368063702f45f1a3e54b4cbf84cbb214faa0ed6e",
+    "apps/nakiros/src/services/runner-core/execution-settings.ts": "a3a9d08e00df87c4fbbe0a891f5d50058e3e61a37866120b5beb8e1b02ebe118",
+    "apps/nakiros/src/services/runner-core/git-worktree.ts": "5b73633010e102e56c436f67b45073805291d78e8b908c096bf8a738cac4f192",
+    "apps/nakiros/src/services/runner-core/index.ts": "0fd8d783f6d6f5166d2b4d45987db57443f020833b72e076fd16c7536a72f28a",
+    "apps/nakiros/src/services/runner-core/isolated-home.ts": "01077c5583f89cd69ad43a0d83ecdeaa2e91551c5184a0400092f8c62e250120",
+    "apps/nakiros/src/services/runner-core/run-id.ts": "7947b6d68a02cfba9690224c4b71f22b14f2bb430f73a354627ed197b7848718",
+    "apps/nakiros/src/services/runner-core/run-status.ts": "c9114d26323de64c15fee4253419b669e1ed949ce7b3f005c40755538c0d793d",
+    "apps/nakiros/src/services/runner-core/run-store.ts": "6a6c7133d508277e13ff181bc9f92e4f9477e1a7dae8755e86fc7f13b5b88366",
+    "apps/nakiros/src/services/runner-core/tmp-sandbox.ts": "d41d683f13e6c92f0605dbfb6088f7be0f5bf215e04ccff817589e7be263ee13",
+    "apps/nakiros/src/services/runner-core/tool-format.ts": "36a6874917223219450bd6e88e84bfd63b602b0ac1028a765bba084b0bf95e2a"
   },
-  "updated_at": "2026-04-24T20:32:54.525Z"
+  "updated_at": "2026-04-24T20:37:59.321Z"
 }

@@ -17,6 +17,7 @@ import { join } from 'path';
  * The log is purely a resumption aid. Once the user acknowledges the run's outcome
  * (commit/deploy/terminer), the workdir — including events.jsonl — is deleted.
  */
+/** Options for constructing an {@link EventLog}. */
 export interface EventLogOptions<TEvent> {
   workdir: string;
   broadcast: (event: TEvent) => void;

@@ -3,6 +3,7 @@ import { join } from 'path';
 
 const DEFAULT_ALLOW = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
 
+/** Options controlling {@link writeExecutionSettings}. */
 export interface ExecutionSettingsOptions {
   /** Block the Skill tool — used by without_skill eval baselines. */
   denySkill?: boolean;

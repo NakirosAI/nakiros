@@ -36,6 +36,7 @@ export function findGitRoot(start: string): string | null {
   }
 }
 
+/** Return value of {@link createEvalSandbox}. */
 export interface CreateSandboxResult {
   /** Absolute path of the newly created worktree. */
   path: string;

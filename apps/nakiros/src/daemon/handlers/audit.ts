@@ -21,6 +21,17 @@ import type { HandlerRegistry } from './index.js';
 
 const broadcastAuditEvent = createEventBroadcaster<AuditRunEvent>('audit:event');
 
+/**
+ * Registers the `audit:*` IPC channels — static skill review via the
+ * `/nakiros-skill-factory audit` flow.
+ *
+ * Channels:
+ * - Lifecycle: `audit:start`, `audit:stopRun`, `audit:getRun`, `audit:finish`
+ * - Stream: `audit:sendUserMessage`, `audit:listActive`, `audit:getBufferedEvents`
+ * - History: `audit:listHistory`, `audit:readReport` (reads archived report from `{skill}/audits/`)
+ *
+ * Broadcasts `audit:event` via `eventBus.broadcast` while runs are active.
+ */
 export const auditHandlers: HandlerRegistry = {
   'audit:start': (args) => {
     const request = args[0] as StartAuditRequest;

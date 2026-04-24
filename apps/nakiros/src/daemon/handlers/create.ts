@@ -21,6 +21,17 @@ import type { HandlerRegistry } from './index.js';
 
 const broadcastCreateEvent = createEventBroadcaster<AuditRunEvent>('create:event');
 
+/**
+ * Registers the `create:*` IPC channels — thin mirror of `fix:*` with different
+ * temp-workdir seeding (new skill from scratch) and sync-back policy.
+ *
+ * Channels:
+ * - Lifecycle: `create:start`, `create:stopRun`, `create:getRun`, `create:finish`
+ * - Stream: `create:sendUserMessage`, `create:listActive`, `create:getBufferedEvents`
+ * - Diff preview: `create:listDiff`, `create:readDiffFile`
+ *
+ * Broadcasts `create:event` via `eventBus.broadcast`.
+ */
 export const createHandlers: HandlerRegistry = {
   'create:start': (args) => {
     const request = args[0] as StartAuditRequest;

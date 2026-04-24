@@ -65,6 +65,19 @@ function getDefinitionForRun(run: SkillEvalRun): {
   return { skillDir, definition };
 }
 
+/**
+ * Registers the `eval:*` IPC channels — the full eval runner surface (lifecycle,
+ * streaming, artefacts, feedback, matrix, single-iteration artefact load).
+ *
+ * Channels:
+ * - Lifecycle: `eval:startRuns`, `eval:stopRun`, `eval:listRuns`, `eval:loadPersisted`, `eval:finishRun`
+ * - Stream: `eval:sendUserMessage`, `eval:getBufferedEvents`
+ * - Feedback: `eval:getFeedback`, `eval:saveFeedback`
+ * - Outputs: `eval:listOutputs`, `eval:readOutput`, `eval:readDiffPatch`
+ * - Matrix: `eval:getMatrix`, `eval:loadIterationRun`
+ *
+ * Broadcasts `eval:event` via `eventBus.broadcast` while runs are active.
+ */
 export const evalHandlers: HandlerRegistry = {
   'eval:startRuns': async (args) => {
     const request = args[0] as StartEvalRunRequest;

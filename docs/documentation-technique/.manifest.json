@@ -20,7 +20,29 @@
     "packages/shared/src/types/skill-diff.ts": "d2a22ab5ff45cee1cf7bdfa32c2dac93bfd68d3647e46c642151f17991a7896b",
     "packages/shared/src/types/version-info.ts": "188f160c573dd7cc2bd421d4d9be19ac55545abaecb6823bc52a03992f31a734",
     "packages/shared/src/types/workspace-settings.ts": "72b4e67451add85d0bad5a064b7a77c83a04e02cf8936bce2c8b98930aed707a",
-    "packages/shared/src/types/workspace.ts": "4dc1e50f51d07fb25a33e27765729aae162456bf0d1e350f575dfb69bff012c6"
+    "packages/shared/src/types/workspace.ts": "4dc1e50f51d07fb25a33e27765729aae162456bf0d1e350f575dfb69bff012c6",
+    "apps/nakiros/src/daemon/event-bus.ts": "61dc19f65860b025cce549b9828464df21773008244477c0710eb82ba46d7222",
+    "apps/nakiros/src/daemon/handlers/agents.ts": "810d7994483da275470eb0cdb44cca49dbb1c8ce2057201a79d467433bb1e07e",
+    "apps/nakiros/src/daemon/handlers/audit.ts": "f725bced3611ffff203102bd55488e3160988e6e2a978bdee8b28dfdcda8d9e8",
+    "apps/nakiros/src/daemon/handlers/bundled-skills.ts": "7d71b8aa4338b2981e030c42fbc52d2d29cd8205d1413b36a7ab15f04922ed2c",
+    "apps/nakiros/src/daemon/handlers/claude-global.ts": "e52521c578061477d9fdf45629efaf65a235cb6bfb93e54027cd190a80b30016",
+    "apps/nakiros/src/daemon/handlers/comparison.ts": "f926bef6b1085e753911b29f6793e5847a1a619652d6de08421d96e6a7b5d31d",
+    "apps/nakiros/src/daemon/handlers/create.ts": "0d982f34d7c7b3b95e5198a42cc7694006a980ae452ff9fc5bc12b47b5c8cc11",
+    "apps/nakiros/src/daemon/handlers/eval.ts": "2654b712be6ebe0e08abe08ee7686a3c5cc43e179d7ce7813a147ffd36426ee4",
+    "apps/nakiros/src/daemon/handlers/fix.ts": "3820432d79c396af60b03884adf1286103875717a32660b7c7e592f9dfec150a",
+    "apps/nakiros/src/daemon/handlers/index.ts": "5bcac06e5607cf2bce61ef72eb483eb41c5aa16216a5276bee295c65d26c4efe",
+    "apps/nakiros/src/daemon/handlers/meta.ts": "4cca726777739df8e1fc3fb5fae72b1c6aef28fdc08f68bcfd8f1bb92965db03",
+    "apps/nakiros/src/daemon/handlers/onboarding.ts": "19c46ec7cc57d93922f63a46e0682b0f3b59a9a47434daf914494f267a8017dd",
+    "apps/nakiros/src/daemon/handlers/plugin-skills.ts": "95553e07868fe2351b06bbbf2347fa21b6bb97dae931073d203f1f1dcdc5b6c2",
+    "apps/nakiros/src/daemon/handlers/preferences.ts": "820fde2cb56e92a3ba8b8267bde2d633d674f4c900c63055e90a54bc73f9e9f8",
+    "apps/nakiros/src/daemon/handlers/projects.ts": "d5811e779b95be10002c65e2d2907250696abeca548a3eb44b0c0de1db482bb1",
+    "apps/nakiros/src/daemon/handlers/run-helpers.ts": "87318530ae5bdc0d61c53fa7de3e9bf9dd7a58bceeac2ab64be5e4eb5cbe7d9b",
+    "apps/nakiros/src/daemon/handlers/shell.ts": "e6d4514a477979c7e07ca666b03fa5355dbc29937fefef28e6fe91d7cc0aa434",
+    "apps/nakiros/src/daemon/handlers/skill-agent.ts": "e4f46eb362d43f32dca5ac8069c348298256147aca05c1361bffd6aff2ca2dc4",
+    "apps/nakiros/src/daemon/handlers/skill-dir.ts": "17d239a6744c87302c292c02892be8dc8d6d8fbf5fb48642b4de3cac9d03736f",
+    "apps/nakiros/src/daemon/handlers/skills-common.ts": "4a8bc61bdf0bc56fb339bae69a428e2cb3898b3310a0e341e53fff9d84b02a8a",
+    "apps/nakiros/src/daemon/port.ts": "49b156f00bc0cd38a25db189c3bde54086e4a70ed3162ecbb6c28fab7e8a6ad1",
+    "apps/nakiros/src/daemon/server.ts": "369448def85efcc4a2f3d7f2361b1fa1c7359ee2dbb547ade970e3027f3e75e0"
   },
-  "updated_at": "2026-04-24T20:16:44.212Z"
+  "updated_at": "2026-04-24T20:32:54.525Z"
 }

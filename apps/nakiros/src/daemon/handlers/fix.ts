@@ -28,6 +28,19 @@ import type { HandlerRegistry } from './index.js';
 const broadcastFixEvent = createEventBroadcaster<AuditRunEvent>('fix:event');
 const broadcastEvalEvent = createEventBroadcaster<EvalRunEvent>('eval:event');
 
+/**
+ * Registers the `fix:*` IPC channels — skill iteration flow that edits a temp
+ * copy of the skill under `~/.nakiros/tmp-skills/` and lets the user sync to
+ * the real skill only after review. The tmp_skill pattern is load-bearing.
+ *
+ * Channels:
+ * - Lifecycle: `fix:start`, `fix:stopRun`, `fix:getRun`, `fix:finish`
+ * - Stream: `fix:sendUserMessage`, `fix:listActive`, `fix:getBufferedEvents`
+ * - Evals in temp: `fix:runEvalsInTemp` (runs the eval suite against the in-progress copy), `fix:getBenchmarks`
+ * - Diff preview: `fix:listDiff`, `fix:readDiffFile`
+ *
+ * Broadcasts `fix:event` (fix lifecycle) and `eval:event` (evals launched from the fix temp workdir).
+ */
 export const fixHandlers: HandlerRegistry = {
   'fix:start': (args) => {
     const request = args[0] as StartAuditRequest;

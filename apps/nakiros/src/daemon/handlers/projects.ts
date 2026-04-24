@@ -20,6 +20,24 @@ import {
 import { eventBus } from '../event-bus.js';
 import type { HandlerRegistry } from './index.js';
 
+/**
+ * Registers the `project:*` IPC channels — project scanning, conversation
+ * metadata, conversation analysis (deterministic + LLM-powered), and project-
+ * scoped skill CRUD.
+ *
+ * Channels:
+ * - `project:scan` — walk provider dirs for Claude Code projects
+ * - `project:list`, `project:get`, `project:dismiss`
+ * - `project:getStats`, `project:getGlobalStats` (currently stubbed to `null`)
+ * - Conversations: `project:listConversations`, `project:getConversationMessages`,
+ *   `project:analyzeConversation`, `project:listConversationsWithAnalysis`,
+ *   `project:deepAnalyzeConversation`, `project:loadDeepAnalysis`
+ * - Skills: `project:listSkills`, `project:getSkill`, `project:saveSkill`,
+ *   `project:readSkillFile`, `project:saveSkillFile`
+ * - `project:getRecommendations` (currently stubbed to `[]`)
+ *
+ * Broadcasts `project:scanProgress` via `eventBus.broadcast` while `project:scan` runs.
+ */
 export const projectHandlers: HandlerRegistry = {
   'project:scan': () =>
     scanProjects((current, total, projectName) => {

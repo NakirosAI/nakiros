@@ -1,20 +1,17 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+
+import type {
+  DetectedEditor,
+  EditorId,
+  OnboardingInstallResult,
+  OnboardingProgressEvent,
+} from '@nakiros/shared';
+
 import { eventBus } from '../daemon/event-bus.js';
 
 const NAKIROS_VERSION = '1.0.0';
-
-/** Identifier for an editor/agent environment the onboarding can install into. */
-export type EditorId = 'claude' | 'cursor' | 'codex';
-
-/** Result of {@link detectEditors}: presence + label + target commands dir for one editor. */
-export interface DetectedEditor {
-  id: EditorId;
-  label: string;
-  detected: boolean;
-  targetDir: string;
-}
 
 const GLOBAL_DIR = join(homedir(), '.nakiros');
 
@@ -53,12 +50,6 @@ export function nakirosConfigExists(): boolean {
   return existsSync(join(GLOBAL_DIR, 'config.yaml'));
 }
 
-interface OnboardingProgressEvent {
-  label: string;
-  done: boolean;
-  error?: string;
-}
-
 function emitProgress(event: OnboardingProgressEvent): void {
   eventBus.broadcast('onboarding:progress', event);
 }
@@ -73,7 +64,7 @@ function emitProgress(event: OnboardingProgressEvent): void {
  */
 export async function installNakiros(
   editors: DetectedEditor[],
-): Promise<{ success: boolean; errors: string[] }> {
+): Promise<OnboardingInstallResult> {
   const errors: string[] = [];
 
   try {

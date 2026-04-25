@@ -2,6 +2,18 @@ import type { AgentProfile } from './workspace.js';
 import type { WorkspaceMCP, WorkspaceDoc } from './workspace-settings.js';
 import type { WorkspaceContext } from './server.js';
 
+/**
+ * One Nakiros command file already installed on disk (under `~/.claude/commands`,
+ * `~/.cursor/commands`, or `~/.codex/commands`). Returned by
+ * `agents:installed-commands` to drive the "Already installed" panel of the UI.
+ */
+export interface InstalledCommand {
+  id: string;
+  command: string;
+  kind: 'agent' | 'workflow';
+  fileName: string;
+}
+
 /** Persisted repo entry inside a {@link StoredWorkspace}. */
 export interface StoredRepo {
   name: string;

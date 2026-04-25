@@ -1,8 +1,9 @@
+import type { DetectedEditor } from '@nakiros/shared';
+
 import {
   detectEditors,
   installNakiros,
   nakirosConfigExists,
-  type DetectedEditor,
 } from '../../services/onboarding-installer.js';
 import type { HandlerRegistry } from './index.js';
 

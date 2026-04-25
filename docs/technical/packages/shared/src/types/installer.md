@@ -6,6 +6,19 @@ Persisted workspace record types (stored under `~/.nakiros/`). Holds the repo li
 
 ## Exports
 
+### `interface InstalledCommand`
+
+One Nakiros command file already installed on disk (under `~/.claude/commands`, `~/.cursor/commands`, or `~/.codex/commands`). Returned by `agents:installed-commands` to drive the "Already installed" panel of the UI.
+
+```ts
+export interface InstalledCommand {
+  id: string;
+  command: string;
+  kind: 'agent' | 'workflow';
+  fileName: string;
+}
+```
+
 ### `interface StoredRepo`
 
 Persisted repo entry inside a `StoredWorkspace`.

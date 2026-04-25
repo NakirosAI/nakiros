@@ -1,12 +1,17 @@
 import type {
   AppPreferences,
-  AgentProvider,
   AgentInstallStatus,
   AgentInstallRequest,
   AgentInstallSummary,
+  AgentRunNotificationPayload,
   BundledSkillConflict,
   BundledSkillConflictFileDiff,
   BundledSkillConflictResolution,
+  DetectedEditor,
+  InstalledCommand,
+  OnboardingInstallResult,
+  OnboardingProgressEvent,
+  OpenAgentRunChatPayload,
   SkillDiffEntry,
   SkillDiffFilePayload,
   VersionInfo,
@@ -46,48 +51,6 @@ import type {
 } from '@nakiros/shared';
 
 declare global {
-  interface DetectedEditor {
-    id: 'claude' | 'cursor' | 'codex';
-    label: string;
-    detected: boolean;
-    targetDir: string;
-  }
-
-  interface OnboardingProgressEvent {
-    label: string;
-    done: boolean;
-    error?: string;
-  }
-
-  interface OnboardingInstallResult {
-    success: boolean;
-    errors: string[];
-  }
-
-  interface InstalledCommand {
-    id: string;
-    command: string;
-    kind: 'agent' | 'workflow';
-    fileName: string;
-  }
-
-  interface AgentRunNotificationPayload {
-    workspaceId: string;
-    workspaceName?: string;
-    conversationId?: string | null;
-    tabId?: string | null;
-    conversationTitle?: string;
-    provider?: AgentProvider;
-    durationSeconds: number;
-  }
-
-  interface OpenAgentRunChatPayload {
-    workspaceId: string;
-    conversationId?: string | null;
-    tabId?: string | null;
-    eventId?: string;
-  }
-
   interface Window {
     nakiros: {
       // Generic shell / clipboard

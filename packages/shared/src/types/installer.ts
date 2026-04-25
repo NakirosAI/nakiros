@@ -1,32 +1,38 @@
-export type AgentEnvironmentId = 'cursor' | 'codex' | 'claude';
+import type { AgentProfile } from './workspace.js';
+import type { WorkspaceMCP, WorkspaceDoc } from './workspace-settings.js';
+import type { WorkspaceContext } from './server.js';
 
-export interface AgentEnvironmentStatus {
-  id: AgentEnvironmentId;
-  label: string;
-  targetPath: string;
-  markerExists: boolean;
-  installedCount: number;
-  totalExpected: number;
+/** Persisted repo entry inside a {@link StoredWorkspace}. */
+export interface StoredRepo {
+  name: string;
+  localPath: string;
+  url?: string;
+  role: string;
+  profile: AgentProfile;
+  llmDocs: string[];
 }
 
-export interface AgentInstallStatus {
-  repoPath: string;
-  environments: AgentEnvironmentStatus[];
-}
-
-export interface AgentInstallRequest {
-  repoPath: string;
-  targets: AgentEnvironmentId[];
-  force?: boolean;
-}
-
-export interface AgentInstallSummary {
-  repoPath: string;
-  targets: AgentEnvironmentId[];
-  commandFilesCopied: number;
-  commandFilesOverwritten: number;
-  runtimeFilesCopied: number;
-  runtimeFilesOverwritten: number;
-  workspaceDirsCreated: number;
-  gitignorePatched: boolean;
+/**
+ * Workspace record persisted on disk (under `~/.nakiros/`). Holds the repos,
+ * optional PM tool integration, workspace-level docs, MCPs, and rendered
+ * workspace context.
+ */
+export interface StoredWorkspace {
+  id: string;
+  name: string;
+  workspacePath?: string;
+  repos: StoredRepo[];
+  pmTool?: 'github' | 'gitlab' | 'linear';
+  projectKey?: string;
+  createdAt: string;
+  lastOpenedAt: string;
+  topology?: 'mono' | 'multi';
+  ticketPrefix?: string;
+  ticketCounter?: number;
+  mcps?: WorkspaceMCP[];
+  projectDocs?: WorkspaceDoc[];
+  documentLanguage?: string;
+  branchPattern?: string;
+  pmBoardId?: string;
+  context?: WorkspaceContext;
 }

@@ -37,6 +37,7 @@ import { collectConfigStats, type EvalConfigStats } from './eval-benchmark.js';
 // Haiku, which would be misleading.
 // ---------------------------------------------------------------------------
 
+/** Options passed by the `comparison:run` handler to {@link startComparisonRun}. */
 export interface StartComparisonOptions {
   resolveSkillDir(request: RunComparisonRequest): string;
   onEvent(event: EvalRunEvent): void;
@@ -124,6 +125,12 @@ function isIterationComplete(iterDir: string): boolean {
   return true;
 }
 
+/**
+ * Pre-flight check for the comparison UI. Returns the current fingerprint,
+ * the last iteration's info, and whether the two match — if they do, the
+ * runner can copy artefacts instead of re-running that model. When they
+ * don't, the last-iteration model will be re-run alongside the others.
+ */
 export function getComparisonFingerprintStatus(skillDir: string): ComparisonFingerprintStatus {
   let currentFingerprint: string | null = null;
   try {
@@ -386,6 +393,11 @@ export async function startComparisonRun(
 
 // ─── List + load for the UI ─────────────────────────────────────────────────
 
+/**
+ * List every previously-run comparison for a skill, newest-first. Reads each
+ * `comparisons/<id>/comparison.json` and aggregates per-model pass rates for
+ * the list view tile.
+ */
 export function listComparisons(skillDir: string): ComparisonSummary[] {
   const root = comparisonsRoot(skillDir);
   if (!existsSync(root)) return [];
@@ -428,6 +440,11 @@ export function listComparisons(skillDir: string): ComparisonSummary[] {
   return summaries;
 }
 
+/**
+ * Load the full per-model × per-eval matrix for one comparison. Each cell
+ * carries `reusedFromIteration` so the UI can render a subtle hint on columns
+ * that were copied from an Evolution iteration (no fresh tokens spent).
+ */
 export function loadComparisonMatrix(
   skillDir: string,
   comparisonId: string,

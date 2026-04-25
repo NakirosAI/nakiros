@@ -3,6 +3,18 @@
 Canonical project memory is `ARCHITECTURE.md` at the repo root. Read it
 first for layout, runtime, and IPC contract.
 
+## Technical documentation (read before coding)
+
+Full TSDoc mirror lives under [`docs/technical/`](docs/technical/README.md).
+Each source file has a leaf markdown documenting its exported symbols, and
+each folder has an index (≤ 200 lines) listing children.
+
+**Before implementing a new function, helper, hook, component, runner, or
+IPC handler, browse the relevant index** (`apps/nakiros/`, `apps/frontend/`,
+`packages/shared/`) to check if the capability already exists. Reuse over
+duplication. If you add or change exported symbols, refresh both the TSDoc
+and its mirrored markdown via the `code-documentation` skill.
+
 ## Mandatory constraints
 
 - Use `IPC_CHANNELS` from `@nakiros/shared` everywhere. **No hardcoded

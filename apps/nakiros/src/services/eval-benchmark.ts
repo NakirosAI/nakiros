@@ -21,6 +21,7 @@ interface TimingFile {
   model?: string;
 }
 
+/** Flat per-eval + per-config stats used inside `benchmark.json` (snake_case matches the on-disk shape). */
 export interface EvalConfigStats {
   passed: number;
   failed: number;

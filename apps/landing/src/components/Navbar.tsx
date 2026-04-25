@@ -3,6 +3,14 @@ import { NakirosLogo } from './NakirosLogo';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useI18n } from '@/i18n/I18nProvider';
 
+/**
+ * Sticky top navigation bar of the landing page.
+ *
+ * Renders the {@link NakirosLogo}, in-page anchor links (Etymology, Features,
+ * How it works), the {@link LanguageSwitcher}, a GitHub icon link and the
+ * primary "Install" CTA pointing to `#install`. Anchor labels come from the
+ * `navbar` block of the active locale via {@link useI18n}.
+ */
 export function Navbar() {
   const { messages } = useI18n();
 

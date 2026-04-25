@@ -1,6 +1,11 @@
 import * as SeparatorPrimitive from '@radix-ui/react-separator';
 import { cn } from '../../lib/utils';
 
+/**
+ * Thin divider built on Radix `Separator` primitive. Defaults to a horizontal,
+ * purely decorative line coloured with the theme's `--line` token. Pass
+ * `orientation="vertical"` for vertical dividers inside flex rows.
+ */
 function Separator({
   className,
   orientation = 'horizontal',

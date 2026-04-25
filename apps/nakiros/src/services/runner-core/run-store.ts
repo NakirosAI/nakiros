@@ -19,6 +19,11 @@ export function persistRunJson<T extends object>(workdir: string, blob: T): void
   }
 }
 
+/**
+ * Read the run state blob persisted by {@link persistRunJson}. Returns `null`
+ * when the file is missing or unreadable — callers treat both cases as "no
+ * recoverable run".
+ */
 export function loadRunJson<T>(workdir: string): T | null {
   const path = join(workdir, RUN_FILE);
   if (!existsSync(path)) return null;

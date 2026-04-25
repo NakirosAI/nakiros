@@ -2,6 +2,13 @@ import { useEffect, useRef, type DependencyList } from 'react';
 
 type SubscribeFn<T> = (handler: (payload: T) => void) => (() => void);
 
+/**
+ * Wraps a `subscribe` IPC channel (one that returns its own unsubscribe
+ * function) into a React-friendly side effect. Resubscribes when `enabled`,
+ * `subscribe`, or any `deps` change. The latest `handler` is captured via a
+ * ref so callers don't need to memoize it. No-op when `subscribe` is nullish
+ * or `enabled` is false.
+ */
 export function useIpcListener<T>(
   subscribe: SubscribeFn<T> | null | undefined,
   handler: (payload: T) => void,

@@ -1,6 +1,11 @@
 import * as ProgressPrimitive from '@radix-ui/react-progress';
 import { cn } from '../../lib/utils';
 
+/**
+ * Horizontal progress bar built on Radix `Progress` primitive. The indicator
+ * is translated by `100 - value` percent to fill from the left as `value`
+ * grows from 0 to 100.
+ */
 function Progress({
   className,
   value,

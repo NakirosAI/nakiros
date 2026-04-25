@@ -140,6 +140,11 @@ async function detectInitialLanguage(): Promise<ResolvedLanguage> {
   }
 }
 
+/**
+ * Promise that resolves once `i18next` has been initialized with the detected
+ * system language. The app `await`s this before rendering so that the very
+ * first paint already shows translated copy.
+ */
 export const i18nReady = (async () => {
   const lng = await detectInitialLanguage();
   await i18n.use(initReactI18next).init({
@@ -152,4 +157,9 @@ export const i18nReady = (async () => {
   });
 })();
 
+/**
+ * Default export: the singleton `i18next` instance. Use this only when an
+ * imperative API is needed (e.g. `i18n.changeLanguage`); React components
+ * should call `useTranslation(namespace)` instead.
+ */
 export default i18n;

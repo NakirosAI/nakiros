@@ -33,9 +33,21 @@ import {
 import { SkillEvalsPanel } from './skills/EvalsPanel';
 
 interface Props {
+  /** Navigate back (typically returns to `Home`). */
   onBack(): void;
 }
 
+/**
+ * Full-screen view for skills shipped bundled with the Nakiros package itself
+ * (the `nakiros-bundled` scope). Browse, inspect, edit, audit, eval and fix
+ * the skills delivered as part of `@nakirosai/nakiros` and synced into
+ * `~/.claude/skills/`.
+ *
+ * Wires `useSkillsViewState` to the `nakiros-bundled` IPC surface
+ * (`listBundledSkills`, `readBundledSkillFile`, `saveBundledSkillFile`) and
+ * delegates run overlays to `AuditView` / `EvalRunsView` / `FixView`. Reached
+ * from the `Home` "Nakiros skills" button.
+ */
 export default function NakirosSkillsView({ onBack }: Props) {
   const { t } = useTranslation('nakiros-skills');
 

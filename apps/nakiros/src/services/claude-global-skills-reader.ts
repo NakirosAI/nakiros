@@ -159,6 +159,11 @@ export function listClaudeGlobalSkills(): Skill[] {
   return skills;
 }
 
+/**
+ * Read one user-global skill by name. Nakiros-managed symlinks return `null`
+ * so they don't show up in the "Claude Global" list (they already appear in
+ * "Nakiros Skills").
+ */
 export function readClaudeGlobalSkill(skillName: string): Skill | null {
   const dir = getClaudeGlobalSkillsDir();
   const skillDir = join(dir, skillName);
@@ -168,6 +173,7 @@ export function readClaudeGlobalSkill(skillName: string): Skill | null {
   return buildSkill(skillDir, skillName);
 }
 
+/** Read an arbitrary file inside a user-global skill. Refuses path-traversal; returns `null` on miss. */
 export function readClaudeGlobalSkillFile(skillName: string, relativePath: string): string | null {
   const dir = getClaudeGlobalSkillsDir();
   const filePath = join(dir, skillName, relativePath);
@@ -181,6 +187,7 @@ export function readClaudeGlobalSkillFile(skillName: string, relativePath: strin
   }
 }
 
+/** Write an arbitrary file inside a user-global skill. Refuses path-traversal silently. */
 export function saveClaudeGlobalSkillFile(skillName: string, relativePath: string, content: string): void {
   const dir = getClaudeGlobalSkillsDir();
   const filePath = join(dir, skillName, relativePath);

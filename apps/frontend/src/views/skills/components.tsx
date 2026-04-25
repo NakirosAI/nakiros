@@ -26,6 +26,7 @@ export function PassRateBadge({ rate, size = 'md' }: { rate: number; size?: 'sm'
   );
 }
 
+/** Small neutral pill for short labels (counts, categories). */
 export function Badge({ label }: { label: string }) {
   return (
     <span className="rounded bg-[var(--bg-muted)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
@@ -34,6 +35,10 @@ export function Badge({ label }: { label: string }) {
   );
 }
 
+/**
+ * Segmented-control button used in the skill detail view (Files / Evals /
+ * Audits). Visually flat, no border — relies on bg color to mark `active`.
+ */
 export function TabButton({
   active,
   onClick,
@@ -61,6 +66,11 @@ export function TabButton({
   );
 }
 
+/**
+ * Recursive file/folder tree for the selected skill. Leaf files invoke
+ * `onSelect(relativePath)`; folders toggle expand/collapse locally. Depth-0
+ * folders render expanded by default.
+ */
 export function FileTree({
   entries,
   selectedPath,
@@ -148,6 +158,7 @@ function FileTreeNode({
   );
 }
 
+/** Recursively counts non-directory entries inside a skill file tree. */
 export function countFiles(entries: SkillFileEntry[]): number {
   let count = 0;
   for (const entry of entries) {
@@ -160,17 +171,20 @@ export function countFiles(entries: SkillFileEntry[]): number {
   return count;
 }
 
+/** Human-readable file size: `999B`, `12.3K`, `4.5M` (binary divisions). */
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
+/** Compact token count: `820 tok` under 1k, `1.2k tok` above. */
 export function formatTokens(n: number): string {
   if (n < 1000) return `${n} tok`;
   return `${(n / 1000).toFixed(1)}k tok`;
 }
 
+/** Compact duration: `420ms`, `12.3s`, `1m05s`. */
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;

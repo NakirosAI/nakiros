@@ -76,6 +76,10 @@ export type LiveStreamEvent =
   | { type: 'text'; text: string; ts: number }
   | { type: 'tool'; name: string; display: string; ts: number };
 
+/**
+ * Strip transient timestamps off live stream events, leaving the persisted
+ * block shape used by `ConversationTurn`.
+ */
 export function liveEventsToBlocks(events: LiveStreamEvent[]): EvalRunTurnBlock[] {
   return events.map((e) =>
     e.type === 'text'

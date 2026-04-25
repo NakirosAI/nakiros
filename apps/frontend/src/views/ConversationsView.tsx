@@ -5,12 +5,22 @@ import { ConversationHealthBadges } from '../components/conversations/Conversati
 import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
 
 interface Props {
+  /** Project whose JSONL conversation analyses are listed. */
   project: Project;
 }
 
 type SortKey = 'score' | 'recent' | 'longest';
 type FilterKey = 'all' | 'critical' | 'compactions' | 'friction' | 'cacheWaste' | 'toolErrors';
 
+/**
+ * Dashboard tab listing every analyzed Claude Code JSONL conversation for a
+ * project, ranked health-first (lowest score = most worth investigating).
+ *
+ * Loads analyses via `window.nakiros.listProjectConversationsWithAnalysis`,
+ * supports filter/sort presets (critical, compactions, friction, cache waste,
+ * tool errors) and opens `ConversationDiagnosticPanel` on row click for the
+ * narrative diagnostic. Reached via `Sidebar` → "conversations" route.
+ */
 export default function ConversationsView({ project }: Props) {
   const { t } = useTranslation('conversations');
   const [analyses, setAnalyses] = useState<ConversationAnalysis[]>([]);

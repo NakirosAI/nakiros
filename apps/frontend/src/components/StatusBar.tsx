@@ -1,11 +1,19 @@
 import { Separator } from './ui';
 
 interface Props {
+  /** Current daemon lifecycle phase. Drives the status label on the left. */
   serverStatus: 'starting' | 'running' | 'stopped';
+  /** Number of detected project repos in the active workspace. */
   repoCount: number;
+  /** Whether the workspace contains a single repo (mono) or several (multi). */
   topology: 'mono' | 'multi';
 }
 
+/**
+ * Thin footer strip pinned at the bottom of the app window. Shows daemon
+ * status on the left and a workspace summary (repo count + topology) on
+ * the right. Pure presentational.
+ */
 export default function StatusBar({
   serverStatus,
   repoCount,

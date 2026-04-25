@@ -183,6 +183,13 @@ interface MarkdownViewerProps {
   onInternalLinkClick?: (href: string) => void;
 }
 
+/**
+ * Themed markdown renderer for the Nakiros frontend. Wraps `react-markdown` +
+ * `remark-gfm` with custom renderers for headings, tables, code blocks,
+ * Mermaid diagrams (`language-mermaid`) and unified diffs (`language-diff`).
+ * External links open via `window.nakiros.openPath` (system browser); internal
+ * links delegate to `onInternalLinkClick` when provided.
+ */
 export function MarkdownViewer({ content = '', className, onInternalLinkClick }: MarkdownViewerProps) {
   const resolvedComponents: Components = {
     ...components,

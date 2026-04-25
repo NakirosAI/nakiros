@@ -2,6 +2,14 @@ import { ArrowRight } from 'lucide-react';
 import { InstallCommand } from './InstallCommand';
 import { useI18n } from '@/i18n/I18nProvider';
 
+/**
+ * Hero section of the landing page (anchor `#top`).
+ *
+ * Top-of-page block that introduces Nakiros: animated eyebrow badge,
+ * 3-line headline with an accent line in teal, lead paragraph, primary
+ * {@link InstallCommand}, and a secondary anchor to `#how-it-works`. Copy
+ * is sourced from the `hero` block of the active locale via {@link useI18n}.
+ */
 export function Hero() {
   const { messages } = useI18n();
 

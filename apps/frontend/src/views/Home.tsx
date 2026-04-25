@@ -9,16 +9,34 @@ import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 type HomeTab = 'projects' | 'plugins' | 'globals';
 
 interface Props {
+  /** Detected projects shown in the "Projects" tab. */
   projects: Project[];
+  /** Open a project — switches the app to the `Dashboard` view. */
   onOpenProject(id: string): void;
+  /** Trigger a fresh project rescan via `window.nakiros.scanProjects`. */
   onRescan(): void;
+  /** Hide a project from the home list (`window.nakiros.dismissProject`). */
   onDismissProject(id: string): void;
+  /** Navigate to the bundled Nakiros skills view. */
   onOpenNakirosSkills(): void;
+  /** Navigate to `~/.claude/skills/` (claude-global) skills view. */
   onOpenGlobalSkills(): void;
+  /** Navigate to the plugin skills view. */
   onOpenPluginSkills(): void;
+  /** Optional fatal-boot error to display as a red banner. */
   bootError?: string;
 }
 
+/**
+ * Landing screen of the app: header, recent-project list, and tabs to navigate
+ * to plugin / global skills views. Shown after onboarding/scan complete and
+ * whenever the user clicks the logo from the dashboard.
+ *
+ * Sorts projects by `lastActivityAt` (newest first), flags inactive ones
+ * (>30 days), and exposes the `Rescan` and "Nakiros skills" entry points.
+ * All actions are delegated to props — the view itself only owns local UI
+ * state (tab, show-all toggle).
+ */
 export default function Home({
   projects,
   onOpenProject,

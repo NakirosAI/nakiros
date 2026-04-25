@@ -3,12 +3,21 @@ import clsx from 'clsx';
 import { FormField } from './FormField';
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  /** Optional label rendered by the wrapping {@link FormField}. */
   label?: ReactNode;
+  /** Helper text displayed below the textarea when no error is set. */
   hint?: ReactNode;
+  /** Error message; replaces the hint and turns the border red. */
   error?: ReactNode;
+  /** Class applied to the {@link FormField} container. */
   containerClassName?: string;
 }
 
+/**
+ * Themed multi-line text input wrapped in a {@link FormField}. Defaults to 4
+ * rows and is vertically resizable. Forwards its ref to the underlying
+ * `<textarea>`.
+ */
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
   { label, hint, error, className, containerClassName, id, rows = 4, ...props },
   ref,

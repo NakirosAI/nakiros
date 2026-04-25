@@ -43,6 +43,18 @@ function toEvalRequestShape(req: {
   };
 }
 
+/**
+ * Registers the `comparison:*` IPC channels — A/B/C eval comparison across
+ * Haiku / Sonnet / Opus for a single skill snapshot. Comparison runs reuse
+ * the eval runner under the hood, so their events flow through the same
+ * `eval:event` broadcast.
+ *
+ * Channels:
+ * - `comparison:run` — launch a new comparison (returns runIds + reuse summary)
+ * - `comparison:list` — existing comparisons stored under `{skillDir}/evals/comparisons/`
+ * - `comparison:getMatrix` — full per-model matrix for one comparison
+ * - `comparison:getFingerprintStatus` — pre-flight info so the UI can warn if the skill changed since the last iteration
+ */
 export const comparisonHandlers: HandlerRegistry = {
   'comparison:run': async (args) => {
     const request = args[0] as RunComparisonRequest;

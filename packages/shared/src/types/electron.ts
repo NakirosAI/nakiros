@@ -1,32 +1,37 @@
-import type { AgentProfile } from './workspace.js';
-import type { WorkspaceMCP, WorkspaceDoc } from './workspace-settings.js';
-import type { WorkspaceContext } from './server.js';
+/** Supported editor/agent integrations the Nakiros skill-command installer targets. */
+export type AgentEnvironmentId = 'cursor' | 'codex' | 'claude';
 
-export interface StoredRepo {
-  name: string;
-  localPath: string;
-  url?: string;
-  role: string;
-  profile: AgentProfile;
-  llmDocs: string[];
+/** Install status for one environment in a single repo (marker presence + command counts). */
+export interface AgentEnvironmentStatus {
+  id: AgentEnvironmentId;
+  label: string;
+  targetPath: string;
+  markerExists: boolean;
+  installedCount: number;
+  totalExpected: number;
 }
 
-export interface StoredWorkspace {
-  id: string;
-  name: string;
-  workspacePath?: string;
-  repos: StoredRepo[];
-  pmTool?: 'github' | 'gitlab' | 'linear';
-  projectKey?: string;
-  createdAt: string;
-  lastOpenedAt: string;
-  topology?: 'mono' | 'multi';
-  ticketPrefix?: string;
-  ticketCounter?: number;
-  mcps?: WorkspaceMCP[];
-  projectDocs?: WorkspaceDoc[];
-  documentLanguage?: string;
-  branchPattern?: string;
-  pmBoardId?: string;
-  context?: WorkspaceContext;
+/** Aggregate install status across every environment for one repo. */
+export interface AgentInstallStatus {
+  repoPath: string;
+  environments: AgentEnvironmentStatus[];
+}
+
+/** Request payload for the installer IPC call — target repo + environments. */
+export interface AgentInstallRequest {
+  repoPath: string;
+  targets: AgentEnvironmentId[];
+  force?: boolean;
+}
+
+/** Summary of what the installer actually wrote / overwrote on disk after a run. */
+export interface AgentInstallSummary {
+  repoPath: string;
+  targets: AgentEnvironmentId[];
+  commandFilesCopied: number;
+  commandFilesOverwritten: number;
+  runtimeFilesCopied: number;
+  runtimeFilesOverwritten: number;
+  workspaceDirsCreated: number;
+  gitignorePatched: boolean;
 }

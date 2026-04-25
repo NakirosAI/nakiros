@@ -17,6 +17,11 @@ interface EmptyStateProps {
   className?: string;
 }
 
+/**
+ * Centered placeholder shown when a list/panel has no data. Renders a dashed
+ * surface with an optional icon, a title, an optional subtitle and an optional
+ * primary action that delegates to {@link Button}.
+ */
 export function EmptyState({ icon, title, subtitle, action, className }: EmptyStateProps) {
   return (
     <div

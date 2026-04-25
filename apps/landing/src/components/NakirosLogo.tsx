@@ -1,3 +1,12 @@
+/**
+ * Inline SVG of the Nakiros constellation logo.
+ *
+ * Decorative (`aria-hidden`) — used in the {@link Navbar} and {@link Footer}.
+ * Stroke and fill colors are baked into the SVG; only `className` is
+ * configurable so callers can size it via Tailwind.
+ *
+ * @param props.className - Tailwind classes; defaults to `h-7 w-7`.
+ */
 export function NakirosLogo({ className = 'h-7 w-7' }: { className?: string }) {
   return (
     <svg

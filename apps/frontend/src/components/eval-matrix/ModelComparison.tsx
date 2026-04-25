@@ -51,6 +51,16 @@ interface Props {
 
 type Mode = 'idle' | 'running' | 'viewing';
 
+/**
+ * The Models tab — A/B/C comparison of the same eval suite across multiple
+ * Claude model ids on a frozen skill iteration. Three modes:
+ *  - idle: launch panel only (pick models + Run)
+ *  - running: live grid of in-flight runs (subscribed to `eval:event`)
+ *  - viewing: history selector + comparison matrix (with optional baseline)
+ *
+ * Reuses prior runs that share a skill fingerprint to save tokens — the
+ * `Reuse` badge on a model checkbox tells the user it's free.
+ */
 export function ModelComparison({ request, refreshKey, onRunsLaunched }: Props) {
   const { t } = useTranslation('comparison');
 

@@ -35,6 +35,15 @@ const TEMP_FILE_IMAGE_MIME: Record<string, string> = {
 /** Max bytes we send as text — above that we treat as opaque binary. */
 const MAX_TEMP_TEXT_BYTES = 1_000_000;
 
+/**
+ * Registers the `skillAgent:*` IPC channels — shared draft-file surface for
+ * the fix + create runners. Reads files from the run's temp workdir, hiding
+ * Nakiros-internal runtime paths (`.claude/`, `run.json`, `evals/workspace/`).
+ *
+ * Channels:
+ * - `skillAgent:listTempFiles` — lists user-facing draft files inside the temp workdir
+ * - `skillAgent:readTempFile` — returns text, image data URL, or binary-size placeholder (> 1 MB)
+ */
 export const skillAgentHandlers: HandlerRegistry = {
   'skillAgent:listTempFiles': (args): SkillAgentTempFileEntry[] => {
     const runId = args[0] as string;

@@ -54,6 +54,12 @@ class DashboardErrorBoundaryInner extends Component<BoundaryProps & {
   }
 }
 
+/**
+ * React error boundary wrapped around the dashboard view tree. Renders a
+ * localised "Something went wrong" panel with the error message and a
+ * retry button. Resets automatically when `resetKey` changes (the parent
+ * passes the active project + tab so switching either clears the error).
+ */
 export default function DashboardErrorBoundary({ children, resetKey }: BoundaryProps) {
   const { t } = useTranslation('dashboard');
 

@@ -45,10 +45,19 @@ const LEAKY_CLAUDE_ENTRIES = new Set([
   'projects',
 ]);
 
+/** Handle returned by {@link createIsolatedHome} — points at the isolated HOME directory. */
 export interface IsolatedHome {
   path: string;
 }
 
+/**
+ * Build an isolated HOME directory for a run. Copies `~/.claude.json`
+ * verbatim and symlinks every `~/.claude/` entry into the isolated HOME
+ * EXCEPT those that would leak user-level context (`CLAUDE.md`,
+ * `CLAUDE.local.md`, `RTK.md`, `skills/`, `projects/`). The resulting path is
+ * passed to the child process as `HOME=...` so auth / settings / plugins keep
+ * working while global skills and user prompts stay out.
+ */
 export function createIsolatedHome(runId: string): IsolatedHome {
   const homePath = join(sandboxRoot(), `eval-${runId}-home`);
   if (existsSync(homePath)) {
@@ -94,6 +103,7 @@ export function createIsolatedHome(runId: string): IsolatedHome {
   return { path: homePath };
 }
 
+/** Tear down an isolated HOME created by {@link createIsolatedHome}. Best-effort. */
 export function destroyIsolatedHome(homePath: string): void {
   try {
     rmSync(homePath, { recursive: true, force: true });

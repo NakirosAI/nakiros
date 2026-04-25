@@ -18,6 +18,11 @@ const alertVariants = cva(
   },
 );
 
+/**
+ * Banner used to surface contextual feedback (info, errors). Renders a
+ * `role="alert"` `<div>` styled via `alertVariants` (default or destructive).
+ * Compose with {@link AlertTitle} and {@link AlertDescription}.
+ */
 function Alert({
   className,
   variant,
@@ -33,6 +38,9 @@ function Alert({
   );
 }
 
+/**
+ * Bold heading slot inside an {@link Alert}.
+ */
 function AlertTitle({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
@@ -43,6 +51,9 @@ function AlertTitle({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
+/**
+ * Body slot inside an {@link Alert}, used for the descriptive text.
+ */
 function AlertDescription({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div

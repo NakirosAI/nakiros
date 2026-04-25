@@ -14,6 +14,11 @@ interface PreferencesProviderProps {
   children: ReactNode;
 }
 
+/**
+ * Context provider exposing the current `AppPreferences` and an async
+ * `updatePreferences` mutator to the React tree. Memoizes the value so
+ * consumers only re-render when the preferences object identity changes.
+ */
 export function PreferencesProvider({
   preferences,
   updatePreferences,
@@ -30,6 +35,10 @@ export function PreferencesProvider({
   );
 }
 
+/**
+ * Reads the preferences context. Throws if invoked outside
+ * `PreferencesProvider` so missed wiring fails loudly during development.
+ */
 export function usePreferences(): PreferencesContextValue {
   const context = useContext(PreferencesContext);
   if (!context) {

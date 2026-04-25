@@ -23,9 +23,21 @@ import {
 import { SkillEvalsPanel } from './skills/EvalsPanel';
 
 interface Props {
+  /** Project whose `.claude/skills/` are inspected. */
   project: Project;
 }
 
+/**
+ * Dashboard "Skills" tab for project-scoped skills (`.claude/skills/` inside
+ * the project root). Lists detected skills, lets the user inspect/edit files,
+ * run audits, evals and fixes, plus create a brand-new skill via the
+ * `mode='create'` path of `FixView`.
+ *
+ * Wires `useSkillsViewState` to the project IPC surface (`listProjectSkills`,
+ * `readSkillFile`, `saveSkillFile`, `listActiveCreateRuns`) and routes audit /
+ * eval / fix actions to overlay views. Owns the "new skill" name modal and
+ * dispatches `startCreate` when the user submits. Mounted by `DashboardRouter`.
+ */
 export default function SkillsView({ project }: Props) {
   const { t } = useTranslation('skills');
 

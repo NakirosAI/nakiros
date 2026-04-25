@@ -380,6 +380,7 @@ function pruneStaleRomFiles(liveSkill: string, romFiles: Set<string>): void {
 
 // ─── Conflict resolution + diff API ──────────────────────────────────────────
 
+/** Return the cached list of conflicts detected during the last `syncBundledSkills` pass. */
 export function listBundledSkillConflicts(): BundledSkillConflict[] {
   return conflictCache;
 }
@@ -399,6 +400,13 @@ function readIfExists(path: string): { content: string | null; isBinary: boolean
   return { content: buf.toString('utf8'), isBinary: false };
 }
 
+/**
+ * Produce a per-file diff payload for the conflict UI: ROM content vs live
+ * content. Refuses user-owned paths (`audits/`, `workspace/`, etc.) and any
+ * path containing `..` to prevent traversal.
+ *
+ * @throws {Error} when `relativePath` is user-owned or contains `..`
+ */
 export function readBundledSkillConflictDiff(
   skillName: string,
   relativePath: string,
@@ -418,6 +426,14 @@ export function readBundledSkillConflictDiff(
   };
 }
 
+/**
+ * Apply the user-chosen resolution for a bundled-skill conflict:
+ * - `apply-rom` — overwrite the live copy with the ROM (user modifications lost)
+ * - `keep-mine` — record ROM as the new baseline without touching live (future ROM updates will re-surface a conflict)
+ * - `promote-mine` — copy the live copy BACK into the ROM (dev only — fails in production installs)
+ *
+ * @throws {Error} when ROM or live skills are missing, or when `promote-mine` is used on a read-only ROM
+ */
 export function resolveBundledSkillConflict(
   skillName: string,
   resolution: BundledSkillConflictResolution,
@@ -473,14 +489,24 @@ export function resolveBundledSkillConflict(
 
 // ─── Legacy helpers (kept for compatibility) ─────────────────────────────────
 
+/** Absolute path to `~/.nakiros/skills/` — the live, editable Nakiros-owned skill location. */
 export function getNakirosSkillsDir(): string {
   return NAKIROS_SKILLS_DIR;
 }
 
+/** Absolute path to the bundled-skills ROM (source in dev, packaged assets in prod). */
 export function getBundledSkillsDir(): string {
   return getBundledSkillsRomDir();
 }
 
+/**
+ * Copy a skill from `~/.nakiros/skills/` back into the ROM, skipping user-owned
+ * subtrees (`audits/`, `evals/workspace/`, `outputs/`). Dev-only — the ROM is
+ * read-only in production installs. Updates the sync manifest so subsequent
+ * syncs treat the promoted content as baseline.
+ *
+ * @throws {Error} when source is missing or ROM directory is read-only
+ */
 export function promoteBundledSkill(skillName: string): string {
   const src = join(NAKIROS_SKILLS_DIR, skillName);
   const dest = join(getBundledSkillsRomDir(), skillName);
@@ -558,6 +584,7 @@ function copyEvalsSelective(src: string, dest: string): void {
   }
 }
 
+/** Remove the symlink `~/.claude/skills/<skillName>` if it exists. No-op on real directories. */
 export function removeClaudeSkillLink(skillName: string): void {
   const claudeSkillLink = join(CLAUDE_SKILLS_DIR, skillName);
   if (!existsSync(claudeSkillLink)) return;

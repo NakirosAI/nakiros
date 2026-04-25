@@ -1,18 +1,35 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { cn } from '../../lib/utils';
 
+/**
+ * Top-level provider for tooltips. Mount once near the app root to share a
+ * single delay-timer across every {@link Tooltip}. Defaults `delayDuration` to
+ * 300ms instead of Radix's 700ms default.
+ */
 function TooltipProvider({ delayDuration = 300, ...props }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return <TooltipPrimitive.Provider data-slot="tooltip-provider" delayDuration={delayDuration} {...props} />;
 }
 
+/**
+ * Root of a single tooltip. Holds a {@link TooltipTrigger} and a
+ * {@link TooltipContent}. Must be inside a {@link TooltipProvider}.
+ */
 function Tooltip({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
 
+/**
+ * Element that opens the tooltip on hover/focus. Use `asChild` to graft the
+ * tooltip onto an existing button or link.
+ */
 function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
+/**
+ * Themed tooltip popover content. Portalled to `document.body`, animated with
+ * `tailwindcss-animate` keyframes, and decorated with a small arrow.
+ */
 function TooltipContent({
   className,
   sideOffset = 4,

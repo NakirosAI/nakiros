@@ -1,5 +1,13 @@
 import { useI18n } from '@/i18n/I18nProvider';
 
+/**
+ * "Etymology" section of the landing page.
+ *
+ * Explains the origin of the name "Nakiros" by combining the words *nakama*
+ * (Japanese) and *kairos* (Greek). Reads its copy from the `etymology` block
+ * of the active locale via {@link useI18n}. Rendered between the Hero and
+ * Features sections inside `App`.
+ */
 export function Etymology() {
   const { messages } = useI18n();
   const { eyebrow, title, nakama, kairos, synthesis } = messages.etymology;

@@ -14,6 +14,7 @@ import { sweepOrphanNakirosProjectEntries, sweepOrphanSandboxes } from '../servi
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/** Options accepted by {@link createDaemonServer}. */
 export interface DaemonServerOptions {
   host?: string;
   logLevel?: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
@@ -84,6 +85,14 @@ export function bootstrapDaemonRuntime(): void {
   }
 }
 
+/**
+ * Build the Fastify daemon instance. Registers three surfaces:
+ * - `POST /ipc/:channel` — dispatches to the handler registry built from `handlers/index.ts`
+ * - `GET /ws` — WebSocket that mirrors every `eventBus.broadcast(...)` to connected clients
+ * - `GET /*` — static frontend bundle (SPA fallback) or a placeholder page when no bundle is found
+ *
+ * Callers are responsible for `bootstrapDaemonRuntime()` and `app.listen(...)`.
+ */
 export async function createDaemonServer(opts: DaemonServerOptions = {}): Promise<FastifyInstance> {
   // Default to 'warn' so routine request logs stay out of the terminal; the
   // user can still opt in to verbose logs by passing `logLevel: 'info'` or

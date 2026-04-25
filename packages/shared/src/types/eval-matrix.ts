@@ -80,6 +80,7 @@ export type EvalMatrixTag =
       variance: number;
     };
 
+/** One row of the matrix — all iterations for a single eval, plus its behaviour tag. */
 export interface EvalMatrixRow {
   evalName: string;
   /**
@@ -94,6 +95,7 @@ export interface EvalMatrixRow {
   tag: EvalMatrixTag;
 }
 
+/** Per-iteration aggregates + tag counts rendered in the matrix header. */
 export interface EvalMatrixMetrics {
   /** Iteration numbers in ascending order. */
   iterations: number[];
@@ -116,6 +118,7 @@ export interface EvalMatrixMetrics {
   };
 }
 
+/** Complete eval matrix consumed by the Evolution view — iterations × evals grid + metrics. */
 export interface EvalMatrix {
   skillName: string;
   /** Iteration numbers in ascending order — these are the matrix columns. */
@@ -135,6 +138,7 @@ export interface EvalMatrix {
   metrics: EvalMatrixMetrics;
 }
 
+/** Request payload for the `eval:getMatrix` IPC channel. */
 export interface GetEvalMatrixRequest {
   scope: import('./project.js').SkillScope;
   projectId?: string;
@@ -149,6 +153,7 @@ export interface GetEvalMatrixRequest {
   skillDirOverride?: string;
 }
 
+/** Request payload for the `eval:loadIterationRun` IPC channel. */
 export interface LoadIterationRunRequest {
   scope: import('./project.js').SkillScope;
   projectId?: string;
@@ -162,6 +167,7 @@ export interface LoadIterationRunRequest {
   skillDirOverride?: string;
 }
 
+/** Full artefact bundle for a single iteration run (raw run + grading + outputs + diff + timing). */
 export interface IterationRunArtifact {
   /** Raw `run.json` contents (turns + blocks + tools) — null if missing. */
   run: import('./project.js').SkillEvalRun | null;

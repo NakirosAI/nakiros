@@ -2,6 +2,12 @@ import { spawn, type ChildProcess } from 'child_process';
 
 import { formatTool } from './tool-format.js';
 
+/**
+ * Domain-agnostic callbacks invoked by {@link handleClaudeStreamEvent} while
+ * consuming the `claude --output-format stream-json` stream. Each runner
+ * (eval / audit / fix / create) wires its own implementation to route events
+ * into its run state.
+ */
 export interface ClaudeStreamHandlers {
   onSession(id: string): void;
   onText(text: string): void;
@@ -46,6 +52,7 @@ export function handleClaudeStreamEvent(
   }
 }
 
+/** Options for {@link buildClaudeArgs}. */
 export interface BuildArgsOptions {
   prompt: string;
   resumeSessionId?: string;
@@ -62,6 +69,11 @@ export interface BuildArgsOptions {
   model?: string;
 }
 
+/**
+ * Build the `claude` CLI argv for one turn. Always enables `--output-format
+ * stream-json --verbose`; additional flags are opt-in via `opts`. The prompt
+ * is passed via `--print` (not stdin) so the CLI exits after one turn.
+ */
 export function buildClaudeArgs(opts: BuildArgsOptions): string[] {
   const args: string[] = ['--output-format', 'stream-json', '--verbose'];
   if (opts.skipPermissions) args.push('--dangerously-skip-permissions');
@@ -76,6 +88,7 @@ export function buildClaudeArgs(opts: BuildArgsOptions): string[] {
   return args;
 }
 
+/** Options for {@link spawnClaudeTurn} — stream handlers + process lifecycle hooks. */
 export interface SpawnTurnOptions extends ClaudeStreamHandlers {
   workdir: string;
   cliArgs: string[];
@@ -98,6 +111,7 @@ export interface SpawnTurnOptions extends ClaudeStreamHandlers {
   env?: NodeJS.ProcessEnv;
 }
 
+/** Outcome of a single {@link spawnClaudeTurn} invocation. */
 export interface SpawnTurnResult {
   exitCode: number;
   /** Tail of stderr when the exit code is non-zero, trimmed to 500 chars. */

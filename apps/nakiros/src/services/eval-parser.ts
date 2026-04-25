@@ -12,6 +12,14 @@ import type {
   SkillEvalRunSummary,
 } from '@nakiros/shared';
 
+/**
+ * Build the full `SkillEvalSuite` for a skill by reading `evals/evals.json`
+ * (static definitions) and walking every `evals/workspace/iteration-N/`
+ * (historical iterations with gradings + timings + feedback).
+ *
+ * Computes per-iteration deltas vs the previous iteration. Returns `null`
+ * when the skill has no eval suite.
+ */
 export function parseSkillEvals(skillDir: string, skillName: string): SkillEvalSuite | null {
   const evalsDir = join(skillDir, 'evals');
   const evalsJsonPath = join(evalsDir, 'evals.json');

@@ -29,6 +29,7 @@ import { sandboxRoot } from './git-worktree.js';
  * an empty sandbox with no skill at all.
  */
 
+/** Arguments for {@link createTmpSandbox}. */
 export interface CreateTmpSandboxArgs {
   runId: string;
   skillDir: string;
@@ -36,10 +37,24 @@ export interface CreateTmpSandboxArgs {
   includeSkill: boolean;
 }
 
+/** Return value of {@link createTmpSandbox} — path to the fresh sandbox. */
 export interface CreateTmpSandboxResult {
   path: string;
 }
 
+/**
+ * Create a throwaway sandbox directory for a skill that doesn't live inside a
+ * git repo (fallback to {@link createEvalSandbox}'s worktree mode).
+ *
+ * Layout written:
+ * ```
+ * <sandbox>/.claude/skills/<skillName>/   ← skill copy, MINUS evals/workspace/
+ * ```
+ *
+ * Invoking the skill from `<sandbox>/` picks up this copy (project-scoped
+ * discovery convention), never the real one. When `includeSkill` is false the
+ * sandbox stays empty — matches the `without_skill` baseline config.
+ */
 export function createTmpSandbox(args: CreateTmpSandboxArgs): CreateTmpSandboxResult {
   const sandboxPath = join(sandboxRoot(), `eval-${args.runId}`);
   if (existsSync(sandboxPath)) {
@@ -68,6 +83,7 @@ export function createTmpSandbox(args: CreateTmpSandboxArgs): CreateTmpSandboxRe
   return { path: sandboxPath };
 }
 
+/** Remove a sandbox created by {@link createTmpSandbox}. Best-effort. */
 export function destroyTmpSandbox(sandboxPath: string): void {
   try {
     rmSync(sandboxPath, { recursive: true, force: true });

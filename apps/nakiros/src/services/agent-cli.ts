@@ -4,6 +4,10 @@ import { homedir, platform } from 'os';
 import { join, resolve } from 'path';
 import type { AgentProvider } from '@nakiros/shared';
 
+/**
+ * Install status for one agent CLI (claude / codex / cursor-agent). `path` and
+ * `version` populate when the binary is on PATH and responds to `--version`.
+ */
 export interface AgentCliStatus {
   provider: AgentProvider;
   label: string;
@@ -151,6 +155,13 @@ function detectVersion(command: string, args: string[]): { version?: string; err
   };
 }
 
+/**
+ * Detect which of `claude`, `codex`, `cursor-agent` are installed by probing a
+ * login shell with a PATH augmented for common Node version managers (nvm,
+ * fnm, volta, asdf) and standard package install locations. Returns one entry
+ * per provider with `installed: true` whenever the binary is found OR the
+ * `--version` probe succeeds.
+ */
 export function getAgentCliStatus(): AgentCliStatus[] {
   return PROVIDERS.map((provider) => {
     const path = resolveCommandPath(provider.command);

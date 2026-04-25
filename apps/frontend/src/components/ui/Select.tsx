@@ -2,20 +2,34 @@ import { forwardRef, type ReactNode, type SelectHTMLAttributes } from 'react';
 import clsx from 'clsx';
 import { FormField } from './FormField';
 
+/** Single entry in a {@link Select} dropdown. */
 export interface SelectOption {
+  /** Submitted value. */
   value: string;
+  /** User-facing label. */
   label: string;
+  /** When true, the option cannot be selected. */
   disabled?: boolean;
 }
 
 export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'children'> {
+  /** Optional label rendered by the wrapping {@link FormField}. */
   label?: ReactNode;
+  /** Helper text displayed below the select when no error is set. */
   hint?: ReactNode;
+  /** Error message; replaces the hint and turns the border red. */
   error?: ReactNode;
+  /** Available options rendered as native `<option>` elements. */
   options: SelectOption[];
+  /** Class applied to the {@link FormField} container. */
   containerClassName?: string;
 }
 
+/**
+ * Themed native `<select>` wrapped in a {@link FormField} with a custom caret.
+ * Driven by an `options` array rather than `children` so consumers don't have
+ * to deal with `<option>` JSX. Forwards its ref to the underlying `<select>`.
+ */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   { label, hint, error, options, className, containerClassName, id, ...props },
   ref,

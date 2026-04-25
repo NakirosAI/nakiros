@@ -1,6 +1,14 @@
 import { Check, Github } from 'lucide-react';
 import { useI18n } from '@/i18n/I18nProvider';
 
+/**
+ * "Open source" section of the landing page.
+ *
+ * Two-column block: left side shows the headline, description and a GitHub
+ * link to `NakirosAI/nakiros`; right side renders the bullet list of values
+ * (`messages.openSource.bullets`). All copy comes from the active locale
+ * via {@link useI18n}.
+ */
 export function OpenSource() {
   const { messages } = useI18n();
 

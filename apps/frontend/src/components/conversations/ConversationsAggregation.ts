@@ -49,6 +49,11 @@ export interface TipFrequency {
   severity: 'info' | 'warning' | 'critical';
 }
 
+/**
+ * Reduce a population of analyzed conversations into a single
+ * `AggregatedStats` snapshot. Tolerates an empty list (returns zeroed stats
+ * with `totalCount = 0`).
+ */
 export function aggregate(convs: ConversationAnalysis[]): AggregatedStats {
   const total = Math.max(convs.length, 1);
   const sumScore = convs.reduce((acc, c) => acc + c.score, 0);
@@ -143,6 +148,11 @@ export function buildInsights(
   return signals.sort((a, b) => weight[a.severity] - weight[b.severity]);
 }
 
+/**
+ * Top-N tools that errored across the population. Filters out tools used
+ * fewer than 5 times to avoid surfacing one-off blips, sorts by error rate
+ * descending.
+ */
 export function topFailingTools(convs: ConversationAnalysis[], limit = 5): ToolErrorFrequency[] {
   const acc = new Map<string, { uses: number; errors: number; convs: Set<string> }>();
   for (const c of convs) {
@@ -167,6 +177,11 @@ export function topFailingTools(convs: ConversationAnalysis[], limit = 5): ToolE
     .slice(0, limit);
 }
 
+/**
+ * Files flagged as "hot" in at least 2 distinct conversations across the
+ * population — a proxy for "repeatedly edited under pressure", which often
+ * signals an architectural pain point.
+ */
 export function recurringHotFiles(convs: ConversationAnalysis[], limit = 5): HotFileFrequency[] {
   const acc = new Map<string, { count: number; edits: number }>();
   for (const c of convs) {
@@ -184,6 +199,10 @@ export function recurringHotFiles(convs: ConversationAnalysis[], limit = 5): Hot
     .slice(0, limit);
 }
 
+/**
+ * Most recurring tip ids across the population, keeping the worst-seen
+ * severity for each id so the UI can render the right tone.
+ */
 export function topTipFrequencies(convs: ConversationAnalysis[], limit = 5): TipFrequency[] {
   const acc = new Map<string, { count: number; severity: TipFrequency['severity'] }>();
   for (const c of convs) {

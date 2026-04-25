@@ -12,9 +12,21 @@ import { useProject } from '../hooks/useProject';
 import { usePreferences } from '../hooks/usePreferences';
 
 interface Props {
+  /** Navigate back to the `Home` view (exit the dashboard). */
   onGoHome(): void;
 }
 
+/**
+ * Top-level dashboard shell for project-scoped views: tab strip of opened
+ * projects, language picker, and a sidebar that switches between dashboard
+ * sub-routes (overview / skills / conversations / recommendations / settings).
+ *
+ * Pulls open/active project state from `useProject` and language preferences
+ * from `usePreferences` (persisted via `window.nakiros.getPreferences` /
+ * `setPreferences`). Renders `DashboardRouter` inside a `DashboardErrorBoundary`
+ * keyed by `<projectId>:<activeTab>` so a crash in one tab does not poison
+ * the others. Mounted from `App.tsx` once a project is open.
+ */
 export default function Dashboard({ onGoHome }: Props) {
   const { t } = useTranslation('dashboard');
   const { t: tSidebar } = useTranslation('sidebar');

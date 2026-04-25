@@ -3,13 +3,23 @@ import clsx from 'clsx';
 import { FormField } from './FormField';
 
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
+  /** Optional label rendered by the wrapping {@link FormField}. */
   label?: ReactNode;
+  /** Helper text displayed below the input when no error is set. */
   hint?: ReactNode;
+  /** Error message; when present, replaces the hint and turns the border red. */
   error?: ReactNode;
+  /** Leading icon, absolutely positioned inside the input on the left. */
   icon?: ReactNode;
+  /** Class applied to the {@link FormField} container, not to `<input>`. */
   containerClassName?: string;
 }
 
+/**
+ * Themed text input wrapped in a {@link FormField}. Supports an optional
+ * leading icon and the standard label/hint/error pattern. Forwards its ref to
+ * the underlying `<input>`.
+ */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { label, hint, error, icon, className, containerClassName, id, ...props },
   ref,

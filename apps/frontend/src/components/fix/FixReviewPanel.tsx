@@ -15,6 +15,13 @@ interface Props {
   refreshKey: string;
 }
 
+/**
+ * Renders the diff between the original skill and what the fix/create
+ * runner produced in its sandbox. Fetches the file list lazily, then
+ * delegates to `SkillDiffView` for the side-by-side rendering. Cache is
+ * scoped by `mode:runId:refreshKey` so a new agent turn (which bumps
+ * `refreshKey`) forces a clean re-fetch.
+ */
 export default function FixReviewPanel({ runId, mode, refreshKey }: Props) {
   const { t } = useTranslation('fix');
   const [files, setFiles] = useState<SkillDiffEntry[] | null>(null);

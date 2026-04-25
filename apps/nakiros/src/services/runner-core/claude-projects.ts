@@ -68,6 +68,7 @@ function decodeProjectPathGuess(encoded: string): string | null {
   return null;
 }
 
+/** Return value of {@link sweepOrphanNakirosProjectEntries} — how many entries were scanned vs deleted. */
 export interface SweepResult {
   scanned: number;
   deleted: number;

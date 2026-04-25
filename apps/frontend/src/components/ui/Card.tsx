@@ -1,6 +1,12 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
+/**
+ * Top-level card surface. Provides a rounded, bordered container with the
+ * Nakiros card background, foreground colours and elevated shadow. Compose with
+ * {@link CardHeader}, {@link CardTitle}, {@link CardDescription},
+ * {@link CardContent} and {@link CardFooter}.
+ */
 function Card({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
@@ -14,6 +20,10 @@ function Card({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
+/**
+ * Header slot for {@link Card}. Stacks {@link CardTitle} +
+ * {@link CardDescription} with consistent padding.
+ */
 function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
@@ -24,6 +34,10 @@ function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
+/**
+ * Heading text inside {@link CardHeader}. Renders a `<div>` (not a heading
+ * element) styled as a tracked, bold title.
+ */
 function CardTitle({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
@@ -34,6 +48,9 @@ function CardTitle({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
+/**
+ * Muted secondary text inside {@link CardHeader}, typically a subtitle.
+ */
 function CardDescription({ className, ...props }: React.ComponentProps<'p'>) {
   return (
     <p
@@ -44,10 +61,18 @@ function CardDescription({ className, ...props }: React.ComponentProps<'p'>) {
   );
 }
 
+/**
+ * Body slot for {@link Card}. Holds the main content with horizontal padding
+ * and bottom padding (no top padding — sits flush below {@link CardHeader}).
+ */
 function CardContent({ className, ...props }: React.ComponentProps<'div'>) {
   return <div data-slot="card-content" className={cn('px-6 pb-6', className)} {...props} />;
 }
 
+/**
+ * Footer slot for {@link Card}. Lays out trailing actions (buttons, links) in a
+ * horizontal flex row.
+ */
 function CardFooter({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div

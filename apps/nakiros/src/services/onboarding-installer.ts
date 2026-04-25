@@ -5,8 +5,10 @@ import { eventBus } from '../daemon/event-bus.js';
 
 const NAKIROS_VERSION = '1.0.0';
 
+/** Identifier for an editor/agent environment the onboarding can install into. */
 export type EditorId = 'claude' | 'cursor' | 'codex';
 
+/** Result of {@link detectEditors}: presence + label + target commands dir for one editor. */
 export interface DetectedEditor {
   id: EditorId;
   label: string;
@@ -34,6 +36,7 @@ const EDITOR_DEFS: Record<EditorId, { label: string; markerPaths: string[]; targ
   },
 };
 
+/** Scan well-known install paths for Claude Code / Cursor / Codex and report presence. */
 export function detectEditors(): DetectedEditor[] {
   return (Object.entries(EDITOR_DEFS) as [EditorId, (typeof EDITOR_DEFS)[EditorId]][]).map(
     ([id, def]) => ({
@@ -45,6 +48,7 @@ export function detectEditors(): DetectedEditor[] {
   );
 }
 
+/** True when `~/.nakiros/config.yaml` exists — used by the UI to skip onboarding. */
 export function nakirosConfigExists(): boolean {
   return existsSync(join(GLOBAL_DIR, 'config.yaml'));
 }
@@ -59,6 +63,14 @@ function emitProgress(event: OnboardingProgressEvent): void {
   eventBus.broadcast('onboarding:progress', event);
 }
 
+/**
+ * One-shot installer: create `~/.nakiros/` layout, seed `config.yaml` and
+ * `version.json` if missing, and mark each detected editor as ready.
+ *
+ * Broadcasts step-by-step progress on the `onboarding:progress` channel so the
+ * UI can render a live install log. Errors are collected and returned instead
+ * of thrown — the caller displays them next to the step that failed.
+ */
 export async function installNakiros(
   editors: DetectedEditor[],
 ): Promise<{ success: boolean; errors: string[] }> {

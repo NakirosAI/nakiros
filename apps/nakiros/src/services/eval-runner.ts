@@ -398,6 +398,7 @@ function normalizeAssertions(
 
 // ─── Main runner ────────────────────────────────────────────────────────────
 
+/** Options for {@link startEvalRuns}. `artifactRootOverride`, `skipBenchmarkWrite`, and `fixedIteration` are internal — used by the comparison runner. */
 export interface StartRunsOptions {
   resolveSkillDir(request: StartEvalRunRequest): string;
   onEvent(event: EvalRunEvent): void;
@@ -937,10 +938,12 @@ export async function finishWaitingRun(runId: string, definition: SkillEvalDefin
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
+/** List every in-memory eval run (every status, every iteration loaded so far). */
 export function listRuns(): SkillEvalRun[] {
   return Array.from(runs.values()).map((e) => e.run);
 }
 
+/** Look up an eval run by id. Returns `null` when unknown. */
 export function getRun(runId: string): SkillEvalRun | null {
   return runs.get(runId)?.run ?? null;
 }
@@ -952,6 +955,11 @@ export function getEvalBufferedEvents(runId: string): EvalRunEvent['event'][] {
   return runs.get(runId)?.eventLog.getBuffered() ?? [];
 }
 
+/**
+ * Cancel an in-flight eval run: `SIGTERM` the child, collapse status to
+ * `stopped`, preserve partial artefacts (`outputs/`, `diff.patch`) so the
+ * user can inspect what the agent managed to do, then tear down the sandbox.
+ */
 export function stopRun(runId: string): void {
   const entry = runs.get(runId);
   if (!entry) return;

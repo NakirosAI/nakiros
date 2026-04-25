@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect } from 'react';
 import clsx from 'clsx';
 
+/** Width preset applied to the {@link Modal} panel. */
 export type ModalSize = 'sm' | 'md' | 'lg';
 
 interface ModalProps {
@@ -20,6 +21,11 @@ const SIZE_CLASSES: Record<ModalSize, string> = {
   lg: 'max-w-4xl',
 };
 
+/**
+ * Lightweight controlled modal dialog. Renders nothing when `isOpen` is false.
+ * Escape key and (optionally) overlay clicks call `onClose`. Not portalled —
+ * relies on `position: fixed` + `z-[1000]` to overlay the app shell.
+ */
 export function Modal({
   isOpen,
   onClose,

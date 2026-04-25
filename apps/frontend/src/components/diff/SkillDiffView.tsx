@@ -3,6 +3,7 @@ import { FileText } from 'lucide-react';
 import clsx from 'clsx';
 import { diffLines, type Change } from 'diff';
 
+/** One file entry shown in the left-hand sidebar of the diff view. */
 export interface SkillDiffFileEntry {
   relativePath: string;
   /** True if the file has content on the "original" side (before). */
@@ -11,12 +12,17 @@ export interface SkillDiffFileEntry {
   inModified: boolean;
 }
 
+/**
+ * Content of a single file on both sides of the diff, returned by the
+ * caller-supplied fetcher. `isBinary` short-circuits rendering with a notice.
+ */
 export interface SkillDiffFileContent {
   originalContent: string | null;
   modifiedContent: string | null;
   isBinary: boolean;
 }
 
+/** All user-facing strings rendered by `SkillDiffView`. Populated by callers from i18n. */
 export interface SkillDiffLabels {
   filesPanelTitle: string;
   originalColumn: string;
@@ -79,6 +85,15 @@ function runFetch(
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
+/**
+ * Reusable side-by-side file diff with a left-hand file list. Used by
+ * `FixReviewPanel` (fix runs) and the create-review flow. Lazy-loads each
+ * file's content via the caller-supplied `fetchDiff` and memoises results
+ * in a module-level cache keyed by `cacheScope::relativePath`.
+ *
+ * Sidebar items show added/removed line counts as soon as their diff is
+ * fetched, so the user sees magnitude before opening each file.
+ */
 export default function SkillDiffView({ files, fetchDiff, labels, headerSlot, cacheScope }: Props) {
   const sortedFiles = useMemo(() => [...files].sort((a, b) => a.relativePath.localeCompare(b.relativePath)), [files]);
   const [activeFile, setActiveFile] = useState<string | null>(null);
@@ -437,6 +452,12 @@ function DiffCell({
   );
 }
 
+/**
+ * Drop every cached + in-flight diff entry whose key starts with
+ * `${cacheScope}::`. Call this when the underlying files change so the
+ * diff view re-fetches on next mount (e.g. after a new agent turn in a
+ * fix run).
+ */
 export function invalidateSkillDiffCache(cacheScope: string): void {
   for (const key of [...diffCache.keys()]) {
     if (key.startsWith(`${cacheScope}::`)) diffCache.delete(key);

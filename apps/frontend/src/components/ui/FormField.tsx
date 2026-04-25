@@ -11,6 +11,12 @@ interface FormFieldProps {
   children: ReactNode;
 }
 
+/**
+ * Vertical form group used internally by {@link Input}, {@link Select} and
+ * {@link Textarea}. Renders an uppercase label, the input child(ren), and
+ * either an error message (priority) or a helper hint underneath. The error
+ * message replaces the hint when present.
+ */
 export function FormField({
   label,
   hint,

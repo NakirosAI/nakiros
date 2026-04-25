@@ -2,8 +2,10 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileS
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 
+/** Path to the per-command metadata file (`tag`/`label`/`color` overrides). */
 export const COMMANDS_META_FILE = join(homedir(), '.nakiros', 'commands-meta.json');
 
+/** UI metadata for a single installed command (optional labelling + colour). */
 export interface CommandMeta {
   tag?: string;
   label?: string;
@@ -55,6 +57,7 @@ function readCommandTemplates(): Record<string, string> {
 
 // ─── Agents globaux ─────────────────────────────────────────────────────────
 
+/** Aggregate install status for the user-global environments (`~/.claude`, `~/.cursor`, `~/.codex`). */
 export interface GlobalInstallStatus {
   environments: Array<{
     id: AgentEnvironmentId;
@@ -67,6 +70,7 @@ export interface GlobalInstallStatus {
   totalExpected: number;
 }
 
+/** Runtime descriptor for one Nakiros command currently installed under `~/.nakiros/commands/`. */
 export interface InstalledCommand {
   id: string;
   command: string;
@@ -104,6 +108,7 @@ function readCommandsMeta(): Record<string, CommandMeta> {
   return {};
 }
 
+/** List every `nak-agent-*` / `nak-workflow-*` command currently under `~/.nakiros/commands/`. */
 export function getInstalledCommands(): InstalledCommand[] {
   const dir = resolve(GLOBAL_RUNTIME_DIR, 'commands');
   if (!existsSync(dir)) return [];
@@ -123,6 +128,7 @@ export function getInstalledCommands(): InstalledCommand[] {
     .sort((a, b) => a.command.localeCompare(b.command));
 }
 
+/** Return value of {@link installAgentsGlobally} — files copied vs overwritten per environment. */
 export interface GlobalInstallSummary {
   environments: Array<{
     id: AgentEnvironmentId;
@@ -135,6 +141,11 @@ export interface GlobalInstallSummary {
   commandFilesOverwritten: number;
 }
 
+/**
+ * Install every Nakiros command template into the user-global target dirs for
+ * Claude Code, Codex, and Cursor. Always overwrites. Returns per-environment +
+ * aggregate copy/overwrite counts.
+ */
 export function installAgentsGlobally(): GlobalInstallSummary {
   const home = homedir();
   const ids: AgentEnvironmentId[] = ['claude', 'codex', 'cursor'];
@@ -176,6 +187,11 @@ export function installAgentsGlobally(): GlobalInstallSummary {
   return { environments, commandFilesCopied, commandFilesOverwritten };
 }
 
+/**
+ * Install Nakiros command templates into selected environments for one repo.
+ * Respects `request.force` (defaults to `true`). Throws when the repo path is
+ * invalid or no targets are selected.
+ */
 export function installAgents(request: AgentInstallRequest): AgentInstallSummary {
   const repoPath = resolve(request.repoPath);
   if (!existsSync(repoPath) || !lstatSync(repoPath).isDirectory()) {
@@ -217,6 +233,7 @@ export function installAgents(request: AgentInstallRequest): AgentInstallSummary
   };
 }
 
+/** Compute user-global install status by counting installed command files per environment. */
 export function getGlobalInstallStatus(): GlobalInstallStatus {
   const home = homedir();
   const ids: AgentEnvironmentId[] = ['claude', 'codex', 'cursor'];
@@ -261,6 +278,7 @@ function getEnvironmentStatus(repoPath: string, id: AgentEnvironmentId): AgentEn
   };
 }
 
+/** Compute per-repo install status across every environment (marker presence + command file count). */
 export function getAgentInstallStatus(repoPath: string): AgentInstallStatus {
   const resolvedRepoPath = resolve(repoPath);
   const environments: AgentEnvironmentStatus[] = [

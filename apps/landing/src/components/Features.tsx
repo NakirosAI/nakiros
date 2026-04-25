@@ -3,6 +3,15 @@ import { useI18n } from '@/i18n/I18nProvider';
 
 const ICONS = [Compass, ClipboardCheck, FlaskConical, Wrench];
 
+/**
+ * "Features" section of the landing page.
+ *
+ * Renders a 2-column grid of feature cards (Compass / Audit / Eval / Fix
+ * icons from lucide-react), one per entry of `messages.features.items`.
+ * The icon order is fixed and matches the i18n list order; if the list grows
+ * past 4 items the extras fall back to the Compass icon. Translations come
+ * from {@link useI18n}.
+ */
 export function Features() {
   const { messages } = useI18n();
 

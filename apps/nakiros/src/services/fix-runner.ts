@@ -497,10 +497,21 @@ You are creating a NEW skill from scratch. Your current working directory is a T
 - Do not modify \`.claude/settings.local.json\` in this workdir — it's Nakiros's runtime config.`;
 }
 
+/**
+ * Start (or resume) a fix run on an existing skill. Seeds the temp workdir
+ * with a lean copy of the skill (source + latest audit + latest iteration),
+ * then lets the agent edit under `/nakiros-skill-factory fix`. Sync-back to
+ * the real skill happens on {@link finishFix}.
+ */
 export function startFix(request: StartAuditRequest, opts: RunOpts): AuditRun {
   return startSkillAgent('fix', request, opts);
 }
 
+/**
+ * Start (or resume) a create run for a new skill. Starts with an empty temp
+ * workdir; the agent writes SKILL.md + friends from scratch. Sync-back only
+ * fires if the target skill still doesn't exist when the user clicks Create.
+ */
 export function startCreate(request: StartAuditRequest, opts: RunOpts): AuditRun {
   return startSkillAgent('create', request, opts);
 }
@@ -594,6 +605,14 @@ function maybeWait(entry: FixEntry): void {
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
+/**
+ * Forward a user message to a fix/create run in `waiting_for_input`. Re-binds
+ * the event log, executes one claude turn via `--resume`, then transitions
+ * back to `waiting_for_input` so the user can continue (fix runs never
+ * auto-complete).
+ *
+ * @throws {Error} when the run is unknown or not waiting for input
+ */
 export async function sendFixUserMessage(runId: string, message: string, opts: RunOpts): Promise<void> {
   const entry = fixes.get(runId);
   if (!entry) throw new Error(`Fix run not found: ${runId}`);
@@ -605,6 +624,16 @@ export async function sendFixUserMessage(runId: string, message: string, opts: R
   maybeWait(entry);
 }
 
+/**
+ * User-confirmed completion. Syncs the temp workdir BACK to the real skill
+ * (replacing the existing source tree for `fix`, creating the new skill dir
+ * for `create`), tears down the workdir + event log, and marks the run
+ * completed.
+ *
+ * Safety net for `create` mode: if the target skill appeared since start, the
+ * sync is refused and the run is marked failed so the user can pick a new
+ * name instead of clobbering.
+ */
 export function finishFix(runId: string, opts: RunOpts): void {
   const entry = fixes.get(runId);
   if (!entry) return;
@@ -653,6 +682,11 @@ export const getCreateRun = getFixRun;
 export const getCreateTempWorkdir = getFixTempWorkdir;
 export const getCreateRealSkillDir = getFixRealSkillDir;
 
+/**
+ * Cancel an in-flight fix/create run: `SIGTERM` the child, collapse status to
+ * `stopped`, emit final events, delete the temp workdir + event log. Stopped
+ * runs do NOT sync back — temp modifications are discarded.
+ */
 export function stopFix(runId: string): void {
   const entry = fixes.get(runId);
   if (!entry) return;
@@ -672,6 +706,7 @@ export function stopFix(runId: string): void {
   cleanupRunWorkdir(entry.tempWorkdir);
 }
 
+/** Look up a fix or create run by id. Both run kinds share the registry. */
 export function getFixRun(runId: string): AuditRun | null {
   return fixes.get(runId)?.run ?? null;
 }
@@ -711,11 +746,13 @@ function listActive(mode: SkillAgentMode): AuditRun[] {
 }
 
 /** List all active (non-terminal) fix runs. */
+/** List every non-terminal fix run (starting / running / waiting_for_input). */
 export function listActiveFixRuns(): AuditRun[] {
   return listActive('fix');
 }
 
 /** List all active (non-terminal) create runs. */
+/** List every non-terminal create run (starting / running / waiting_for_input). */
 export function listActiveCreateRuns(): AuditRun[] {
   return listActive('create');
 }
@@ -795,6 +832,12 @@ function readPair(relativePath: string, originalDir: string | null, modifiedDir:
  * `create` runs surface every file in the temp workdir since the original does
  * not exist yet.
  */
+/**
+ * List every file that exists either in the original skill or in the temp
+ * workdir. The UI uses this to render the before/after file picker in the
+ * diff preview panel. Entries carry `inOriginal` / `inModified` flags so
+ * created / deleted / modified states render distinctly.
+ */
 export function listFixDiff(runId: string): SkillDiffEntry[] {
   const entry = fixes.get(runId);
   if (!entry) return [];
@@ -826,6 +869,11 @@ export function listFixDiff(runId: string): SkillDiffEntry[] {
   return diffs;
 }
 
+/**
+ * Read one file from BOTH the original skill and the temp workdir, returning
+ * their contents side-by-side for the diff viewer. Binary files are flagged
+ * so the UI can fall back to an opaque message instead of garbling the view.
+ */
 export function readFixDiffFile(runId: string, relativePath: string): SkillDiffFilePayload {
   const entry = fixes.get(runId);
   if (!entry) throw new Error(`Unknown run: ${runId}`);

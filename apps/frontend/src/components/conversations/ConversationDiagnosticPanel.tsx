@@ -18,6 +18,15 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * Modal-style panel that renders the full diagnostic for a single
+ * conversation: tips, deep-analysis trigger, timeline + health badges,
+ * key fields, cache efficiency, top tools, hot files, and an opt-in raw
+ * message dump fetched via `getProjectConversationMessages`.
+ *
+ * Opened from `ConversationsView` rows. Closes through the parent's
+ * `onClose` (the panel itself owns no routing state).
+ */
 export function ConversationDiagnosticPanel({ project, analysis, onClose }: Props) {
   const { t } = useTranslation('conversations');
   const [rawMessages, setRawMessages] = useState<ConversationMessage[] | null>(null);

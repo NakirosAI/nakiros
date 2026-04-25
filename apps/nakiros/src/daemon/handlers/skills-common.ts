@@ -50,6 +50,12 @@ function resolveSkillDir(request: ReadFileRequest): string {
   return join(project.projectPath, '.claude', 'skills', request.skillName);
 }
 
+/**
+ * Registers the cross-scope `skill:readFileAsDataUrl` channel used by the UI
+ * to render binary/asset files (images, icons) inside any skill regardless of
+ * its scope (project, nakiros-bundled, claude-global, plugin). Only whitelisted
+ * image MIME types are returned; anything else yields `null`.
+ */
 export const skillsCommonHandlers: HandlerRegistry = {
   'skill:readFileAsDataUrl': (args) => {
     const request = args[0] as ReadFileRequest;

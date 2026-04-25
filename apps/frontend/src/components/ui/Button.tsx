@@ -3,6 +3,11 @@ import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
+/**
+ * `class-variance-authority` variants for {@link Button}. Exposed so that other
+ * components (e.g. links styled as buttons) can reuse the exact same Tailwind
+ * recipe via `buttonVariants({ variant, size })`.
+ */
 const buttonVariants = cva(
   [
     'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,box-shadow,background-color,border-color]',
@@ -36,10 +41,17 @@ const buttonVariants = cva(
 
 type ButtonProps = React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
+    /** When true, renders the child element via Radix `Slot` instead of a `<button>`. */
     asChild?: boolean;
+    /** When true, the button is implicitly disabled (visual state stays). */
     loading?: boolean;
   };
 
+/**
+ * Primary call-to-action component for the Nakiros frontend. Wraps a native
+ * `<button>` (or any child element via `asChild` + Radix `Slot`) with the
+ * shared shadcn/ui-flavoured Tailwind recipe defined by {@link buttonVariants}.
+ */
 function Button({
   className,
   variant,

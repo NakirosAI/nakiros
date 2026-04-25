@@ -191,6 +191,7 @@ declare global {
       listAuditHistory(request: { scope: SkillScope; marketplaceName?: string; pluginName?: string; projectId?: string; skillName: string }): Promise<AuditHistoryEntry[]>;
       readAuditReport(path: string): Promise<string | null>;
       listActiveAuditRuns(): Promise<AuditRun[]>;
+      listAllAuditRuns(): Promise<AuditRun[]>;
       getAuditBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onAuditEvent(cb: (event: AuditRunEvent) => void): () => void;
 
@@ -203,6 +204,7 @@ declare global {
       runFixEvalsInTemp(request: { runId: string; evalNames?: string[]; includeBaseline?: boolean }): Promise<StartEvalRunResponse>;
       getFixBenchmarks(runId: string): Promise<FixBenchmarks>;
       listActiveFixRuns(): Promise<AuditRun[]>;
+      listAllFixRuns(): Promise<AuditRun[]>;
       getFixBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onFixEvent(cb: (event: AuditRunEvent) => void): () => void;
       listFixDiff(runId: string): Promise<SkillDiffEntry[]>;
@@ -215,6 +217,7 @@ declare global {
       sendCreateUserMessage(runId: string, message: string): Promise<void>;
       finishCreate(runId: string): Promise<void>;
       listActiveCreateRuns(): Promise<AuditRun[]>;
+      listAllCreateRuns(): Promise<AuditRun[]>;
       getCreateBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onCreateEvent(cb: (event: AuditRunEvent) => void): () => void;
       listCreateDiff(runId: string): Promise<SkillDiffEntry[]>;

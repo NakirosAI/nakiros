@@ -14,6 +14,7 @@ import {
   getFixTempWorkdir,
   getFixRealSkillDir,
   listActiveFixRuns,
+  listAllFixRuns,
   getFixBufferedEvents,
   listFixDiff,
   readFixDiffFile,
@@ -99,6 +100,8 @@ export const fixHandlers: HandlerRegistry = {
   },
 
   'fix:listActive': () => listActiveFixRuns(),
+
+  'fix:listAll': () => listAllFixRuns(),
 
   'fix:getBufferedEvents': (args) => getFixBufferedEvents(args[0] as string),
 

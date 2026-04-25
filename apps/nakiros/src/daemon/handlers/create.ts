@@ -7,6 +7,7 @@ import {
   sendCreateUserMessage,
   finishCreate,
   listActiveCreateRuns,
+  listAllCreateRuns,
   getCreateBufferedEvents,
   listFixDiff,
   readFixDiffFile,
@@ -60,6 +61,8 @@ export const createHandlers: HandlerRegistry = {
   },
 
   'create:listActive': () => listActiveCreateRuns(),
+
+  'create:listAll': () => listAllCreateRuns(),
 
   'create:getBufferedEvents': (args) => getCreateBufferedEvents(args[0] as string),
 

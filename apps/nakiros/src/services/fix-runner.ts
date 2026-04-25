@@ -745,6 +745,15 @@ function listActive(mode: SkillAgentMode): AuditRun[] {
   return out;
 }
 
+function listAll(mode: SkillAgentMode): AuditRun[] {
+  const out: AuditRun[] = [];
+  for (const entry of fixes.values()) {
+    if (entry.mode !== mode) continue;
+    out.push(entry.run);
+  }
+  return out;
+}
+
 /** List all active (non-terminal) fix runs. */
 /** List every non-terminal fix run (starting / running / waiting_for_input). */
 export function listActiveFixRuns(): AuditRun[] {
@@ -755,6 +764,16 @@ export function listActiveFixRuns(): AuditRun[] {
 /** List every non-terminal create run (starting / running / waiting_for_input). */
 export function listActiveCreateRuns(): AuditRun[] {
   return listActive('create');
+}
+
+/** List every fix run currently in memory — active **and** terminal — for the runs center. */
+export function listAllFixRuns(): AuditRun[] {
+  return listAll('fix');
+}
+
+/** List every create run currently in memory — active **and** terminal — for the runs center. */
+export function listAllCreateRuns(): AuditRun[] {
+  return listAll('create');
 }
 
 // ─── Review diff API ─────────────────────────────────────────────────────────

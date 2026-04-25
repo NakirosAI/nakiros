@@ -8,6 +8,7 @@ import {
   listAuditHistory,
   readAuditReport,
   listActiveAuditRuns,
+  listAllAuditRuns,
   finishAudit,
   getAuditBufferedEvents,
 } from '../../services/audit-runner.js';
@@ -61,6 +62,8 @@ export const auditHandlers: HandlerRegistry = {
   'audit:readReport': (args) => readAuditReport(args[0] as string),
 
   'audit:listActive': () => listActiveAuditRuns(),
+
+  'audit:listAll': () => listAllAuditRuns(),
 
   'audit:finish': (args) => {
     finishAudit(args[0] as string);

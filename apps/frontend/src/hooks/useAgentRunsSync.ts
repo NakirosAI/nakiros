@@ -150,10 +150,14 @@ function groupEvalRuns(runs: SkillEvalRun[]): AgentRun[] {
  */
 export function useAgentRunsSync(): void {
   usePolling(async () => {
+    // listAll* — active + recently-terminal — so the drawer can surface
+    // completed runs the daemon restored from disk and let the user
+    // dismiss them once acknowledged. The store filters out anything in
+    // its dismissed-ids localStorage entry on every upsert.
     const [audits, fixes, creates, evals] = await Promise.all([
-      window.nakiros.listActiveAuditRuns(),
-      window.nakiros.listActiveFixRuns(),
-      window.nakiros.listActiveCreateRuns(),
+      window.nakiros.listAllAuditRuns(),
+      window.nakiros.listAllFixRuns(),
+      window.nakiros.listAllCreateRuns(),
       window.nakiros.listEvalRuns(),
     ]);
     agentRunStore.syncKind('audit', audits.map((r) => auditLikeToAgentRun(r, 'audit', 'Audit')));

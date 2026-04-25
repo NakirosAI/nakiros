@@ -296,6 +296,7 @@ const client = {
   listAuditHistory: (request: unknown) => invoke('audit:listHistory', request),
   readAuditReport: (path: string) => invoke('audit:readReport', path),
   listActiveAuditRuns: () => invoke('audit:listActive'),
+  listAllAuditRuns: () => invoke('audit:listAll'),
   getAuditBufferedEvents: (runId: string) => invoke('audit:getBufferedEvents', runId),
   onAuditEvent: (cb: (event: unknown) => void) => subscribe('audit:event', cb),
 
@@ -308,6 +309,7 @@ const client = {
   runFixEvalsInTemp: (request: unknown) => invoke('fix:runEvalsInTemp', request),
   getFixBenchmarks: (runId: string) => invoke('fix:getBenchmarks', runId),
   listActiveFixRuns: () => invoke('fix:listActive'),
+  listAllFixRuns: () => invoke('fix:listAll'),
   getFixBufferedEvents: (runId: string) => invoke('fix:getBufferedEvents', runId),
   onFixEvent: (cb: (event: unknown) => void) => subscribe('fix:event', cb),
   listFixDiff: (runId: string) => invoke('fix:listDiff', runId),
@@ -320,6 +322,7 @@ const client = {
   sendCreateUserMessage: (runId: string, message: string) => invoke('create:sendUserMessage', runId, message),
   finishCreate: (runId: string) => invoke('create:finish', runId),
   listActiveCreateRuns: () => invoke('create:listActive'),
+  listAllCreateRuns: () => invoke('create:listAll'),
   getCreateBufferedEvents: (runId: string) => invoke('create:getBufferedEvents', runId),
   onCreateEvent: (cb: (event: unknown) => void) => subscribe('create:event', cb),
   listCreateDiff: (runId: string) => invoke('create:listDiff', runId),

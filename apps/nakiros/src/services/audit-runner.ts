@@ -217,6 +217,15 @@ export function listActiveAuditRuns(): AuditRun[] {
 }
 
 /**
+ * List every audit run currently held in memory — active **and** terminal
+ * (completed / failed / stopped). Used by the runs center so completed
+ * audits restored at boot can be revisited and dismissed by the user.
+ */
+export function listAllAuditRuns(): AuditRun[] {
+  return Array.from(audits.values()).map((entry) => entry.run);
+}
+
+/**
  * Start (or resume) an audit run for `request.skillName`. Idempotent on the
  * `(scope, projectId, skillName)` triple — when a non-terminal run already
  * exists, the event log is re-pointed to the new caller and the existing run

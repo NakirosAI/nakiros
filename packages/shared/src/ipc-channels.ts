@@ -113,6 +113,7 @@ export const IPC_CHANNELS = {
   'audit:readReport': 'audit:readReport',
   'audit:event': 'audit:event',
   'audit:listActive': 'audit:listActive',
+  'audit:listAll': 'audit:listAll',
   'audit:getBufferedEvents': 'audit:getBufferedEvents',
 
   // Fix runner
@@ -125,6 +126,7 @@ export const IPC_CHANNELS = {
   'fix:runEvalsInTemp': 'fix:runEvalsInTemp',
   'fix:getBenchmarks': 'fix:getBenchmarks',
   'fix:listActive': 'fix:listActive',
+  'fix:listAll': 'fix:listAll',
   'fix:getBufferedEvents': 'fix:getBufferedEvents',
   'fix:listDiff': 'fix:listDiff',
   'fix:readDiffFile': 'fix:readDiffFile',
@@ -137,6 +139,7 @@ export const IPC_CHANNELS = {
   'create:finish': 'create:finish',
   'create:event': 'create:event',
   'create:listActive': 'create:listActive',
+  'create:listAll': 'create:listAll',
   'create:getBufferedEvents': 'create:getBufferedEvents',
   'create:listDiff': 'create:listDiff',
   'create:readDiffFile': 'create:readDiffFile',

@@ -181,7 +181,7 @@ async function enrichFrictions(
 }
 
 function makeFrictionId(sessionId: string, raw: RawFriction): string {
-  const hash = createHash('sha1')
+  const hash = createHash('sha256')
     .update(sessionId)
     .update('::')
     .update(String(raw.approximateTurn))
@@ -315,7 +315,7 @@ async function buildAndSaveProposal(
 
   const now = Date.now();
   const proposal: Proposal = {
-    id: `p_${createHash('sha1').update(cluster.id).update(String(now)).digest('hex').slice(0, 16)}`,
+    id: `p_${createHash('sha256').update(cluster.id).update(String(now)).digest('hex').slice(0, 16)}`,
     projectId,
     type: existing ? 'patch' : 'new',
     targetSkill: existing?.name,

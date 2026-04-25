@@ -13,11 +13,25 @@ import SkillDiffView, {
 } from '../components/diff/SkillDiffView';
 
 interface Props {
+  /** Outstanding conflicts surfaced after a bundled-skill install/upgrade. */
   conflicts: BundledSkillConflict[];
+  /** Dismiss the overlay without further action. */
   onClose(): void;
+  /** Invoked once a single skill conflict has been resolved successfully. */
   onResolved(skillName: string): void;
 }
 
+/**
+ * Full-screen conflict resolution UI shown when a bundled (Nakiros-shipped)
+ * skill upgrade collides with the user's local edits in `~/.claude/skills/`.
+ *
+ * For each conflict the user can compare ROM (incoming bundled) vs LIVE (their
+ * edits) per file via `SkillDiffView`, then pick a resolution strategy
+ * (`apply-rom`, `keep-mine`, `promote-mine`) which is committed via
+ * `window.nakiros.resolveBundledSkillConflict`. Diff payloads come from
+ * `readBundledSkillConflictDiff`. Mounted from `App.tsx` when the daemon
+ * surfaces pending conflicts on startup.
+ */
 export default function BundledSkillConflictsView({ conflicts, onClose, onResolved }: Props) {
   const { t } = useTranslation('bundled-conflicts');
   const [activeSkill, setActiveSkill] = useState<string | null>(conflicts[0]?.skillName ?? null);

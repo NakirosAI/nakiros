@@ -2,11 +2,18 @@ import { type ReactNode } from 'react';
 import { LayoutDashboard, MessageSquare, Settings, Sparkles, Lightbulb } from 'lucide-react';
 import clsx from 'clsx';
 
+/**
+ * Identifier of one of the top-level navigation tabs in the project shell.
+ * Drives both the `Sidebar` UI and the `DashboardRouter` view switch.
+ */
 export type SidebarTab = 'dashboard' | 'skills' | 'conversations' | 'recommendations' | 'settings';
 
 interface Props {
+  /** Currently active tab — controlled by the parent shell. */
   active: SidebarTab;
+  /** Called when the user clicks a different tab. */
   onChange(tab: SidebarTab): void;
+  /** i18n labels keyed by tab id (rendered under each icon and as title). */
   labels: Record<SidebarTab, string>;
 }
 
@@ -17,6 +24,11 @@ const navTabs: { id: Exclude<SidebarTab, 'settings'>; icon: ReactNode }[] = [
   { id: 'recommendations', icon: <Lightbulb size={18} /> },
 ];
 
+/**
+ * Vertical icon-only navigation rail rendered on the left of the dashboard.
+ * Pure presentational component: state lives in the parent shell which
+ * passes the active tab and an onChange handler.
+ */
 export default function Sidebar({ active, onChange, labels }: Props) {
   return (
     <div className="flex w-[68px] shrink-0 flex-col items-center border-r border-[var(--line)] bg-[var(--bg-soft)] py-2.5">

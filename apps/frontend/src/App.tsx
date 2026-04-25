@@ -28,6 +28,17 @@ type View =
   | { name: 'global-skills' }
   | { name: 'plugin-skills' };
 
+/**
+ * Root component of the Nakiros web UI. Boots the daemon-backed app:
+ * loads preferences, surfaces bundled-skill conflicts, lists projects, and
+ * routes to the matching top-level view (loading / scan / home / dashboard /
+ * nakiros-skills / global-skills / plugin-skills).
+ *
+ * Forces the dark theme on the document root and resolves the active i18n
+ * language from `AppPreferences.language` via {@link resolveLanguage}.
+ * Manages the in-memory list of opened project tabs and feeds them into
+ * {@link ProjectProvider} when the dashboard is active.
+ */
 export default function App() {
   const { t } = useTranslation('common');
   const [view, setView] = useState<View>({ name: 'loading' });

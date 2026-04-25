@@ -7,6 +7,7 @@ import { useIpcListener } from '../hooks/useIpcListener';
 type Step = 1 | 2 | 3 | 4;
 
 interface OnboardingProps {
+  /** Called once the user finishes the last onboarding step. */
   onDone: () => void;
 }
 
@@ -112,6 +113,16 @@ function AnimatedLogo({ size = 160 }: { size?: number }) {
   return <canvas ref={canvasRef} width={size} height={size} className="block" />;
 }
 
+/**
+ * Four-step first-launch onboarding shown by `App.tsx` when no preferences
+ * file exists yet: welcome → editor detection → install Claude Code hooks
+ * → done.
+ *
+ * Calls `window.nakiros.onboardingDetectEditors` to discover supported editors,
+ * then `onboardingInstall` to wire up Nakiros hooks for the chosen editors,
+ * streaming progress over `onOnboardingProgress`. On completion, hands control
+ * back to the app via `onDone`.
+ */
 export default function Onboarding({ onDone }: OnboardingProps) {
   const { t } = useTranslation('onboarding');
   const [step, setStep] = useState<Step>(1);

@@ -4,9 +4,19 @@ import { Loader2, X, AlertTriangle } from 'lucide-react';
 import type { Project, ScanProgress } from '@nakiros/shared';
 
 interface ScanViewProps {
+  /** Called once the scan finishes and the user clicks "Continue". */
   onComplete(projects: Project[]): void;
 }
 
+/**
+ * First-run / boot-time view that scans `~/.claude/projects/` for Claude Code
+ * project sessions, displays per-project progress, and lets the user dismiss
+ * unwanted entries before continuing into the app.
+ *
+ * Subscribes to `window.nakiros.onScanProgress` for live progress updates,
+ * triggers the scan via `scanProjects`, and removes individual entries via
+ * `dismissProject`. Mounted by `App.tsx` between `Onboarding` and `Home`.
+ */
 export default function ScanView({ onComplete }: ScanViewProps) {
   const { t } = useTranslation('scan');
   const [scanning, setScanning] = useState(true);

@@ -19,12 +19,17 @@ export type RunStreamInnerEvent =
   | { type: 'status'; status: string }
   | { type: string };
 
+/**
+ * IPC surface every runner exposes so the hook can fetch the current run,
+ * replay any buffered events, and subscribe to live event envelopes.
+ */
 export interface RunStateApi<R, Ev extends RunStreamInnerEvent> {
   getRun: (id: string) => Promise<R | null>;
   getBufferedEvents: (id: string) => Promise<Ev[]>;
   onEvent: (cb: (envelope: { runId: string; event: Ev }) => void) => () => void;
 }
 
+/** Return value of {@link useRunState}: run state, setter, live events, scroll ref. */
 export interface UseRunStateResult<R> {
   run: R;
   setRun: Dispatch<SetStateAction<R>>;

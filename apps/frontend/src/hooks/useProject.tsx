@@ -16,6 +16,11 @@ interface ProjectProviderProps extends ProjectContextValue {
   children: ReactNode;
 }
 
+/**
+ * Context provider for the active project + open-project tab state.
+ * The shell wires real handlers (open/close tab, switch active project); inner
+ * views consume the context via `useProject` instead of prop drilling.
+ */
 export function ProjectProvider({
   project,
   openProjects,
@@ -43,6 +48,9 @@ export function ProjectProvider({
   );
 }
 
+/**
+ * Reads the project context. Throws if invoked outside `ProjectProvider`.
+ */
 export function useProject(): ProjectContextValue {
   const context = useContext(ProjectContext);
   if (!context) {

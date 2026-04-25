@@ -12,11 +12,24 @@ import {
 } from '../components/conversations/ConversationsAggregation';
 
 interface Props {
+  /** Project whose conversation analyses are aggregated. */
   project: Project;
 }
 
 type WindowKey = '10' | '30' | '90' | 'all';
 
+/**
+ * Dashboard "Overview" tab — aggregates the latest N conversation analyses
+ * (10/30/90/all) for a project and surfaces high-level health signals: average
+ * score, compaction rate, cache waste, healthy/watch/degraded distribution,
+ * pattern insights, top failing tools, recurring hot files, top recurring tips
+ * and the most critical conversations to drill into.
+ *
+ * Loads analyses via `window.nakiros.listProjectConversationsWithAnalysis`,
+ * computes derivations using helpers from `ConversationsAggregation`, and opens
+ * `ConversationDiagnosticPanel` when the user picks a critical conversation.
+ * Mounted from `DashboardRouter` for the default project tab.
+ */
 export default function ProjectOverview({ project }: Props) {
   const { t } = useTranslation('overview');
   const [analyses, setAnalyses] = useState<ConversationAnalysis[] | null>(null);

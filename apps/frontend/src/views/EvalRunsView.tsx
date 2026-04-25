@@ -29,18 +29,40 @@ import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry, SkillScope } from '@nakiros/shared';
 
 interface Props {
+  /** Skill scope (project / claude-global / nakiros-bundled / plugin). */
   scope: SkillScope;
+  /** Project id when `scope === 'project'`. */
   projectId?: string;
+  /** Plugin name when `scope === 'plugin'`. */
   pluginName?: string;
+  /** Marketplace name when `scope === 'plugin'`. */
   marketplaceName?: string;
+  /** Skill folder name being evaluated. */
   skillName: string;
+  /** All run ids belonging to the current eval batch / iteration. */
   initialRunIds: string[];
+  /** Iteration number for this batch — used to load/save human feedback. */
   iteration: number;
+  /** Closes the overlay; the parent typically refreshes the skills list. */
   onClose(): void;
 }
 
 type LiveEvent = LiveStreamEvent;
 
+/**
+ * Full-screen overlay for a batch of skill eval runs (one iteration, possibly
+ * with/without baseline pairs and across multiple models for comparisons).
+ *
+ * Polls `window.nakiros.listEvalRuns` every 500ms while runs are active, also
+ * subscribing to `onEvalEvent` for live text/tool stream rendering. Splits the
+ * UI into a left run list (grouped by model + eval, paired with baseline) and
+ * a `RunDetail` pane with conversation, generated outputs (`listEvalRunOutputs`
+ * + `readEvalRunOutput`), sandbox diff (`readEvalRunDiffPatch`), and a per-eval
+ * human feedback textarea persisted via `getEvalFeedback`/`saveEvalFeedback`.
+ * Lets the user reply to a `waiting_for_input` run, stop individual runs or all,
+ * and finish a run with `finishEvalRun`. Mounted from `*SkillsView` and from
+ * `FixView` (for in-temp eval batches).
+ */
 export default function EvalRunsView({
   scope,
   projectId,

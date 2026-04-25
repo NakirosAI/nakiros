@@ -1,10 +1,18 @@
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { cn } from '../../lib/utils';
 
+/**
+ * Root container for a tabbed UI. Thin themed wrapper around Radix `Tabs.Root`
+ * laying its children out in a vertical flex column.
+ */
 function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Root>) {
   return <TabsPrimitive.Root data-slot="tabs" className={cn('flex flex-col', className)} {...props} />;
 }
 
+/**
+ * Horizontal tab bar holding {@link TabsTrigger} buttons, separated from the
+ * content by a bottom border.
+ */
 function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
@@ -18,6 +26,10 @@ function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimi
   );
 }
 
+/**
+ * Clickable tab header rendered inside {@link TabsList}. The active state
+ * applies the primary colour via Radix's `data-state="active"` attribute.
+ */
 function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
@@ -35,6 +47,10 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
   );
 }
 
+/**
+ * Panel rendered for the currently active tab. Matched to a {@link TabsTrigger}
+ * via Radix's shared `value` prop.
+ */
 function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
     <TabsPrimitive.Content

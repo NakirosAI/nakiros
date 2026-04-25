@@ -46,11 +46,17 @@ import FixReviewPanel from '../components/fix/FixReviewPanel';
 import { EvalMatrix } from '../components/eval-matrix';
 
 interface Props {
+  /** Skill scope (project / claude-global / nakiros-bundled / plugin). */
   scope: SkillScope;
+  /** Project id when `scope === 'project'`. */
   projectId?: string;
+  /** Plugin name when `scope === 'plugin'`. */
   pluginName?: string;
+  /** Marketplace name when `scope === 'plugin'`. */
   marketplaceName?: string;
+  /** Skill folder name being fixed/created. */
   skillName: string;
+  /** Run snapshot returned by `startFix` / `startCreate`. */
   initialRun: AuditRun;
   /**
    * 'fix' (default): skill exists, temp copy, sync back to existing location.
@@ -58,6 +64,7 @@ interface Props {
    * Only copy and confirm-button labels change — the runtime is identical.
    */
   mode?: 'fix' | 'create';
+  /** Closes the overlay; the parent typically refreshes the skills list. */
   onClose(): void;
 }
 
@@ -90,6 +97,20 @@ function TabButton({
   );
 }
 
+/**
+ * Full-screen overlay driving the fix-skill or create-skill agent. Both modes
+ * operate on an isolated temp workdir (the tmp_skill pattern) — the user
+ * iterates with the agent, optionally runs evals against the temp copy, then
+ * either syncs the result back to the real skill location or discards it.
+ *
+ * Resolves the matching IPC surface based on `mode` (`window.nakiros.getFixRun`
+ * / `getCreateRun`, `sendFixUserMessage` / `sendCreateUserMessage`, `finishFix`
+ * / `finishCreate`, `stopFix` / `stopCreate`, `onFixEvent` / `onCreateEvent`,
+ * etc.) and wires it into `useRunState`. Embeds `EvalMatrix` to track in-temp
+ * eval iterations, `FixReviewPanel` to review the staged file changes, and
+ * launches `EvalRunsView` as a higher-z-index overlay for in-temp eval batches
+ * via `runFixEvalsInTemp`. Mounted from `*SkillsView` when fix/create is active.
+ */
 export default function FixView({
   scope,
   projectId,

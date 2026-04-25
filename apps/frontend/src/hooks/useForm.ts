@@ -3,6 +3,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 type FormErrors<T> = Partial<Record<keyof T, string>>;
 type FormValidator<T> = (values: T) => FormErrors<T>;
 
+/**
+ * Lightweight controlled-form helper. Holds `values`, derives `errors` from an
+ * optional sync `validate` callback on every change, and re-syncs to
+ * `initialValues` whenever the reference changes (so parents can reset the
+ * form by passing fresh defaults).
+ *
+ * @returns `{ values, errors, handleChange, reset, isValid }` — `handleChange`
+ *   is generic on the field key, `isValid` is `true` when no error is set.
+ */
 export function useForm<T extends Record<string, unknown>>(
   initialValues: T,
   validate?: FormValidator<T>,

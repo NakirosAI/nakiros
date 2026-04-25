@@ -36,6 +36,7 @@ import {
 import { SkillEvalsPanel } from './skills/EvalsPanel';
 
 interface Props {
+  /** Navigate back (typically returns to `Home`). */
   onBack(): void;
 }
 
@@ -48,6 +49,18 @@ function runKey(run: { marketplaceName?: string; pluginName?: string; skillName:
   return `${run.marketplaceName ?? ''}::${run.pluginName ?? ''}::${run.skillName}`;
 }
 
+/**
+ * Full-screen view for skills installed by Claude Code plugins, located under
+ * `~/.claude/plugins/marketplaces/<mkt>/plugins/<plugin>/skills/` (the
+ * `plugin` scope). Lists marketplaces, then per-marketplace skills, with the
+ * usual inspect / edit / audit / eval / fix workflow.
+ *
+ * Uses a composite identity `<marketplace>::<plugin>::<skill>` to disambiguate
+ * skills with the same name. Wires `useSkillsViewState` to the plugin IPC
+ * surface (`listPluginSkills`, `readPluginSkillFile`, `savePluginSkillFile`)
+ * and routes audit/eval/fix to overlay views. Reached from the `Home` "Plugins"
+ * tab.
+ */
 export default function PluginSkillsView({ onBack }: Props) {
   const { t } = useTranslation('plugin-skills');
   const [selectedMarketplace, setSelectedMarketplace] = useState<string | null>(null);

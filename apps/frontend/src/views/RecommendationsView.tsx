@@ -3,9 +3,16 @@ import { Lightbulb } from 'lucide-react';
 import type { Project } from '@nakiros/shared';
 
 interface Props {
+  /** Project displayed in the placeholder body copy. */
   project: Project;
 }
 
+/**
+ * Placeholder dashboard tab for the upcoming "Insights" / proposal-engine
+ * surface (friction → skill recommendations). Currently renders only a header
+ * and a "coming soon" notice for the active project; reached via
+ * `DashboardRouter` → "recommendations" route.
+ */
 export default function RecommendationsView({ project }: Props) {
   const { t } = useTranslation('recommendations');
   return (

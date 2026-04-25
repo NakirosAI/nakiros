@@ -1,6 +1,11 @@
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area';
 import { cn } from '../../lib/utils';
 
+/**
+ * Themed scroll container built on Radix `ScrollArea` primitive. Renders a
+ * viewport with a custom {@link ScrollBar} thumb instead of the platform
+ * scrollbar.
+ */
 function ScrollArea({
   className,
   children,
@@ -21,6 +26,10 @@ function ScrollArea({
   );
 }
 
+/**
+ * Custom scrollbar used inside {@link ScrollArea}. Defaults to vertical
+ * orientation; pass `orientation="horizontal"` for horizontal lists.
+ */
 function ScrollBar({
   className,
   orientation = 'vertical',

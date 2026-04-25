@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+/** Failure callbacks plugged into eval/audit/fix start handlers. */
 export interface SkillActionErrorHandlers {
   onEvalFailure: (message: string) => void;
   onAuditFailure: (message: string) => void;

@@ -29,12 +29,19 @@ import { useRunState } from '../hooks/useRunState';
 import { TabButton } from './skills/components';
 
 interface Props {
+  /** Skill scope (project / claude-global / nakiros-bundled / plugin). */
   scope: SkillScope;
+  /** Project id when `scope === 'project'`. */
   projectId?: string;
+  /** Plugin name when `scope === 'plugin'`. */
   pluginName?: string;
+  /** Marketplace name when `scope === 'plugin'`. */
   marketplaceName?: string;
+  /** Skill folder name being audited. */
   skillName: string;
+  /** Run snapshot returned by `startAudit` — already attached to the bus. */
   initialRun: AuditRun;
+  /** Closes the overlay; the parent typically refreshes the skills list. */
   onClose(): void;
 }
 
@@ -48,6 +55,18 @@ const AUDIT_RUN_API = {
   onEvent: window.nakiros.onAuditEvent,
 };
 
+/**
+ * Full-screen overlay rendering an in-flight or terminal audit run.
+ *
+ * Subscribes to the audit run via `useRunState` (poll + IPC events through
+ * `window.nakiros.getAuditRun` / `getAuditBufferedEvents` / `onAuditEvent`),
+ * displays the streaming Claude conversation, and once `done` lands, fetches
+ * the markdown report from disk via `readAuditReport`. Lets the user reply
+ * while the run is `waiting_for_input`, stop a running audit, or finish a
+ * completed one (which discards the in-memory workdir but keeps the report
+ * file on disk). Mounted from the various `*SkillsView` components when
+ * `s.activeAudit` is set.
+ */
 export default function AuditView({ scope, projectId, skillName, initialRun, onClose }: Props) {
   const { t } = useTranslation('audit');
   const [reportContent, setReportContent] = useState<string | null>(null);

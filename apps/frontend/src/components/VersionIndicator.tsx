@@ -14,6 +14,12 @@ interface Props {
   variant?: 'compact' | 'inline';
 }
 
+/**
+ * Tiny pill / inline marker showing the running CLI version and, when an
+ * update is available on npm, an actionable upgrade flow (modal with the
+ * `npm install -g` command). Hides itself entirely until the
+ * `useVersionInfo` hook resolves.
+ */
 export default function VersionIndicator({ variant = 'compact' }: Props) {
   const { t } = useTranslation('version');
   const info = useVersionInfo();

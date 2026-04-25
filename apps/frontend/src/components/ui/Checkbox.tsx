@@ -4,6 +4,11 @@ import { Checkbox as CheckboxPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { CheckIcon } from "lucide-react"
 
+/**
+ * Themed checkbox built on Radix `Checkbox` primitive. Includes a checked-state
+ * background, focus ring, invalid styling and a `lucide-react` check icon
+ * inside the `Indicator` sub-component.
+ */
 function Checkbox({
   className,
   ...props

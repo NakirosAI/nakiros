@@ -13,6 +13,14 @@ interface Props {
   skillName: string;
 }
 
+/**
+ * Tab inside `SkillView` listing past audit reports for the active skill.
+ * Two states:
+ *  - list: clickable cards (one per audit report on disk)
+ *  - reader: full-width Markdown viewer with a back button
+ *
+ * Both are populated via the IPC client (`listAuditHistory` + `readAuditReport`).
+ */
 export default function SkillAuditsTab({
   scope,
   projectId,

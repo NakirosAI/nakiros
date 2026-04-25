@@ -58,9 +58,9 @@
     "apps/nakiros/src/services/agent-cli.ts": "53974e61dfbd6e4d045e6c7e82b5939d8bebf49e507c2df3bdd72f8f5413de17",
     "apps/nakiros/src/services/agent-installer.ts": "bbccc0d1f276c0ec97b306d6a7ed02e3bdbebc2716eb999aaaa5cbf192f025b4",
     "apps/nakiros/src/services/audit-runner.ts": "fd82fd34d9d091ede4164eafb801215f820a0207a2733efc16da2ffa3bf26bbf",
-    "apps/nakiros/src/services/bundled-skills-reader.ts": "5bf377e28f1424168f901fbabc75230157ccec898c6bcfcc8cf5e7187b4f8c4e",
+    "apps/nakiros/src/services/bundled-skills-reader.ts": "6a7fa6445b9cde65bf3f990f79bf2d66128016b67782dcef3ef8be0518c52586",
     "apps/nakiros/src/services/bundled-skills-sync.ts": "4744b084cced3c7bce6d95bd606256f24f8f2f106316b2698ddf2044654373cd",
-    "apps/nakiros/src/services/claude-global-skills-reader.ts": "16c9679c4e0d5c6b1cce8e01bf1753e52e53f0fe5456aad9e1d576e56e1adca5",
+    "apps/nakiros/src/services/claude-global-skills-reader.ts": "fe6846a5134a26cca3d7cb0eba48ffa0e98d0868a4d361eca63c99cd0363107a",
     "apps/nakiros/src/services/comparison-runner.ts": "f2a5c0577605d313d9b2a123ee8112581593c0a9f5dcceb2cd058dec59dd8db9",
     "apps/nakiros/src/services/conversation-analyzer.ts": "e90a6db0306faac9d5e1200766934d122e7a071865545cd0d81155266917d67b",
     "apps/nakiros/src/services/conversation-deep-analyzer.ts": "79985184c83f5af9c81c28b0a1a4d723182920dab9ad222db4f7aff7a16a3311",
@@ -74,12 +74,12 @@
     "apps/nakiros/src/services/eval-runner.ts": "5ecfcb50ded845ddfb53fafab48667455086dc1361bb7deb0029c2c4017008b6",
     "apps/nakiros/src/services/fix-runner.ts": "177a36add919295ed0a6fc04c079eef26c3a2ef8a6a9c68b2e7b1fcb5823bba5",
     "apps/nakiros/src/services/onboarding-installer.ts": "c3123dfdeebf613f77252d5100da594c35c7331e5c544ee0ce8b28b17caa4ad5",
-    "apps/nakiros/src/services/plugin-skills-reader.ts": "54b3e52300c77f41500c01f5c6c947c898b4065e3e5f2b7685a6be49490419f2",
+    "apps/nakiros/src/services/plugin-skills-reader.ts": "a5d30e17e64066b37979a06213bf39d7fa98e2ee2707204f34febb0f0e08c443",
     "apps/nakiros/src/services/preferences.ts": "a2eca6b4dcaae021b4731f8634d0412df49437cc3f83c11662fbf00d5b588fda",
     "apps/nakiros/src/services/project-scanner.ts": "06c3cbcbfdda411d924199239a9a671ff8ae2e18902e49ab43064a27ac997f4a",
     "apps/nakiros/src/services/providers/claude-scanner.ts": "f4b0e8e8a1bc352182d03f91bc5a4404bb162c19b7d4dd632b83035be0e80853",
     "apps/nakiros/src/services/skill-fingerprint.ts": "f133dc0274bf7aee3060eeebe75b6ca18c6990586f6ce6fc2b664f736862e1ec",
-    "apps/nakiros/src/services/skill-reader.ts": "07e0fb66f99796905d771d16409d57c9288b8346ba584171caf2056d790fd076",
+    "apps/nakiros/src/services/skill-reader.ts": "924abf8a5574cf0541a9e64be0a1dab2dcd25dc276be12d5f796826ed7d266d3",
     "apps/nakiros/src/services/version-service.ts": "0a402da45bfc8e2bc41c851c8031b3fa840e5792a82d548b57946ab8a36c348a",
     "apps/nakiros/src/index.ts": "3186920306773cbe94294e841c9df802eb0b09df97ced94f397e714651f622e2",
     "apps/nakiros/src/utils/nakiros-dir.ts": "93e0892d6d6b84f2cea7c011cc6212f7c673c226dd9ee7432ddb73a386e9132e",
@@ -180,7 +180,13 @@
     "apps/landing/src/i18n/I18nProvider.tsx": "45ace53717142024e8450551ab23099ae225180a9ffc302b6c8ab83fbf939106",
     "apps/landing/src/lib/useNpmVersion.ts": "a2f4a07fb2fb4267975f98d6c4fcc355d59960d77629dcbf0da18c08cb03bffc",
     "apps/landing/src/lib/utils.ts": "7d301f6e10c0765ecbbd1200bc353742e6c1853ceb504a9fe785f72cb46b428f",
-    "apps/landing/src/main.tsx": "e837676dc8b154c545e87400216c41207a22d6eef73d687b25b9bd93ecf9fb64"
+    "apps/landing/src/main.tsx": "e837676dc8b154c545e87400216c41207a22d6eef73d687b25b9bd93ecf9fb64",
+    "apps/nakiros/src/services/skill-fs/audits.ts": "ca898f13863d28d0d174c12663707c6517e75cbb03c0bb590dff3865efa844e8",
+    "apps/nakiros/src/services/skill-fs/build.ts": "749d4161f5fd0907ac195a8a66645de506db961c37dbc6ca2a406ac563200828",
+    "apps/nakiros/src/services/skill-fs/fs.ts": "7d61d66a62017011e0a2fb6556442b93b0f53698caccdf49de7d548f6230743e",
+    "apps/nakiros/src/services/skill-fs/index.ts": "fb5a4098bfe96953761906b27851c1678e9592a59148039534267231f4c88c6c",
+    "apps/nakiros/src/services/skill-fs/io.ts": "8da97cce5da45318036494993c296d76d97599bc4746939ae49ca112d187938a",
+    "apps/nakiros/src/services/skill-fs/scan.ts": "b5825069c84af68afce05d21f49d30e591e583883effe4b424f91ab0bf54ed26"
   },
-  "updated_at": "2026-04-25T06:03:45.828Z"
+  "updated_at": "2026-04-25T09:51:13.822Z"
 }

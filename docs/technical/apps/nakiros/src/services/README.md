@@ -8,6 +8,7 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 
 - [runner-core/](./runner-core/README.md) — Domain-agnostic runner primitives: claude-CLI driver, sandboxing, isolated HOME, run-store, event log.
 - [providers/](./providers/README.md) — Per-agent project scanners (Claude, eventually Cursor / Codex / Gemini).
+- [skill-fs/](./skill-fs/README.md) — Shared filesystem primitives for every skill scope: directory scan, audit count, path-traversal-safe IO, `Skill` record assembly.
 
 ## Runners
 

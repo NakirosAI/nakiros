@@ -101,6 +101,13 @@ export interface RunnerSpec<TRun extends BaseRun, TStartReq, TEvent, TExtras> {
   runsRoot(): string;
 
   /**
+   * Optional per-request runId prefix. Defaults to {@link kind} — override for
+   * runners that surface a sub-discriminator in run ids (e.g. skill-agent
+   * → `fix_*` or `create_*` based on the request mode).
+   */
+  runIdPrefix?(req: TStartReq): string;
+
+  /**
    * Prepare the on-disk workdir for a fresh run. The factory has already
    * generated the `runId` and ensured `runsRoot()` exists; the spec does
    * the kind-specific seeding (symlink for audit, tmp copy for fix, sandbox
@@ -364,7 +371,7 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       }
     }
 
-    const runId = generateRunId(spec.kind);
+    const runId = generateRunId(spec.runIdPrefix ? spec.runIdPrefix(req) : spec.kind);
     mkdirSync(spec.runsRoot(), { recursive: true });
     const { workdir, extras } = spec.prepareWorkdir(req, runId, opts);
     const run = spec.createInitialRun(req, runId, workdir, extras);

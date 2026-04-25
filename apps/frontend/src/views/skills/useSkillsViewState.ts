@@ -58,11 +58,13 @@ export function useSkillsViewState(config: SkillsViewConfig) {
   // Effect is gated on `!loading && skills.length > 0` so we never consume a
   // focus we cannot honour. Subscribes for the case where the focus is set
   // after the view has mounted (e.g. user already on this scope's view
-  // clicks a run from the topbar).
+  // clicks a run from the topbar). For `kind: 'audit'` focuses, we also
+  // open the AuditView overlay — the user expects landing on the run, not
+  // just on the skill.
   useEffect(() => {
     if (loading || skills.length === 0) return;
 
-    function tryConsume() {
+    async function tryConsume() {
       const focus = agentRunFocus.consume();
       if (!focus) return;
       if (focus.target.type !== 'skill') return;
@@ -75,10 +77,21 @@ export function useSkillsViewState(config: SkillsViewConfig) {
       if (!match) return;
       setSelectedKey(config.keyOf(match));
       setDetailTab('audits');
+
+      if (focus.kind === 'audit') {
+        try {
+          const auditRun = await window.nakiros.getAuditRun(focus.id);
+          if (auditRun) setActiveAudit({ run: auditRun, skill: match });
+        } catch (err) {
+          console.error('[useSkillsViewState] getAuditRun failed', err);
+        }
+      }
     }
 
-    tryConsume();
-    return agentRunFocus.subscribe(tryConsume);
+    void tryConsume();
+    return agentRunFocus.subscribe(() => {
+      void tryConsume();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, skills]);
 

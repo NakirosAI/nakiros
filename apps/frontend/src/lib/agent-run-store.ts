@@ -1,14 +1,23 @@
-import type { AgentRun, AgentRunKind } from '@nakiros/shared';
+import type { AgentRun, AgentRunKind, AgentRunStatus } from '@nakiros/shared';
 
 type Listener = () => void;
 
+const TERMINAL_STATUSES: ReadonlySet<AgentRunStatus> = new Set([
+  'done',
+  'failed',
+  'cancelled',
+]);
+
 /**
- * Tiny module-scoped store holding every active `AgentRun` regardless of its
- * `kind` (audit / eval / fix / create / future). Adapters poll the daemon for
- * their own kind and call `syncKind(kind, next)` to mirror the active set.
+ * Module-scoped store holding every `AgentRun` the UI cares about — both
+ * active runs (mirrored from the daemon) and recently-terminal runs the
+ * user hasn't dismissed yet. Adapters poll the daemon for their own kind
+ * and call `syncKind(kind, active)` with the **active set**; runs missing
+ * from that set are not deleted, they're transitioned to `done` so the
+ * topbar can flag "something just finished".
  *
- * Store is intentionally minimal — no zustand, no redux, just a `Map` plus
- * `useSyncExternalStore` consumers in the corresponding hooks.
+ * Dismissal is explicit: the user clicks an X (or "mark all as read"), and
+ * the run is removed from the store. No timed eviction.
  */
 const runs = new Map<string, AgentRun>();
 const listeners = new Set<Listener>();
@@ -23,11 +32,12 @@ function emit(): void {
   for (const fn of listeners) fn();
 }
 
-/**
- * Public accessor surface — methods kept on a single object so consumers
- * import one symbol (`agentRunStore`) and the React hooks reference its
- * `subscribe` / `getSnapshot` directly.
- */
+/** True for `'done' | 'failed' | 'cancelled'`. */
+export function isTerminal(status: AgentRunStatus): boolean {
+  return TERMINAL_STATUSES.has(status);
+}
+
+/** Public store API. */
 export const agentRunStore = {
   /** Subscribe to any change. Returns the unsubscribe handle. */
   subscribe(fn: Listener): () => void {
@@ -48,25 +58,56 @@ export const agentRunStore = {
   },
 
   /**
-   * Replace the active set for `kind` with `next`. Existing runs of `kind`
-   * absent from `next` are removed; runs in `next` are upserted. Runs of
-   * other kinds are untouched — multiple adapters cohabit safely.
+   * Reconcile the store with the daemon's active set for `kind`:
+   *   - Runs in `active` are upserted (same id → updated; new id → added).
+   *   - Existing runs of `kind` not in `active` are **kept** but transitioned
+   *     to `done` if they were still in a non-terminal status. This is how
+   *     "the run just finished" surfaces in the runs center without losing
+   *     the entry the moment the daemon drops it from the active list.
+   *   - Runs of other kinds are untouched — multiple adapters cohabit.
    */
-  syncKind(kind: AgentRunKind, next: AgentRun[]): void {
-    const nextIds = new Set(next.map((r) => r.id));
+  syncKind(kind: AgentRunKind, active: AgentRun[]): void {
+    const activeIds = new Set(active.map((r) => r.id));
+
     for (const existing of runs.values()) {
-      if (existing.kind === kind && !nextIds.has(existing.id)) {
-        runs.delete(existing.id);
-      }
+      if (existing.kind !== kind) continue;
+      if (activeIds.has(existing.id)) continue;
+      if (isTerminal(existing.status)) continue;
+      // Was active in our store, no longer reported by the daemon → assume done.
+      runs.set(existing.id, {
+        ...existing,
+        status: 'done',
+        endedAt: existing.endedAt ?? new Date().toISOString(),
+      });
     }
-    for (const run of next) {
+
+    for (const run of active) {
       runs.set(run.id, run);
     }
+
     emit();
+  },
+
+  /** Remove one run from the store (user clicked the dismiss X). */
+  dismiss(id: string): void {
+    if (runs.delete(id)) emit();
+  },
+
+  /** Remove every terminal run (user clicked "clear completed"). */
+  dismissAllTerminal(): void {
+    let changed = false;
+    for (const run of runs.values()) {
+      if (isTerminal(run.status)) {
+        runs.delete(run.id);
+        changed = true;
+      }
+    }
+    if (changed) emit();
   },
 
   /** Empty the store — used in tests and on full-reset scenarios. */
   clear(): void {
+    if (runs.size === 0) return;
     runs.clear();
     emit();
   },

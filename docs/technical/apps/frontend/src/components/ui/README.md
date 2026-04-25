@@ -17,6 +17,7 @@ Themed UI primitives shared by every feature view in the Nakiros frontend. Pure 
 - [MarkdownViewer.tsx](./MarkdownViewer.md) — Themed `react-markdown` + `remark-gfm` renderer with custom support for Mermaid and unified diffs.
 - [Modal.tsx](./Modal.md) — Lightweight controlled modal dialog (not portalled).
 - [Select.tsx](./Select.md) — Themed native `<select>` driven by an `options` array.
+- [TabButton.tsx](./TabButton.md) — Filled segmented-control tab button for in-page tab groups (sibling to the underline-style Radix tabs).
 - [Textarea.tsx](./Textarea.md) — Themed multi-line text input wrapped in a `FormField`.
 - [alert.tsx](./alert.md) — Banner used to surface contextual feedback (info, errors).
 - [index.ts](./index.md) — Curated barrel re-exporting the subset of primitives feature code consumes.

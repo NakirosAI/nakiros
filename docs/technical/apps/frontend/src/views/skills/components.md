@@ -26,20 +26,6 @@ function Badge(props: { label: string }): JSX.Element;
 
 Small neutral pill for short labels (counts, categories).
 
-### `TabButton`
-
-```ts
-function TabButton(props: {
-  active: boolean;
-  onClick(): void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}): JSX.Element;
-```
-
-Segmented-control button used in the skill detail view (Files / Evals /
-Audits).
-
 ### `FileTree`
 
 ```ts

@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { FlaskConical } from 'lucide-react';
 import type { Skill, SkillScope } from '@nakiros/shared';
 import { EvalMatrix, ModelComparison } from '../../components/eval-matrix';
-import { Badge, TabButton } from './components';
+import { TabButton } from '../../components/ui';
+import { Badge } from './components';
 
 interface Props {
   skill: Skill;

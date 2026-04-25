@@ -13,7 +13,7 @@ import {
   Package,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { Checkbox, LoadingState, MarkdownViewer } from '../components/ui';
+import { Checkbox, LoadingState, MarkdownViewer, TabButton } from '../components/ui';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
@@ -27,7 +27,6 @@ import {
   EvalModelSelector,
   FileTree,
   PassRateBadge,
-  TabButton,
   countFiles,
 } from './skills/components';
 import { SkillEvalsPanel } from './skills/EvalsPanel';

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, File, Loader2, Play, Plus, Save, Search, Sparkles, Wrench, FlaskConical } from 'lucide-react';
 import clsx from 'clsx';
 import type { AuditRun, Project } from '@nakiros/shared';
-import { Checkbox, LoadingState, MarkdownViewer } from '../components/ui';
+import { Checkbox, LoadingState, MarkdownViewer, TabButton } from '../components/ui';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
@@ -17,7 +17,6 @@ import {
   EvalModelSelector,
   FileTree,
   PassRateBadge,
-  TabButton,
   countFiles,
 } from './skills/components';
 import { SkillEvalsPanel } from './skills/EvalsPanel';

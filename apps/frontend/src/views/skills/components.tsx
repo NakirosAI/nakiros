@@ -36,37 +36,6 @@ export function Badge({ label }: { label: string }) {
 }
 
 /**
- * Segmented-control button used in the skill detail view (Files / Evals /
- * Audits). Visually flat, no border — relies on bg color to mark `active`.
- */
-export function TabButton({
-  active,
-  onClick,
-  disabled,
-  children,
-}: {
-  active: boolean;
-  onClick(): void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={clsx(
-        'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
-        active
-          ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]'
-          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]',
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-/**
  * Recursive file/folder tree for the selected skill. Leaf files invoke
  * `onSelect(relativePath)`; folders toggle expand/collapse locally. Depth-0
  * folders render expanded by default.

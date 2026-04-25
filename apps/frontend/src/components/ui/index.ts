@@ -8,6 +8,7 @@ export * from './Input';
 export * from './LoadingState';
 export * from './Modal';
 export * from './Select';
+export * from './TabButton';
 export * from './Textarea';
 export * from './alert';
 export * from './separator';

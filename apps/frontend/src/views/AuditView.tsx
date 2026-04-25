@@ -15,7 +15,7 @@ import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { AuditRun, AuditRunEvent, SkillScope } from '@nakiros/shared';
-import { LoadingState, MarkdownViewer } from '../components/ui';
+import { LoadingState, MarkdownViewer, TabButton } from '../components/ui';
 import { formatComputeDuration, formatTokens } from '../utils/format';
 import {
   ConversationTurn,
@@ -27,7 +27,6 @@ import {
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { useElapsedTimer } from '../hooks/useElapsedTimer';
 import { useRunState } from '../hooks/useRunState';
-import { TabButton } from './skills/components';
 
 interface Props {
   /** Skill scope (project / claude-global / nakiros-bundled / plugin). */

@@ -140,11 +140,22 @@ export interface RunnerSpec<TRun extends BaseRun, TStartReq, TEvent, TExtras> {
   ): void;
 
   /**
-   * Cleanup on terminal (stop / failed). Different per kind: audit uses
-   * `cleanupRunWorkdir`, fix/create destroys the temp sandbox, eval destroys
-   * the eval sandbox. Called once when the run leaves the active set.
+   * Cleanup at the very end of a run's lifecycle (user `stop` or `finish`).
+   * Different per kind: audit uses `cleanupRunWorkdir`, fix/create destroys
+   * the temp sandbox, eval destroys the eval sandbox. Called by the factory's
+   * `stop()` and `finish()`; **not** called on a failed turn (that's
+   * `onTurnFailed`'s job).
    */
   cleanupOnTerminal(entry: RunEntry<TRun, TEvent, TExtras>): void;
+
+  /**
+   * Optional. Called when a turn ends with a non-zero exit code or stream
+   * error. Default: nothing extra (the `done` event has already been emitted).
+   * Fix / create override to immediately destroy the temp workdir; audit
+   * leaves it so the user can review the conversation before clicking
+   * Terminer.
+   */
+  onTurnFailed?(entry: RunEntry<TRun, TEvent, TExtras>): void;
 
   /**
    * Optional explicit "finish" action triggered by the user (not the runner).
@@ -310,7 +321,7 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
         exitCode: result.exitCode,
         error: result.error ?? undefined,
       } as unknown as TEvent);
-      spec.cleanupOnTerminal(entry);
+      spec.onTurnFailed?.(entry);
     }
   }
 
@@ -339,7 +350,7 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       run.finishedAt = new Date().toISOString();
       persist(entry);
       entry.eventLog.emit({ type: 'done', exitCode: 1, error } as unknown as TEvent);
-      spec.cleanupOnTerminal(entry);
+      spec.onTurnFailed?.(entry);
     },
   };
 
@@ -403,17 +414,30 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       entry.run.finishedAt = new Date().toISOString();
     }
     persist(entry);
+    // Broadcast BEFORE destroying so the frontend gets immediate feedback
+    // (no need to wait for the next poll cycle).
     entry.eventLog.emit({ type: 'status', status: 'stopped' } as unknown as TEvent);
-    entry.eventLog.emit({ type: 'done', exitCode: 0 } as unknown as TEvent);
+    entry.eventLog.emit({ type: 'done', exitCode: 130 } as unknown as TEvent);
+    entry.eventLog.destroy();
     spec.cleanupOnTerminal(entry);
   }
 
+  /**
+   * User-confirmed completion. Calls the kind-specific `spec.finish` (e.g.
+   * fix/create syncback), then tears down the workdir via `cleanupOnTerminal`
+   * and removes the entry from the registry.
+   *
+   * No-op when the run is unknown. Spec.finish is optional — kinds that
+   * have nothing extra to do (audit's artefact is already archived during
+   * onTurnComplete) can still call this to dispose the workdir + entry.
+   */
   function finish(runId: string, opts: RunOpts<TEvent>): void {
     const entry = registry.get(runId);
     if (!entry) return;
-    if (!spec.finish) return;
     rebindEventLog(entry, opts);
-    spec.finish(entry, opts);
+    spec.finish?.(entry, opts);
+    spec.cleanupOnTerminal(entry);
+    registry.delete(runId);
   }
 
   function getRun(runId: string): TRun | null {

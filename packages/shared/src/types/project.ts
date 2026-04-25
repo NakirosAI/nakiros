@@ -423,6 +423,8 @@ export interface SkillEvalRun {
   sessionId: string | null;
   /** Scope: whether launched from a project or from bundled Nakiros skills. */
   scope: SkillScope;
+  /** Parent project id when scope is 'project'. */
+  projectId?: string;
   /** Parent plugin name when scope is 'plugin'. */
   pluginName?: string;
   /** Parent marketplace name when scope is 'plugin'. */

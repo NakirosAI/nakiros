@@ -54,6 +54,17 @@ export interface SkillRunTarget {
 export type AgentRunTarget = SkillRunTarget;
 
 /**
+ * Kind-specific opaque payload riding alongside an `AgentRun`. The store
+ * never inspects it; only the matching `kind`'s adapter and its consumer
+ * (the focus handler in `useSkillsViewState`) read the relevant variant.
+ *
+ * - `eval` carries the batch of run ids that share the same skill+iteration,
+ *   so clicking the entry can open `EvalRunsView` with the full batch.
+ */
+export type AgentRunMeta =
+  | { kind: 'eval'; runIds: string[]; iteration: number };
+
+/**
  * The unified run primitive surfaced to the runs center, the activity feed,
  * and any "is something running on this target?" check across the UI. Each
  * runner emits its native record; an adapter translates it into this shape.
@@ -73,4 +84,6 @@ export interface AgentRun {
   capabilities: AgentRunCapabilities;
   /** Cumulative tokens used by the underlying claude process, when known. */
   tokensUsed?: number;
+  /** Kind-specific data — opaque to the store, see {@link AgentRunMeta}. */
+  meta?: AgentRunMeta;
 }

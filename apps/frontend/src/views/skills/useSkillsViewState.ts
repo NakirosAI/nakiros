@@ -76,15 +76,36 @@ export function useSkillsViewState(config: SkillsViewConfig) {
       const match = skills.find((s) => config.keyOf(s) === config.keyOfRun(focus.target));
       if (!match) return;
       setSelectedKey(config.keyOf(match));
-      setDetailTab('audits');
 
+      // Per-kind landing: open the native overlay matching the run's kind
+      // so the user lands on the run, not just on the skill.
       if (focus.kind === 'audit') {
+        setDetailTab('audits');
         try {
           const auditRun = await window.nakiros.getAuditRun(focus.id);
           if (auditRun) setActiveAudit({ run: auditRun, skill: match });
         } catch (err) {
           console.error('[useSkillsViewState] getAuditRun failed', err);
         }
+      } else if (focus.kind === 'fix') {
+        setDetailTab('files');
+        try {
+          const fixRun = await window.nakiros.getFixRun(focus.id);
+          if (fixRun) setActiveFix({ run: fixRun, skill: match });
+        } catch (err) {
+          console.error('[useSkillsViewState] getFixRun failed', err);
+        }
+      } else if (focus.kind === 'eval' && focus.meta?.kind === 'eval') {
+        setDetailTab('evals');
+        setActiveRuns({
+          runIds: focus.meta.runIds,
+          iteration: focus.meta.iteration,
+          skill: match,
+        });
+      } else {
+        // create — overlay is owned by SkillsView itself, not the hook.
+        // Selecting the skill is the best we can do here for now.
+        setDetailTab('files');
       }
     }
 

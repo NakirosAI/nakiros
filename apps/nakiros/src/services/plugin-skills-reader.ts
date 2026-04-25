@@ -1,19 +1,16 @@
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
-import { join, relative } from 'path';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { homedir } from 'os';
 
-import type { Skill, SkillFileEntry } from '@nakiros/shared';
+import type { Skill } from '@nakiros/shared';
 
-import { parseSkillEvals } from './eval-parser.js';
-
-const HIDDEN_PATHS = new Set(['evals/workspace']);
-
-function shouldHide(relativePath: string): boolean {
-  for (const hidden of HIDDEN_PATHS) {
-    if (relativePath === hidden || relativePath.startsWith(hidden + '/')) return true;
-  }
-  return false;
-}
+import {
+  buildSkillRecord,
+  isDirectoryStat,
+  readSkillFileSafe,
+  safeReaddir,
+  writeSkillFileSafe,
+} from './skill-fs/index.js';
 
 /**
  * Claude Code clones each plugin marketplace to
@@ -30,21 +27,7 @@ export interface PluginSkillLocation {
   skillDir: string;
 }
 
-function safeReaddir(path: string): import('fs').Dirent[] {
-  try {
-    return readdirSync(path, { withFileTypes: true }) as import('fs').Dirent[];
-  } catch {
-    return [];
-  }
-}
-
-function isDirectory(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-}
+const PLUGIN_PROJECT_ID = 'claude-plugin';
 
 /**
  * Walk `~/.claude/plugins/marketplaces/<mkt>/plugins/<plugin>/skills/` and
@@ -59,21 +42,21 @@ export function listPluginSkillLocations(): PluginSkillLocation[] {
 
   for (const mkt of safeReaddir(marketplacesRoot)) {
     const mktPath = join(marketplacesRoot, mkt.name);
-    if (!isDirectory(mktPath)) continue;
+    if (!isDirectoryStat(mktPath)) continue;
 
     const pluginsRoot = join(mktPath, 'plugins');
     if (!existsSync(pluginsRoot)) continue;
 
     for (const plugin of safeReaddir(pluginsRoot)) {
       const pluginPath = join(pluginsRoot, plugin.name);
-      if (!isDirectory(pluginPath)) continue;
+      if (!isDirectoryStat(pluginPath)) continue;
 
       const skillsDir = join(pluginPath, 'skills');
       if (!existsSync(skillsDir)) continue;
 
       for (const skillEntry of safeReaddir(skillsDir)) {
         const skillDir = join(skillsDir, skillEntry.name);
-        if (!isDirectory(skillDir)) continue;
+        if (!isDirectoryStat(skillDir)) continue;
         out.push({
           marketplaceName: mkt.name,
           pluginName: plugin.name,
@@ -108,84 +91,21 @@ export function resolvePluginSkillDir(
   );
 }
 
-function scanDirectory(dirPath: string, basePath: string): SkillFileEntry[] {
-  const entries = safeReaddir(dirPath);
-  const result: SkillFileEntry[] = [];
-  for (const entry of entries) {
-    const fullPath = join(dirPath, entry.name);
-    const relPath = relative(basePath, fullPath);
-    if (shouldHide(relPath)) continue;
-
-    if (entry.isDirectory()) {
-      result.push({
-        name: entry.name,
-        relativePath: relPath,
-        isDirectory: true,
-        children: scanDirectory(fullPath, basePath),
-      });
-    } else {
-      let sizeBytes = 0;
-      try {
-        sizeBytes = statSync(fullPath).size;
-      } catch {
-        // ignore
-      }
-      result.push({
-        name: entry.name,
-        relativePath: relPath,
-        isDirectory: false,
-        sizeBytes,
-      });
-    }
-  }
-
-  result.sort((a, b) => {
-    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-    return a.name.localeCompare(b.name);
+function buildPluginSkill(loc: PluginSkillLocation): Skill {
+  return buildSkillRecord({
+    skillDir: loc.skillDir,
+    skillName: loc.skillName,
+    projectId: PLUGIN_PROJECT_ID,
+    extras: {
+      pluginName: loc.pluginName,
+      marketplaceName: loc.marketplaceName,
+    },
   });
-  return result;
-}
-
-function countAudits(skillDir: string): number {
-  const auditsDir = join(skillDir, 'audits');
-  if (!existsSync(auditsDir)) return 0;
-  try {
-    return readdirSync(auditsDir).filter((f) => f.startsWith('audit-') && f.endsWith('.md')).length;
-  } catch {
-    return 0;
-  }
-}
-
-function buildSkill(loc: PluginSkillLocation): Skill {
-  const skillMdPath = join(loc.skillDir, 'SKILL.md');
-  let content = '';
-  if (existsSync(skillMdPath)) {
-    try {
-      content = readFileSync(skillMdPath, 'utf8');
-    } catch {
-      // ignore
-    }
-  }
-
-  return {
-    name: loc.skillName,
-    projectId: 'claude-plugin',
-    skillPath: loc.skillDir,
-    content,
-    hasEvals: existsSync(join(loc.skillDir, 'evals')),
-    hasReferences: existsSync(join(loc.skillDir, 'references')),
-    hasTemplates: existsSync(join(loc.skillDir, 'templates')),
-    files: scanDirectory(loc.skillDir, loc.skillDir),
-    evals: parseSkillEvals(loc.skillDir, loc.skillName),
-    auditCount: countAudits(loc.skillDir),
-    pluginName: loc.pluginName,
-    marketplaceName: loc.marketplaceName,
-  };
 }
 
 /** List every plugin skill sorted by `(marketplace, plugin, skill)`. */
 export function listPluginSkills(): Skill[] {
-  const skills = listPluginSkillLocations().map(buildSkill);
+  const skills = listPluginSkillLocations().map(buildPluginSkill);
   skills.sort((a, b) => {
     const m = (a.marketplaceName ?? '').localeCompare(b.marketplaceName ?? '');
     if (m !== 0) return m;
@@ -217,7 +137,7 @@ export function readPluginSkill(
 ): Skill | null {
   const loc = findLocation(marketplaceName, pluginName, skillName);
   if (!loc) return null;
-  return buildSkill(loc);
+  return buildPluginSkill(loc);
 }
 
 /** Read an arbitrary file inside a plugin skill. Refuses path-traversal; returns `null` on miss. */
@@ -229,14 +149,7 @@ export function readPluginSkillFile(
 ): string | null {
   const loc = findLocation(marketplaceName, pluginName, skillName);
   if (!loc) return null;
-  const filePath = join(loc.skillDir, relativePath);
-  if (!filePath.startsWith(loc.skillDir)) return null;
-  if (!existsSync(filePath)) return null;
-  try {
-    return readFileSync(filePath, 'utf8');
-  } catch {
-    return null;
-  }
+  return readSkillFileSafe(loc.skillDir, relativePath);
 }
 
 /** Write an arbitrary file inside a plugin skill. Refuses path-traversal silently. */
@@ -249,7 +162,5 @@ export function savePluginSkillFile(
 ): void {
   const loc = findLocation(marketplaceName, pluginName, skillName);
   if (!loc) return;
-  const filePath = join(loc.skillDir, relativePath);
-  if (!filePath.startsWith(loc.skillDir)) return;
-  writeFileSync(filePath, content, 'utf8');
+  writeSkillFileSafe(loc.skillDir, relativePath, content);
 }

@@ -17,4 +17,5 @@ export * from './types/eval-matrix.js';
 export * from './types/eval-comparison.js';
 export * from './types/onboarding.js';
 export * from './constants/claude-models.js';
+export * from './constants/editor-definitions.js';
 export * from './ipc-channels.js';

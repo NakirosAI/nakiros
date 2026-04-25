@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "packages/shared/src/constants/claude-models.ts": "bd50a71f750afb8b4f65c7d1f27a4295ea26567a8c78586d5a8dd5c9aef2e03c",
-    "packages/shared/src/index.ts": "d9ada8a463268abbf9c902ec5c3c180e426cd1fea038b3debbf7525c1d866745",
+    "packages/shared/src/index.ts": "e0d26477bbf57cc30356fa0a5520b61db7b49e535d62ea1eb926a58f3e807a20",
     "packages/shared/src/ipc-channels.ts": "492cd708bbaace60b413e3a90c79ca50bb6f3183a5d129ae91780a11132c03d4",
     "packages/shared/src/types/artifact-review.ts": "bea8bc800140287ad85bdf2d1d586bf7d78b68915c1790e04a421cbdff4372a7",
     "packages/shared/src/types/bundled-skill-conflict.ts": "7e3c163c26dd6a490fea794e6a418c3747b8edcb70baf215c706a57ad7a35043",
@@ -56,7 +56,7 @@
     "apps/nakiros/src/services/runner-core/tmp-sandbox.ts": "d41d683f13e6c92f0605dbfb6088f7be0f5bf215e04ccff817589e7be263ee13",
     "apps/nakiros/src/services/runner-core/tool-format.ts": "36a6874917223219450bd6e88e84bfd63b602b0ac1028a765bba084b0bf95e2a",
     "apps/nakiros/src/services/agent-cli.ts": "53974e61dfbd6e4d045e6c7e82b5939d8bebf49e507c2df3bdd72f8f5413de17",
-    "apps/nakiros/src/services/agent-installer.ts": "bbccc0d1f276c0ec97b306d6a7ed02e3bdbebc2716eb999aaaa5cbf192f025b4",
+    "apps/nakiros/src/services/agent-installer.ts": "15fded88375d1d9a7fc55ab09a4861fd6f9c2387918d32844fe4a15b3bf0475e",
     "apps/nakiros/src/services/audit-runner.ts": "fd82fd34d9d091ede4164eafb801215f820a0207a2733efc16da2ffa3bf26bbf",
     "apps/nakiros/src/services/bundled-skills-reader.ts": "6a7fa6445b9cde65bf3f990f79bf2d66128016b67782dcef3ef8be0518c52586",
     "apps/nakiros/src/services/bundled-skills-sync.ts": "4744b084cced3c7bce6d95bd606256f24f8f2f106316b2698ddf2044654373cd",
@@ -73,7 +73,7 @@
     "apps/nakiros/src/services/eval-parser.ts": "5664464b71d0ef8d8fbbf398acc274f15363d262f758453966b69ece671a3e54",
     "apps/nakiros/src/services/eval-runner.ts": "5ecfcb50ded845ddfb53fafab48667455086dc1361bb7deb0029c2c4017008b6",
     "apps/nakiros/src/services/fix-runner.ts": "177a36add919295ed0a6fc04c079eef26c3a2ef8a6a9c68b2e7b1fcb5823bba5",
-    "apps/nakiros/src/services/onboarding-installer.ts": "e625aa72c71a6054c639f8f000468173586a077e84ab3a9ca722288e6e566b41",
+    "apps/nakiros/src/services/onboarding-installer.ts": "c22f93b04d047f6c62d5c1bb15eca3a35536b2d30f2852d27349da2d2017a9ff",
     "apps/nakiros/src/services/plugin-skills-reader.ts": "a5d30e17e64066b37979a06213bf39d7fa98e2ee2707204f34febb0f0e08c443",
     "apps/nakiros/src/services/preferences.ts": "a2eca6b4dcaae021b4731f8634d0412df49437cc3f83c11662fbf00d5b588fda",
     "apps/nakiros/src/services/project-scanner.ts": "06c3cbcbfdda411d924199239a9a671ff8ae2e18902e49ab43064a27ac997f4a",
@@ -187,7 +187,8 @@
     "apps/nakiros/src/services/skill-fs/index.ts": "fb5a4098bfe96953761906b27851c1678e9592a59148039534267231f4c88c6c",
     "apps/nakiros/src/services/skill-fs/io.ts": "8da97cce5da45318036494993c296d76d97599bc4746939ae49ca112d187938a",
     "apps/nakiros/src/services/skill-fs/scan.ts": "b5825069c84af68afce05d21f49d30e591e583883effe4b424f91ab0bf54ed26",
-    "packages/shared/src/types/onboarding.ts": "a3801dfc573c227185c0256054ec0e428f2d86a01873261c2caef047fdba9e1a"
+    "packages/shared/src/types/onboarding.ts": "a3801dfc573c227185c0256054ec0e428f2d86a01873261c2caef047fdba9e1a",
+    "packages/shared/src/constants/editor-definitions.ts": "4708de6e1f85df0bc9b3c8a34236da6e5bfc03e880d4a680e63a9fb835756363"
   },
-  "updated_at": "2026-04-25T10:24:38.663Z"
+  "updated_at": "2026-04-25T10:31:55.251Z"
 }

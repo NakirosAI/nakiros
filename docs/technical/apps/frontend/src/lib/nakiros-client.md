@@ -15,6 +15,11 @@ Communication runs over two channels:
   helper. The socket auto-reconnects with capped exponential backoff
   (max 10 s).
 
+Every channel name flows through `IPC_CHANNELS` from `@nakiros/shared` —
+no hardcoded channel string literals (`CLAUDE.md` mandate). The internal
+`invoke()` and `subscribe()` helpers take `IpcChannel` instead of `string`
+so a typo is a compile-time error.
+
 The exposed surface is intentionally `unknown`-typed at the implementation
 side — strict types live in `apps/frontend/src/global.d.ts` and are
 applied at every call site.

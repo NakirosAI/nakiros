@@ -1,9 +1,17 @@
 import { forwardRef, type TextareaHTMLAttributes } from 'react';
 import clsx from 'clsx';
 
+/**
+ * Props for {@link CodeEditorPane}. Inherits every standard
+ * `<textarea>` attribute except `value` / `onChange`, which are tightened to
+ * a string-in / string-out contract so callers don't need to dig into
+ * `event.target.value`.
+ */
 export interface CodeEditorPaneProps
   extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> {
+  /** Current text content of the editor. */
   value: string;
+  /** Called with the new value whenever the user edits the text. */
   onChange(value: string): void;
 }
 

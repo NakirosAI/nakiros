@@ -7,6 +7,15 @@ the daemon for the system language, then initialises i18next once. The
 app waits on `i18nReady` before rendering so the first paint is already
 translated.
 
+Namespaces include shell-level ones (`common`, `home`, `dashboard`,
+`sidebar`, `settings`, `onboarding`), project tabs (`overview`,
+`conversations`, `skills`, `recommendations`), skill scopes
+(`nakiros-skills`, `global-skills`, `plugin-skills`), runtime kinds
+(`audit`, `evals`, `fix`, `runs`), and a few cross-cutting ones
+(`feedback`, `toast`, `version`, `comparison`, …). The `runs` namespace
+holds the shared status / input / error copy consumed by the run-component
+library under `components/runs/`.
+
 ## Exports
 
 ### `i18nReady`

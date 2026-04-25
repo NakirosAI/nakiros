@@ -11,6 +11,7 @@ React components consumed by the views layer. Top-level files are app-shell piec
 - [diff/](./diff/README.md) — Reusable side-by-side file-diff component used by fix and create review flows.
 - [eval-matrix/](./eval-matrix/README.md) — Components composing the Evolution view and the Models comparison tab.
 - [fix/](./fix/README.md) — Components specific to the fix/create review flow.
+- [runs/](./runs/README.md) — Shared component library for every agent-run kind (audit / fix / create / eval).
 - [skill/](./skill/README.md) — Components specific to the per-skill view.
 - [ui/](./ui/README.md) — Themed UI primitives shared by every feature view (Tailwind + Radix).
 

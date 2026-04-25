@@ -10,6 +10,7 @@ Themed UI primitives shared by every feature view in the Nakiros frontend. Pure 
 - [Button.tsx](./Button.md) — Primary call-to-action component built on Radix `Slot` (`asChild`) and `class-variance-authority`.
 - [Card.tsx](./Card.md) — Composable card surface (`Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`).
 - [Checkbox.tsx](./Checkbox.md) — Themed checkbox built on the Radix `Checkbox` primitive.
+- [CodeEditorPane.tsx](./CodeEditorPane.md) — Full-pane font-mono code editor surface (distinct from the form-style `Textarea`).
 - [EmptyState.tsx](./EmptyState.md) — Centered placeholder shown when a list or panel has no data.
 - [FormField.tsx](./FormField.md) — Vertical label / control / hint-or-error layout used internally by `Input`, `Select`, `Textarea`.
 - [Input.tsx](./Input.md) — Themed text input wrapped in a `FormField` with optional leading icon.

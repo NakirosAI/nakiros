@@ -11,7 +11,7 @@ import {
   topTipFrequencies,
 } from '../components/conversations/ConversationsAggregation';
 import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
-import { LoadingState } from '../components/ui';
+import { EmptyState, LoadingState } from '../components/ui';
 
 interface Props {
   /** Project whose conversation analyses are aggregated. */
@@ -95,9 +95,7 @@ export default function ProjectOverview({ project }: Props) {
 
       <div className="flex-1 overflow-y-auto p-6">
         {analyses.length === 0 ? (
-          <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-            {t('noAnalyzedHint')}
-          </div>
+          <EmptyState title={t('noAnalyzedHint')} />
         ) : (
           <>
             {/* Headline stats */}

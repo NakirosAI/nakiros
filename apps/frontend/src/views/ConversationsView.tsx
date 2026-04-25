@@ -4,7 +4,7 @@ import type { ConversationAnalysis, Project } from '@nakiros/shared';
 import { ConversationHealthBadges } from '../components/conversations/ConversationHealthBadges';
 import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
 import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
-import { LoadingState } from '../components/ui';
+import { EmptyState, LoadingState } from '../components/ui';
 import { formatLongDuration } from '../utils/format';
 
 interface Props {
@@ -106,9 +106,7 @@ export default function ConversationsView({ project }: Props) {
 
       <div className="flex-1 overflow-y-auto p-4">
         {visible.length === 0 ? (
-          <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-            {t('empty')}
-          </div>
+          <EmptyState title={t('empty')} />
         ) : (
           <ul className="flex flex-col gap-2">
             {visible.map((a) => (

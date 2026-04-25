@@ -14,7 +14,7 @@ import {
   Package,
 } from 'lucide-react';
 import clsx from 'clsx';
-import { Checkbox, LoadingState, MarkdownViewer, TabButton } from '../components/ui';
+import { Checkbox, CodeEditorPane, LoadingState, MarkdownViewer, TabButton } from '../components/ui';
 import { RunsCenter } from '../components/RunsCenter';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
@@ -296,12 +296,7 @@ export default function GlobalSkillsView({ onBack }: Props) {
                       <MarkdownViewer content={s.fileContent} />
                     </div>
                   ) : (
-                    <textarea
-                      value={s.fileContent}
-                      onChange={(e) => s.setFileContent(e.target.value)}
-                      className="flex-1 resize-none border-none bg-[var(--bg)] p-4 font-mono text-sm text-[var(--text-primary)] outline-none"
-                      spellCheck={false}
-                    />
+                    <CodeEditorPane value={s.fileContent} onChange={s.setFileContent} />
                   )}
                 </>
               ) : (

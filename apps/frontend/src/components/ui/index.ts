@@ -2,6 +2,7 @@ export * from './Badge';
 export * from './Checkbox';
 export * from './Button';
 export * from './Card';
+export * from './CodeEditorPane';
 export * from './EmptyState';
 export * from './FormField';
 export * from './Input';

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
-  CheckCircle,
   ChevronRight,
   ChevronDown,
   FileText,
@@ -9,24 +8,20 @@ import {
   Loader2,
   MessageSquare,
   RefreshCw,
-  Send,
   Square,
-  XCircle,
-  AlertTriangle,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { LoadingState, MarkdownViewer } from '../components/ui';
-import { formatComputeDuration, formatTokens } from '../utils/format';
 import {
-  ConversationTurn,
-  liveEventsToBlocks,
-  legacyTurnToBlocks,
-  endsOnAssistant,
-  type LiveStreamEvent,
-} from '../components/ConversationTurn';
-import { ThinkingIndicator } from '../components/ThinkingIndicator';
+  AgentActivityFeed,
+  HumanInteractionPanel,
+  RunErrorBanner,
+  RunStatusIcon,
+} from '../components/runs';
+import { formatComputeDuration, formatTokens } from '../utils/format';
+import { type LiveStreamEvent } from '../components/ConversationTurn';
 import { useEvalFeedback } from '../hooks/useEvalFeedback';
 import { usePolling } from '../hooks/usePolling';
 import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry, SkillScope } from '@nakiros/shared';
@@ -309,7 +304,7 @@ function RunListItem({
         selected ? 'bg-[var(--bg-muted)]' : 'hover:bg-[var(--bg-muted)]/50',
       )}
     >
-      <StatusIcon status={run.status} />
+      <RunStatusIcon status={run.status} />
       <span className={clsx('shrink-0', run.config === 'with_skill' ? 'text-[var(--primary)]' : 'text-amber-400')}>
         {label}
       </span>
@@ -337,7 +332,6 @@ function RunDetail({
   t: TFunction<'evals'>;
 }) {
   const [expanded, setExpanded] = useState<'turns' | 'stream' | null>('turns');
-  const [userInput, setUserInput] = useState('');
   const [sending, setSending] = useState(false);
   const [feedbackDraft, setFeedbackDraft] = useState(feedback);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
@@ -360,19 +354,8 @@ function RunDetail({
   const isWaiting = run.status === 'waiting_for_input';
   const feedbackDirty = feedbackDraft !== feedback;
 
-  async function handleSend() {
-    const trimmed = userInput.trim();
-    if (!trimmed || sending) return;
-    setSending(true);
-    setUserInput('');
-    try {
-      await window.nakiros.sendEvalUserMessage(run.runId, trimmed);
-    } catch (err) {
-      setUserInput(trimmed);
-      alert(t('alertSendFailed', { message: (err as Error).message }));
-    } finally {
-      setSending(false);
-    }
+  async function handleSendMessage(message: string) {
+    await window.nakiros.sendEvalUserMessage(run.runId, message);
   }
 
   async function handleFinish() {
@@ -400,7 +383,7 @@ function RunDetail({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
-        <StatusIcon status={run.status} size="lg" />
+        <RunStatusIcon status={run.status} size="lg" />
         <div className="flex-1">
           <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
             <span>{run.evalName}</span>
@@ -439,15 +422,8 @@ function RunDetail({
         )}
       </div>
 
-      {run.error && (
-        <div className="mx-4 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-          <div className="mb-1 flex items-center gap-1.5 font-semibold">
-            <AlertTriangle size={12} />
-            {t('errorLabel')}
-          </div>
-          <pre className="whitespace-pre-wrap break-all font-mono">{run.error}</pre>
-        </div>
-      )}
+      <RunErrorBanner message={run.error} title={t('errorLabel')} />
+
 
       <div className="flex-1 overflow-y-auto p-4">
         {/* Prompt */}
@@ -461,48 +437,16 @@ function RunDetail({
           </pre>
         </Section>
 
-        {/* Conversation — user prompt + assistant turns with ordered text/tool
-            blocks. While the run is streaming, we append a provisional assistant
-            turn built from live events so the user sees each Read/Bash/Write
-            appear in place as it happens (like the Claude Code extension). */}
         {(run.turns.length > 0 || (isRunning && liveEvents.length > 0)) && (
-          <div className="mt-4 flex flex-col gap-2">
-            {run.turns.map((turn, i) => (
-              <ConversationTurn
-                key={i}
-                role={turn.role}
-                timestamp={turn.timestamp}
-                blocks={
-                  turn.blocks ??
-                  (turn.role === 'assistant'
-                    ? legacyTurnToBlocks(turn.content, turn.tools)
-                    : [{ type: 'text', text: turn.content }])
-                }
-              />
-            ))}
-
-            {/* Provisional turn: events streaming in right now, not yet saved
-                to run.turns. Disappears as soon as the real turn lands. */}
-            {isRunning &&
-              liveEvents.length > 0 &&
-              !endsOnAssistant(run.turns) && (
-                <ConversationTurn
-                  key="provisional"
-                  role="assistant"
-                  timestamp={new Date().toISOString()}
-                  blocks={liveEventsToBlocks(liveEvents)}
-                  streaming
-                  scrollRef={liveScrollRef}
-                />
-              )}
-
-            {isRunning &&
-              liveEvents.length === 0 &&
-              !endsOnAssistant(run.turns) && (
-                <ThinkingIndicator
-                  verbs={t('thinking.verbs', { returnObjects: true }) as string[]}
-                />
-              )}
+          <div className="mt-4">
+            <AgentActivityFeed
+              turns={run.turns}
+              liveEvents={liveEvents}
+              liveScrollRef={liveScrollRef}
+              isStreaming={isRunning}
+              thinkingVerbs={t('thinking.verbs', { returnObjects: true }) as string[]}
+              variant="inline"
+            />
           </div>
         )}
 
@@ -542,49 +486,24 @@ function RunDetail({
         )}
       </div>
 
-      {/* Interactive input panel */}
       {isWaiting && (
-        <div className="border-t border-amber-500/30 bg-amber-500/5 p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-amber-400">
-            <MessageSquare size={12} />
-            {t('waitingForInput')}
-          </div>
-          <div className="flex gap-2">
-            <textarea
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              placeholder={t('userInputPlaceholder')}
-              className="min-h-[60px] flex-1 resize-none rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
-              autoFocus
-            />
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={handleSend}
-                disabled={!userInput.trim() || sending}
-                aria-label={t('send')}
-                title={t('send')}
-                className="flex shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] p-2.5 text-white transition-colors hover:bg-[var(--primary)]/90 disabled:opacity-50"
-              >
-                <Send size={16} />
-              </button>
-              <button
-                onClick={handleFinish}
-                disabled={sending}
-                aria-label={t('finish')}
-                className="flex shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
-                title={t('finishTooltip')}
-              >
-                <Flag size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
+        <HumanInteractionPanel
+          isWaiting
+          onSend={handleSendMessage}
+          waitingBanner={t('waitingForInput')}
+          placeholderWaiting={t('userInputPlaceholder')}
+          extraButtons={
+            <button
+              onClick={handleFinish}
+              disabled={sending}
+              aria-label={t('finish')}
+              title={t('finishTooltip')}
+              className="flex shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
+            >
+              <Flag size={16} />
+            </button>
+          }
+        />
       )}
     </div>
   );
@@ -616,28 +535,6 @@ function Section({
     </div>
   );
 }
-
-function StatusIcon({ status, size = 'sm' }: { status: EvalRunStatus; size?: 'sm' | 'lg' }) {
-  const sz = size === 'lg' ? 18 : 14;
-  switch (status) {
-    case 'completed':
-      return <CheckCircle size={sz} className="text-emerald-400" />;
-    case 'failed':
-      return <XCircle size={sz} className="text-red-400" />;
-    case 'stopped':
-      return <Square size={sz} className="text-[var(--text-muted)]" />;
-    case 'waiting_for_input':
-      return <MessageSquare size={sz} className="text-amber-400" />;
-    case 'running':
-    case 'starting':
-    case 'grading':
-      return <Loader2 size={sz} className="animate-spin text-[var(--primary)]" />;
-    case 'queued':
-    default:
-      return <span className="inline-block h-3 w-3 rounded-full border border-[var(--line-strong)]" />;
-  }
-}
-
 
 function formatBytes(n: number, t: TFunction<'evals'>): string {
   if (n < 1024) return t('units.bytes', { count: n });

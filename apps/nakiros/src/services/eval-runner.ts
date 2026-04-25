@@ -984,6 +984,19 @@ export function stopRun(runId: string): void {
 
 /**
  * Load all runs from a skill's workspace iterations into the in-memory registry.
+ *
+ * Boot-rehydration policy:
+ *  - `completed` / `failed` / `stopped` runs are returned read-only — they're
+ *    persisted artefacts the user can still inspect.
+ *  - `waiting_for_input` runs are pushed into the registry with their saved
+ *    `sessionId` so {@link sendUserMessage} can resume them after a daemon
+ *    restart (token-expensive runs survive reboots).
+ *  - `queued` / `starting` / `running` / `grading` runs are collapsed to
+ *    `stopped` (the subprocess is gone — there's no recovery path mid-grading)
+ *    and pushed into the registry so the runs center shows them as terminated
+ *    instead of stale "running" forever.
+ *
+ * Already-registered runs (in-memory wins over disk) are returned unchanged.
  */
 export function loadPersistedRuns(skillDir: string): SkillEvalRun[] {
   const workspaceDir = join(skillDir, 'evals', 'workspace');
@@ -1001,7 +1014,13 @@ export function loadPersistedRuns(skillDir: string): SkillEvalRun[] {
           if (!existsSync(runJsonPath)) continue;
           try {
             const run = JSON.parse(readFileSync(runJsonPath, 'utf8')) as SkillEvalRun;
-            result.push(run);
+            // Memory wins — never overwrite an in-flight registry entry.
+            if (runs.has(run.runId)) {
+              result.push(runs.get(run.runId)!.run);
+              continue;
+            }
+            const restored = rehydratePersistedRun(run);
+            result.push(restored);
           } catch {
             // ignore
           }
@@ -1013,4 +1032,51 @@ export function loadPersistedRuns(skillDir: string): SkillEvalRun[] {
   }
 
   return result;
+}
+
+/**
+ * Inject a persisted run into the in-memory registry. Active statuses other
+ * than `waiting_for_input` are collapsed to `stopped` (their subprocess died
+ * with the previous daemon). The EventLog is created with a no-op broadcaster;
+ * the next IPC call rebinds it via {@link rebindEventLog}.
+ */
+function rehydratePersistedRun(run: SkillEvalRun): SkillEvalRun {
+  const restoredStatus: EvalRunStatus =
+    run.status === 'waiting_for_input'
+      ? 'waiting_for_input'
+      : run.status === 'completed' || run.status === 'failed' || run.status === 'stopped'
+        ? run.status
+        : 'stopped';
+
+  const restoredRun: SkillEvalRun = {
+    ...run,
+    status: restoredStatus,
+    finishedAt: run.finishedAt ?? (restoredStatus === 'stopped' ? new Date().toISOString() : run.finishedAt),
+  };
+
+  const eventLog = new EventLog<EvalRunEvent['event']>({
+    workdir: restoredRun.workdir,
+    broadcast: () => {
+      /* no listener yet; rebound on first IPC call */
+    },
+  });
+  // Replay buffer from disk so the live activity panel re-populates if the
+  // user opens this run before any new event lands.
+  eventLog.restore();
+
+  runs.set(restoredRun.runId, {
+    run: restoredRun,
+    child: null,
+    onEvent: () => undefined,
+    killed: false,
+    eventLog,
+    sandbox: null, // sandbox is gone with the previous daemon
+  });
+
+  if (run.status !== restoredStatus) {
+    // Persist the collapse so the next reload doesn't keep flipping it.
+    writeRunJson(restoredRun);
+  }
+
+  return restoredRun;
 }

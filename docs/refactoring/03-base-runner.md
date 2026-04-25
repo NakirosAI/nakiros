@@ -193,29 +193,48 @@ spec compose à sa guise.
   finish syncback) ; flow create complet (start vide, send, finish,
   skill créé).
 
-### Étape 3 — migrer `eval-runner` *(décision : conserver le batch)*
+### Étape 3 — `eval-runner` reste autonome *(décision révisée 2026-04-25)*
 
-- Cas le plus tortueux : batch concurrent + grading.
-- **Décision actée** : conserver le modèle batch existant
-  (`startEvalRuns(request)` retourne plusieurs `runIds`). `createRunner`
-  reste **per-run** côté core ; `startEvalRuns` orchestre N appels à
-  `runner.start()`. Pas d'introduction d'un mode "batch" dans le spec
-  — chaque entrée du registry reste un run indépendant comme aujourd'hui.
-- **Rehydratation au boot — IN SCOPE** : les runs eval coûtent cher en
-  tokens, on ne veut pas en perdre sur un reboot. `spec.rehydrate`
-  pour eval :
-  - `completed` / `failed` / `stopped` → rehydrate (user peut revoir
-    le résultat dans `EvalRunsView`).
-  - `running` / `starting` / `grading` → collapse `stopped` (le child
-    est mort, le grading est partiel — on garde la conversation et les
-    tokens consommés visibles).
-  - `waiting_for_input` → rehydrate (rare en eval mais l'utilisateur
-    peut continuer via `--resume`).
-- **Critère de validation** : batch eval `with/without × N modèles`
-  toujours fonctionnel ; grading produit le même résultat qu'avant ;
-  feedback humain persisté ; **un reboot daemon en plein batch laisse
-  les runs visibles dans `EvalRunsView` avec leurs turns/tokens
-  préservés**.
+À la mise en œuvre, plusieurs mismatches structurels avec le contrat
+`createRunner` ont été identifiés :
+
+| Aspect | audit / fix | eval |
+|---|---|---|
+| Mode opératoire | 1 run / cible, idempotent | batch N runs (configs × evals × modèles), pas d'idempotence |
+| Workdir | `~/.nakiros/runs/<kind>/<runId>/` | `{skillDir}/evals/workspace/iteration-N/eval-X/<config>/` |
+| executionDir | == workdir | sandbox git-worktree ou tmp, distinct du workdir |
+| Post-turn | sync (check artefact ou wait) | async (grading scripts + LLM judge) |
+| Concurrence | aucune | worker pool maxConcurrent (4 par défaut) |
+| Persistance | flat scan via `restoreOrCleanup` | per-skill via `loadPersistedRuns(skillDir)` |
+
+Forcer eval dans la factory exigerait 4 hooks supplémentaires
+(`getExecutionDir`, async `onTurnComplete`, defer-start avec
+`runFirstTurn`, custom `restoreOrCleanup`) qui ne servent qu'à eval. Le
+gain net en LOC est négligeable : la spécificité eval (sandbox + grading
++ batch) n'est PAS du lifecycle dupliqué, c'est de la logique propre au
+kind.
+
+**Décision actée** : `eval-runner` garde sa logique autonome (batch +
+sandbox + worker pool + grading). On conserve l'objectif token-cost en
+ajoutant **uniquement** la rehydratation registry à `loadPersistedRuns` :
+
+- ✅ `completed` / `failed` / `stopped` : rehydratés read-only (déjà
+  visibles via `EvalRunsView` à la demande).
+- ✅ `waiting_for_input` : rehydratés avec `sessionId` préservé →
+  `sendEvalUserMessage` retrouve le run après reboot et peut spawner un
+  fresh process avec `--resume`.
+- ✅ `queued` / `starting` / `running` / `grading` : collapsés en
+  `stopped` (subprocess mort) et persistés en `stopped` pour ne pas
+  recommencer.
+
+**Limitation acceptée** : la rehydratation est **lazy** (déclenchée par
+`loadPersistedRuns(skillDir)` quand le frontend ouvre une vue eval), pas
+au boot du daemon. Conséquence : le runs-center n'affiche les runs eval
+restaurés qu'après navigation. Données jamais perdues (sur disque). Si
+on veut un boot scan complet plus tard, il faudra coupler le boot à un
+skill-discovery (project / bundled / global / plugin) — chantier séparé.
+
+**Effort réel : 0,5 j** (vs 1,25 j estimé).
 
 ### Étape 4 — finition
 
@@ -256,9 +275,12 @@ spec compose à sa guise.
    `finish` optionnel — l'instance `runner.finish` est elle-même
    optionnelle (`undefined` côté eval).
 
-## Critères de succès
+## Critères de succès *(révisés)*
 
-1. **LOC** : audit-runner ≤ 200, fix-runner ≤ 250, eval-runner ≤ 600.
+1. **LOC** : audit-runner ≤ 350, fix-runner ≤ 700, eval-runner inchangé
+   (autonome). Cibles initiales (200 / 250 / 600) trop optimistes —
+   audit/fix gardent leurs helpers spécifiques (history, diff API), eval
+   reste tel quel par décision actée à l'Étape 3.
 2. **Comportement préservé** : pas un seul changement de contrat IPC,
    pas un changement visible côté frontend pour les flows critiques
    (audit / fix / create / eval / batch eval).
@@ -293,8 +315,8 @@ spec compose à sa guise.
 | 0. `createRunner` + tests | 0,5 j |
 | 1. Migration audit | 0,5 j |
 | 2. Migration fix + create | 0,75 j |
-| 3. Migration eval (incl. rehydratation) | 1,25 j |
+| 3. Eval rehydratation lazy (autonome, pas migré) | 0,5 j |
 | 4. Finition + smoke + docs/technical | 0,25 j |
-| **Total** | **~3,25 j** |
+| **Total** | **~2,5 j** |
 
 À découper en autant de commits dédiés (un par étape).

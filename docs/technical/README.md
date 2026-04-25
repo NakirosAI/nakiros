@@ -1,4 +1,4 @@
-# documentation-technique/
+# technical/
 
 Generated TSDoc mirror for the Nakiros monorepo. Read the index closest to your target file; leaves reproduce the TSDoc of one source file each.
 

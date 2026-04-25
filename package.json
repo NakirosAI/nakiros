@@ -23,6 +23,10 @@
       "fs-xattr",
       "macos-alias",
       "node-pty"
-    ]
+    ],
+    "overrides": {
+      "uuid": "^14.0.0",
+      "yaml": "^2.8.3"
+    }
   }
 }

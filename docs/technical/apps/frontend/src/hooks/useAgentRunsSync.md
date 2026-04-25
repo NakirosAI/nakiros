@@ -2,16 +2,16 @@
 
 **Path:** `apps/frontend/src/hooks/useAgentRunsSync.ts`
 
-Mirrors the daemon's active runs into the frontend `agentRunStore`. v1 covers audit only — eval / fix / create adapters land alongside the corresponding kind migrations. Runs disappearing from the daemon's active list are removed locally on the next tick.
+Mirrors the daemon's runs into the frontend `agentRunStore` across every kind (audit / fix / create / eval). Polls `*.listAll` every 2 s so active **and** recently-terminal runs surface in the topbar drawer; the store filters dismissed ids on upsert.
+
+Audit / fix / create map one-to-one onto an `AgentRun`; eval runs are grouped by `(scope, projectId, plugin/marketplace, skillName, iteration)` so a 5-run batch surfaces as a single drawer entry whose `meta.runIds` carries the constituent runs for the `EvalRunsView` overlay.
 
 ## Exports
 
 ### `function useAgentRunsSync`
 
-Mount this once at the app shell to keep `agentRunStore` mirrored with the daemon's active runs.
+Mount this once at the app shell.
 
 ```ts
 export function useAgentRunsSync(): void
 ```
-
-Polls every 2s via `usePolling`. Each adapter inside translates its native run shape (e.g. `AuditRun`) into the unified `AgentRun` shape and calls `agentRunStore.syncKind(kind, mapped)`.

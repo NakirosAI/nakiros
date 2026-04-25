@@ -63,6 +63,17 @@ export type AgentRunTarget = SkillRunTarget
 
 Discriminated union of every supported target shape. New target kinds (e.g. `{ type: 'conversation'; conversationId: string; … }`) extend this union when their corresponding agent-run kind ships.
 
+### `type AgentRunMeta`
+
+Kind-specific opaque payload riding alongside an `AgentRun`. The store never inspects it; only the matching `kind`'s adapter and its consumer (the focus handler in `useSkillsViewState`) read the relevant variant.
+
+- `eval` carries the batch of run ids that share the same skill+iteration, so clicking the entry can open `EvalRunsView` with the full batch.
+
+```ts
+export type AgentRunMeta =
+  | { kind: 'eval'; runIds: string[]; iteration: number }
+```
+
 ### `interface AgentRun`
 
 ```ts
@@ -76,6 +87,7 @@ export interface AgentRun {
   endedAt?: string;
   capabilities: AgentRunCapabilities;
   tokensUsed?: number;
+  meta?: AgentRunMeta;
 }
 ```
 

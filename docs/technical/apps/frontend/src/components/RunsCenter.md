@@ -2,20 +2,22 @@
 
 **Path:** `apps/frontend/src/components/RunsCenter.tsx`
 
-Topbar pill that surfaces every active agent run regardless of `kind`. Single source of truth for "is something running right now?", visible from any screen so the in-flight indicator survives navigation.
+Topbar pill + slide-in drawer surfacing every agent run regardless of `kind`. Visible from any screen so the in-flight indicator survives navigation. The icon shows two distinct counters:
 
-v1 lists active runs only; the dropdown is read-only (clicking a run calls `onOpenRun` if provided). Completed-run badges and notifications come in a later iteration.
+- **Active** (primary, spinner) when at least one run is in flight, with an emerald `+N` chip when terminal-unread runs are also waiting.
+- **Completed-unread** (success/warning) when only terminal runs are waiting to be acknowledged.
+- **Idle** (muted activity icon) when nothing is in the drawer.
+
+The drawer slides in from the right (`w-96`, full height, opaque `bg-card`, semi-transparent backdrop). Closes on Escape, click-outside, or the X button. Body scroll is locked while open. Active runs render in an "Active" section above; terminal runs in a "Completed" section below with per-row dismiss `X` and a "Clear completed" footer button.
+
+Clicking a row navigates to the run's native screen via the `useAgentRunNavigation` context.
 
 ## Exports
 
 ### `function RunsCenter`
 
 ```ts
-export function RunsCenter(props: {
-  onOpenRun?(run: AgentRun): void;
-}): JSX.Element
+export function RunsCenter(): JSX.Element
 ```
 
-Rendered once at the App shell level (fixed top-right). Reads the global `agentRunStore` via `useActiveAgentRuns` — no props for the run list itself.
-
-The host (App.tsx) provides `onOpenRun` to handle navigation: typically calls `agentRunFocus.set(run)` then switches the top-level view to the run's native screen, where `useSkillsViewState` consumes the focus and selects the right skill.
+No props — reads the global `agentRunStore` via `useActiveAgentRuns` and resolves the click-to-navigate callback from `useAgentRunNavigation`. Render it once per top-level view inside the existing topbar (Home's fixed div, Dashboard's flex, the three skill views' TopBar).

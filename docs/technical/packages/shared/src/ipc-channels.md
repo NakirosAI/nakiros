@@ -64,19 +64,21 @@ Channels are grouped by domain. Each key equals its value so the object acts as 
 
 - `audit:start`, `audit:stopRun`, `audit:getRun`, `audit:sendUserMessage`, `audit:finish`
 - `audit:listHistory`, `audit:readReport`
-- Stream: `audit:event`, `audit:listActive`, `audit:getBufferedEvents`
+- Stream: `audit:event`, `audit:listActive`, `audit:listAll`, `audit:getBufferedEvents`
+
+`audit:listActive` filters to non-terminal runs; `audit:listAll` returns the full registry (active + recently terminal) for the runs center.
 
 ### Fix runner
 
 - `fix:start`, `fix:stopRun`, `fix:getRun`, `fix:sendUserMessage`, `fix:finish`
 - Evals in temp: `fix:runEvalsInTemp`, `fix:getBenchmarks`
-- Stream: `fix:event`, `fix:listActive`, `fix:getBufferedEvents`
+- Stream: `fix:event`, `fix:listActive`, `fix:listAll`, `fix:getBufferedEvents`
 - Diff preview: `fix:listDiff`, `fix:readDiffFile`
 
 ### Create runner (thin mirror of fix)
 
 - `create:start`, `create:stopRun`, `create:getRun`, `create:sendUserMessage`, `create:finish`
-- `create:event`, `create:listActive`, `create:getBufferedEvents`
+- `create:event`, `create:listActive`, `create:listAll`, `create:getBufferedEvents`
 - `create:listDiff`, `create:readDiffFile`
 
 ### Draft temp files (shared by fix + create)

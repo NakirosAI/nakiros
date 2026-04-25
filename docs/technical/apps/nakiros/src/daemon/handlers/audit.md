@@ -10,7 +10,9 @@ Registers the `audit:*` IPC channels — static skill review via the `/nakiros-s
 - `audit:start`, `audit:stopRun`, `audit:getRun`, `audit:finish`
 
 ### Stream
-- `audit:sendUserMessage`, `audit:listActive`, `audit:getBufferedEvents`
+- `audit:sendUserMessage`, `audit:listActive`, `audit:listAll`, `audit:getBufferedEvents`
+
+`audit:listActive` filters to non-terminal runs (used by per-skill badges); `audit:listAll` returns the full registry — active **and** recently terminal — so the runs center can surface restored / completed audits for the user to dismiss.
 
 ### History
 - `audit:listHistory` — archived reports under `{skill}/audits/`

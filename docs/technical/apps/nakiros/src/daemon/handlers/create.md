@@ -10,7 +10,9 @@ Registers the `create:*` IPC channels — thin mirror of `fix:*` with different 
 - `create:start`, `create:stopRun`, `create:getRun`, `create:finish`
 
 ### Stream
-- `create:sendUserMessage`, `create:listActive`, `create:getBufferedEvents`
+- `create:sendUserMessage`, `create:listActive`, `create:listAll`, `create:getBufferedEvents`
+
+`create:listActive` filters to non-terminal runs; `create:listAll` returns the full registry (active + recently terminal) for the runs center.
 
 ### Diff preview
 - `create:listDiff`, `create:readDiffFile`

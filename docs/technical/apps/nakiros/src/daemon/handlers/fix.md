@@ -10,7 +10,9 @@ Registers the `fix:*` IPC channels — skill iteration flow that edits a temp co
 - `fix:start`, `fix:stopRun`, `fix:getRun`, `fix:finish`
 
 ### Stream
-- `fix:sendUserMessage`, `fix:listActive`, `fix:getBufferedEvents`
+- `fix:sendUserMessage`, `fix:listActive`, `fix:listAll`, `fix:getBufferedEvents`
+
+`fix:listActive` filters to non-terminal runs; `fix:listAll` returns the full registry (active + recently terminal) for the runs center.
 
 ### Evals in temp
 - `fix:runEvalsInTemp` — runs the eval suite against the in-progress copy. Results are written inside the temp workdir, so the real skill stays untouched until the user syncs. The fix agent can read `benchmark.json` between turns.

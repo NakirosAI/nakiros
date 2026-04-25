@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, File, Loader2, Play, Plus, Save, Search, Sparkles, Wrench, FlaskConical } from 'lucide-react';
 import clsx from 'clsx';
 import type { AuditRun, Project } from '@nakiros/shared';
-import { Checkbox, MarkdownViewer } from '../components/ui';
+import { Checkbox, LoadingState, MarkdownViewer } from '../components/ui';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
@@ -163,11 +163,7 @@ export default function SkillsView({ project }: Props) {
   }
 
   if (s.loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        {t('loading')}
-      </div>
-    );
+    return <LoadingState>{t('loading')}</LoadingState>;
   }
 
   // Skill detail
@@ -334,7 +330,7 @@ export default function SkillsView({ project }: Props) {
                     </button>
                   </div>
                   {s.loadingFile ? (
-                    <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">{t('loadingFile')}</div>
+                    <LoadingState>{t('loadingFile')}</LoadingState>
                   ) : s.imageDataUrl ? (
                     <div className="flex flex-1 items-center justify-center overflow-auto bg-[var(--bg-muted)] p-6">
                       <img
@@ -344,9 +340,7 @@ export default function SkillsView({ project }: Props) {
                       />
                     </div>
                   ) : s.selectedFile && isImagePath(s.selectedFile) ? (
-                    <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-                      {t('imageError')}
-                    </div>
+                    <LoadingState>{t('imageError')}</LoadingState>
                   ) : s.isMarkdown && !s.dirty ? (
                     <div className="flex-1 overflow-y-auto p-6">
                       <MarkdownViewer content={s.fileContent} />

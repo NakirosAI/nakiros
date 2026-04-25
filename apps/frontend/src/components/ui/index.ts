@@ -5,6 +5,7 @@ export * from './Card';
 export * from './EmptyState';
 export * from './FormField';
 export * from './Input';
+export * from './LoadingState';
 export * from './Modal';
 export * from './Select';
 export * from './Textarea';

@@ -15,7 +15,7 @@ import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { AuditRun, AuditRunEvent, SkillScope } from '@nakiros/shared';
-import { MarkdownViewer } from '../components/ui';
+import { LoadingState, MarkdownViewer } from '../components/ui';
 import {
   ConversationTurn,
   liveEventsToBlocks,
@@ -204,9 +204,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-            {t('report.notYetProduced')}
-          </div>
+          <LoadingState>{t('report.notYetProduced')}</LoadingState>
         )}
 
         {run.error && (

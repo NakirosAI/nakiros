@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, FileText, Search } from 'lucide-react';
 import type { AuditHistoryEntry, SkillScope } from '@nakiros/shared';
 import type { TFunction } from 'i18next';
-import { MarkdownViewer } from '../ui';
+import { LoadingState, MarkdownViewer } from '../ui';
 
 interface Props {
   scope: SkillScope;
@@ -59,11 +59,7 @@ export default function SkillAuditsTab({
   }
 
   if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        {t('history.loading')}
-      </div>
-    );
+    return <LoadingState>{t('history.loading')}</LoadingState>;
   }
 
   if (selected) {

@@ -17,7 +17,7 @@ import {
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { MarkdownViewer } from '../components/ui';
+import { LoadingState, MarkdownViewer } from '../components/ui';
 import {
   ConversationTurn,
   liveEventsToBlocks,
@@ -306,9 +306,7 @@ export default function EvalRunsView({
               t={t}
             />
           ) : (
-            <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-              {t('selectRun')}
-            </div>
+            <LoadingState>{t('selectRun')}</LoadingState>
           )}
         </div>
       </div>

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { ConversationAnalysis, Project } from '@nakiros/shared';
 import { ConversationHealthBadges } from '../components/conversations/ConversationHealthBadges';
 import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
+import { LoadingState } from '../components/ui';
 
 interface Props {
   /** Project whose JSONL conversation analyses are listed. */
@@ -68,11 +69,7 @@ export default function ConversationsView({ project }: Props) {
   }, [analyses, sort, filter]);
 
   if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        {t('loading')}
-      </div>
-    );
+    return <LoadingState>{t('loading')}</LoadingState>;
   }
 
   return (

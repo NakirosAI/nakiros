@@ -11,6 +11,7 @@ import SkillDiffView, {
   type SkillDiffFileEntry,
   type SkillDiffLabels,
 } from '../components/diff/SkillDiffView';
+import { LoadingState } from '../components/ui';
 
 interface Props {
   /** Outstanding conflicts surfaced after a bundled-skill install/upgrade. */
@@ -225,9 +226,7 @@ export default function BundledSkillConflictsView({ conflicts, onClose, onResolv
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-[var(--text-muted)]">
-            {t('allResolved')}
-          </div>
+          <LoadingState size="sm">{t('allResolved')}</LoadingState>
         )}
       </div>
     </div>

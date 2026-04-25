@@ -10,6 +10,7 @@ import {
   topFailingTools,
   topTipFrequencies,
 } from '../components/conversations/ConversationsAggregation';
+import { LoadingState } from '../components/ui';
 
 interface Props {
   /** Project whose conversation analyses are aggregated. */
@@ -62,11 +63,7 @@ export default function ProjectOverview({ project }: Props) {
   );
 
   if (!analyses) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        {t('loading')}
-      </div>
-    );
+    return <LoadingState>{t('loading')}</LoadingState>;
   }
 
   return (

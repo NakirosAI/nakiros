@@ -697,7 +697,7 @@ function DraftFilesPanel({ runId, defaultOpen, t }: { runId: string; defaultOpen
       </button>
 
       {open && (
-        <div className="flex border-t border-[var(--line)]" style={{ height: 320 }}>
+        <div className="flex h-80 border-t border-[var(--line)]">
           {/* File list */}
           <div className="w-[240px] shrink-0 overflow-y-auto border-r border-[var(--line)]">
             {error ? (

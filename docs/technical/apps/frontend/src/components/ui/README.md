@@ -13,6 +13,7 @@ Themed UI primitives shared by every feature view in the Nakiros frontend. Pure 
 - [EmptyState.tsx](./EmptyState.md) — Centered placeholder shown when a list or panel has no data.
 - [FormField.tsx](./FormField.md) — Vertical label / control / hint-or-error layout used internally by `Input`, `Select`, `Textarea`.
 - [Input.tsx](./Input.md) — Themed text input wrapped in a `FormField` with optional leading icon.
+- [LoadingState.tsx](./LoadingState.md) — Centered muted-text placeholder for "loading" / "no item selected" panels.
 - [MarkdownViewer.tsx](./MarkdownViewer.md) — Themed `react-markdown` + `remark-gfm` renderer with custom support for Mermaid and unified diffs.
 - [Modal.tsx](./Modal.md) — Lightweight controlled modal dialog (not portalled).
 - [Select.tsx](./Select.md) — Themed native `<select>` driven by an `options` array.

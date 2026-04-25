@@ -7,6 +7,7 @@ import SkillDiffView, {
   type SkillDiffFileContent,
   type SkillDiffLabels,
 } from '../diff/SkillDiffView';
+import { LoadingState } from '../ui';
 
 interface Props {
   runId: string;
@@ -70,18 +71,18 @@ export default function FixReviewPanel({ runId, mode, refreshKey }: Props) {
 
   if (files == null) {
     return (
-      <div className="flex flex-1 items-center justify-center gap-2 text-xs text-[var(--text-muted)]">
+      <LoadingState size="xs" className="gap-2">
         <Loader2 size={12} className="animate-spin" />
         {t('review.loading')}
-      </div>
+      </LoadingState>
     );
   }
 
   if (files.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center px-4 text-xs text-[var(--text-muted)]">
+      <LoadingState size="xs" className="px-4">
         {mode === 'create' ? t('review.emptyCreate') : t('review.emptyFix')}
-      </div>
+      </LoadingState>
     );
   }
 

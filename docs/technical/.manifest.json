@@ -48,7 +48,7 @@
     "apps/nakiros/src/services/runner-core/event-log.ts": "81c4270d9742337fe856bc6e368063702f45f1a3e54b4cbf84cbb214faa0ed6e",
     "apps/nakiros/src/services/runner-core/execution-settings.ts": "a3a9d08e00df87c4fbbe0a891f5d50058e3e61a37866120b5beb8e1b02ebe118",
     "apps/nakiros/src/services/runner-core/git-worktree.ts": "5b73633010e102e56c436f67b45073805291d78e8b908c096bf8a738cac4f192",
-    "apps/nakiros/src/services/runner-core/index.ts": "0fd8d783f6d6f5166d2b4d45987db57443f020833b72e076fd16c7536a72f28a",
+    "apps/nakiros/src/services/runner-core/index.ts": "a1a8a72fdfa764cf1dbf7775d08e6aaeb209a3d840708b3be5f76afac61d4f95",
     "apps/nakiros/src/services/runner-core/isolated-home.ts": "01077c5583f89cd69ad43a0d83ecdeaa2e91551c5184a0400092f8c62e250120",
     "apps/nakiros/src/services/runner-core/run-id.ts": "7947b6d68a02cfba9690224c4b71f22b14f2bb430f73a354627ed197b7848718",
     "apps/nakiros/src/services/runner-core/run-status.ts": "c9114d26323de64c15fee4253419b669e1ed949ce7b3f005c40755538c0d793d",
@@ -57,7 +57,7 @@
     "apps/nakiros/src/services/runner-core/tool-format.ts": "36a6874917223219450bd6e88e84bfd63b602b0ac1028a765bba084b0bf95e2a",
     "apps/nakiros/src/services/agent-cli.ts": "53974e61dfbd6e4d045e6c7e82b5939d8bebf49e507c2df3bdd72f8f5413de17",
     "apps/nakiros/src/services/agent-installer.ts": "15fded88375d1d9a7fc55ab09a4861fd6f9c2387918d32844fe4a15b3bf0475e",
-    "apps/nakiros/src/services/audit-runner.ts": "fdba378893af1dc904a3472385f621c2a4c197fc72a3cea665a34e5c13ce7ee7",
+    "apps/nakiros/src/services/audit-runner.ts": "0c793f6b7c5ff934dcbfdb5ccdd2fb14e3f67e1e24c2c846020ec174732ddef7",
     "apps/nakiros/src/services/bundled-skills-reader.ts": "6a7fa6445b9cde65bf3f990f79bf2d66128016b67782dcef3ef8be0518c52586",
     "apps/nakiros/src/services/bundled-skills-sync.ts": "4744b084cced3c7bce6d95bd606256f24f8f2f106316b2698ddf2044654373cd",
     "apps/nakiros/src/services/claude-global-skills-reader.ts": "fe6846a5134a26cca3d7cb0eba48ffa0e98d0868a4d361eca63c99cd0363107a",
@@ -71,8 +71,8 @@
     "apps/nakiros/src/services/eval-llm-grader.ts": "a7c2f72d7678b1e7279d74819fa7846c0754d0125ad5e55071c8666f15f3a931",
     "apps/nakiros/src/services/eval-matrix.ts": "421a905af5ee39809ed6003e6ace7933b484c00d742b724e4fa1bf8aa87cdcd7",
     "apps/nakiros/src/services/eval-parser.ts": "5664464b71d0ef8d8fbbf398acc274f15363d262f758453966b69ece671a3e54",
-    "apps/nakiros/src/services/eval-runner.ts": "0e92d0e4cff14a8c772896fe7fa5dcd6e807884ecaef1ec5cd43f0656b06fc21",
-    "apps/nakiros/src/services/fix-runner.ts": "d14221cef4bfdca5d9f29124a78b5cbfdc0fc230d942c59f5ab3c03eb246d984",
+    "apps/nakiros/src/services/eval-runner.ts": "65da2a9daf416169f76bf1a19f6a4bd4e63031f1e09523293707264e9f4cdb1b",
+    "apps/nakiros/src/services/fix-runner.ts": "4d184d249926e1bddc4b3ec491aba729a6d7c31fca7072924f068f3a1442ed15",
     "apps/nakiros/src/services/onboarding-installer.ts": "c22f93b04d047f6c62d5c1bb15eca3a35536b2d30f2852d27349da2d2017a9ff",
     "apps/nakiros/src/services/plugin-skills-reader.ts": "a5d30e17e64066b37979a06213bf39d7fa98e2ee2707204f34febb0f0e08c443",
     "apps/nakiros/src/services/preferences.ts": "a2eca6b4dcaae021b4731f8634d0412df49437cc3f83c11662fbf00d5b588fda",
@@ -209,7 +209,8 @@
     "apps/frontend/src/components/runs/RunStatusBadge.tsx": "6371564a5f97a5a15c36099c0614ae8c1b6f7c7281219f508b7c5083a9dd2ec0",
     "apps/frontend/src/components/runs/RunStatusIcon.tsx": "222331127b438242a84f78a6ce372626fef19500b43ccecd1a6cc3f38abe4318",
     "apps/frontend/src/components/runs/index.ts": "c93864622f679e0a22cd2bc3fe3655902e96e7a1ebd5405f3ea55cd625ee4f8b",
-    "apps/frontend/src/components/ui/CodeEditorPane.tsx": "8116c91f26bb6dd478f1fecf28d5347507ae2fe7caa15001bfd47eeacbc42877"
+    "apps/frontend/src/components/ui/CodeEditorPane.tsx": "8116c91f26bb6dd478f1fecf28d5347507ae2fe7caa15001bfd47eeacbc42877",
+    "apps/nakiros/src/services/runner-core/runner.ts": "bc33efec06c9e19890ef72db3c4551f43a357d55b1ed9aba6b5611942505eb19"
   },
-  "updated_at": "2026-04-25T19:52:02.765Z"
+  "updated_at": "2026-04-25T20:34:34.916Z"
 }

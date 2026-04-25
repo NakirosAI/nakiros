@@ -88,3 +88,12 @@ Load all runs from a skill's workspace iterations into the in-memory registry. C
 ```ts
 export function loadPersistedRuns(skillDir: string): SkillEvalRun[]
 ```
+
+Boot-rehydration policy (token-cost survival across daemon restarts):
+
+- `completed` / `failed` / `stopped` → returned read-only.
+- `waiting_for_input` → injected into the registry with the saved `sessionId` so {@link sendUserMessage} can resume via `--resume` after a reboot.
+- `queued` / `starting` / `running` / `grading` → collapsed to `stopped` (the subprocess died with the previous daemon) and the collapse is persisted to disk so subsequent reloads stay stable.
+- Already-registered runs (in-flight) are returned as-is — memory wins over disk.
+
+The rehydration is **lazy**: triggered when the frontend opens an eval view (which calls `eval:loadPersisted`), not at daemon boot. The runs-center drawer therefore populates eval entries as the user navigates between skills. No data is lost — everything is on disk.

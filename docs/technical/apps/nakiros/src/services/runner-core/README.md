@@ -28,3 +28,6 @@ The tmp_skill pattern (eval/fix/create isolated from the real skill) is load-bea
 
 ### Cleanup
 - [claude-projects.ts](./claude-projects.md) — Reclaim `~/.claude/projects/*` entries orphaned by Nakiros runs (boot sweep + per-run teardown).
+
+### Lifecycle factory
+- [runner.ts](./runner.md) — `createRunner(spec)` — kind-agnostic backbone (registry, executeTurn, persistence, boot rehydration) consumed by audit/fix/create. Eval keeps its own lifecycle.

@@ -10,6 +10,8 @@ Workdir layout differs per mode:
 
 Boot recovery rehydrates in-flight workdirs into `waiting_for_input` and restores the event log from `events.jsonl` so the user sees the tail of the interrupted turn on reopen.
 
+Built on top of the shared [`createRunner`](../services/runner-core/runner.md) factory — this file only contributes the skill-agent spec (mode-aware workdir prep, sync-back on finish, immediate workdir destruction on failed turn) and the diff API (`listFixDiff` / `readFixDiffFile`) the review panel consumes. Both `fix` and `create` modes share the same registry; the spec's `runIdPrefix` keeps `fix_*` and `create_*` ids distinct.
+
 ## Exports
 
 ### `type SkillAgentMode`
@@ -89,6 +91,15 @@ Return the buffered stream events for the current turn (used on remount mid-run)
 ### `function listActiveFixRuns`, `listActiveCreateRuns`
 
 List every non-terminal run of each mode. Used by the UI to surface "fix running" / "create running" badges.
+
+### `function listAllFixRuns`, `listAllCreateRuns`
+
+List every run of each mode currently in memory — active **and** terminal (`completed` / `failed` / `stopped`). Used by the runs center so completed runs restored at boot can be revisited and dismissed by the user.
+
+```ts
+export function listAllFixRuns(): AuditRun[]
+export function listAllCreateRuns(): AuditRun[]
+```
 
 ### `function listFixDiff`
 

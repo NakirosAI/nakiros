@@ -6,6 +6,8 @@ Static-review run-kind driven by `/nakiros-skill-factory audit <skillName>`. The
 
 Workdir lives under `~/.nakiros/runs/audit/<runId>/` and persists across daemon restarts. The target skill is symlinked into `{workdir}/.claude/skills/<skillName>` so the factory skill can find it via cwd. Boot recovery (`restoreOrCleanupAuditWorkdirs`) rehydrates in-flight runs into `waiting_for_input` (they resume via `--resume`) or cleans up terminal workdirs.
 
+Built on top of the shared [`createRunner`](../services/runner-core/runner.md) factory — this file only contributes the audit-specific spec (workdir prep with skill symlink, post-turn artefact archive, audit-history listing) and re-exports the public surface IPC handlers consume.
+
 ## Exports
 
 ### `function restoreOrCleanupAuditWorkdirs`
@@ -22,6 +24,14 @@ Return every in-memory audit run that's still in a non-terminal status (`startin
 
 ```ts
 export function listActiveAuditRuns(): AuditRun[]
+```
+
+### `function listAllAuditRuns`
+
+Return every audit run currently held in memory — active **and** terminal (`completed` / `failed` / `stopped`). Used by the runs center so completed audits restored at boot can be revisited and dismissed by the user.
+
+```ts
+export function listAllAuditRuns(): AuditRun[]
 ```
 
 ### `function startAudit`

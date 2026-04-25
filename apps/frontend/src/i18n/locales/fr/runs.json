@@ -1,0 +1,38 @@
+{
+  "back": "Retour",
+  "stop": "Arrêter",
+  "finish": "Terminer",
+  "discard": "Abandonner",
+  "error": {
+    "title": "Erreur"
+  },
+  "input": {
+    "send": "Envoyer",
+    "waitingBanner": "L'agent attend ta réponse",
+    "placeholderWaiting": "Tape ta réponse… (Entrée pour envoyer, Maj+Entrée pour nouvelle ligne)",
+    "placeholderRunning": "L'agent tourne, ton message sera mis en file…",
+    "placeholderIdle": "Tape un message…",
+    "sendFailed": "Échec de l'envoi : {{message}}"
+  },
+  "status": {
+    "queued": "en file",
+    "starting": "démarrage",
+    "running": "en cours",
+    "waiting_for_input": "en attente",
+    "awaiting_input": "en attente",
+    "grading": "notation",
+    "completed": "terminé",
+    "done": "terminé",
+    "failed": "échec",
+    "stopped": "arrêté",
+    "cancelled": "annulé",
+    "pending": "en attente"
+  },
+  "thinking": {
+    "verbs": [
+      "Réflexion…",
+      "Lecture…",
+      "Travail en cours…"
+    ]
+  }
+}

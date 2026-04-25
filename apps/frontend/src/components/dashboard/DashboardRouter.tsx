@@ -19,15 +19,19 @@ interface DashboardRouterProps {
  * settings ship.
  */
 export function DashboardRouter({ activeTab, project }: DashboardRouterProps) {
+  // The `key={project.id}` on each view forces a remount on project switch
+  // so internal state (selected skill, loaded skill list, in-flight overlays)
+  // resets to the new project's data — otherwise SkillsView's
+  // useSkillsViewState would keep showing the previous project's skills.
   switch (activeTab) {
     case 'dashboard':
-      return <ProjectOverview project={project} />;
+      return <ProjectOverview key={project.id} project={project} />;
     case 'skills':
-      return <SkillsView project={project} />;
+      return <SkillsView key={project.id} project={project} />;
     case 'conversations':
-      return <ConversationsView project={project} />;
+      return <ConversationsView key={project.id} project={project} />;
     case 'recommendations':
-      return <RecommendationsView project={project} />;
+      return <RecommendationsView key={project.id} project={project} />;
     case 'settings':
       return (
         <div className="flex-1 overflow-y-auto p-6">

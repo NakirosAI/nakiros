@@ -1,14 +1,14 @@
 .DS_Store
-.nakiros/
-_bmad*
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/code-documentation/
 .codex/
 .cursor/
 .npm-cache/
 dist/
 .agents/
 node_modules/
-.nakiros.yaml
 
 # Wrangler
 .wrangler/
@@ -22,14 +22,3 @@ apps/*/dist/
 apps/*/node_modules/
 packages/*/dist/
 packages/*/node_modules/
-
-# Electron
-apps/desktop/out/
-apps/desktop/.vite/
-apps/desktop/.generated-icons/
-apps/desktop/dist-electron/
-
-# VS Code Extension
-apps/vscode-extension/*.vsix
-tmp/
-_nakiros/

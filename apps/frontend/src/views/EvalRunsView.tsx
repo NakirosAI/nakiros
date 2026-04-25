@@ -18,6 +18,7 @@ import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { LoadingState, MarkdownViewer } from '../components/ui';
+import { formatComputeDuration, formatTokens } from '../utils/format';
 import {
   ConversationTurn,
   liveEventsToBlocks,
@@ -205,9 +206,9 @@ export default function EvalRunsView({
             </>
           )}
           <span>·</span>
-          <span>{t('elapsed', { duration: formatDuration(elapsed, t) })}</span>
+          <span>{t('elapsed', { duration: formatComputeDuration(elapsed) })}</span>
           <span>·</span>
-          <span>{t('tokensUsed', { tokens: formatTokens(totalTokens, t) })}</span>
+          <span>{t('tokensUsed', { tokens: formatTokens(totalTokens, { unit: 'tok' }) })}</span>
           {!allDone && (
             <button
               onClick={handleStopAll}
@@ -313,8 +314,8 @@ function RunListItem({
         {label}
       </span>
       <span className="ml-auto truncate text-[10px] text-[var(--text-muted)]">
-        {run.tokensUsed > 0 && formatTokens(run.tokensUsed, t)}
-        {run.durationMs > 0 && ` · ${formatDuration(run.durationMs, t)}`}
+        {run.tokensUsed > 0 && formatTokens(run.tokensUsed, { unit: 'tok' })}
+        {run.durationMs > 0 && ` · ${formatComputeDuration(run.durationMs)}`}
       </span>
     </button>
   );
@@ -416,13 +417,13 @@ function RunDetail({
             {run.tokensUsed > 0 && (
               <>
                 <span>·</span>
-                <span>{formatTokens(run.tokensUsed, t)}</span>
+                <span>{formatTokens(run.tokensUsed, { unit: 'tok' })}</span>
               </>
             )}
             {run.durationMs > 0 && (
               <>
                 <span>·</span>
-                <span>{formatDuration(run.durationMs, t)}</span>
+                <span>{formatComputeDuration(run.durationMs)}</span>
               </>
             )}
           </div>
@@ -637,19 +638,6 @@ function StatusIcon({ status, size = 'sm' }: { status: EvalRunStatus; size?: 'sm
   }
 }
 
-
-function formatTokens(n: number, t: TFunction<'evals'>): string {
-  if (n < 1000) return t('units.tokens', { count: n });
-  return t('units.tokensThousands', { value: (n / 1000).toFixed(1) });
-}
-
-function formatDuration(ms: number, t: TFunction<'evals'>): string {
-  if (ms < 1000) return t('units.milliseconds', { count: ms });
-  if (ms < 60000) return t('units.seconds', { value: (ms / 1000).toFixed(1) });
-  const min = Math.floor(ms / 60000);
-  const sec = Math.floor((ms % 60000) / 1000);
-  return t('units.minutes', { minutes: min, seconds: sec });
-}
 
 function formatBytes(n: number, t: TFunction<'evals'>): string {
   if (n < 1024) return t('units.bytes', { count: n });

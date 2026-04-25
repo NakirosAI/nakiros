@@ -30,6 +30,7 @@ import type {
   SkillScope,
 } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui';
+import { formatComputeDuration, formatTokens } from '../utils/format';
 import {
   ConversationTurn,
   liveEventsToBlocks,
@@ -272,9 +273,9 @@ export default function FixView({
         <StatusPill status={run.status} t={t} />
 
         <div className="ml-auto flex items-center gap-3 text-xs text-[var(--text-muted)]">
-          <span>{formatTokens(run.tokensUsed, t)}</span>
+          <span>{formatTokens(run.tokensUsed, { unit: 'tok' })}</span>
           <span>·</span>
-          <span>{formatDuration(isTerminal ? run.durationMs : elapsed)}</span>
+          <span>{formatComputeDuration(isTerminal ? run.durationMs : elapsed)}</span>
           {isWaiting && !isCreate && (
             <button
               onClick={handleRunEvalsInTemp}
@@ -518,20 +519,6 @@ function StatusPill({ status, t }: { status: AuditRun['status']; t: TFunction<'f
       {conf.label}
     </span>
   );
-}
-
-function formatTokens(n: number, t: TFunction<'fix'>): string {
-  const unit = t('units.tokens');
-  if (n < 1000) return `${n} ${unit}`;
-  return `${(n / 1000).toFixed(1)}k ${unit}`;
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  const min = Math.floor(ms / 60000);
-  const sec = Math.floor((ms % 60000) / 1000);
-  return `${min}m${sec}s`;
 }
 
 function BenchmarkComparePanel({

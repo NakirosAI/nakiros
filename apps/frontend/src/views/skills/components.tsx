@@ -178,18 +178,6 @@ export function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
-/** Compact token count: `820 tok` under 1k, `1.2k tok` above. */
-export function formatTokens(n: number): string {
-  if (n < 1000) return `${n} tok`;
-  return `${(n / 1000).toFixed(1)}k tok`;
-}
-
-/** Compact duration: `420ms`, `12.3s`, `1m05s`. */
-export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m${Math.floor((ms % 60000) / 1000)}s`;
-}
 
 /**
  * Inline selector for the Claude model used to run evals. Rendered next to the

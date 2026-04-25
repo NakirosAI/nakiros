@@ -5,6 +5,7 @@ import { ConversationHealthBadges } from '../components/conversations/Conversati
 import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
 import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
 import { LoadingState } from '../components/ui';
+import { formatLongDuration } from '../utils/format';
 
 interface Props {
   /** Project whose JSONL conversation analyses are listed. */
@@ -182,7 +183,7 @@ function ConversationRow({
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-muted)]">
             <span>{new Date(analysis.lastMessageAt).toLocaleDateString()}</span>
-            <span>{formatDuration(analysis.durationMs)}</span>
+            <span>{formatLongDuration(analysis.durationMs)}</span>
             <span>{analysis.messageCount} msgs</span>
             {analysis.gitBranch && <span>{analysis.gitBranch}</span>}
           </div>
@@ -195,12 +196,3 @@ function ConversationRow({
   );
 }
 
-function formatDuration(ms: number): string {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  return rem === 0 ? `${h}h` : `${h}h${rem}m`;
-}

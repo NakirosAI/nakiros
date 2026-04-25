@@ -3,8 +3,9 @@
 **Path:** `apps/frontend/src/views/skills/components.tsx`
 
 UI primitives shared across every scoped skills view: pass-rate badge,
-neutral pill, segmented tab button, recursive file/folder tree, and a
-handful of formatters.
+neutral pill, segmented tab button, recursive file/folder tree, file-size
+formatter, and the inline eval model selector. Token / duration
+formatters now live in `utils/format.ts`.
 
 ## Exports
 
@@ -68,22 +69,6 @@ function formatSize(bytes: number): string;
 ```
 
 Human-readable file size: `999B`, `12.3K`, `4.5M` (binary divisions).
-
-### `formatTokens`
-
-```ts
-function formatTokens(n: number): string;
-```
-
-Compact token count: `820 tok` under 1k, `1.2k tok` above.
-
-### `formatDuration`
-
-```ts
-function formatDuration(ms: number): string;
-```
-
-Compact duration: `420ms`, `12.3s`, `1m05s`.
 
 ### `EvalModelSelector`
 

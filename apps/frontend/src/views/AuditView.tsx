@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { AuditRun, AuditRunEvent, SkillScope } from '@nakiros/shared';
 import { LoadingState, MarkdownViewer } from '../components/ui';
+import { formatComputeDuration, formatTokens } from '../utils/format';
 import {
   ConversationTurn,
   liveEventsToBlocks,
@@ -149,9 +150,9 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
         <StatusPill status={run.status} t={t} />
 
         <div className="ml-auto flex items-center gap-3 text-xs text-[var(--text-muted)]">
-          <span>{formatTokens(run.tokensUsed, t)}</span>
+          <span>{formatTokens(run.tokensUsed, { unit: 'tok' })}</span>
           <span>·</span>
-          <span>{formatDuration(isTerminal ? run.durationMs : elapsed, t)}</span>
+          <span>{formatComputeDuration(isTerminal ? run.durationMs : elapsed)}</span>
           {isRunning && (
             <button
               onClick={handleStop}
@@ -327,15 +328,3 @@ function StatusPill({ status, t }: { status: AuditRun['status']; t: TFunction<'a
   );
 }
 
-function formatTokens(n: number, t: TFunction<'audit'>): string {
-  if (n < 1000) return t('tokens.short', { count: n });
-  return t('tokens.thousands', { value: (n / 1000).toFixed(1) });
-}
-
-function formatDuration(ms: number, t: TFunction<'audit'>): string {
-  if (ms < 1000) return t('duration.ms', { ms });
-  if (ms < 60000) return t('duration.seconds', { s: (ms / 1000).toFixed(1) });
-  const min = Math.floor(ms / 60000);
-  const sec = Math.floor((ms % 60000) / 1000);
-  return t('duration.minutes', { m: min, s: sec });
-}

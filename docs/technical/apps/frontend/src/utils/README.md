@@ -8,6 +8,7 @@ Pure helpers shared across views: dates, file-type classification, id generation
 
 - [dates.ts](./dates.md) — Date helpers: freshness colour, age in days, i18n-aware short relative time formatting.
 - [file-types.ts](./file-types.md) — MIME-like classification for skill asset files displayed in the UI.
+- [format.ts](./format.md) — Compact token and duration formatters used by the run views, eval matrix, and conversation panels.
 - [ids.ts](./ids.md) — Short unique-id generator backed by `crypto.randomUUID()`.
 - [language.ts](./language.md) — Resolves the user's language preference into a concrete language code.
 - [strings.ts](./strings.md) — String helpers shared across views.

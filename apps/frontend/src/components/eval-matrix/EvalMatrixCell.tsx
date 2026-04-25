@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import type { EvalMatrixCell as Cell } from '@nakiros/shared';
+import { formatComputeDuration, formatTokens } from '../../utils/format';
 
 /**
  * A composite cell showing BOTH configurations stacked:
@@ -76,7 +77,7 @@ export function EvalMatrixCellView({
 }
 
 function tooltipFor(cell: Cell, label: string): string {
-  return `${label}: ${cell.passed}/${cell.total} · ${formatTokens(cell.tokens)} tokens · ${formatDuration(cell.durationMs)}`;
+  return `${label}: ${cell.passed}/${cell.total} · ${formatTokens(cell.tokens)} tokens · ${formatComputeDuration(cell.durationMs)}`;
 }
 
 /** Red (0%) → orange → yellow → lime → green (100%). */
@@ -99,13 +100,3 @@ function mutedBg(passRate: number): string {
   return 'bg-red-900/50 text-red-300';
 }
 
-function formatTokens(n: number): string {
-  if (n < 1000) return `${n}t`;
-  return `${(n / 1000).toFixed(1)}kt`;
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m${Math.floor((ms % 60000) / 1000)}s`;
-}

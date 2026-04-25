@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Project, AppPreferences, BundledSkillConflict } from '@nakiros/shared';
+import type { AgentRun, Project, AppPreferences, BundledSkillConflict } from '@nakiros/shared';
 import Home from './views/Home';
 import ScanView from './views/ScanView';
 import Dashboard from './views/Dashboard';
@@ -8,10 +8,13 @@ import NakirosSkillsView from './views/NakirosSkillsView';
 import GlobalSkillsView from './views/GlobalSkillsView';
 import PluginSkillsView from './views/PluginSkillsView';
 import BundledSkillConflictsView from './views/BundledSkillConflictsView';
+import { RunsCenter } from './components/RunsCenter';
 import { resolveLanguage } from './utils/language';
 import i18n from './i18n/index';
 import { PreferencesProvider } from './hooks/usePreferences';
 import { ProjectProvider } from './hooks/useProject';
+import { useAgentRunsSync } from './hooks/useAgentRunsSync';
+import { agentRunFocus } from './lib/agent-run-focus';
 
 const FALLBACK_PREFERENCES: AppPreferences = {
   theme: 'dark',
@@ -49,6 +52,10 @@ export default function App() {
   const [preferences, setPreferences] = useState<AppPreferences>(FALLBACK_PREFERENCES);
   const [bundledConflicts, setBundledConflicts] = useState<BundledSkillConflict[]>([]);
   const [bundledConflictsDismissed, setBundledConflictsDismissed] = useState(false);
+
+  // Mirror the daemon's active runs into the global agent-run store. The
+  // RunsCenter pill below (and any other component) reads from there.
+  useAgentRunsSync();
 
   async function boot() {
     try {
@@ -165,6 +172,34 @@ export default function App() {
     }
   }
 
+  /**
+   * Route to the native screen hosting `run` and queue the focus so the
+   * destination view auto-selects the right skill (and switches to its
+   * audit tab) once it has loaded its skill list.
+   */
+  function navigateToAgentRun(run: AgentRun) {
+    if (run.target.type !== 'skill') return;
+    agentRunFocus.set(run);
+    switch (run.target.scope) {
+      case 'nakiros-bundled':
+        setView({ name: 'nakiros-skills' });
+        break;
+      case 'claude-global':
+        setView({ name: 'global-skills' });
+        break;
+      case 'plugin':
+        setView({ name: 'plugin-skills' });
+        break;
+      case 'project': {
+        const projectId = run.target.projectId;
+        if (!projectId) break;
+        const project = projects.find((p) => p.id === projectId);
+        if (project) openProject(project);
+        break;
+      }
+    }
+  }
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const showConflictsView =
@@ -265,5 +300,14 @@ export default function App() {
     );
   }
 
-  return renderView();
+  return (
+    <>
+      {view.name !== 'loading' && (
+        <div className="fixed right-4 top-3 z-20">
+          <RunsCenter onOpenRun={navigateToAgentRun} />
+        </div>
+      )}
+      {renderView()}
+    </>
+  );
 }

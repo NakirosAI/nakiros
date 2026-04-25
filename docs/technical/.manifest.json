@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "packages/shared/src/constants/claude-models.ts": "bd50a71f750afb8b4f65c7d1f27a4295ea26567a8c78586d5a8dd5c9aef2e03c",
-    "packages/shared/src/index.ts": "e0d26477bbf57cc30356fa0a5520b61db7b49e535d62ea1eb926a58f3e807a20",
+    "packages/shared/src/index.ts": "0f2518888d6e2be944f23746011dc905ee69922bda93abf24f6723e7bfe48936",
     "packages/shared/src/ipc-channels.ts": "492cd708bbaace60b413e3a90c79ca50bb6f3183a5d129ae91780a11132c03d4",
     "packages/shared/src/types/artifact-review.ts": "bea8bc800140287ad85bdf2d1d586bf7d78b68915c1790e04a421cbdff4372a7",
     "packages/shared/src/types/bundled-skill-conflict.ts": "7e3c163c26dd6a490fea794e6a418c3747b8edcb70baf215c706a57ad7a35043",
@@ -83,7 +83,7 @@
     "apps/nakiros/src/services/version-service.ts": "0a402da45bfc8e2bc41c851c8031b3fa840e5792a82d548b57946ab8a36c348a",
     "apps/nakiros/src/index.ts": "3186920306773cbe94294e841c9df802eb0b09df97ced94f397e714651f622e2",
     "apps/nakiros/src/utils/nakiros-dir.ts": "93e0892d6d6b84f2cea7c011cc6212f7c673c226dd9ee7432ddb73a386e9132e",
-    "apps/frontend/src/App.tsx": "5672a0dfbf330489f0d6c71a614a77d64eec0c1927833216fbe732a4f7e7aa1f",
+    "apps/frontend/src/App.tsx": "e6dd8e1ca6c4bb4df50d8e81cd26bc829c33b294ed883904d696a4a550f7234b",
     "apps/frontend/src/components/ConversationTurn.tsx": "1346277f9c30df7fb33df37101f01bf83804a09f8c0229ee9245e603a7ea13ed",
     "apps/frontend/src/components/Sidebar.tsx": "0c52e6d84da1c9ccea0c24fa531e37ac4261819be1764bee4be135d8bb233fe4",
     "apps/frontend/src/components/StatusBar.tsx": "7a25e236f6030f5a4458e02953e4f7fbc6c49011e5d84afb9ece332f33c8f777",
@@ -163,7 +163,7 @@
     "apps/frontend/src/views/skills/EvalsPanel.tsx": "56fb999eb892c958e1c3f7fce98d01c8a0ffba96d8462dc38de2378baa230205",
     "apps/frontend/src/views/skills/components.tsx": "c55d41e933533be9a9198cf246ddfde33be85314f0f07f70346d53e335df77c1",
     "apps/frontend/src/views/skills/types.ts": "55b4a1796f577381e128138f5d39f273d2ca0a45af3a04390f07f0651da1ac13",
-    "apps/frontend/src/views/skills/useSkillsViewState.ts": "d56ac688648f3d93a9d2e062bebddd7fbcf0b40cf812a99576224a15268f5b8b",
+    "apps/frontend/src/views/skills/useSkillsViewState.ts": "bc3914127971f116cd4968708548d3907de99988ad1f5fa6b709aa975e3111df",
     "apps/landing/src/App.tsx": "30e5b249f8cf7373040553fef541118fa68f15106a599d47ab7e1c08ad11bc1f",
     "apps/landing/src/components/Etymology.tsx": "5c8cef2a85c1c476d33f248cb0868de455cb69169f164464db12cfa5edc69a54",
     "apps/landing/src/components/Features.tsx": "cde296637d604d1f44b9e2d1adc656c26d2904f34dfd40e9047b37283100e07c",
@@ -194,7 +194,13 @@
     "apps/frontend/src/hooks/useEvalFeedback.ts": "00739b4a0723f66de0752252163dbc49a23d43dec52e04edb7d9ef5d3b85671f",
     "apps/frontend/src/hooks/usePolling.ts": "ccc9bc7763ab10e640a20495912ff28b64ec5d1e564ee829e10e1af0be151cf5",
     "apps/frontend/src/utils/format.ts": "21ae60e25e1aea68a927a33247b704a4be294994445a3a7a5677475ecc3323f6",
-    "apps/frontend/src/components/ui/TabButton.tsx": "5aea49b7799f3ea600fb898d676982d5cbd38be3946a82845848d2e30c4ffb42"
+    "apps/frontend/src/components/ui/TabButton.tsx": "5aea49b7799f3ea600fb898d676982d5cbd38be3946a82845848d2e30c4ffb42",
+    "apps/frontend/src/components/RunsCenter.tsx": "cb4818b360a706ec2bfafd91ea778981b8687fbcc9c42887086122188ad3dd36",
+    "apps/frontend/src/hooks/useAgentRun.ts": "5344bdc98dc821be4c12ad810945b0df829d683fccef2796d9443a6fd89c4dfa",
+    "apps/frontend/src/hooks/useAgentRunsSync.ts": "0e36c18c263bcf4899cee32213d5a68016b9710a98685a2726732d3f2300eb8d",
+    "apps/frontend/src/lib/agent-run-focus.ts": "cfe0f91e92850b31249ba96ba3593f7465d52eb84096a6cb29b537d7bc8c6b7e",
+    "apps/frontend/src/lib/agent-run-store.ts": "b6d9223663a31bb3bdd86fd7f96dcd73c8d79c80ae274da969afe578bf474db4",
+    "packages/shared/src/types/agent-run.ts": "2e9a3cd0a98b520b6737343a598824b2938d3084642f565c497c495cb1669241"
   },
-  "updated_at": "2026-04-25T12:01:12.723Z"
+  "updated_at": "2026-04-25T12:31:21.626Z"
 }

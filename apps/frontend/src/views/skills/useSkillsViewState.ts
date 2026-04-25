@@ -3,6 +3,7 @@ import type { AuditRun, ClaudeModelId, Skill } from '@nakiros/shared';
 import { DEFAULT_EVAL_MODEL } from '@nakiros/shared';
 import { isImagePath } from '../../utils/file-types';
 import { usePolling } from '../../hooks/usePolling';
+import { agentRunFocus } from '../../lib/agent-run-focus';
 import type { SkillIdentity, SkillsViewConfig } from './types';
 
 export type SkillDetailTab = 'files' | 'evals' | 'audits';
@@ -52,6 +53,34 @@ export function useSkillsViewState(config: SkillsViewConfig) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.scope]);
+
+  // ── Consume an `agentRunFocus` request after skills are loaded ───────────
+  // Effect is gated on `!loading && skills.length > 0` so we never consume a
+  // focus we cannot honour. Subscribes for the case where the focus is set
+  // after the view has mounted (e.g. user already on this scope's view
+  // clicks a run from the topbar).
+  useEffect(() => {
+    if (loading || skills.length === 0) return;
+
+    function tryConsume() {
+      const focus = agentRunFocus.consume();
+      if (!focus) return;
+      if (focus.target.type !== 'skill') return;
+      if (!config.matchesScope(focus.target)) {
+        // Wrong scope — push it back so the matching view can take it.
+        agentRunFocus.set(focus);
+        return;
+      }
+      const match = skills.find((s) => config.keyOf(s) === config.keyOfRun(focus.target));
+      if (!match) return;
+      setSelectedKey(config.keyOf(match));
+      setDetailTab('audits');
+    }
+
+    tryConsume();
+    return agentRunFocus.subscribe(tryConsume);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, skills]);
 
   // ── Polling: ongoing evals / active fix / active audit / optional create ─
   usePolling(async () => {

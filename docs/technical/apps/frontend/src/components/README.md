@@ -17,6 +17,7 @@ React components consumed by the views layer. Top-level files are app-shell piec
 ## Files
 
 - [ConversationTurn.tsx](./ConversationTurn.md) — Shared chat-style turn renderer used by every runner (eval, audit, fix).
+- [RunsCenter.tsx](./RunsCenter.md) — Topbar pill listing every active `AgentRun` regardless of kind; survives navigation so the in-flight indicator never disappears.
 - [Sidebar.tsx](./Sidebar.md) — Vertical icon-only navigation rail rendered on the left of the dashboard.
 - [StatusBar.tsx](./StatusBar.md) — Thin footer strip showing daemon status and workspace summary.
 - [ThinkingIndicator.tsx](./ThinkingIndicator.md) — Cycling "thinking" indicator shown while a runner is active but silent.

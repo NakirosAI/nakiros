@@ -2,7 +2,15 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import en from './locales/en.json';
 import fr from './locales/fr.json';
 
+/** Locales supported by the landing page. */
 export type Locale = 'en' | 'fr';
+
+/**
+ * Shape of the translation bundle.
+ *
+ * Inferred from the English JSON file so adding a new key triggers a
+ * type error in the French file until it is translated.
+ */
 export type Messages = typeof en;
 
 const LOCALES: Record<Locale, Messages> = { en, fr };
@@ -25,6 +33,15 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
+/**
+ * Root i18n provider for the landing page.
+ *
+ * Detects the initial locale from `localStorage` (`nakiros-landing-locale`)
+ * with a fallback to `navigator.language` ("fr*" → fr, otherwise en). Persists
+ * the active locale to `localStorage` and reflects it on
+ * `document.documentElement.lang` whenever it changes. Wraps the app in
+ * `main.tsx` so every component below can call {@link useI18n}.
+ */
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => detectInitialLocale());
 
@@ -46,6 +63,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
+/**
+ * Hook returning the active locale, its messages, and the locale setter.
+ *
+ * Throws if called outside an {@link I18nProvider} — every landing component
+ * relies on it being mounted at the root in `main.tsx`.
+ */
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);
   if (!ctx) throw new Error('useI18n must be used within I18nProvider');

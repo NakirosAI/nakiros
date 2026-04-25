@@ -2,6 +2,13 @@ import { Github } from 'lucide-react';
 import { InstallCommand } from './InstallCommand';
 import { useI18n } from '@/i18n/I18nProvider';
 
+/**
+ * Final call-to-action section of the landing page (anchor `#install`).
+ *
+ * Surfaces the install command (`@nakirosai/nakiros`) via {@link InstallCommand}
+ * along with the follow-up command and a GitHub link. All copy is pulled from
+ * the `cta` block of the active locale through {@link useI18n}.
+ */
 export function FinalCta() {
   const { messages } = useI18n();
 

@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils';
 type Variant = 'primary' | 'secondary' | 'ghost';
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
+  /** Visual variant — `primary` (teal CTA), `secondary` (outlined), `ghost` (text-only). */
   variant?: Variant;
+  /** Reserved for a future Radix-style slot pattern; currently unused. */
   asChild?: boolean;
 }
 
@@ -17,6 +19,16 @@ const VARIANTS: Record<Variant, string> = {
     'text-[#F0F0F0]/70 hover:text-[#F0F0F0] hover:bg-[#1A1A1A]',
 };
 
+/**
+ * Shared button primitive for the landing page.
+ *
+ * Wraps a native `<button>` with focus-visible ring styling, three Tailwind
+ * variants (`primary` / `secondary` / `ghost`) and `tailwind-merge`-aware
+ * className composition via {@link cn}. Forwards refs so it can be used by
+ * tooltips/anchors that need DOM access. Independent of the
+ * `apps/frontend/src/components/ui/Button` — kept duplicated to keep the
+ * landing bundle minimal.
+ */
 export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
   { className, variant = 'primary', ...props },
   ref,

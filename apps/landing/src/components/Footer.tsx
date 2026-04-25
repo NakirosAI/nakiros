@@ -1,6 +1,13 @@
 import { NakirosLogo } from './NakirosLogo';
 import { useI18n } from '@/i18n/I18nProvider';
 
+/**
+ * Page footer for the landing site.
+ *
+ * Displays the Nakiros logo, tagline, "built with" line, and copyright.
+ * All text comes from the `footer` block of the active locale via
+ * {@link useI18n}. Last component rendered by `App`.
+ */
 export function Footer() {
   const { messages } = useI18n();
 

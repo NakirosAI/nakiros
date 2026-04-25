@@ -163,7 +163,24 @@
     "apps/frontend/src/views/skills/EvalsPanel.tsx": "4bb0a9dc2f477f689684b982f5277d2fbf9422c6ec3957eb5c2a55c959bd2e54",
     "apps/frontend/src/views/skills/components.tsx": "2ed2a9e44b6f6cdc153297cb29195b78562d19f2b6f868eeb10306a94e790447",
     "apps/frontend/src/views/skills/types.ts": "55b4a1796f577381e128138f5d39f273d2ca0a45af3a04390f07f0651da1ac13",
-    "apps/frontend/src/views/skills/useSkillsViewState.ts": "5a6b2148e4c8c7b939e3f6ada1e17d30a8bcd8defe1fd6ebcdf5178cc07fe133"
+    "apps/frontend/src/views/skills/useSkillsViewState.ts": "5a6b2148e4c8c7b939e3f6ada1e17d30a8bcd8defe1fd6ebcdf5178cc07fe133",
+    "apps/landing/src/App.tsx": "30e5b249f8cf7373040553fef541118fa68f15106a599d47ab7e1c08ad11bc1f",
+    "apps/landing/src/components/Etymology.tsx": "5c8cef2a85c1c476d33f248cb0868de455cb69169f164464db12cfa5edc69a54",
+    "apps/landing/src/components/Features.tsx": "cde296637d604d1f44b9e2d1adc656c26d2904f34dfd40e9047b37283100e07c",
+    "apps/landing/src/components/FinalCta.tsx": "478a7a6767b80e18eacbf9bbcc2688b0b8a8e90f9f611fde78b0ac6c171fedf7",
+    "apps/landing/src/components/Footer.tsx": "ceb1c4af413ff7c00579c3aa4107e615fa2d8b3fe9ba57a575293941ca2036e8",
+    "apps/landing/src/components/Hero.tsx": "6139fb61a78098bbdbd27ccbc2b846320d100bbdc5884dda113128c62fbf0e9c",
+    "apps/landing/src/components/HowItWorks.tsx": "bf548cf09cc702e3cbba35c338c437deb7e654a63df20235a0ad88bcf95a8cbc",
+    "apps/landing/src/components/InstallCommand.tsx": "c6ca583db17ee39ec8df3f4fc8e10f254b13e921034cdafc8ddc4f33cf05a7a5",
+    "apps/landing/src/components/LanguageSwitcher.tsx": "a4732e7c858098d67df3006d338618842e1b691c8ef9ebe1ebf3a36294b65b9e",
+    "apps/landing/src/components/NakirosLogo.tsx": "c5de16cdacf6bd3ae2f961b4c929fcee3c6905982af03d487f7ac39084939b6b",
+    "apps/landing/src/components/Navbar.tsx": "deccea093a9e87e8935d7daa3bbdc07359beb4492a9813da24b48a5ffd153846",
+    "apps/landing/src/components/OpenSource.tsx": "609f0c987701b763a7454b2a12bb18b6bd01c0d7d89f3ebd1c359b0e61700a57",
+    "apps/landing/src/components/ui/Button.tsx": "4a276185a1fea8625f5f27cea88aa004b85bbb0a80bae24b53419be10b5a624a",
+    "apps/landing/src/i18n/I18nProvider.tsx": "45ace53717142024e8450551ab23099ae225180a9ffc302b6c8ab83fbf939106",
+    "apps/landing/src/lib/useNpmVersion.ts": "a2f4a07fb2fb4267975f98d6c4fcc355d59960d77629dcbf0da18c08cb03bffc",
+    "apps/landing/src/lib/utils.ts": "7d301f6e10c0765ecbbd1200bc353742e6c1853ceb504a9fe785f72cb46b428f",
+    "apps/landing/src/main.tsx": "e837676dc8b154c545e87400216c41207a22d6eef73d687b25b9bd93ecf9fb64"
   },
-  "updated_at": "2026-04-25T05:51:52.649Z"
+  "updated_at": "2026-04-25T06:03:45.828Z"
 }

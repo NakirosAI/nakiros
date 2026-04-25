@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 
+/**
+ * Resolved npm version + the dist-tag that produced it.
+ */
 export interface NpmVersionInfo {
+  /** Semver string published under {@link tag}, e.g. `0.4.2`. */
   version: string;
+  /** Dist-tag picked from the registry response (`latest`, `rc`, `beta`, `alpha`, …). */
   tag: 'latest' | 'beta' | 'alpha' | 'rc' | string;
 }
 

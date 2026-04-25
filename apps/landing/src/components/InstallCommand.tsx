@@ -4,13 +4,25 @@ import { cn } from '@/lib/utils';
 import { useNpmVersion } from '@/lib/useNpmVersion';
 
 interface Props {
+  /** Shell command to display and copy (e.g. `npm i -g @nakirosai/nakiros`). */
   command: string;
+  /** Extra Tailwind classes merged onto the wrapper. */
   className?: string;
+  /** Optional uppercase label rendered above the command pill. */
   label?: string;
   /** npm package to fetch latest version for. Omit to hide the version badge. */
   packageName?: string;
 }
 
+/**
+ * Copy-to-clipboard install command pill used in Hero and FinalCta sections.
+ *
+ * Resolves the latest published version via {@link useNpmVersion}; when only a
+ * pre-release dist-tag is available, suffixes the command with `@<tag>` so the
+ * snippet stays directly executable. Renders a teal "latest" or amber
+ * pre-release version badge next to the command and reverts the copy icon
+ * after 1.5s.
+ */
 export function InstallCommand({ command, className, label, packageName }: Props) {
   const [copied, setCopied] = useState(false);
   const info = useNpmVersion(packageName ?? '');

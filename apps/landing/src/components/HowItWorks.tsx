@@ -1,5 +1,13 @@
 import { useI18n } from '@/i18n/I18nProvider';
 
+/**
+ * "How it works" section of the landing page (anchor `#how-it-works`).
+ *
+ * Renders a 3-column numbered timeline driven by `messages.howItWorks.steps`,
+ * with subtle gradient connector lines drawn between cards on `md` and up.
+ * Copy is sourced from the `howItWorks` block of the active locale via
+ * {@link useI18n}.
+ */
 export function HowItWorks() {
   const { messages } = useI18n();
 

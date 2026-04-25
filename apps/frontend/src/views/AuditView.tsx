@@ -17,6 +17,7 @@ import type { TFunction } from 'i18next';
 import type { AuditRun, AuditRunEvent, SkillScope } from '@nakiros/shared';
 import { LoadingState, MarkdownViewer, TabButton } from '../components/ui';
 import { formatComputeDuration, formatTokens } from '../utils/format';
+import { agentRunStore } from '../lib/agent-run-store';
 import {
   ConversationTurn,
   liveEventsToBlocks,
@@ -128,6 +129,7 @@ export default function AuditView({ scope, projectId, skillName, initialRun, onC
    */
   async function handleFinish() {
     await window.nakiros.finishAudit(initialRun.runId);
+    agentRunStore.dismiss(initialRun.runId);
     onClose();
   }
 

@@ -31,6 +31,7 @@ import type {
 } from '@nakiros/shared';
 import { MarkdownViewer } from '../components/ui';
 import { formatComputeDuration, formatTokens } from '../utils/format';
+import { agentRunStore } from '../lib/agent-run-store';
 import {
   ConversationTurn,
   liveEventsToBlocks,
@@ -221,6 +222,7 @@ export default function FixView({
     setSending(true);
     try {
       await api.finish(initialRun.runId);
+      agentRunStore.dismiss(initialRun.runId);
     } catch (err) {
       alert(t('errors.syncFailed', { message: (err as Error).message }));
     } finally {

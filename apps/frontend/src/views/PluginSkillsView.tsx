@@ -17,6 +17,7 @@ import {
 import clsx from 'clsx';
 import type { Skill } from '@nakiros/shared';
 import { Checkbox, LoadingState, MarkdownViewer, TabButton } from '../components/ui';
+import { RunsCenter } from '../components/RunsCenter';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
@@ -542,6 +543,9 @@ function TopBar({
         {t('topBarBack')}
       </button>
       <span className="text-sm font-semibold text-[var(--text-primary)]">{title}</span>
+      <div className="ml-auto">
+        <RunsCenter />
+      </div>
     </div>
   );
 }

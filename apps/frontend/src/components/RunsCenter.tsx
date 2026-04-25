@@ -5,22 +5,22 @@ import clsx from 'clsx';
 import type { AgentRun } from '@nakiros/shared';
 
 import { useActiveAgentRuns } from '../hooks/useAgentRun';
-
-interface RunsCenterProps {
-  /** Invoked when the user clicks one of the listed runs. Hosts handle navigation. */
-  onOpenRun?(run: AgentRun): void;
-}
+import { useAgentRunNavigation } from '../hooks/useAgentRunNavigation';
 
 /**
  * Topbar pill that surfaces every active agent run regardless of `kind`. A
  * single source of truth for "is something running right now?", visible from
  * any screen so the in-flight indicator survives navigation.
  *
- * v1 lists active runs only; the dropdown is read-only (clicking a run calls
- * `onOpenRun` if provided). Completed-run badges and notifications come in a
- * later iteration.
+ * Render this inside each top-level view's existing topbar (next to version
+ * indicator / language selector). Navigation on click is delegated to the
+ * App-level `AgentRunNavigationProvider` via context — no props needed.
+ *
+ * v1 lists active runs only; the dropdown is read-only. Completed-run
+ * badges and notifications come in a later iteration.
  */
-export function RunsCenter({ onOpenRun }: RunsCenterProps) {
+export function RunsCenter() {
+  const onOpenRun = useAgentRunNavigation();
   const runs = useActiveAgentRuns();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -79,7 +79,7 @@ export function RunsCenter({ onOpenRun }: RunsCenterProps) {
                   key={run.id}
                   run={run}
                   onClick={() => {
-                    onOpenRun?.(run);
+                    onOpenRun(run);
                     setOpen(false);
                   }}
                 />

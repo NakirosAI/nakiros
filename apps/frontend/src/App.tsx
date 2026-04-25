@@ -8,12 +8,12 @@ import NakirosSkillsView from './views/NakirosSkillsView';
 import GlobalSkillsView from './views/GlobalSkillsView';
 import PluginSkillsView from './views/PluginSkillsView';
 import BundledSkillConflictsView from './views/BundledSkillConflictsView';
-import { RunsCenter } from './components/RunsCenter';
 import { resolveLanguage } from './utils/language';
 import i18n from './i18n/index';
 import { PreferencesProvider } from './hooks/usePreferences';
 import { ProjectProvider } from './hooks/useProject';
 import { useAgentRunsSync } from './hooks/useAgentRunsSync';
+import { AgentRunNavigationProvider } from './hooks/useAgentRunNavigation';
 import { agentRunFocus } from './lib/agent-run-focus';
 
 const FALLBACK_PREFERENCES: AppPreferences = {
@@ -301,13 +301,8 @@ export default function App() {
   }
 
   return (
-    <>
-      {view.name !== 'loading' && (
-        <div className="fixed right-4 top-3 z-20">
-          <RunsCenter onOpenRun={navigateToAgentRun} />
-        </div>
-      )}
+    <AgentRunNavigationProvider navigate={navigateToAgentRun}>
       {renderView()}
-    </>
+    </AgentRunNavigationProvider>
   );
 }

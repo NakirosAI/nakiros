@@ -4,6 +4,7 @@ import type { Project } from '@nakiros/shared';
 import appIcon from '../assets/icon.svg';
 import { AlertTriangle, Globe, Package, Plug, RefreshCw, X } from 'lucide-react';
 import VersionIndicator from '../components/VersionIndicator';
+import { RunsCenter } from '../components/RunsCenter';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 
 type HomeTab = 'projects' | 'plugins' | 'globals';
@@ -83,7 +84,8 @@ export default function Home({
 
   return (
     <div className="box-border flex min-h-screen flex-col items-center justify-center p-6">
-      <div className="fixed right-4 top-3 z-10">
+      <div className="fixed right-4 top-3 z-10 flex items-center gap-2">
+        <RunsCenter />
         <VersionIndicator variant="inline" />
       </div>
       <div className="w-full max-w-[820px] rounded-[14px] border border-[var(--line)] bg-[var(--bg-soft)] px-7 pb-[26px] pt-[34px] shadow-[var(--shadow-sm)]">

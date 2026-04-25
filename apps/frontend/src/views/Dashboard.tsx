@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { Languages } from 'lucide-react';
@@ -8,8 +8,10 @@ import DashboardErrorBoundary from '../components/dashboard/DashboardErrorBounda
 import { DashboardRouter } from '../components/dashboard/DashboardRouter';
 import Sidebar, { type SidebarTab } from '../components/Sidebar';
 import VersionIndicator from '../components/VersionIndicator';
+import { RunsCenter } from '../components/RunsCenter';
 import { useProject } from '../hooks/useProject';
 import { usePreferences } from '../hooks/usePreferences';
+import { agentRunFocus } from '../lib/agent-run-focus';
 
 interface Props {
   /** Navigate back to the `Home` view (exit the dashboard). */
@@ -47,6 +49,21 @@ export default function Dashboard({ onGoHome }: Props) {
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
   const projectMenuRef = useRef<HTMLDivElement>(null);
   const projectMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // When the runs-center queues a focus on a project skill, switch to the
+  // Skills tab so SkillsView mounts and consumes the focus to select the
+  // right skill. We only peek (no consume) — SkillsView must still get it.
+  useEffect(() => {
+    function handleFocus() {
+      const focus = agentRunFocus.peek();
+      if (focus?.target.type !== 'skill') return;
+      if (focus.target.scope !== 'project') return;
+      if (focus.target.projectId !== project.id) return;
+      setActiveTab('skills');
+    }
+    handleFocus();
+    return agentRunFocus.subscribe(handleFocus);
+  }, [project.id]);
 
   const languageOptions: { value: LanguagePreference; label: string }[] = [
     { value: 'system', label: tSettings('languageSystem') },
@@ -164,6 +181,7 @@ export default function Dashboard({ onGoHome }: Props) {
         </div>
 
         <div className="relative flex shrink-0 items-center gap-2">
+          <RunsCenter />
           <VersionIndicator />
           <button
             onClick={() => setIsLangMenuOpen((prev) => !prev)}

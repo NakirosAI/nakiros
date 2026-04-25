@@ -7,6 +7,7 @@ Custom React hooks and context providers shared across the frontend. Includes da
 ## Files
 
 - [useAgentRun.ts](./useAgentRun.md) — Subscribe to one agent run by id, or the full active set, from `agentRunStore`.
+- [useAgentRunNavigation.tsx](./useAgentRunNavigation.md) — React context exposing the App-level "open this run's native screen" implementation.
 - [useAgentRunsSync.ts](./useAgentRunsSync.md) — Mounts the daemon-poll → agent-run-store mirror; called once at the app shell.
 - [useConversationAnalyses.ts](./useConversationAnalyses.md) — Fetches per-project conversation analyses; `null` while loading.
 - [useDebounce.ts](./useDebounce.md) — Trivial debounce primitive used by search inputs and other rate-limited filters.

@@ -31,6 +31,14 @@ export const agentRunFocus = {
     pendingFocus = null;
     return r;
   },
+  /**
+   * Read without clearing — for intermediate hosts (e.g. Dashboard) that
+   * need to react to the focus before the final consumer takes it. Always
+   * pair with a downstream `consume()` so the focus is eventually cleared.
+   */
+  peek(): AgentRun | null {
+    return pendingFocus;
+  },
   /** Subscribe to focus mutations — used by views that may already be mounted when focus is set. */
   subscribe(fn: Listener): () => void {
     listeners.add(fn);

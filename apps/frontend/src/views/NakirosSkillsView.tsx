@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Checkbox, LoadingState, MarkdownViewer, TabButton } from '../components/ui';
+import { RunsCenter } from '../components/RunsCenter';
 import { isImagePath } from '../utils/file-types';
 import EvalRunsView from './EvalRunsView';
 import AuditView from './AuditView';
@@ -410,6 +411,9 @@ function TopBar({ onBack, title, backLabel }: { onBack(): void; title: string; b
         {backLabel}
       </button>
       <span className="text-sm font-semibold text-[var(--text-primary)]">{title}</span>
+      <div className="ml-auto">
+        <RunsCenter />
+      </div>
     </div>
   );
 }

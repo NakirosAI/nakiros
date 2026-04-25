@@ -91,6 +91,10 @@ Only include if the conversation shows a pattern that would generalize. Format:
 
 If no pattern generalizes, omit the section.
 
+## `## Nakiros machine output` (required — always last)
+
+A single `nakiros-json` fenced block. Full schema and rules in `machine-output.md`. Must be emitted even when there are no frictions (`"frictions": []`), and nothing may follow its closing fence.
+
 ## Things this report must NEVER contain
 
 - A "Conclusion" section

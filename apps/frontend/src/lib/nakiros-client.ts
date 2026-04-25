@@ -331,6 +331,17 @@ const client = {
   // Skill agent temp files
   listSkillAgentTempFiles: (runId: string) => invoke('skillAgent:listTempFiles', runId),
   readSkillAgentTempFile: (runId: string, relativePath: string) => invoke('skillAgent:readTempFile', runId, relativePath),
+
+  // Deep analysis streaming events
+  onDeepAnalysisEvent: (cb: (event: unknown) => void) => subscribe('deepAnalysis:event', cb),
+
+  // Friction → Skill proposals
+  listProposals: (request?: unknown) => invoke('proposals:list', request ?? {}),
+  getProposal: (request: unknown) => invoke('proposals:get', request),
+  acceptProposal: (request: unknown) => invoke('proposals:accept', request),
+  rejectProposal: (request: unknown) => invoke('proposals:reject', request),
+  runProposalEval: (request: unknown) => invoke('proposals:runEval', request),
+  onProposalsNew: (cb: (event: unknown) => void) => subscribe('proposals:new', cb),
 };
 
 // Install on window. We cast via `unknown` because the full type surface in

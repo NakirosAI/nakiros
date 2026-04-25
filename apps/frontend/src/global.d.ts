@@ -16,6 +16,7 @@ import type {
   ConversationMessage,
   ConversationAnalysis,
   ConversationDeepAnalysis,
+  DeepAnalysisEvent,
   Skill,
   SkillScope,
   ScanProgress,
@@ -43,6 +44,14 @@ import type {
   ListComparisonsRequest,
   RunComparisonRequest,
   RunComparisonResponse,
+  AcceptProposalRequest,
+  GetProposalRequest,
+  ListProposalsRequest,
+  ListProposalsResponse,
+  Proposal,
+  ProposalsNewEvent,
+  RejectProposalRequest,
+  RunProposalEvalRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -160,6 +169,7 @@ declare global {
       listProjectConversationsWithAnalysis(projectId: string): Promise<ConversationAnalysis[]>;
       loadConversationDeepAnalysis(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis | null>;
       deepAnalyzeConversation(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis>;
+      onDeepAnalysisEvent(cb: (event: DeepAnalysisEvent) => void): () => void;
 
       listProjectSkills(projectId: string): Promise<Skill[]>;
       getProjectSkill(projectId: string, skillName: string): Promise<Skill | null>;
@@ -260,6 +270,14 @@ declare global {
       // Draft files (temp workdir preview for fix + create)
       listSkillAgentTempFiles(runId: string): Promise<SkillAgentTempFileEntry[]>;
       readSkillAgentTempFile(runId: string, relativePath: string): Promise<SkillAgentTempFileContent>;
+
+      // Friction → Skill proposals
+      listProposals(request?: ListProposalsRequest): Promise<ListProposalsResponse>;
+      getProposal(request: GetProposalRequest): Promise<Proposal | null>;
+      acceptProposal(request: AcceptProposalRequest): Promise<Proposal>;
+      rejectProposal(request: RejectProposalRequest): Promise<Proposal>;
+      runProposalEval(request: RunProposalEvalRequest): Promise<RunComparisonResponse>;
+      onProposalsNew(cb: (event: ProposalsNewEvent) => void): () => void;
 
       onScanProgress(cb: (progress: ScanProgress) => void): () => void;
     };

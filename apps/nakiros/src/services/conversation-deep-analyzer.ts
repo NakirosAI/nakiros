@@ -1,12 +1,21 @@
-import { spawn } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { homedir, tmpdir } from 'os';
 
-import type { ConversationAnalysis, ConversationDeepAnalysis } from '@nakiros/shared';
+import type {
+  AnalyzerStructuredOutput,
+  ConversationAnalysis,
+  ConversationAnalyzedEvent,
+  ConversationDeepAnalysis,
+  DeepAnalysisEvent,
+  RawFriction,
+} from '@nakiros/shared';
+import { IPC_CHANNELS } from '@nakiros/shared';
 
 import { analyzeConversation } from './conversation-analyzer.js';
 import { getConversationMessages } from './conversation-parser.js';
+import { eventBus } from '../daemon/event-bus.js';
+import { buildClaudeArgs, spawnClaudeTurn } from './runner-core/index.js';
 
 // ---------------------------------------------------------------------------
 // Model routing — we pick the cheapest model that fits the prompt.
@@ -27,6 +36,9 @@ const MAX_PROMPT_TOKENS = 950_000; // Sonnet 1M with comfortable margin
 
 // Where we persist completed reports so re-opening doesn't re-bill.
 const ANALYSES_DIR = join(homedir(), '.nakiros', 'analyses');
+// Raw frictions extracted from the analyzer's JSON tail, one file per session.
+// The proposal engine reads from here (re-entrant: crashes don't lose frictions).
+const FRICTIONS_RAW_DIR = join(homedir(), '.nakiros', 'frictions', 'raw');
 
 export type DeepAnalysisResult = ConversationDeepAnalysis;
 
@@ -74,18 +86,119 @@ export async function runDeepAnalysis(
     );
   }
 
-  const report = await spawnClaude(prompt, modelId);
+  const rawReport = await streamDeepAnalysis(sessionId, prompt, modelId, model, inputTokens);
+  const { markdown, structured } = parseStructuredTail(rawReport);
+  const generatedAt = new Date().toISOString();
 
   const result: DeepAnalysisResult = {
     sessionId,
     model,
     inputTokens,
-    report: report.trim(),
-    generatedAt: new Date().toISOString(),
+    report: markdown.trim(),
+    generatedAt,
+    structuredFrictions: structured ? structured.frictions : null,
   };
 
   persistAnalysis(result);
+
+  // Persist raw frictions in their own queue so the proposal engine can
+  // process them even if it wasn't listening at broadcast time (crash-safe).
+  if (structured) {
+    const event: ConversationAnalyzedEvent = {
+      sessionId,
+      projectId,
+      providerProjectDir,
+      frictions: structured.frictions,
+      generatedAt,
+    };
+    persistRawFrictions(event);
+    eventBus.broadcast(IPC_CHANNELS['conversation:analyzed'], event);
+  }
+
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Structured-tail parsing — the skill appends a `nakiros-json` fenced block at
+// the end of the report. We extract it, strip it from the markdown shown to
+// the user, and return both pieces. When the block is missing or malformed we
+// degrade gracefully: the Markdown consumer still gets the full report, the
+// proposal engine simply receives null.
+// ---------------------------------------------------------------------------
+
+// Find the nakiros-json fence anywhere in the report. Tolerates trailing
+// model chatter after the closing fence — the skill forbids it, but we'd
+// rather surface frictions than reject a report for an extra "hope this helps".
+const NAKIROS_JSON_FENCE_RE = /```nakiros-json\s*\n([\s\S]*?)\n```/i;
+// Used to strip the machine-output section from the displayed markdown —
+// optional header, optional leading blank lines, then the fence.
+const NAKIROS_TAIL_STRIP_RE =
+  /\n*(?:##\s+Nakiros machine output\s*\n+)?```nakiros-json[\s\S]*?```\s*$/i;
+
+export function parseStructuredTail(report: string): {
+  markdown: string;
+  structured: AnalyzerStructuredOutput | null;
+} {
+  const match = report.match(NAKIROS_JSON_FENCE_RE);
+  if (!match) return { markdown: report, structured: null };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch {
+    // Malformed JSON — keep full report so the user still sees everything.
+    return { markdown: report, structured: null };
+  }
+
+  const validated = validateStructuredOutput(parsed);
+  if (!validated) return { markdown: report, structured: null };
+
+  // Strip the tail. If the tail isn't cleanly at the end (model added trailing
+  // text), fall back to slicing at the first fence occurrence.
+  const strippedMarkdown = report.replace(NAKIROS_TAIL_STRIP_RE, '');
+  const fallback = strippedMarkdown === report
+    ? report.slice(0, match.index ?? report.length)
+    : strippedMarkdown;
+  return { markdown: fallback, structured: validated };
+}
+
+function validateStructuredOutput(value: unknown): AnalyzerStructuredOutput | null {
+  if (!value || typeof value !== 'object') return null;
+  const obj = value as Record<string, unknown>;
+  if (obj.schemaVersion !== 1) return null;
+  if (!Array.isArray(obj.frictions)) return null;
+
+  const frictions: RawFriction[] = [];
+  for (const item of obj.frictions) {
+    if (!item || typeof item !== 'object') continue;
+    const f = item as Record<string, unknown>;
+    if (typeof f.approximateTurn !== 'number') continue;
+    if (typeof f.timestampIso !== 'string') continue;
+    if (typeof f.description !== 'string' || f.description.trim().length === 0) continue;
+    if (typeof f.rawExcerpt !== 'string') continue;
+    frictions.push({
+      approximateTurn: f.approximateTurn,
+      timestampIso: f.timestampIso,
+      description: f.description,
+      category: typeof f.category === 'string' ? f.category : undefined,
+      rawExcerpt: f.rawExcerpt,
+    });
+  }
+
+  return { schemaVersion: 1, frictions };
+}
+
+/**
+ * Persist the analyzer event verbatim — crash-safe input queue for the
+ * proposal engine. The engine removes the file once it has processed the
+ * frictions.
+ */
+function persistRawFrictions(event: ConversationAnalyzedEvent): void {
+  if (!existsSync(FRICTIONS_RAW_DIR)) mkdirSync(FRICTIONS_RAW_DIR, { recursive: true });
+  writeFileSync(
+    join(FRICTIONS_RAW_DIR, `${event.sessionId}.json`),
+    JSON.stringify(event, null, 2),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +263,9 @@ function buildPrompt(
 
   return (
     '<instructions>\n' +
-    'Analyze the following Claude Code conversation and produce the Markdown report per your skill.\n' +
+    'Analyze the following Claude Code conversation and produce the Markdown report per the nakiros-conversation-analyst skill conventions (sections: What happened / Friction & frustration / Context drift / Tool issues / Root causes / What would have helped / Skill recommendations if warranted).\n' +
+    '\n' +
+    buildMachineOutputContract() +
     '</instructions>\n\n' +
     '<stage1-signals>\n' +
     stage1Block +
@@ -158,6 +273,56 @@ function buildPrompt(
     '<conversation>\n' +
     convBlock +
     '</conversation>\n'
+  );
+}
+
+/**
+ * Inlined contract for the machine-readable tail. We do NOT rely on Claude
+ * Code auto-loading the skill or its `references/machine-output.md` — in
+ * `--print` mode that discovery is unreliable, and models tend to invent
+ * their own schema by mimicking the input shape they see. Spelling the exact
+ * JSON template + category taxonomy directly in the prompt is load-bearing
+ * for the proposal engine to receive parseable output.
+ */
+function buildMachineOutputContract(): string {
+  return (
+    'CRITICAL — MACHINE OUTPUT REQUIREMENT\n' +
+    '\n' +
+    'AFTER the Markdown report, emit EXACTLY this section as the final thing in your response (no trailing text):\n' +
+    '\n' +
+    '## Nakiros machine output\n' +
+    '\n' +
+    '```nakiros-json\n' +
+    '{\n' +
+    '  "schemaVersion": 1,\n' +
+    '  "frictions": [\n' +
+    '    {\n' +
+    '      "approximateTurn": 42,\n' +
+    '      "timestampIso": "2026-04-22T10:30:12Z",\n' +
+    '      "description": "Short natural-language summary of the friction (20-60 words). Describes the SHAPE of the problem so similar frictions across conversations cluster together. Avoid project-specific proper nouns.",\n' +
+    '      "category": "context-drift",\n' +
+    '      "rawExcerpt": "Verbatim ~500 chars around the friction."\n' +
+    '    }\n' +
+    '  ]\n' +
+    '}\n' +
+    '```\n' +
+    '\n' +
+    'Hard rules — violations break the downstream pipeline:\n' +
+    '- Fence language MUST be `nakiros-json` (not `json`). The engine greps for this exact token.\n' +
+    '- JSON must be valid (no trailing commas, no comments).\n' +
+    '- `approximateTurn` is a 1-based integer turn index from the `--- turn N (...) ---` headers in the conversation. NOT a percentage, NOT an offset.\n' +
+    '- `timestampIso` is ISO 8601. Copy from the turn header.\n' +
+    '- `description` is what gets embedded for clustering ACROSS conversations and projects — MAX 25 WORDS in ENGLISH describing the PATTERN of the problem, not the specific instance.\n' +
+    '  - BANNED: file paths, component names, function names, library names, project-specific proper nouns (e.g. no "AgentPanel", "settings.local.json", "CognitoService"). If the pain is "wiring change doesn\'t reflect in UI", say that — don\'t say which component.\n' +
+    '  - Template to follow: "model [did X] [even though|when|after] [Y], user had to [intervene]". Short. Abstract. Reusable across projects.\n' +
+    '  - Good: "Model wired IPC handlers and state but the visible UI was never updated, user had to point out the render path was missing."\n' +
+    '  - Bad: "After extensive IPC and hook wiring across six files, the visible UI was unchanged because the AgentPanel render path was never modified."\n' +
+    '  - Two frictions that share the same PATTERN must produce descriptions that are semantically near-identical, regardless of which project they happened in.\n' +
+    '- `category` is OPTIONAL and must be one of: `context-drift`, `tool-loop`, `wrong-file`, `scope-creep`, `unmet-instruction`, `repeated-correction`, `missing-knowledge`, `other`. Omit rather than invent a new tag.\n' +
+    '- `rawExcerpt` is a verbatim ~500-char slice around the friction, preserving the user\'s language.\n' +
+    '- Emit the block even when there are no real frictions: `"frictions": []`. Omission is not allowed.\n' +
+    '- The Markdown report and this JSON block are the ONLY content in your response. No preamble, no post-script.\n' +
+    '- If you start running out of tokens, SHORTEN the narrative sections; NEVER truncate the JSON block.\n'
   );
 }
 
@@ -174,47 +339,76 @@ function estimateTokens(text: string): number {
 }
 
 // ---------------------------------------------------------------------------
-// Claude CLI invocation — mirrors the pattern in eval-llm-grader.ts.
+// Claude CLI invocation — uses the shared `spawnClaudeTurn` helper from
+// runner-core so this pipeline benefits from the same stream-json parsing,
+// tool dispatch, and error handling as audit/eval/fix. Text deltas are
+// broadcast on `deepAnalysis:event` so the frontend can render the
+// assistant's output progressively instead of waiting on a silent spinner.
 // ---------------------------------------------------------------------------
 
-function spawnClaude(prompt: string, model: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
+async function streamDeepAnalysis(
+  sessionId: string,
+  prompt: string,
+  modelId: string,
+  modelLabel: 'haiku' | 'sonnet',
+  inputTokens: number,
+): Promise<string> {
+  broadcastEvent({ sessionId, type: 'started', model: modelLabel, inputTokens });
 
-    const child = spawn(
-      'claude',
-      ['--model', model, '--output-format', 'text', '--print', prompt],
-      { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
+  const cliArgs = buildClaudeArgs({ prompt, model: modelId });
+  let collected = '';
+  let tokensUsed = 0;
+  const startedAt = Date.now();
 
-    child.stdout?.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-
-    child.on('close', (code) => {
-      if (code !== 0) {
-        reject(
-          new Error(
-            `claude exited with code ${code}: ${stderr.slice(-500) || '(no stderr)'}`,
-          ),
-        );
-        return;
-      }
-      if (!stdout.trim()) {
-        reject(new Error('claude returned empty output'));
-        return;
-      }
-      resolve(stdout);
-    });
-
-    child.on('error', (err) => {
-      reject(new Error(`Failed to spawn claude: ${err.message}`));
-    });
+  const result = await spawnClaudeTurn({
+    // The analyzer doesn't read/write files — any cwd works. Use tmpdir so
+    // the CLI can't accidentally pick up a stray .claude/ config from the
+    // daemon's cwd.
+    workdir: tmpdir(),
+    cliArgs,
+    onChildSpawned: () => {
+      /* no stop/resume semantics for fire-and-forget analyses */
+    },
+    isKilled: () => false,
+    onSession: () => {
+      /* ignored — analysis sessions aren't resumable */
+    },
+    onText: (text) => {
+      collected += text;
+      broadcastEvent({ sessionId, type: 'text', text });
+    },
+    onTool: (name, display) => {
+      // Not expected in the analyzer path, but forward anyway for visibility.
+      broadcastEvent({ sessionId, type: 'tool', name, display });
+    },
+    onUsage: (total) => {
+      tokensUsed = total;
+      broadcastEvent({ sessionId, type: 'tokens', tokensUsed: total });
+    },
   });
+
+  if (result.exitCode !== 0) {
+    const message = result.error ?? `claude exited with code ${result.exitCode}`;
+    broadcastEvent({ sessionId, type: 'error', message });
+    throw new Error(`claude failed — exit=${result.exitCode}${result.error ? ` | ${result.error}` : ''}`);
+  }
+  if (!collected.trim()) {
+    const message = 'claude returned empty output';
+    broadcastEvent({ sessionId, type: 'error', message });
+    throw new Error(message);
+  }
+
+  broadcastEvent({
+    sessionId,
+    type: 'done',
+    tokensUsed,
+    durationMs: Date.now() - startedAt,
+  });
+  return collected;
+}
+
+function broadcastEvent(event: DeepAnalysisEvent): void {
+  eventBus.broadcast(IPC_CHANNELS['deepAnalysis:event'], event);
 }
 
 // ---------------------------------------------------------------------------

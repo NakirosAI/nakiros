@@ -10,6 +10,7 @@ import Sidebar, { type SidebarTab } from '../components/Sidebar';
 import VersionIndicator from '../components/VersionIndicator';
 import { useProject } from '../hooks/useProject';
 import { usePreferences } from '../hooks/usePreferences';
+import { useProposalCount } from '../hooks/useProposalCount';
 
 interface Props {
   onGoHome(): void;
@@ -28,6 +29,7 @@ export default function Dashboard({ onGoHome }: Props) {
     closeProjectTab,
   } = useProject();
   const { preferences, updatePreferences } = usePreferences();
+  const proposalCount = useProposalCount(activeProjectId);
 
   const [activeTab, setActiveTab] = useState<SidebarTab>('dashboard');
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
@@ -199,6 +201,7 @@ export default function Dashboard({ onGoHome }: Props) {
             recommendations: tSidebar('recommendations', 'Insights'),
             settings: tSidebar('settings', 'Settings'),
           }}
+          badges={{ recommendations: proposalCount }}
         />
         <DashboardErrorBoundary resetKey={`${activeProjectId ?? 'none'}:${activeTab}`}>
           <div className="flex min-w-0 flex-1 overflow-hidden">

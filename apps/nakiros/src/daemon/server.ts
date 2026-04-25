@@ -11,6 +11,8 @@ import { restoreOrCleanupAuditWorkdirs } from '../services/audit-runner.js';
 import { cleanupEvalArtifacts } from '../services/eval-artifact-cleanup.js';
 import { syncBundledSkills } from '../services/bundled-skills-sync.js';
 import { sweepOrphanNakirosProjectEntries, sweepOrphanSandboxes } from '../services/runner-core/index.js';
+import { initProposalEngine } from '../services/proposal-engine/index.js';
+import { getDb } from '../services/nakiros-db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -58,6 +60,15 @@ function findFrontendDir(override?: string): string | null {
  * Safe to call multiple times.
  */
 export function bootstrapDaemonRuntime(): void {
+  // Warm up the shared SQLite database — applies pending migrations so the
+  // first SQL-backed service (proposal engine today, config audit tomorrow)
+  // doesn't pay the migration cost on a hot path.
+  try {
+    getDb();
+  } catch (err) {
+    console.warn('[nakiros] Database init failed:', err instanceof Error ? err.message : err);
+  }
+
   try {
     syncBundledSkills();
   } catch (err) {
@@ -82,6 +93,9 @@ export function bootstrapDaemonRuntime(): void {
   if (sandboxes.deleted > 0) {
     console.log(`[nakiros] Swept ${sandboxes.deleted} orphan eval sandbox${sandboxes.deleted === 1 ? '' : 'es'}.`);
   }
+  // Subscribe the proposal engine to analyzer events and drain any pending
+  // raw frictions the analyzer left behind.
+  initProposalEngine();
 }
 
 export async function createDaemonServer(opts: DaemonServerOptions = {}): Promise<FastifyInstance> {

@@ -1,40 +1,57 @@
 import { homedir } from 'os';
 import { join } from 'path';
 
-import type { StartEvalRunRequest } from '@nakiros/shared';
+import type { SkillScope } from '@nakiros/shared';
 
 import { getProject } from '../../services/project-scanner.js';
 import { getClaudeGlobalSkillsDir } from '../../services/claude-global-skills-reader.js';
 import { resolvePluginSkillDir } from '../../services/plugin-skills-reader.js';
 
 /**
- * Resolve the directory of the skill targeted by a request.
+ * Minimal scope reference accepted by `resolveSkillDir`. Every request shape
+ * involving a skill (StartEvalRunRequest, ReadFileRequest, audit/fix/create
+ * starts) structurally satisfies this — pass the request directly.
  *
- * Also accepts partial request shapes (same scope + projectId + skillName fields)
- * used by audit/fix/create/feedback/output handlers.
- *
- * `skillDirOverride` takes precedence — used by fix runs so that evals can run
- * against the temp copy of the in-progress skill.
+ * `skillDirOverride` short-circuits resolution and is used by fix runs so
+ * evals can target the temp copy of the in-progress skill.
  */
-export function resolveEvalSkillDir(request: StartEvalRunRequest): string {
-  if (request.skillDirOverride) {
-    return request.skillDirOverride;
+export interface SkillScopeRef {
+  scope: SkillScope;
+  skillName: string;
+  projectId?: string;
+  pluginName?: string;
+  marketplaceName?: string;
+  skillDirOverride?: string;
+}
+
+/**
+ * Resolve the absolute directory of the skill targeted by `ref`. Accepts the
+ * four scopes (`project`, `nakiros-bundled`, `claude-global`, `plugin`) and
+ * the `skillDirOverride` short-circuit.
+ *
+ * @throws when required fields for the scope are missing (e.g. `projectId`
+ * for project scope, `marketplaceName`/`pluginName` for plugin scope) or when
+ * the project id does not exist in the registry.
+ */
+export function resolveSkillDir(ref: SkillScopeRef): string {
+  if (ref.skillDirOverride) {
+    return ref.skillDirOverride;
   }
-  if (request.scope === 'nakiros-bundled') {
-    return join(homedir(), '.nakiros', 'skills', request.skillName);
+  if (ref.scope === 'nakiros-bundled') {
+    return join(homedir(), '.nakiros', 'skills', ref.skillName);
   }
-  if (request.scope === 'claude-global') {
-    return join(getClaudeGlobalSkillsDir(), request.skillName);
+  if (ref.scope === 'claude-global') {
+    return join(getClaudeGlobalSkillsDir(), ref.skillName);
   }
-  if (request.scope === 'plugin') {
-    const { marketplaceName, pluginName } = request;
+  if (ref.scope === 'plugin') {
+    const { marketplaceName, pluginName } = ref;
     if (!marketplaceName) throw new Error('marketplaceName required for plugin scope');
     if (!pluginName) throw new Error('pluginName required for plugin scope');
-    return resolvePluginSkillDir(marketplaceName, pluginName, request.skillName);
+    return resolvePluginSkillDir(marketplaceName, pluginName, ref.skillName);
   }
-  const projectId = request.projectId;
+  const projectId = ref.projectId;
   if (!projectId) throw new Error('projectId required for project scope');
   const project = getProject(projectId);
   if (!project) throw new Error(`Project not found: ${projectId}`);
-  return join(project.projectPath, '.claude', 'skills', request.skillName);
+  return join(project.projectPath, '.claude', 'skills', ref.skillName);
 }

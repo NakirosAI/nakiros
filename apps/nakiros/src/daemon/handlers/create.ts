@@ -1,8 +1,4 @@
-import type {
-  AuditRunEvent,
-  StartAuditRequest,
-  StartEvalRunRequest,
-} from '@nakiros/shared';
+import type { AuditRunEvent, StartAuditRequest } from '@nakiros/shared';
 
 import {
   startCreate,
@@ -15,7 +11,7 @@ import {
   listFixDiff,
   readFixDiffFile,
 } from '../../services/fix-runner.js';
-import { resolveEvalSkillDir } from './skill-dir.js';
+import { resolveSkillDir } from './skill-dir.js';
 import { createEventBroadcaster, getRunOrThrow, resolveSkillDirForRun } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
@@ -35,7 +31,7 @@ const broadcastCreateEvent = createEventBroadcaster<AuditRunEvent>('create:event
 export const createHandlers: HandlerRegistry = {
   'create:start': (args) => {
     const request = args[0] as StartAuditRequest;
-    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+    const skillDir = resolveSkillDir(request);
     return startCreate(request, { skillDir, onEvent: broadcastCreateEvent });
   },
 

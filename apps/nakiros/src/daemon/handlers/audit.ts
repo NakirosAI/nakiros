@@ -1,8 +1,4 @@
-import type {
-  AuditRunEvent,
-  StartAuditRequest,
-  StartEvalRunRequest,
-} from '@nakiros/shared';
+import type { AuditRunEvent, StartAuditRequest } from '@nakiros/shared';
 
 import {
   startAudit,
@@ -15,7 +11,7 @@ import {
   finishAudit,
   getAuditBufferedEvents,
 } from '../../services/audit-runner.js';
-import { resolveEvalSkillDir } from './skill-dir.js';
+import { resolveSkillDir, type SkillScopeRef } from './skill-dir.js';
 import { createEventBroadcaster, getRunOrThrow, resolveSkillDirForRun } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
@@ -35,7 +31,7 @@ const broadcastAuditEvent = createEventBroadcaster<AuditRunEvent>('audit:event')
 export const auditHandlers: HandlerRegistry = {
   'audit:start': (args) => {
     const request = args[0] as StartAuditRequest;
-    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+    const skillDir = resolveSkillDir(request);
     return startAudit(request, { skillDir, onEvent: broadcastAuditEvent });
   },
 
@@ -57,8 +53,8 @@ export const auditHandlers: HandlerRegistry = {
   },
 
   'audit:listHistory': (args) => {
-    const request = args[0] as StartEvalRunRequest;
-    const skillDir = resolveEvalSkillDir(request);
+    const request = args[0] as SkillScopeRef;
+    const skillDir = resolveSkillDir(request);
     return listAuditHistory(skillDir);
   },
 

@@ -25,7 +25,7 @@ import {
 } from '../../services/eval-runner.js';
 import { readIterationFeedback, saveEvalFeedback } from '../../services/eval-feedback.js';
 import { buildEvalMatrix } from '../../services/eval-matrix.js';
-import { resolveEvalSkillDir } from './skill-dir.js';
+import { resolveSkillDir } from './skill-dir.js';
 import { createEventBroadcaster, getRunOrThrow } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
@@ -82,7 +82,7 @@ export const evalHandlers: HandlerRegistry = {
   'eval:startRuns': async (args) => {
     const request = args[0] as StartEvalRunRequest;
     return startEvalRuns(request, {
-      resolveSkillDir: resolveEvalSkillDir,
+      resolveSkillDir: resolveSkillDir,
       onEvent: broadcastEvalEvent,
     });
   },
@@ -95,7 +95,7 @@ export const evalHandlers: HandlerRegistry = {
 
   'eval:loadPersisted': (args) => {
     const request = args[0] as StartEvalRunRequest;
-    const skillDir = resolveEvalSkillDir(request);
+    const skillDir = resolveSkillDir(request);
     return loadPersistedRuns(skillDir);
   },
 
@@ -118,7 +118,7 @@ export const evalHandlers: HandlerRegistry = {
 
   'eval:getFeedback': (args) => {
     const request = args[0] as StartEvalRunRequest & { iteration: number };
-    const skillDir = resolveEvalSkillDir(request);
+    const skillDir = resolveSkillDir(request);
     return readIterationFeedback(skillDir, request.iteration);
   },
 
@@ -128,7 +128,7 @@ export const evalHandlers: HandlerRegistry = {
       evalName: string;
       feedback: string;
     };
-    const skillDir = resolveEvalSkillDir(request);
+    const skillDir = resolveSkillDir(request);
     saveEvalFeedback(skillDir, request.iteration, request.evalName, request.feedback);
   },
 
@@ -204,13 +204,13 @@ export const evalHandlers: HandlerRegistry = {
 
   'eval:getMatrix': (args): EvalMatrix => {
     const request = args[0] as GetEvalMatrixRequest;
-    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+    const skillDir = resolveSkillDir(request);
     return buildEvalMatrix(skillDir, request.skillName);
   },
 
   'eval:loadIterationRun': (args): IterationRunArtifact => {
     const request = args[0] as LoadIterationRunRequest;
-    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+    const skillDir = resolveSkillDir(request);
     const runDir = join(
       skillDir,
       'evals',

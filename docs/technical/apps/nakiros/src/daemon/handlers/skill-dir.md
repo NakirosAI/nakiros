@@ -2,18 +2,31 @@
 
 **Path:** `apps/nakiros/src/daemon/handlers/skill-dir.ts`
 
-Central resolver turning a `StartEvalRunRequest` (scope + optional projectId / pluginName / marketplaceName / skillName, plus the optional `skillDirOverride`) into an absolute skill directory path. Reused by every run-kind handler (eval / audit / fix / create / comparison) so scope resolution logic lives in one place — this mirrors `resolveSkillDir` on the read side (cf. `SkillScope` docs).
+Central resolver turning a `SkillScopeRef` (scope + skillName + optional projectId / pluginName / marketplaceName / skillDirOverride) into an absolute skill directory path. Reused by every run-kind handler (eval / audit / fix / create / comparison) and by the cross-scope read-file handler so scope resolution logic lives in one place.
 
 ## Exports
 
-### `function resolveEvalSkillDir`
+### `interface SkillScopeRef`
 
-Resolve the directory of the skill targeted by a request. Also accepts partial request shapes (same scope + projectId + skillName fields) used by audit/fix/create/feedback/output handlers.
-
-`skillDirOverride` takes precedence — used by fix runs so that evals can run against the temp copy of the in-progress skill.
+Minimal scope reference accepted by `resolveSkillDir`. Every request shape involving a skill (`StartEvalRunRequest`, `StartAuditRequest`, `GetEvalMatrixRequest`, `LoadIterationRunRequest`, `RunComparisonRequest`, the cross-scope read-file request) structurally satisfies this — pass the request directly. `skillDirOverride` short-circuits resolution and is used by fix runs so evals can target the temp copy of the in-progress skill.
 
 ```ts
-export function resolveEvalSkillDir(request: StartEvalRunRequest): string
+export interface SkillScopeRef {
+  scope: SkillScope;
+  skillName: string;
+  projectId?: string;
+  pluginName?: string;
+  marketplaceName?: string;
+  skillDirOverride?: string;
+}
+```
+
+### `function resolveSkillDir`
+
+Resolve the absolute directory of the skill targeted by `ref`. Accepts the four scopes (`project`, `nakiros-bundled`, `claude-global`, `plugin`) and the `skillDirOverride` short-circuit.
+
+```ts
+export function resolveSkillDir(ref: SkillScopeRef): string
 ```
 
 **Returns:** absolute path to the resolved skill directory.

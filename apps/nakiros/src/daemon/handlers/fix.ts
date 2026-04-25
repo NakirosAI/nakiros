@@ -3,7 +3,6 @@ import type {
   EvalRunEvent,
   FixBenchmarks,
   StartAuditRequest,
-  StartEvalRunRequest,
 } from '@nakiros/shared';
 
 import {
@@ -21,7 +20,7 @@ import {
 } from '../../services/fix-runner.js';
 import { startEvalRuns } from '../../services/eval-runner.js';
 import { readLatestIterationBenchmark } from '../../services/eval-benchmark.js';
-import { resolveEvalSkillDir } from './skill-dir.js';
+import { resolveSkillDir } from './skill-dir.js';
 import { createEventBroadcaster, getRunOrThrow, resolveSkillDirForRun } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
@@ -44,7 +43,7 @@ const broadcastEvalEvent = createEventBroadcaster<EvalRunEvent>('eval:event');
 export const fixHandlers: HandlerRegistry = {
   'fix:start': (args) => {
     const request = args[0] as StartAuditRequest;
-    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+    const skillDir = resolveSkillDir(request);
     return startFix(request, { skillDir, onEvent: broadcastFixEvent });
   },
 
@@ -93,7 +92,7 @@ export const fixHandlers: HandlerRegistry = {
         skillDirOverride: tempDir,
       },
       {
-        resolveSkillDir: resolveEvalSkillDir,
+        resolveSkillDir,
         onEvent: broadcastEvalEvent,
       },
     );

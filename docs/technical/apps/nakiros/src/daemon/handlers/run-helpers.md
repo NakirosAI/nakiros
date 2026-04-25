@@ -44,7 +44,7 @@ export interface SkillRunIdentity {
 
 ### `function resolveSkillDirForRun`
 
-Resolve the on-disk skill directory for a run, delegating to `resolveEvalSkillDir`. Used by audit/fix/create handlers to turn a `SkillRunIdentity` back into the original skill path.
+Resolve the on-disk skill directory for a run, delegating to `resolveSkillDir`. Used by audit/fix/create handlers to turn a `SkillRunIdentity` back into the original skill path.
 
 ```ts
 export function resolveSkillDirForRun(run: SkillRunIdentity): string

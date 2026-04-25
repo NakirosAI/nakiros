@@ -1,7 +1,7 @@
 import { IPC_CHANNELS, type IpcChannel, type StartEvalRunRequest } from '@nakiros/shared';
 
 import { eventBus } from '../event-bus.js';
-import { resolveEvalSkillDir } from './skill-dir.js';
+import { resolveSkillDir } from './skill-dir.js';
 
 /**
  * Build a typed broadcaster that pushes events onto `eventBus` under the
@@ -45,15 +45,15 @@ export interface SkillRunIdentity {
 
 /**
  * Resolve the on-disk skill directory for a run, delegating to
- * {@link resolveEvalSkillDir}. Used by audit/fix/create handlers to turn a
+ * {@link resolveSkillDir}. Used by audit/fix/create handlers to turn a
  * `SkillRunIdentity` back into the original skill path.
  */
 export function resolveSkillDirForRun(run: SkillRunIdentity): string {
-  return resolveEvalSkillDir({
+  return resolveSkillDir({
     scope: run.scope,
     projectId: run.projectId,
     skillName: run.skillName,
     pluginName: run.pluginName,
     marketplaceName: run.marketplaceName,
-  } as StartEvalRunRequest);
+  });
 }

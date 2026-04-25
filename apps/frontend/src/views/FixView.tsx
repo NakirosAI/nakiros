@@ -39,6 +39,7 @@ import {
 } from '../components/ConversationTurn';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { useElapsedTimer } from '../hooks/useElapsedTimer';
+import { usePolling } from '../hooks/usePolling';
 import { useRunState } from '../hooks/useRunState';
 import EvalRunsView from './EvalRunsView';
 import { isImagePath } from '../utils/file-types';
@@ -664,12 +665,8 @@ function DraftFilesPanel({ runId, defaultOpen, t }: { runId: string; defaultOpen
     }
   }, [runId]);
 
-  useEffect(() => {
-    if (!open) return;
-    void refresh();
-    const interval = setInterval(refresh, 3000); // Poll while the agent is editing
-    return () => clearInterval(interval);
-  }, [open, refresh]);
+  // Poll while the agent is editing
+  usePolling(refresh, 3000, { enabled: open });
 
   useEffect(() => {
     if (!selected || !open) {

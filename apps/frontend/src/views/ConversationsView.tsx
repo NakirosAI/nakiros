@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ConversationAnalysis, Project } from '@nakiros/shared';
 import { ConversationHealthBadges } from '../components/conversations/ConversationHealthBadges';
 import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
+import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
 import { LoadingState } from '../components/ui';
 
 interface Props {
@@ -24,19 +25,12 @@ type FilterKey = 'all' | 'critical' | 'compactions' | 'friction' | 'cacheWaste' 
  */
 export default function ConversationsView({ project }: Props) {
   const { t } = useTranslation('conversations');
-  const [analyses, setAnalyses] = useState<ConversationAnalysis[]>([]);
-  const [loading, setLoading] = useState(true);
+  const fetched = useConversationAnalyses(project.id);
+  const analyses = fetched ?? [];
+  const loading = fetched === null;
   const [selected, setSelected] = useState<ConversationAnalysis | null>(null);
   const [sort, setSort] = useState<SortKey>('score');
   const [filter, setFilter] = useState<FilterKey>('all');
-
-  useEffect(() => {
-    setLoading(true);
-    window.nakiros.listProjectConversationsWithAnalysis(project.id).then((data) => {
-      setAnalyses(data);
-      setLoading(false);
-    });
-  }, [project.id]);
 
   const visible = useMemo(() => {
     const filtered = analyses.filter((a) => {

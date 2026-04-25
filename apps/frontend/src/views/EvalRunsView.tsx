@@ -26,6 +26,8 @@ import {
   type LiveStreamEvent,
 } from '../components/ConversationTurn';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
+import { useEvalFeedback } from '../hooks/useEvalFeedback';
+import { usePolling } from '../hooks/usePolling';
 import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry, SkillScope } from '@nakiros/shared';
 
 interface Props {
@@ -79,48 +81,22 @@ export default function EvalRunsView({
   const [liveEventsByRun, setLiveEventsByRun] = useState<Map<string, LiveEvent[]>>(new Map());
   const startTime = useRef(Date.now());
   const [elapsed, setElapsed] = useState(0);
-  const [feedback, setFeedback] = useState<Record<string, string>>({});
 
-  // Load feedback for this iteration
-  useEffect(() => {
-    void window.nakiros
-      .getEvalFeedback({ scope, projectId, pluginName, marketplaceName, skillName, iteration })
-      .then(setFeedback);
-  }, [scope, projectId, pluginName, marketplaceName, skillName, iteration]);
-
-  async function saveFeedback(evalName: string, text: string) {
-    setFeedback((prev) => ({ ...prev, [evalName]: text }));
-    await window.nakiros.saveEvalFeedback({
-      scope,
-      projectId,
-      pluginName,
-      marketplaceName,
-      skillName,
-      iteration,
-      evalName,
-      feedback: text,
-    });
-  }
+  const { feedback, save: saveFeedback } = useEvalFeedback({
+    scope,
+    projectId,
+    pluginName,
+    marketplaceName,
+    skillName,
+    iteration,
+  });
 
   // Poll runs every 500ms while any run is not terminal, in addition to listening for events
-  useEffect(() => {
-    let mounted = true;
-
-    async function refresh() {
-      const all = await window.nakiros.listEvalRuns();
-      if (!mounted) return;
-      const filtered = all.filter((r) => initialRunIds.includes(r.runId));
-      setRuns(new Map(filtered.map((r) => [r.runId, r])));
-    }
-
-    void refresh();
-    const interval = setInterval(refresh, 500);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [initialRunIds]);
+  usePolling(async () => {
+    const all = await window.nakiros.listEvalRuns();
+    const filtered = all.filter((r) => initialRunIds.includes(r.runId));
+    setRuns(new Map(filtered.map((r) => [r.runId, r])));
+  }, 500);
 
   // Subscribe to event stream — capture text + tool events for the live activity panel
   useEffect(() => {
@@ -154,10 +130,7 @@ export default function EvalRunsView({
   }, [initialRunIds]);
 
   // Elapsed timer
-  useEffect(() => {
-    const t = setInterval(() => setElapsed(Date.now() - startTime.current), 500);
-    return () => clearInterval(t);
-  }, []);
+  usePolling(() => setElapsed(Date.now() - startTime.current), 500);
 
   const runsList = useMemo(
     () => initialRunIds.map((id) => runs.get(id)).filter((r): r is SkillEvalRun => Boolean(r)),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, AlertTriangle, Lightbulb } from 'lucide-react';
 import type { ConversationAnalysis, Project } from '@nakiros/shared';
@@ -10,6 +10,7 @@ import {
   topFailingTools,
   topTipFrequencies,
 } from '../components/conversations/ConversationsAggregation';
+import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
 import { LoadingState } from '../components/ui';
 
 interface Props {
@@ -33,14 +34,9 @@ type WindowKey = '10' | '30' | '90' | 'all';
  */
 export default function ProjectOverview({ project }: Props) {
   const { t } = useTranslation('overview');
-  const [analyses, setAnalyses] = useState<ConversationAnalysis[] | null>(null);
+  const analyses = useConversationAnalyses(project.id);
   const [windowKey, setWindowKey] = useState<WindowKey>('30');
   const [selected, setSelected] = useState<ConversationAnalysis | null>(null);
-
-  useEffect(() => {
-    setAnalyses(null);
-    window.nakiros.listProjectConversationsWithAnalysis(project.id).then(setAnalyses);
-  }, [project.id]);
 
   const windowed = useMemo(() => {
     if (!analyses) return [];

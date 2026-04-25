@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AuditRun, ClaudeModelId, Skill } from '@nakiros/shared';
 import { DEFAULT_EVAL_MODEL } from '@nakiros/shared';
 import { isImagePath } from '../../utils/file-types';
+import { usePolling } from '../../hooks/usePolling';
 import type { SkillIdentity, SkillsViewConfig } from './types';
 
 export type SkillDetailTab = 'files' | 'evals' | 'audits';
@@ -53,61 +54,45 @@ export function useSkillsViewState(config: SkillsViewConfig) {
   }, [config.scope]);
 
   // ── Polling: ongoing evals / active fix / active audit / optional create ─
-  useEffect(() => {
+  usePolling(async () => {
     const terminal = new Set(['completed', 'failed', 'stopped']);
 
-    async function pollOngoing() {
-      const all = await window.nakiros.listEvalRuns();
-      const next = new Map<string, OngoingRun>();
-      for (const run of all) {
-        if (!config.matchesScope(run)) continue;
-        if (terminal.has(run.status)) continue;
-        const k = config.keyOfRun(run);
-        const entry = next.get(k) ?? { runIds: [], iteration: run.iteration };
-        entry.runIds.push(run.runId);
-        next.set(k, entry);
-      }
-      setOngoingByKey(next);
-    }
+    const [evalRuns, fixRuns, auditRuns] = await Promise.all([
+      window.nakiros.listEvalRuns(),
+      window.nakiros.listActiveFixRuns(),
+      window.nakiros.listActiveAuditRuns(),
+    ]);
 
-    async function pollFixes() {
-      const all = await window.nakiros.listActiveFixRuns();
-      const next = new Map<string, AuditRun>();
-      for (const run of all) {
-        if (!config.matchesScope(run)) continue;
-        next.set(config.keyOfRun(run), run);
-      }
-      setActiveFixByKey(next);
+    const ongoing = new Map<string, OngoingRun>();
+    for (const run of evalRuns) {
+      if (!config.matchesScope(run)) continue;
+      if (terminal.has(run.status)) continue;
+      const k = config.keyOfRun(run);
+      const entry = ongoing.get(k) ?? { runIds: [], iteration: run.iteration };
+      entry.runIds.push(run.runId);
+      ongoing.set(k, entry);
     }
+    setOngoingByKey(ongoing);
 
-    async function pollAudits() {
-      const all = await window.nakiros.listActiveAuditRuns();
-      const next = new Map<string, AuditRun>();
-      for (const run of all) {
-        if (!config.matchesScope(run)) continue;
-        next.set(config.keyOfRun(run), run);
-      }
-      setActiveAuditByKey(next);
+    const activeFix = new Map<string, AuditRun>();
+    for (const run of fixRuns) {
+      if (!config.matchesScope(run)) continue;
+      activeFix.set(config.keyOfRun(run), run);
     }
+    setActiveFixByKey(activeFix);
 
-    async function pollCreate() {
-      if (!config.pollActiveCreate) return;
-      const run = await config.pollActiveCreate();
-      setPendingCreate(run);
+    const activeAudit = new Map<string, AuditRun>();
+    for (const run of auditRuns) {
+      if (!config.matchesScope(run)) continue;
+      activeAudit.set(config.keyOfRun(run), run);
     }
+    setActiveAuditByKey(activeAudit);
 
-    function tick() {
-      void pollOngoing();
-      void pollFixes();
-      void pollAudits();
-      void pollCreate();
+    if (config.pollActiveCreate) {
+      const create = await config.pollActiveCreate();
+      setPendingCreate(create);
     }
-
-    tick();
-    const interval = setInterval(tick, 2000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.scope]);
+  }, 2000);
 
   // ── Derived values ───────────────────────────────────────────────────────
   const selectedSkill = useMemo(

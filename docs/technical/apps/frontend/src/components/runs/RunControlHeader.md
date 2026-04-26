@@ -18,9 +18,10 @@ export function RunControlHeader(props: {
   onBack(): void;
   actions?: ReactNode;
   extras?: ReactNode;
+  badgeExtras?: ReactNode;
 }): JSX.Element
 ```
 
-Reads `runs:back` for the Back button label. Formats tokens via `formatTokens(value, { unit: 'tok' })` and duration via `formatComputeDuration(durationMs)` from `utils/format`. `actions` is the slot for kind-specific buttons (Stop / Finish / Sync / Discard / RunEvals) — the caller decides which buttons to render based on the run's status. `extras` renders after `actions` and is currently used by `AuditView` for its conversation/report tab switcher.
+Reads `runs:back` for the Back button label. Formats tokens via `formatTokens(value, { unit: 'tok' })` and duration via `formatComputeDuration(durationMs)` from `utils/format`. `actions` is the slot for kind-specific buttons (Stop / Finish / Sync / Discard / RunEvals / Reprendre) — the caller decides which buttons to render based on the run's status. `extras` renders after `actions` and is currently used by `AuditView` for its conversation/report tab switcher. `badgeExtras` renders immediately after the status badge — used to surface secondary badges (e.g. `RunInterruptedBadge`) without re-implementing the header layout.
 
 The header doesn't decide whether to show `elapsed` (live ms) or `durationMs` (final) — the caller passes whichever value matches the run state, typically `isTerminal ? run.durationMs : elapsed`.

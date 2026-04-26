@@ -8,7 +8,7 @@ Workdir layout differs per mode:
 - `fix` — seeded with a lean copy of the existing skill (source + latest audit + latest iteration). Skips older audits/iterations to keep the agent's context tight.
 - `create` — empty. Agent writes SKILL.md + friends from scratch.
 
-Boot recovery rehydrates in-flight workdirs into `waiting_for_input` and restores the event log from `events.jsonl` so the user sees the tail of the interrupted turn on reopen.
+Boot recovery rehydrates in-flight workdirs into `waiting_for_input` + `interruptedByReboot=true` (driving the "Reprendre" button) when the Claude session file at `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` still exists, or collapses the run to `stopped` when the session file is gone — without that defensive check the user's `--resume` would surface "No conversation found with session ID …". The event log is restored from `events.jsonl` so the tail of the interrupted turn re-renders on reopen.
 
 Built on top of the shared [`createRunner`](../services/runner-core/runner.md) factory — this file only contributes the skill-agent spec (mode-aware workdir prep, sync-back on finish, immediate workdir destruction on failed turn) and the diff API (`listFixDiff` / `readFixDiffFile`) the review panel consumes. Both `fix` and `create` modes share the same registry; the spec's `runIdPrefix` keeps `fix_*` and `create_*` ids distinct.
 
@@ -24,7 +24,7 @@ export type SkillAgentMode = 'fix' | 'create';
 
 ### `function restoreOrCleanupTempWorkdirs`
 
-Boot-time scan of `~/.nakiros/tmp-skills/`. Rehydrates non-terminal runs into `waiting_for_input` (the subprocess is gone but the `sessionId` is preserved so `--resume` works on the next turn). Discards terminal workdirs.
+Boot-time scan of `~/.nakiros/tmp-skills/`. Rehydrates non-terminal runs into `waiting_for_input` + `interruptedByReboot=true` when the Claude session file is still on disk (so `--resume` will succeed); collapses to `stopped` when the session file is gone. Discards terminal workdirs.
 
 ```ts
 export function restoreOrCleanupTempWorkdirs(): void

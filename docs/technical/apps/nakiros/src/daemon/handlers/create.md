@@ -19,7 +19,7 @@ Registers the `create:*` IPC channels — thin mirror of `fix:*` with different 
 
 ## Broadcasts
 
-- `create:event` — create run lifecycle.
+- `create:event` — create run lifecycle. `withBroadcastOnError` wraps every create handler that mutates a known run, broadcasting an `error` variant on this channel when the handler throws (the IPC response still rejects).
 
 ## Exports
 

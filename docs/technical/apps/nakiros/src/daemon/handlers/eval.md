@@ -32,7 +32,7 @@ Registers the `eval:*` IPC channels — the full eval runner surface (lifecycle,
 
 ## Broadcasts
 
-- `eval:event` — streams `status`, `text`, `tool`, `tokens`, `waiting_for_input`, `done` events while a run is active.
+- `eval:event` — streams `status`, `text`, `tool`, `tokens`, `waiting_for_input`, `done` events while a run is active. The `error` variant is broadcast by `withBroadcastOnError` when an `eval:*` handler that mutates a known run throws (e.g. `eval:sendUserMessage`, `eval:stopRun`, `eval:finishRun`) — the IPC response still rejects, but the frontend gets an out-of-band signal so it can surface the failure inline. `eval:startRuns` is intentionally not wrapped (no runId yet).
 
 ## Exports
 

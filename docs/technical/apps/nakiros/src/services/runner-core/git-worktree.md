@@ -65,10 +65,10 @@ export function destroyEvalSandbox(sandboxPath: string): void
 
 ### `function sweepOrphanSandboxes`
 
-Boot-time sweep: delete every directory under `~/.nakiros/sandboxes/` left over from a previous daemon session. Orphans have no in-flight references and their artefacts (`diff.patch`) already live in the run's artefact directory.
+Boot-time sweep: delete every directory under `~/.nakiros/sandboxes/` left over from a previous daemon session. The `keep` set carries the absolute paths of sandboxes still referenced by rehydrated `waiting_for_input` runs — without it the sweep would delete the very directories the user is about to "Reprendre" against, hitting "No conversation found with session ID …" on `claude --resume`.
 
 ```ts
-export function sweepOrphanSandboxes(): { deleted: number }
+export function sweepOrphanSandboxes(keep?: ReadonlySet<string>): { deleted: number }
 ```
 
 ### `function sandboxRoot`

@@ -41,7 +41,9 @@ families: shell/clipboard, preferences, agent installer, web Notification
 helpers, onboarding, projects + project conversations, project skills,
 nakiros bundled skills (with conflict resolution), Claude global skills,
 plugin skills, eval runner (start/stop/list/feedback/matrix/comparison),
-audit runner, fix runner, create runner, meta version info, skill agent
+audit runner, fix runner, create runner, **analyze-convo runner** (start /
+stop / send / finish / list / event subscription — one method per channel
+in the `analyzeConvo:*` IPC group), meta version info, skill agent
 temp files. The browser `Notification` API is wrapped to display run
 completion notifications; clicks emit through `onOpenAgentRunChat`
 listeners.

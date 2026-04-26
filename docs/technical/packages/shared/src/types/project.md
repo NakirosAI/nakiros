@@ -191,7 +191,7 @@ One turn (user or assistant message) in an eval run. `blocks` preserves the stre
 
 ### `interface SkillEvalRun`
 
-Full in-memory state of a single eval run — status, turns, tokens, artefact paths, optional git-worktree sandbox path, model id.
+Full in-memory state of a single eval run — status, turns, tokens, artefact paths, optional git-worktree sandbox path, model id. The `interruptedByReboot?: boolean` flag is set when the run was rehydrated from disk into `waiting_for_input` after a daemon reboot (rather than genuinely asking for input); cleared by the next successful turn. Drives the "Reprendre" button in the UI.
 
 ### `interface EvalRunOutputEntry`
 
@@ -203,7 +203,7 @@ Progress snapshot emitted while an eval run is active.
 
 ### `interface EvalRunEvent`
 
-Event broadcast on `eval:event` while an eval run is alive (`status`, `text`, `tool`, `tokens`, `waiting_for_input`, `done`).
+Event broadcast on `eval:event` while an eval run is alive (`status`, `text`, `tool`, `tokens`, `waiting_for_input`, `done`, `error`). The `error` variant is broadcast by `withBroadcastOnError` when an IPC handler throws BEFORE the runner can emit a native event — the originating view receives an out-of-band signal instead of waiting for a turn that will never start. Not persisted to the replay buffer.
 
 ### `interface StartEvalRunRequest`
 
@@ -225,15 +225,39 @@ One turn (user or assistant) inside an audit run conversation.
 
 ### `interface AuditRun`
 
-Full in-memory state of an audit run — mirror of `SkillEvalRun` for the audit flow. `reportPath` is set once the run completes successfully and points at `{skill}/audits/audit-<ts>.md`.
+Full in-memory state of an audit run — mirror of `SkillEvalRun` for the audit flow. `reportPath` is set once the run completes successfully and points at `{skill}/audits/audit-<ts>.md`. `interruptedByReboot?: boolean` mirrors `SkillEvalRun.interruptedByReboot`: set when the last `waiting_for_input` came from a boot-time collapse, cleared by the next successful turn.
 
 ### `interface AuditRunEvent`
 
-Event broadcast on `audit:event` while an audit run is alive.
+Event broadcast on `audit:event` while an audit run is alive (`status`, `text`, `tool`, `tokens`, `waiting_for_input`, `done`, `error`). The `error` variant follows the same `withBroadcastOnError` contract as `EvalRunEvent`.
 
 ### `interface StartAuditRequest`
 
 Request payload for the `audit:start` IPC channel.
+
+## Analyze-convo run
+
+### `type AnalyzeConvoRunStatus`
+
+Lifecycle status of an `analyze-convo` run. Same shape as audit since the agent is also a single-task runner.
+
+```ts
+export type AnalyzeConvoRunStatus =
+  | 'starting' | 'running' | 'waiting_for_input'
+  | 'completed' | 'failed' | 'stopped';
+```
+
+### `interface AnalyzeConvoRun`
+
+Full in-memory state of a deep conversation-analysis run. Mirrors `AuditRun` but targets a Claude Code session (`projectId` + `sessionId`) and writes its markdown report into the run workdir + the cache used by `loadConversationDeepAnalysis`. Carries the pinned `model` (haiku for small convs, sonnet for big), `estimatedInputTokens` for cost transparency, and `reportPath` pointing at the cached `~/.nakiros/analyses/<sessionId>.json`. `interruptedByReboot` semantics match `AuditRun`.
+
+### `interface AnalyzeConvoRunEvent`
+
+Event broadcast on `analyzeConvo:event` while an analyze-convo run is alive. Same variants as `AuditRunEvent` — the `done` event carries an optional `reportPath` once the markdown report has been archived.
+
+### `interface StartAnalyzeConvoRequest`
+
+Request payload for `analyzeConvo:start` — a `(projectId, sessionId)` pair pointing at the conversation to analyze.
 
 ## Fix benchmarks
 

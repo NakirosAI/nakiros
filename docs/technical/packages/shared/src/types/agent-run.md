@@ -9,10 +9,10 @@ Unified primitive surfaced to the runs center, the activity feed, and any "is so
 ### `type AgentRunKind`
 
 ```ts
-export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create'
+export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'analyze-convo'
 ```
 
-The discriminator. Each kind has its own backing runner on the daemon and its own native landing screen on the frontend. New kinds (e.g. `analyze-convo`) extend this union without changing the surrounding contract.
+The discriminator. Each kind has its own backing runner on the daemon and its own native landing screen on the frontend. New kinds extend this union without changing the surrounding contract.
 
 ### `type AgentRunStatus`
 
@@ -55,13 +55,25 @@ export interface SkillRunTarget {
 
 Skill-bound target — common shape for audit / eval / fix / create. Carries enough identity to resolve the underlying skill directory and to deep-link the user back to the right native screen.
 
+### `interface ConversationRunTarget`
+
+```ts
+export interface ConversationRunTarget {
+  type: 'conversation';
+  projectId: string;
+  sessionId: string;
+}
+```
+
+Conversation-bound target — used by the `analyze-convo` kind. Carries the project id + Claude Code session id so the runner can locate the JSONL and the frontend can deep-link back to the diagnostic view.
+
 ### `type AgentRunTarget`
 
 ```ts
-export type AgentRunTarget = SkillRunTarget
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget
 ```
 
-Discriminated union of every supported target shape. New target kinds (e.g. `{ type: 'conversation'; conversationId: string; … }`) extend this union when their corresponding agent-run kind ships.
+Discriminated union of every supported target shape. New target kinds extend this union when their corresponding agent-run kind ships.
 
 ### `type AgentRunMeta`
 

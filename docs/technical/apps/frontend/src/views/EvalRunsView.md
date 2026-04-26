@@ -12,4 +12,4 @@ Full-screen overlay for a batch of skill eval runs (one iteration, possibly with
 export default function EvalRunsView(props: Props): JSX.Element
 ```
 
-Renders the header (counters + stop-all button), the runs sidebar grouped by model and eval, and the detail pane for the selected run. Props include `scope`, optional `projectId` / `pluginName` / `marketplaceName`, `skillName`, `initialRunIds`, the `iteration` number for feedback persistence, and `onClose`.
+Renders the header (counters + stop-all button), the runs sidebar grouped by model and eval, and the detail pane for the selected run. Props include `scope`, optional `projectId` / `pluginName` / `marketplaceName`, `skillName`, `initialRunIds`, the `iteration` number for feedback persistence, and `onClose`. Runs flagged `interruptedByReboot && status === 'waiting_for_input'` (rehydrated after a daemon reboot) surface a Reprendre control wired to `sendEvalUserMessage(runId, RESUME_PROMPTS.eval)`. Handler-level errors broadcast through `eval:event`'s `error` variant are surfaced inline.

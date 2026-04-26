@@ -20,4 +20,4 @@ Clicking a row navigates to the run's native screen via the `useAgentRunNavigati
 export function RunsCenter(): JSX.Element
 ```
 
-No props — reads the global `agentRunStore` via `useActiveAgentRuns` and resolves the click-to-navigate callback from `useAgentRunNavigation`. Render it once per top-level view inside the existing topbar (Home's fixed div, Dashboard's flex, the three skill views' TopBar).
+No props — reads the global `agentRunStore` via `useActiveAgentRuns` and resolves the click-to-navigate callback from `useAgentRunNavigation`. Render it once per top-level view inside the existing topbar (Home's fixed div, Dashboard's flex, the three skill views' TopBar). Supports every kind in `AgentRunKind` including `analyze-convo` (Sparkles icon shared with eval/create).

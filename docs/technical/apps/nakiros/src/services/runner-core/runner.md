@@ -33,7 +33,7 @@ Turn shape shared by `AuditRunTurn` and `EvalRunTurn` — both are structurally 
 
 ### `interface BaseRun`
 
-Minimal contract every run state must satisfy. `AuditRun` / `SkillEvalRun` extend this; the factory only relies on these fields.
+Minimal contract every run state must satisfy. `AuditRun` / `SkillEvalRun` / `AnalyzeConvoRun` extend this; the factory only relies on these fields. The optional `interruptedByReboot?: boolean` flag is set by `spec.rehydrate` when the last `waiting_for_input` came from a boot-time collapse, and cleared at the very start of `executeTurn` once the user (or the runner) actively drives the run again. Drives the UI's "Reprendre" affordance.
 
 ### `interface RunEventEnvelope<TEvent>`
 
@@ -90,7 +90,7 @@ Build a runner instance from the spec. The factory wires:
 
 1. **Registry** — `Map<runId, RunEntry>` shared across the public methods.
 2. **Idempotent `start`** — calls `spec.findActiveForTarget?` first; on miss, runs `prepareWorkdir`, `createInitialRun`, persists, kicks off the first turn fire-and-forget, returns the run synchronously.
-3. **`executeTurn`** — resets the EventLog, transitions `starting → running`, builds CLI args (via `spec.buildCliArgs?` or default), spawns `claude --print`, dispatches text / tool / usage events through the EventLog, pushes user + assistant turns, and on a failed turn emits `done` and calls `spec.onTurnFailed?`. After a successful turn, dispatches `spec.onTurnComplete(entry, helpers)` so the kind decides whether to wait, complete, or fail.
+3. **`executeTurn`** — resets the EventLog, clears `run.interruptedByReboot`, transitions `starting → running`, builds CLI args (via `spec.buildCliArgs?` or default), spawns `claude --print`, dispatches text / tool / usage events through the EventLog, pushes user + assistant turns, and on a failed turn emits `done` and calls `spec.onTurnFailed?`. The `onSession` callback persists `run.json` immediately on receiving the Claude session id — without this, a daemon kill mid-turn would leave `run.json` with `sessionId: null` and rehydrate would have no way to `--resume`. After a successful turn, dispatches `spec.onTurnComplete(entry, helpers)` so the kind decides whether to wait, complete, or fail.
 4. **`sendUserMessage`** — gates via `spec.canSendUserMessage` (default `waiting_for_input`), rebinds the EventLog to the new caller, calls `executeTurn`, then `spec.onTurnComplete` again.
 5. **`stop`** — `SIGTERM`s the child, transitions `stopped`, broadcasts `done` (exitCode 130), destroys the EventLog, calls `spec.cleanupOnTerminal`. Entry stays in the registry for the UI to render.
 6. **`finish`** — calls `spec.finish?`, then `spec.cleanupOnTerminal`, then removes the entry from the registry. Used by the UI's "Terminer" / "Sync" / "Create" buttons.

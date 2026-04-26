@@ -67,3 +67,30 @@ export function createTypedHandler<TArgs extends unknown[], TResult>(
   // …
 }),
 ```
+
+### `function withBroadcastOnError`
+
+Wrap a handler so any synchronous or async throw broadcasts a `{ runId, event: { type: 'error', error } }` payload on the given channel **before** the exception propagates back to the HTTP layer. The error is re-thrown, so the IPC response is still in error and the caller's promise rejects — but the frontend, subscribed to the runner's event channel, receives an out-of-band signal even when the handler fails before the runner can emit anything (e.g. `fix:runEvalsInTemp` failing on a missing `evals.json`). `*:start` handlers should NOT be wrapped: there is no runId yet, and the HTTP error is the only useful signal.
+
+The error event is broadcast-only: it does NOT go through `EventLog` and is therefore not persisted to `events.jsonl` (the buffer is for turn replay, not handler failures).
+
+```ts
+export function withBroadcastOnError<TArgs extends unknown[], TResult>(
+  channel: IpcChannel,
+  fn: (...args: TArgs) => TResult | Promise<TResult>,
+  getRunId: (...args: TArgs) => string,
+): (...args: TArgs) => Promise<TResult>
+```
+
+Argument order matters: `fn` precedes `getRunId` so TypeScript infers `TArgs` from `fn`'s signature, then re-uses the same tuple for `getRunId`. Reversing it loses inference.
+
+**Example:**
+```ts
+'fix:runEvalsInTemp': createTypedHandler(
+  withBroadcastOnError(
+    'eval:event',
+    async (req: RunEvalsInTempRequest) => { /* … */ },
+    (req) => req.runId,
+  ),
+),
+```

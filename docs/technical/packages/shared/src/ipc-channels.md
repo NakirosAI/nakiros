@@ -85,6 +85,13 @@ Channels are grouped by domain. Each key equals its value so the object acts as 
 
 - `skillAgent:listTempFiles`, `skillAgent:readTempFile`
 
+### Conversation deep-analysis runner (analyze-convo Run kind)
+
+- `analyzeConvo:start`, `analyzeConvo:stopRun`, `analyzeConvo:getRun`, `analyzeConvo:sendUserMessage`, `analyzeConvo:finish`
+- Stream: `analyzeConvo:event`, `analyzeConvo:listActive`, `analyzeConvo:listAll`, `analyzeConvo:getBufferedEvents`
+
+Promotes the legacy one-shot `project:deepAnalyzeConversation` (synchronous Promise returning markdown) into a first-class streaming agent run mirroring the audit/fix/create lifecycle.
+
 ## Exports
 
 ### `const IPC_CHANNELS`

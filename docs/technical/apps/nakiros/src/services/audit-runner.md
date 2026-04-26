@@ -4,7 +4,7 @@
 
 Static-review run-kind driven by `/nakiros-skill-factory audit <skillName>`. The audit produces `audit-report.md` in the run's `outputs/` directory, which is then archived into `{skillDir}/audits/audit-<timestamp>.md`.
 
-Workdir lives under `~/.nakiros/runs/audit/<runId>/` and persists across daemon restarts. The target skill is symlinked into `{workdir}/.claude/skills/<skillName>` so the factory skill can find it via cwd. Boot recovery (`restoreOrCleanupAuditWorkdirs`) rehydrates in-flight runs into `waiting_for_input` (they resume via `--resume`) or cleans up terminal workdirs.
+Workdir lives under `~/.nakiros/runs/audit/<runId>/` and persists across daemon restarts. The target skill is symlinked into `{workdir}/.claude/skills/<skillName>` so the factory skill can find it via cwd. Boot recovery (`restoreOrCleanupAuditWorkdirs`) rehydrates in-flight runs into `waiting_for_input` + `interruptedByReboot=true` (the user gets a "Reprendre" button) when the Claude session file at `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` still exists, or collapses them to `stopped` when the session file is gone (without that defensive check the user's `--resume` would hit "No conversation found with session ID …"). Terminal runs are returned read-only, terminal workdirs are deleted on boot.
 
 Built on top of the shared [`createRunner`](../services/runner-core/runner.md) factory — this file only contributes the audit-specific spec (workdir prep with skill symlink, post-turn artefact archive, audit-history listing) and re-exports the public surface IPC handlers consume.
 
@@ -12,7 +12,7 @@ Built on top of the shared [`createRunner`](../services/runner-core/runner.md) f
 
 ### `function restoreOrCleanupAuditWorkdirs`
 
-Boot-time scan of `~/.nakiros/runs/audit/*`. Per persisted workdir: terminal runs are deleted; completed runs stay available for Terminer; in-flight runs collapse to `waiting_for_input` (child is gone, session resumes via `--resume`).
+Boot-time scan of `~/.nakiros/runs/audit/*`. Per persisted workdir: terminal runs are deleted; completed runs stay available for Terminer; in-flight runs collapse to `waiting_for_input` + `interruptedByReboot=true` when the Claude session file is still on disk, or collapse to `stopped` when the session file is gone (no usable session — Reprendre would otherwise surface "No conversation found").
 
 ```ts
 export function restoreOrCleanupAuditWorkdirs(): void

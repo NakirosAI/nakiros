@@ -38,3 +38,4 @@ Every handler runs through `createTypedHandler` from [run-helpers.ts](./run-help
 - [fix.ts](./fix.md) — `fix:*` skill iteration flow editing a temp copy (tmp_skill pattern — load-bearing).
 - [create.ts](./create.md) — `create:*` new-skill-from-scratch mirror of `fix:*`.
 - [skill-agent.ts](./skill-agent.md) — `skillAgent:*` shared draft-file surface for fix + create.
+- [analyze-convo.ts](./analyze-convo.md) — `analyzeConvo:*` streaming deep conversation analysis run kind.

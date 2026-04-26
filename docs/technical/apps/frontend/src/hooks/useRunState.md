@@ -15,10 +15,11 @@ type RunStreamInnerEvent =
   | { type: 'text'; text: string }
   | { type: 'tool'; name: string; display: string }
   | { type: 'status'; status: string }
+  | { type: 'error'; error: string }
   | { type: string };
 ```
 
-Inner event shape emitted by every runner stream.
+Inner event shape emitted by every runner stream. The `error` variant is the handler-level failure broadcast by `withBroadcastOnError` — surfaced separately from `run.error` (runner failure) via `handlerError` below.
 
 ### `RunStateApi<R, Ev>`
 
@@ -40,8 +41,12 @@ interface UseRunStateResult<R> {
   setRun: Dispatch<SetStateAction<R>>;
   liveEvents: LiveStreamEvent[];
   liveScrollRef: RefObject<HTMLDivElement | null>;
+  handlerError: string | null;
+  clearHandlerError(): void;
 }
 ```
+
+`handlerError` carries the latest `error` event broadcast by `withBroadcastOnError` (e.g. `fix:runEvalsInTemp` failing on a missing `evals.json`). It is out-of-band relative to `run.error` (runner failure). Cleared automatically when a fresh turn starts (on `status: 'starting'`); callers can also clear it via `clearHandlerError()` when the user dismisses the banner. Display via `RunErrorBanner` alongside or instead of `run.error`.
 
 ### `useRunState`
 
@@ -57,6 +62,4 @@ function useRunState<R extends { status: string }, Ev extends RunStreamInnerEven
 Polls `getRun` every 500 ms, replays buffered text/tool events, and feeds
 live `text` / `tool` events into `liveEvents`. `status` events mirror into
 `run.status` (so Stop/completion feedback is immediate) and reset
-`liveEvents` on `'starting'`. Auto-scrolls `liveScrollRef` to the bottom on
-each new event. `onInnerEvent` is forwarded to callers for view-specific
-handling.
+`liveEvents` on `'starting'`. `error` events populate `handlerError`. Auto-scrolls `liveScrollRef` to the bottom on each new event. `onInnerEvent` is forwarded to callers for view-specific handling.

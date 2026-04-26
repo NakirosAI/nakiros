@@ -17,3 +17,4 @@ Barrel entry point for `runner-core`. Re-exports every helper, class, type that 
 - `createIsolatedHome`, `destroyIsolatedHome`, `IsolatedHome` — see [isolated-home.md](./isolated-home.md)
 - `isActiveRunStatus` — see [run-status.md](./run-status.md)
 - `writeExecutionSettings`, `ExecutionSettingsOptions` — see [execution-settings.md](./execution-settings.md)
+- `createRunner`, `BaseRun`, `BaseTurn`, `RehydrateResult`, `RunEntry`, `RunEventEnvelope`, `RunOpts`, `RunStatus`, `RunnerInstance`, `RunnerSpec`, `PostTurnHelpers` — see [runner.md](./runner.md)

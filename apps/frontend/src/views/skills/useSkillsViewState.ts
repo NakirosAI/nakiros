@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AuditRun, ClaudeModelId, Skill } from '@nakiros/shared';
 import { DEFAULT_EVAL_MODEL } from '@nakiros/shared';
 import { isImagePath } from '../../utils/file-types';
+import { usePolling } from '../../hooks/usePolling';
+import { agentRunFocus } from '../../lib/agent-run-focus';
 import type { SkillIdentity, SkillsViewConfig } from './types';
 
 export type SkillDetailTab = 'files' | 'evals' | 'audits';
@@ -52,62 +54,110 @@ export function useSkillsViewState(config: SkillsViewConfig) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.scope]);
 
-  // ── Polling: ongoing evals / active fix / active audit / optional create ─
+  // ── Consume an `agentRunFocus` request after skills are loaded ───────────
+  // Effect is gated on `!loading && skills.length > 0` so we never consume a
+  // focus we cannot honour. Subscribes for the case where the focus is set
+  // after the view has mounted (e.g. user already on this scope's view
+  // clicks a run from the topbar). For `kind: 'audit'` focuses, we also
+  // open the AuditView overlay — the user expects landing on the run, not
+  // just on the skill.
   useEffect(() => {
+    if (loading || skills.length === 0) return;
+
+    async function tryConsume() {
+      const focus = agentRunFocus.consume();
+      if (!focus) return;
+      if (focus.target.type !== 'skill') return;
+      // Bind the narrowed target so it survives the closure inside `find`.
+      const skillTarget = focus.target;
+      if (!config.matchesScope(skillTarget)) {
+        // Wrong scope — push it back so the matching view can take it.
+        agentRunFocus.set(focus);
+        return;
+      }
+      const match = skills.find((s) => config.keyOf(s) === config.keyOfRun(skillTarget));
+      if (!match) return;
+      setSelectedKey(config.keyOf(match));
+
+      // Per-kind landing: open the native overlay matching the run's kind
+      // so the user lands on the run, not just on the skill.
+      if (focus.kind === 'audit') {
+        setDetailTab('audits');
+        try {
+          const auditRun = await window.nakiros.getAuditRun(focus.id);
+          if (auditRun) setActiveAudit({ run: auditRun, skill: match });
+        } catch (err) {
+          console.error('[useSkillsViewState] getAuditRun failed', err);
+        }
+      } else if (focus.kind === 'fix') {
+        setDetailTab('files');
+        try {
+          const fixRun = await window.nakiros.getFixRun(focus.id);
+          if (fixRun) setActiveFix({ run: fixRun, skill: match });
+        } catch (err) {
+          console.error('[useSkillsViewState] getFixRun failed', err);
+        }
+      } else if (focus.kind === 'eval' && focus.meta?.kind === 'eval') {
+        setDetailTab('evals');
+        setActiveRuns({
+          runIds: focus.meta.runIds,
+          iteration: focus.meta.iteration,
+          skill: match,
+        });
+      } else {
+        // create — overlay is owned by SkillsView itself, not the hook.
+        // Selecting the skill is the best we can do here for now.
+        setDetailTab('files');
+      }
+    }
+
+    void tryConsume();
+    return agentRunFocus.subscribe(() => {
+      void tryConsume();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, skills]);
+
+  // ── Polling: ongoing evals / active fix / active audit / optional create ─
+  usePolling(async () => {
     const terminal = new Set(['completed', 'failed', 'stopped']);
 
-    async function pollOngoing() {
-      const all = await window.nakiros.listEvalRuns();
-      const next = new Map<string, OngoingRun>();
-      for (const run of all) {
-        if (!config.matchesScope(run)) continue;
-        if (terminal.has(run.status)) continue;
-        const k = config.keyOfRun(run);
-        const entry = next.get(k) ?? { runIds: [], iteration: run.iteration };
-        entry.runIds.push(run.runId);
-        next.set(k, entry);
-      }
-      setOngoingByKey(next);
-    }
+    const [evalRuns, fixRuns, auditRuns] = await Promise.all([
+      window.nakiros.listEvalRuns(),
+      window.nakiros.listActiveFixRuns(),
+      window.nakiros.listActiveAuditRuns(),
+    ]);
 
-    async function pollFixes() {
-      const all = await window.nakiros.listActiveFixRuns();
-      const next = new Map<string, AuditRun>();
-      for (const run of all) {
-        if (!config.matchesScope(run)) continue;
-        next.set(config.keyOfRun(run), run);
-      }
-      setActiveFixByKey(next);
+    const ongoing = new Map<string, OngoingRun>();
+    for (const run of evalRuns) {
+      if (!config.matchesScope(run)) continue;
+      if (terminal.has(run.status)) continue;
+      const k = config.keyOfRun(run);
+      const entry = ongoing.get(k) ?? { runIds: [], iteration: run.iteration };
+      entry.runIds.push(run.runId);
+      ongoing.set(k, entry);
     }
+    setOngoingByKey(ongoing);
 
-    async function pollAudits() {
-      const all = await window.nakiros.listActiveAuditRuns();
-      const next = new Map<string, AuditRun>();
-      for (const run of all) {
-        if (!config.matchesScope(run)) continue;
-        next.set(config.keyOfRun(run), run);
-      }
-      setActiveAuditByKey(next);
+    const activeFix = new Map<string, AuditRun>();
+    for (const run of fixRuns) {
+      if (!config.matchesScope(run)) continue;
+      activeFix.set(config.keyOfRun(run), run);
     }
+    setActiveFixByKey(activeFix);
 
-    async function pollCreate() {
-      if (!config.pollActiveCreate) return;
-      const run = await config.pollActiveCreate();
-      setPendingCreate(run);
+    const activeAudit = new Map<string, AuditRun>();
+    for (const run of auditRuns) {
+      if (!config.matchesScope(run)) continue;
+      activeAudit.set(config.keyOfRun(run), run);
     }
+    setActiveAuditByKey(activeAudit);
 
-    function tick() {
-      void pollOngoing();
-      void pollFixes();
-      void pollAudits();
-      void pollCreate();
+    if (config.pollActiveCreate) {
+      const create = await config.pollActiveCreate();
+      setPendingCreate(create);
     }
-
-    tick();
-    const interval = setInterval(tick, 2000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.scope]);
+  }, 2000);
 
   // ── Derived values ───────────────────────────────────────────────────────
   const selectedSkill = useMemo(

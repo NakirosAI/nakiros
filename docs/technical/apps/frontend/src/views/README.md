@@ -10,6 +10,7 @@ Top-level view components mounted directly by `App.tsx` (boot/onboarding/scan/ho
 
 ## Files
 
+- [AnalyzeConvoView.tsx](./AnalyzeConvoView.md) — Tabbed overlay (conversation / report) hosting a streaming `analyze-convo` agent run.
 - [AuditView.tsx](./AuditView.md) — Full-screen overlay rendering an in-flight or terminal audit run for a single skill.
 - [BundledSkillConflictsView.tsx](./BundledSkillConflictsView.md) — Conflict resolution UI for bundled-skill upgrade collisions.
 - [ConversationsView.tsx](./ConversationsView.md) — Dashboard tab listing every analyzed Claude Code JSONL conversation, ranked health-first.

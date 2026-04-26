@@ -1,8 +1,4 @@
-import type {
-  AuditRunEvent,
-  StartAuditRequest,
-  StartEvalRunRequest,
-} from '@nakiros/shared';
+import type { AuditRunEvent, StartAuditRequest } from '@nakiros/shared';
 
 import {
   startAudit,
@@ -12,11 +8,18 @@ import {
   listAuditHistory,
   readAuditReport,
   listActiveAuditRuns,
+  listAllAuditRuns,
   finishAudit,
   getAuditBufferedEvents,
 } from '../../services/audit-runner.js';
-import { resolveEvalSkillDir } from './skill-dir.js';
-import { createEventBroadcaster, getRunOrThrow, resolveSkillDirForRun } from './run-helpers.js';
+import { resolveSkillDir, type SkillScopeRef } from './skill-dir.js';
+import {
+  createEventBroadcaster,
+  createTypedHandler,
+  getRunOrThrow,
+  resolveSkillDirForRun,
+  withBroadcastOnError,
+} from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 const broadcastAuditEvent = createEventBroadcaster<AuditRunEvent>('audit:event');
@@ -33,42 +36,43 @@ const broadcastAuditEvent = createEventBroadcaster<AuditRunEvent>('audit:event')
  * Broadcasts `audit:event` via `eventBus.broadcast` while runs are active.
  */
 export const auditHandlers: HandlerRegistry = {
-  'audit:start': (args) => {
-    const request = args[0] as StartAuditRequest;
-    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+  'audit:start': createTypedHandler((request: StartAuditRequest) => {
+    const skillDir = resolveSkillDir(request);
     return startAudit(request, { skillDir, onEvent: broadcastAuditEvent });
-  },
+  }),
 
-  'audit:stopRun': (args) => {
-    stopAudit(args[0] as string);
-  },
+  'audit:stopRun': createTypedHandler(
+    withBroadcastOnError('audit:event', stopAudit, (runId: string) => runId),
+  ),
 
-  'audit:getRun': (args) => getAuditRun(args[0] as string),
+  'audit:getRun': createTypedHandler(getAuditRun),
 
-  'audit:sendUserMessage': async (args) => {
-    const runId = args[0] as string;
-    const message = args[1] as string;
-    const run = getRunOrThrow(getAuditRun, runId, 'Audit');
-    const skillDir = resolveSkillDirForRun(run);
-    await sendAuditUserMessage(runId, message, {
-      skillDir,
-      onEvent: broadcastAuditEvent,
-    });
-  },
+  'audit:sendUserMessage': createTypedHandler(
+    withBroadcastOnError(
+      'audit:event',
+      async (runId: string, message: string) => {
+        const run = getRunOrThrow(getAuditRun, runId, 'Audit');
+        const skillDir = resolveSkillDirForRun(run);
+        await sendAuditUserMessage(runId, message, { skillDir, onEvent: broadcastAuditEvent });
+      },
+      (runId) => runId,
+    ),
+  ),
 
-  'audit:listHistory': (args) => {
-    const request = args[0] as StartEvalRunRequest;
-    const skillDir = resolveEvalSkillDir(request);
+  'audit:listHistory': createTypedHandler((request: SkillScopeRef) => {
+    const skillDir = resolveSkillDir(request);
     return listAuditHistory(skillDir);
-  },
+  }),
 
-  'audit:readReport': (args) => readAuditReport(args[0] as string),
+  'audit:readReport': createTypedHandler(readAuditReport),
 
-  'audit:listActive': () => listActiveAuditRuns(),
+  'audit:listActive': createTypedHandler(listActiveAuditRuns),
 
-  'audit:finish': (args) => {
-    finishAudit(args[0] as string);
-  },
+  'audit:listAll': createTypedHandler(listAllAuditRuns),
 
-  'audit:getBufferedEvents': (args) => getAuditBufferedEvents(args[0] as string),
+  'audit:finish': createTypedHandler(
+    withBroadcastOnError('audit:event', finishAudit, (runId: string) => runId),
+  ),
+
+  'audit:getBufferedEvents': createTypedHandler(getAuditBufferedEvents),
 };

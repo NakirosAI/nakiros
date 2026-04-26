@@ -11,6 +11,7 @@ import { Modal } from '../ui/Modal';
 import { ConversationTimeline } from './ConversationTimeline';
 import { ConversationHealthBadges } from './ConversationHealthBadges';
 import { ConversationDeepAnalysisSection } from './ConversationDeepAnalysisSection';
+import { formatLongDuration } from '../../utils/format';
 
 interface Props {
   project: Project;
@@ -99,7 +100,7 @@ export function ConversationDiagnosticPanel({ project, analysis, onClose }: Prop
           <Field label={t('drawer.fields.messages')} value={analysis.messageCount.toString()} />
           <Field
             label={t('drawer.fields.duration')}
-            value={formatDuration(analysis.durationMs)}
+            value={formatLongDuration(analysis.durationMs)}
           />
           <Field
             label={t('drawer.fields.maxContext')}
@@ -363,16 +364,6 @@ function RawMessageList({ messages }: { messages: ConversationMessage[] }) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatDuration(ms: number): string {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  return rem === 0 ? `${h}h` : `${h}h${rem}m`;
-}
 
 function formatLargeTokens(n: number): string {
   if (n < 1000) return n.toString();

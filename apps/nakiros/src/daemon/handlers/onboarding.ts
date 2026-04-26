@@ -1,9 +1,11 @@
+import type { DetectedEditor } from '@nakiros/shared';
+
 import {
   detectEditors,
   installNakiros,
   nakirosConfigExists,
-  type DetectedEditor,
 } from '../../services/onboarding-installer.js';
+import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 /**
@@ -15,7 +17,7 @@ import type { HandlerRegistry } from './index.js';
  * - `onboarding:install` — runs the Nakiros install for a list of selected editors
  */
 export const onboardingHandlers: HandlerRegistry = {
-  'onboarding:detectEditors': () => detectEditors(),
-  'onboarding:nakirosConfigExists': () => nakirosConfigExists(),
-  'onboarding:install': (args) => installNakiros(args[0] as DetectedEditor[]),
+  'onboarding:detectEditors': createTypedHandler(detectEditors),
+  'onboarding:nakirosConfigExists': createTypedHandler(nakirosConfigExists),
+  'onboarding:install': createTypedHandler((editors: DetectedEditor[]) => installNakiros(editors)),
 };

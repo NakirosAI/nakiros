@@ -2,7 +2,7 @@
 
 **Path:** `apps/nakiros/src/daemon/handlers/run-helpers.ts`
 
-Cross-handler helpers used by the run-kind handlers (eval / audit / fix / create / comparison): a typed broadcaster factory, a "run or throw" lookup wrapper, and a skill-directory resolver taking the minimal `SkillRunIdentity` shape every run exposes.
+Cross-handler helpers used by every IPC handler file: a typed broadcaster factory, a "run or throw" lookup wrapper, a skill-directory resolver taking the minimal `SkillRunIdentity` shape every run exposes, and a generic `createTypedHandler` adapter that lifts a typed function into the raw `IpcHandler` shape the registry expects.
 
 ## Exports
 
@@ -44,8 +44,53 @@ export interface SkillRunIdentity {
 
 ### `function resolveSkillDirForRun`
 
-Resolve the on-disk skill directory for a run, delegating to `resolveEvalSkillDir`. Used by audit/fix/create handlers to turn a `SkillRunIdentity` back into the original skill path.
+Resolve the on-disk skill directory for a run, delegating to `resolveSkillDir`. Used by audit/fix/create handlers to turn a `SkillRunIdentity` back into the original skill path.
 
 ```ts
 export function resolveSkillDirForRun(run: SkillRunIdentity): string
+```
+
+### `function createTypedHandler`
+
+Adapter that lifts a typed `(...args: TArgs) => TResult` function into the raw `IpcHandler` shape (`(args: unknown[]) => unknown`) the registry expects. Replaces the boilerplate `args[0] as T`, `args[1] as U`… casts that used to live in every handler. The cast `unknown[] → TArgs` is unsafe by construction (the IPC layer cannot prove the caller passed the right shape), but it's localised here and the handler body sees properly typed parameters. Callers needing runtime validation should keep doing it explicitly inside the handler body.
+
+```ts
+export function createTypedHandler<TArgs extends unknown[], TResult>(
+  fn: (...args: TArgs) => TResult | Promise<TResult>,
+): (rawArgs: unknown[]) => TResult | Promise<TResult>
+```
+
+**Example:**
+```ts
+'audit:stopRun': createTypedHandler(stopAudit),
+'audit:sendUserMessage': createTypedHandler(async (runId: string, message: string) => {
+  // …
+}),
+```
+
+### `function withBroadcastOnError`
+
+Wrap a handler so any synchronous or async throw broadcasts a `{ runId, event: { type: 'error', error } }` payload on the given channel **before** the exception propagates back to the HTTP layer. The error is re-thrown, so the IPC response is still in error and the caller's promise rejects — but the frontend, subscribed to the runner's event channel, receives an out-of-band signal even when the handler fails before the runner can emit anything (e.g. `fix:runEvalsInTemp` failing on a missing `evals.json`). `*:start` handlers should NOT be wrapped: there is no runId yet, and the HTTP error is the only useful signal.
+
+The error event is broadcast-only: it does NOT go through `EventLog` and is therefore not persisted to `events.jsonl` (the buffer is for turn replay, not handler failures).
+
+```ts
+export function withBroadcastOnError<TArgs extends unknown[], TResult>(
+  channel: IpcChannel,
+  fn: (...args: TArgs) => TResult | Promise<TResult>,
+  getRunId: (...args: TArgs) => string,
+): (...args: TArgs) => Promise<TResult>
+```
+
+Argument order matters: `fn` precedes `getRunId` so TypeScript infers `TArgs` from `fn`'s signature, then re-uses the same tuple for `getRunId`. Reversing it loses inference.
+
+**Example:**
+```ts
+'fix:runEvalsInTemp': createTypedHandler(
+  withBroadcastOnError(
+    'eval:event',
+    async (req: RunEvalsInTempRequest) => { /* … */ },
+    (req) => req.runId,
+  ),
+),
 ```

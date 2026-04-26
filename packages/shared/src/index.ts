@@ -15,5 +15,8 @@ export * from './types/skill-diff.js';
 export * from './types/version-info.js';
 export * from './types/eval-matrix.js';
 export * from './types/eval-comparison.js';
+export * from './types/onboarding.js';
+export * from './types/agent-run.js';
 export * from './constants/claude-models.js';
+export * from './constants/editor-definitions.js';
 export * from './ipc-channels.js';

@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Circle, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+
+import type { DetectedEditor, OnboardingProgressEvent } from '@nakiros/shared';
+
 import { useIpcListener } from '../hooks/useIpcListener';
 
 type Step = 1 | 2 | 3 | 4;

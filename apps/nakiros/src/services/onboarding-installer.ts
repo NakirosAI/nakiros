@@ -1,62 +1,49 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+
+import type {
+  DetectedEditor,
+  EditorId,
+  OnboardingInstallResult,
+  OnboardingProgressEvent,
+} from '@nakiros/shared';
+import { EDITOR_DEFINITION_LIST } from '@nakiros/shared';
+
 import { eventBus } from '../daemon/event-bus.js';
 
 const NAKIROS_VERSION = '1.0.0';
 
-/** Identifier for an editor/agent environment the onboarding can install into. */
-export type EditorId = 'claude' | 'cursor' | 'codex';
-
-/** Result of {@link detectEditors}: presence + label + target commands dir for one editor. */
-export interface DetectedEditor {
-  id: EditorId;
-  label: string;
-  detected: boolean;
-  targetDir: string;
-}
-
 const GLOBAL_DIR = join(homedir(), '.nakiros');
 
-const EDITOR_DEFS: Record<EditorId, { label: string; markerPaths: string[]; targetDir: string }> = {
-  claude: {
-    label: 'Claude Code',
-    markerPaths: ['/usr/local/bin/claude', join(homedir(), '.claude')],
-    targetDir: join(homedir(), '.claude', 'commands'),
-  },
-  cursor: {
-    label: 'Cursor',
-    markerPaths: ['/Applications/Cursor.app', join(homedir(), '.cursor')],
-    targetDir: join(homedir(), '.cursor', 'commands'),
-  },
-  codex: {
-    label: 'Codex',
-    markerPaths: ['/usr/local/bin/codex', join(homedir(), '.codex')],
-    targetDir: join(homedir(), '.codex', 'commands'),
-  },
+/**
+ * OS-specific binary/app paths that, when present, also indicate the editor
+ * is installed. Used in addition to the home marker (`~/.claude`, `~/.cursor`,
+ * `~/.codex`) coming from `EDITOR_DEFINITION_LIST`.
+ */
+const EXTRA_DETECTION_PATHS: Record<EditorId, string[]> = {
+  claude: ['/usr/local/bin/claude'],
+  cursor: ['/Applications/Cursor.app'],
+  codex: ['/usr/local/bin/codex'],
 };
 
 /** Scan well-known install paths for Claude Code / Cursor / Codex and report presence. */
 export function detectEditors(): DetectedEditor[] {
-  return (Object.entries(EDITOR_DEFS) as [EditorId, (typeof EDITOR_DEFS)[EditorId]][]).map(
-    ([id, def]) => ({
-      id,
+  return EDITOR_DEFINITION_LIST.map((def) => {
+    const homeMarker = join(homedir(), def.homeMarkerRelative);
+    const markerPaths = [homeMarker, ...EXTRA_DETECTION_PATHS[def.id]];
+    return {
+      id: def.id,
       label: def.label,
-      detected: def.markerPaths.some((p) => existsSync(p)),
-      targetDir: def.targetDir,
-    }),
-  );
+      detected: markerPaths.some((p) => existsSync(p)),
+      targetDir: join(homedir(), def.homeMarkerRelative, def.commandsSubdir),
+    };
+  });
 }
 
 /** True when `~/.nakiros/config.yaml` exists — used by the UI to skip onboarding. */
 export function nakirosConfigExists(): boolean {
   return existsSync(join(GLOBAL_DIR, 'config.yaml'));
-}
-
-interface OnboardingProgressEvent {
-  label: string;
-  done: boolean;
-  error?: string;
 }
 
 function emitProgress(event: OnboardingProgressEvent): void {
@@ -73,7 +60,7 @@ function emitProgress(event: OnboardingProgressEvent): void {
  */
 export async function installNakiros(
   editors: DetectedEditor[],
-): Promise<{ success: boolean; errors: string[] }> {
+): Promise<OnboardingInstallResult> {
   const errors: string[] = [];
 
   try {

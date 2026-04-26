@@ -2,13 +2,15 @@
 
 **Path:** `apps/nakiros/src/daemon/handlers/`
 
-Domain-scoped IPC handler bundles. Each `<domain>.ts` exports one `xxxHandlers: HandlerRegistry` map; `index.ts` merges them all into the final registry consumed by `POST /ipc/:channel`. Handlers never reference IPC channel strings directly — they use the `IPC_CHANNELS` registry from `@nakiros/shared` (enforced by `CLAUDE.md`).
+Domain-scoped IPC handler bundles. Each `<domain>.ts` exports one `xxxHandlers: HandlerRegistry` map; `index.ts` merges them all into the final registry consumed by `POST /ipc/:channel`. Handlers never reference IPC channel strings directly — they use the `IPC_CHANNELS` registry from `@nakiros/shared` (enforced by `CLAUDE.md` and an ESLint `no-restricted-syntax` guard).
+
+Every handler runs through `createTypedHandler` from [run-helpers.ts](./run-helpers.md): the helper lifts a typed `(...args) => result` function into the raw `IpcHandler` shape, removing the `args[0] as T`, `args[1] as U` boilerplate that used to live in every handler.
 
 ## Files
 
 ### Infrastructure
 - [index.ts](./index.md) — Handler registry builder. Merges every domain bundle.
-- [run-helpers.ts](./run-helpers.md) — Cross-handler helpers: typed broadcaster factory, run-or-throw lookup, skill-directory resolver for the minimal `SkillRunIdentity` shape.
+- [run-helpers.ts](./run-helpers.md) — Cross-handler helpers: typed broadcaster factory, run-or-throw lookup, skill-directory resolver, and `createTypedHandler` adapter used by every handler file.
 - [skill-dir.ts](./skill-dir.md) — Central scope-aware resolver turning a `StartEvalRunRequest` into an absolute skill directory path.
 
 ### App-level surfaces
@@ -36,3 +38,4 @@ Domain-scoped IPC handler bundles. Each `<domain>.ts` exports one `xxxHandlers: 
 - [fix.ts](./fix.md) — `fix:*` skill iteration flow editing a temp copy (tmp_skill pattern — load-bearing).
 - [create.ts](./create.md) — `create:*` new-skill-from-scratch mirror of `fix:*`.
 - [skill-agent.ts](./skill-agent.md) — `skillAgent:*` shared draft-file surface for fix + create.
+- [analyze-convo.ts](./analyze-convo.md) — `analyzeConvo:*` streaming deep conversation analysis run kind.

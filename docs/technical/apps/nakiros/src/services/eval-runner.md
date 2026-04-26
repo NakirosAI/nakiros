@@ -83,8 +83,34 @@ export function stopRun(runId: string): void
 
 ### `function loadPersistedRuns`
 
-Load all runs from a skill's workspace iterations into the in-memory registry. Called by `eval:loadPersisted` on project open so the UI sees historical runs alongside live ones.
+Load all runs from a skill's workspace iterations into the in-memory registry. Called by `eval:loadPersisted` on project open so the UI sees historical runs alongside live ones; ALSO called from `restoreEvalRunsForSkillDirs` at daemon boot.
 
 ```ts
 export function loadPersistedRuns(skillDir: string): SkillEvalRun[]
+```
+
+Boot-rehydration policy (token-cost survival across daemon restarts):
+
+- `completed` / `failed` / `stopped` → returned read-only.
+- `waiting_for_input` AND the Claude session file still on disk → kept resumable.
+- `queued` / `starting` / `running` / `grading` AND a session file on disk → collapsed to `waiting_for_input` + `interruptedByReboot=true` (the user gets a "Reprendre" button).
+- Same active states WITHOUT a session file → collapsed to `stopped` (no usable session — Reprendre would surface "No conversation found").
+- Already-registered runs (in-flight) are returned as-is — memory wins over disk.
+
+The defensive session-file check looks at `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` to ensure `--resume` will actually find the conversation; without this guard a stale `sessionId` would yield "No conversation found with session ID …" when the user clicks Reprendre.
+
+### `function restoreEvalRunsForSkillDirs`
+
+Boot-time scan: replay {@link loadPersistedRuns} on every known skill directory so eval runs from a previous daemon session show up in the runs-center drawer immediately, without the user having to navigate into each skill's eval view first. `skillDirs` is supplied by the caller (server bootstrap) to avoid pulling the project / bundled / global / plugin skill readers into this module. Failures are swallowed per-skill — one corrupt workspace must not block the whole rehydration.
+
+```ts
+export function restoreEvalRunsForSkillDirs(skillDirs: string[]): number
+```
+
+### `function getResumableSandboxPaths`
+
+Return every sandbox path currently referenced by a registered run that could still be resumed (`status === 'waiting_for_input'`, `executionDir !== workdir`). Passed to `sweepOrphanSandboxes` at boot so the sweep doesn't delete the very sandboxes the user is about to "Reprendre" against — that would yield "No conversation found with session ID …" on `claude --resume`.
+
+```ts
+export function getResumableSandboxPaths(): Set<string>
 ```

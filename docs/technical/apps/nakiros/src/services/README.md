@@ -8,6 +8,7 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 
 - [runner-core/](./runner-core/README.md) — Domain-agnostic runner primitives: claude-CLI driver, sandboxing, isolated HOME, run-store, event log.
 - [providers/](./providers/README.md) — Per-agent project scanners (Claude, eventually Cursor / Codex / Gemini).
+- [skill-fs/](./skill-fs/README.md) — Shared filesystem primitives for every skill scope: directory scan, audit count, path-traversal-safe IO, `Skill` record assembly.
 
 ## Runners
 
@@ -15,6 +16,7 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 - [eval-runner.ts](./eval-runner.md) — Eval batch runner: parse `evals.json`, sandbox per run, spawn claude, grade assertions, write `grading.json` / `timing.json` / `diff.patch` / `run.json` / `benchmark.json`.
 - [fix-runner.ts](./fix-runner.md) — Shared fix + create flow with temp workdir isolation. The tmp_skill pattern is load-bearing (eval-against-candidate before sync-back).
 - [comparison-runner.ts](./comparison-runner.md) — A/B/C eval comparison across Haiku / Sonnet / Opus with fingerprint-aware artefact reuse.
+- [analyze-convo-runner.ts](./analyze-convo-runner.md) — Streaming deep-analysis runner promoting the legacy one-shot `runDeepAnalysis` into a first-class agent run via `createRunner`.
 
 ## Readers (skill scopes)
 

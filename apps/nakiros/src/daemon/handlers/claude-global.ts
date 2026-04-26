@@ -4,6 +4,7 @@ import {
   readClaudeGlobalSkillFile,
   saveClaudeGlobalSkillFile,
 } from '../../services/claude-global-skills-reader.js';
+import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 /**
@@ -17,11 +18,8 @@ import type { HandlerRegistry } from './index.js';
  * - `claudeGlobal:saveSkillFile` — overwrites a file inside a skill
  */
 export const claudeGlobalHandlers: HandlerRegistry = {
-  'claudeGlobal:listSkills': () => listClaudeGlobalSkills(),
-  'claudeGlobal:getSkill': (args) => readClaudeGlobalSkill(args[0] as string),
-  'claudeGlobal:readSkillFile': (args) =>
-    readClaudeGlobalSkillFile(args[0] as string, args[1] as string),
-  'claudeGlobal:saveSkillFile': (args) => {
-    saveClaudeGlobalSkillFile(args[0] as string, args[1] as string, args[2] as string);
-  },
+  'claudeGlobal:listSkills': createTypedHandler(listClaudeGlobalSkills),
+  'claudeGlobal:getSkill': createTypedHandler(readClaudeGlobalSkill),
+  'claudeGlobal:readSkillFile': createTypedHandler(readClaudeGlobalSkillFile),
+  'claudeGlobal:saveSkillFile': createTypedHandler(saveClaudeGlobalSkillFile),
 };

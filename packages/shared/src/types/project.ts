@@ -423,6 +423,8 @@ export interface SkillEvalRun {
   sessionId: string | null;
   /** Scope: whether launched from a project or from bundled Nakiros skills. */
   scope: SkillScope;
+  /** Parent project id when scope is 'project'. */
+  projectId?: string;
   /** Parent plugin name when scope is 'plugin'. */
   pluginName?: string;
   /** Parent marketplace name when scope is 'plugin'. */
@@ -464,6 +466,12 @@ export interface SkillEvalRun {
   finishedAt: string | null;
   /** Any error message that occurred. */
   error: string | null;
+  /**
+   * `true` when the run was rehydrated from disk into `waiting_for_input`
+   * after a daemon reboot (instead of having genuinely asked for input).
+   * Cleared by a successful turn. Drives the "Reprendre" button in the UI.
+   */
+  interruptedByReboot?: boolean;
 }
 
 /** Output file metadata surfaced in the eval UI (size + mtime, no content). */
@@ -494,7 +502,15 @@ export interface EvalRunEvent {
     | { type: 'tool'; name: string; display: string }
     | { type: 'tokens'; tokensUsed: number }
     | { type: 'waiting_for_input'; lastAssistantText: string }
-    | { type: 'done'; exitCode: number; error?: string };
+    | { type: 'done'; exitCode: number; error?: string }
+    /**
+     * Handler-level failure broadcast by `withBroadcastOnError`. Fires when an
+     * IPC handler (e.g. `eval:startRuns`) throws BEFORE the runner can emit a
+     * native event, so the originating view receives an out-of-band signal
+     * instead of waiting for a turn that will never start. Not persisted to
+     * the replay buffer.
+     */
+    | { type: 'error'; error: string };
 }
 
 /**
@@ -586,6 +602,72 @@ export interface AuditRun {
   startedAt: string;
   finishedAt: string | null;
   error: string | null;
+  /**
+   * `true` when the last transition into `waiting_for_input` came from a
+   * boot-time collapse (subprocess died with the previous daemon), `false`
+   * or `undefined` when the agent naturally asked for input. Cleared by a
+   * successful turn. Drives the "Reprendre" button in the UI so users can
+   * distinguish an interrupted run from a run genuinely awaiting them.
+   */
+  interruptedByReboot?: boolean;
+}
+
+/**
+ * Lifecycle status of an `analyze-convo` run. Same shape as audit since the
+ * agent is also a single-task runner.
+ */
+export type AnalyzeConvoRunStatus =
+  | 'starting'
+  | 'running'
+  | 'waiting_for_input'
+  | 'completed'
+  | 'failed'
+  | 'stopped';
+
+/**
+ * Full in-memory state of a deep conversation-analysis run. Mirrors `AuditRun`
+ * but targets a Claude Code session (projectId + sessionId) and writes its
+ * markdown report into the run workdir + the cache used by `loadDeepAnalysis`.
+ */
+export interface AnalyzeConvoRun {
+  runId: string;
+  projectId: string;
+  sessionId: string;
+  status: AnalyzeConvoRunStatus;
+  sessionClaudeId: string | null;
+  workdir: string;
+  /** `claude --model` id pinned at start (haiku for small convs, sonnet for big). */
+  model: string;
+  /** Estimated input tokens of the synthesised prompt — used for cost transparency. */
+  estimatedInputTokens: number;
+  /** Path to the persisted markdown report inside `~/.nakiros/analyses/`. */
+  reportPath: string | null;
+  turns: AuditRunTurn[];
+  tokensUsed: number;
+  durationMs: number;
+  startedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+  interruptedByReboot?: boolean;
+}
+
+/** Event broadcast on `analyzeConvo:event` while an analyze-convo run is alive. */
+export interface AnalyzeConvoRunEvent {
+  runId: string;
+  event:
+    | { type: 'status'; status: AnalyzeConvoRunStatus }
+    | { type: 'text'; text: string }
+    | { type: 'tool'; name: string; display: string }
+    | { type: 'tokens'; tokensUsed: number }
+    | { type: 'waiting_for_input'; lastAssistantText: string }
+    | { type: 'done'; exitCode: number; error?: string; reportPath?: string }
+    | { type: 'error'; error: string };
+}
+
+/** Request payload for `analyzeConvo:start`. */
+export interface StartAnalyzeConvoRequest {
+  projectId: string;
+  sessionId: string;
 }
 
 /** Event broadcast on `audit:event` while an audit run is alive. */
@@ -597,7 +679,13 @@ export interface AuditRunEvent {
     | { type: 'tool'; name: string; display: string }
     | { type: 'tokens'; tokensUsed: number }
     | { type: 'waiting_for_input'; lastAssistantText: string }
-    | { type: 'done'; exitCode: number; error?: string; reportPath?: string };
+    | { type: 'done'; exitCode: number; error?: string; reportPath?: string }
+    /**
+     * Handler-level failure broadcast by `withBroadcastOnError`. See
+     * `EvalRunEvent`'s `error` variant for the contract — same semantics
+     * applied to audit / fix / create.
+     */
+    | { type: 'error'; error: string };
 }
 
 /** Request payload for the `audit:start` IPC channel. */

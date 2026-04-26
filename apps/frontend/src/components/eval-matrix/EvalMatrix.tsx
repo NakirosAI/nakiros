@@ -6,6 +6,7 @@ import { EvalMatrixHeader } from './EvalMatrixHeader';
 import { EvalMatrixCellView } from './EvalMatrixCell';
 import { EvalMatrixTagBadge } from './EvalMatrixTag';
 import { EvalMatrixDrawer } from './EvalMatrixDrawer';
+import { formatTokens, formatTokensSigned } from '../../utils/format';
 
 /**
  * The Evolution view: top-level container that fetches the skill's eval matrix
@@ -247,10 +248,3 @@ export function EvalMatrix({
   );
 }
 
-function formatTokens(n: number): string {
-  if (Math.abs(n) < 1000) return `${n}`;
-  return `${(n / 1000).toFixed(1)}k`;
-}
-function formatTokensSigned(n: number): string {
-  return `${n >= 0 ? '+' : ''}${formatTokens(n)}`;
-}

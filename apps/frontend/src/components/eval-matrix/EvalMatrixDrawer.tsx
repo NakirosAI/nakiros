@@ -6,6 +6,7 @@ import {
   ConversationTurn,
   legacyTurnToBlocks,
 } from '../ConversationTurn';
+import { formatComputeDuration, formatTokens } from '../../utils/format';
 
 /**
  * Slide-in drawer that loads and displays the full artefact of a single
@@ -87,7 +88,7 @@ export function EvalMatrixDrawer({
                   <span>·</span>
                   <span>{formatTokens(artifact.timing.totalTokens)} tokens</span>
                   <span>·</span>
-                  <span>{formatDuration(artifact.timing.durationMs)}</span>
+                  <span>{formatComputeDuration(artifact.timing.durationMs)}</span>
                 </>
               )}
             </div>
@@ -218,17 +219,6 @@ export function EvalMatrixDrawer({
       </div>
     </div>
   );
-}
-
-function formatTokens(n: number): string {
-  if (n < 1000) return `${n}`;
-  return `${(n / 1000).toFixed(1)}k`;
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m${Math.floor((ms % 60000) / 1000)}s`;
 }
 
 function formatBytes(n: number): string {

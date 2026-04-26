@@ -23,6 +23,7 @@ import type {
 import { CLAUDE_MODEL_IDS, CLAUDE_MODEL_LABELS, type ClaudeModelId } from '@nakiros/shared';
 
 import { PassRateBadge } from '../../views/skills/components';
+import { formatTokens } from '../../utils/format';
 
 // ---------------------------------------------------------------------------
 // ModelComparison view — the "Models" tab that complements Evolution.
@@ -592,11 +593,6 @@ function CompactCell({
 function readableModel(id: string): string {
   const label = (CLAUDE_MODEL_LABELS as Record<string, string>)[id];
   return label ?? id;
-}
-
-function formatTokens(n: number): string {
-  if (Math.abs(n) < 1000) return `${n}`;
-  return `${(n / 1000).toFixed(1)}k`;
 }
 
 // ─── ComparisonRunsGrid ─────────────────────────────────────────────────────

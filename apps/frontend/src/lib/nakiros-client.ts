@@ -3,7 +3,12 @@
  * Installs `window.nakiros` backed by HTTP (for `invoke`-style calls) and
  * WebSocket (for event streams). Must be imported before the React tree
  * calls any `window.nakiros.*` method.
+ *
+ * Every channel name flows through {@link IPC_CHANNELS} — no hardcoded
+ * channel strings. Enforced by `CLAUDE.md`.
  */
+
+import { IPC_CHANNELS, type IpcChannel } from '@nakiros/shared';
 
 const HTTP_BASE = typeof window !== 'undefined' ? window.location.origin : '';
 const WS_URL = HTTP_BASE.replace(/^http/, 'ws') + '/ws';
@@ -48,7 +53,7 @@ function ensureSocket(): void {
   });
 }
 
-function subscribe(channel: string, cb: ChannelListener): () => void {
+function subscribe(channel: IpcChannel, cb: ChannelListener): () => void {
   ensureSocket();
   let set = listeners.get(channel);
   if (!set) {
@@ -63,7 +68,7 @@ function subscribe(channel: string, cb: ChannelListener): () => void {
 }
 
 // ── HTTP invoke ────────────────────────────────────────────────────────────
-async function invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T> {
+async function invoke<T = unknown>(channel: IpcChannel, ...args: unknown[]): Promise<T> {
   const res = await fetch(`${HTTP_BASE}/ipc/${encodeURIComponent(channel)}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -109,9 +114,11 @@ function emitNotifClick(payload: OpenAgentChatPayload): void {
   }
 }
 
+const C = IPC_CHANNELS;
+
 const client = {
   // Shell (daemon) / clipboard (native)
-  openPath: (path: string) => invoke('shell:openPath', path),
+  openPath: (path: string) => invoke(C['shell:openPath'], path),
   writeClipboard: async (text: string): Promise<void> => {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
@@ -129,17 +136,17 @@ const client = {
   },
 
   // Preferences
-  getPreferences: () => invoke('preferences:get'),
-  getSystemLanguage: () => invoke('preferences:getSystemLanguage'),
-  savePreferences: (prefs: unknown) => invoke('preferences:save', prefs),
+  getPreferences: () => invoke(C['preferences:get']),
+  getSystemLanguage: () => invoke(C['preferences:getSystemLanguage']),
+  savePreferences: (prefs: unknown) => invoke(C['preferences:save'], prefs),
 
   // Agent installer
-  getAgentInstallStatus: (repoPath: string) => invoke('agents:status', repoPath),
-  installAgents: (request: unknown) => invoke('agents:install', request),
-  getGlobalInstallStatus: () => invoke('agents:global-status'),
-  getInstalledCommands: () => invoke('agents:installed-commands'),
-  installAgentsGlobal: () => invoke('agents:install-global'),
-  getAgentCliStatus: () => invoke('agents:cli-status'),
+  getAgentInstallStatus: (repoPath: string) => invoke(C['agents:status'], repoPath),
+  installAgents: (request: unknown) => invoke(C['agents:install'], request),
+  getGlobalInstallStatus: () => invoke(C['agents:global-status']),
+  getInstalledCommands: () => invoke(C['agents:installed-commands']),
+  installAgentsGlobal: () => invoke(C['agents:install-global']),
+  getAgentCliStatus: () => invoke(C['agents:cli-status']),
 
   // Notifications (Web Notification API — no daemon roundtrip)
   showAgentRunNotification: async (payload: {
@@ -183,69 +190,69 @@ const client = {
   },
 
   // Onboarding
-  nakirosConfigExists: () => invoke('onboarding:nakirosConfigExists'),
-  onboardingDetectEditors: () => invoke('onboarding:detectEditors'),
-  onboardingInstall: (editors: unknown[]) => invoke('onboarding:install', editors),
-  onOnboardingProgress: (cb: (event: unknown) => void) => subscribe('onboarding:progress', cb),
+  nakirosConfigExists: () => invoke(C['onboarding:nakirosConfigExists']),
+  onboardingDetectEditors: () => invoke(C['onboarding:detectEditors']),
+  onboardingInstall: (editors: unknown[]) => invoke(C['onboarding:install'], editors),
+  onOnboardingProgress: (cb: (event: unknown) => void) => subscribe(C['onboarding:progress'], cb),
 
   // Projects
-  scanProjects: () => invoke('project:scan'),
-  listProjects: () => invoke('project:list'),
-  getProject: (id: string) => invoke('project:get', id),
-  dismissProject: (id: string) => invoke('project:dismiss', id),
-  listProjectConversations: (projectId: string) => invoke('project:listConversations', projectId),
+  scanProjects: () => invoke(C['project:scan']),
+  listProjects: () => invoke(C['project:list']),
+  getProject: (id: string) => invoke(C['project:get'], id),
+  dismissProject: (id: string) => invoke(C['project:dismiss'], id),
+  listProjectConversations: (projectId: string) => invoke(C['project:listConversations'], projectId),
   getProjectConversationMessages: (projectId: string, sessionId: string) =>
-    invoke('project:getConversationMessages', projectId, sessionId),
+    invoke(C['project:getConversationMessages'], projectId, sessionId),
   analyzeProjectConversation: (projectId: string, sessionId: string) =>
-    invoke('project:analyzeConversation', projectId, sessionId),
+    invoke(C['project:analyzeConversation'], projectId, sessionId),
   listProjectConversationsWithAnalysis: (projectId: string) =>
-    invoke('project:listConversationsWithAnalysis', projectId),
+    invoke(C['project:listConversationsWithAnalysis'], projectId),
   loadConversationDeepAnalysis: (projectId: string, sessionId: string) =>
-    invoke('project:loadDeepAnalysis', projectId, sessionId),
+    invoke(C['project:loadDeepAnalysis'], projectId, sessionId),
   deepAnalyzeConversation: (projectId: string, sessionId: string) =>
-    invoke('project:deepAnalyzeConversation', projectId, sessionId),
-  listProjectSkills: (projectId: string) => invoke('project:listSkills', projectId),
-  getProjectSkill: (projectId: string, skillName: string) => invoke('project:getSkill', projectId, skillName),
+    invoke(C['project:deepAnalyzeConversation'], projectId, sessionId),
+  listProjectSkills: (projectId: string) => invoke(C['project:listSkills'], projectId),
+  getProjectSkill: (projectId: string, skillName: string) => invoke(C['project:getSkill'], projectId, skillName),
   saveProjectSkill: (projectId: string, skillName: string, content: string) =>
-    invoke('project:saveSkill', projectId, skillName, content),
+    invoke(C['project:saveSkill'], projectId, skillName, content),
   readSkillFile: (projectId: string, skillName: string, relativePath: string) =>
-    invoke('project:readSkillFile', projectId, skillName, relativePath),
+    invoke(C['project:readSkillFile'], projectId, skillName, relativePath),
   saveSkillFile: (projectId: string, skillName: string, relativePath: string, content: string) =>
-    invoke('project:saveSkillFile', projectId, skillName, relativePath, content),
-  onScanProgress: (cb: (progress: unknown) => void) => subscribe('project:scanProgress', cb),
+    invoke(C['project:saveSkillFile'], projectId, skillName, relativePath, content),
+  onScanProgress: (cb: (progress: unknown) => void) => subscribe(C['project:scanProgress'], cb),
 
   // Nakiros bundled skills
-  listBundledSkills: () => invoke('nakiros:listBundledSkills'),
-  getBundledSkill: (skillName: string) => invoke('nakiros:getBundledSkill', skillName),
+  listBundledSkills: () => invoke(C['nakiros:listBundledSkills']),
+  getBundledSkill: (skillName: string) => invoke(C['nakiros:getBundledSkill'], skillName),
   readBundledSkillFile: (skillName: string, relativePath: string) =>
-    invoke('nakiros:readBundledSkillFile', skillName, relativePath),
+    invoke(C['nakiros:readBundledSkillFile'], skillName, relativePath),
   saveBundledSkillFile: (skillName: string, relativePath: string, content: string) =>
-    invoke('nakiros:saveBundledSkillFile', skillName, relativePath, content),
-  promoteBundledSkill: (skillName: string) => invoke('nakiros:promoteBundledSkill', skillName),
-  listBundledSkillConflicts: () => invoke('nakiros:listBundledSkillConflicts'),
+    invoke(C['nakiros:saveBundledSkillFile'], skillName, relativePath, content),
+  promoteBundledSkill: (skillName: string) => invoke(C['nakiros:promoteBundledSkill'], skillName),
+  listBundledSkillConflicts: () => invoke(C['nakiros:listBundledSkillConflicts']),
   resolveBundledSkillConflict: (skillName: string, resolution: string) =>
-    invoke('nakiros:resolveBundledSkillConflict', skillName, resolution),
+    invoke(C['nakiros:resolveBundledSkillConflict'], skillName, resolution),
   readBundledSkillConflictDiff: (skillName: string, relativePath: string) =>
-    invoke('nakiros:readBundledSkillConflictDiff', skillName, relativePath),
+    invoke(C['nakiros:readBundledSkillConflictDiff'], skillName, relativePath),
 
   // Claude global skills
-  listClaudeGlobalSkills: () => invoke('claudeGlobal:listSkills'),
-  getClaudeGlobalSkill: (skillName: string) => invoke('claudeGlobal:getSkill', skillName),
+  listClaudeGlobalSkills: () => invoke(C['claudeGlobal:listSkills']),
+  getClaudeGlobalSkill: (skillName: string) => invoke(C['claudeGlobal:getSkill'], skillName),
   readClaudeGlobalSkillFile: (skillName: string, relativePath: string) =>
-    invoke('claudeGlobal:readSkillFile', skillName, relativePath),
+    invoke(C['claudeGlobal:readSkillFile'], skillName, relativePath),
   saveClaudeGlobalSkillFile: (skillName: string, relativePath: string, content: string) =>
-    invoke('claudeGlobal:saveSkillFile', skillName, relativePath, content),
+    invoke(C['claudeGlobal:saveSkillFile'], skillName, relativePath, content),
 
   // Plugin skills (~/.claude/plugins/marketplaces/<mkt>/plugins/<plugin>/skills/)
-  listPluginSkills: () => invoke('pluginSkills:list'),
+  listPluginSkills: () => invoke(C['pluginSkills:list']),
   getPluginSkill: (marketplaceName: string, pluginName: string, skillName: string) =>
-    invoke('pluginSkills:getSkill', marketplaceName, pluginName, skillName),
+    invoke(C['pluginSkills:getSkill'], marketplaceName, pluginName, skillName),
   readPluginSkillFile: (
     marketplaceName: string,
     pluginName: string,
     skillName: string,
     relativePath: string,
-  ) => invoke('pluginSkills:readSkillFile', marketplaceName, pluginName, skillName, relativePath),
+  ) => invoke(C['pluginSkills:readSkillFile'], marketplaceName, pluginName, skillName, relativePath),
   savePluginSkillFile: (
     marketplaceName: string,
     pluginName: string,
@@ -254,7 +261,7 @@ const client = {
     content: string,
   ) =>
     invoke(
-      'pluginSkills:saveSkillFile',
+      C['pluginSkills:saveSkillFile'],
       marketplaceName,
       pluginName,
       skillName,
@@ -262,79 +269,93 @@ const client = {
       content,
     ),
 
-  readSkillFileAsDataUrl: (request: unknown) => invoke('skill:readFileAsDataUrl', request),
+  readSkillFileAsDataUrl: (request: unknown) => invoke(C['skill:readFileAsDataUrl'], request),
 
   // Eval runner
-  startEvalRuns: (request: unknown) => invoke('eval:startRuns', request),
-  stopEvalRun: (runId: string) => invoke('eval:stopRun', runId),
-  listEvalRuns: () => invoke('eval:listRuns'),
-  loadPersistedEvalRuns: (request: unknown) => invoke('eval:loadPersisted', request),
-  onEvalEvent: (cb: (event: unknown) => void) => subscribe('eval:event', cb),
-  sendEvalUserMessage: (runId: string, message: string) => invoke('eval:sendUserMessage', runId, message),
-  finishEvalRun: (runId: string) => invoke('eval:finishRun', runId),
-  getEvalBufferedEvents: (runId: string) => invoke('eval:getBufferedEvents', runId),
-  getEvalFeedback: (request: unknown) => invoke('eval:getFeedback', request),
-  saveEvalFeedback: (request: unknown) => invoke('eval:saveFeedback', request),
-  listEvalRunOutputs: (runId: string) => invoke('eval:listOutputs', runId),
-  readEvalRunOutput: (runId: string, relativePath: string) => invoke('eval:readOutput', runId, relativePath),
-  readEvalRunDiffPatch: (runId: string) => invoke('eval:readDiffPatch', runId),
-  getEvalMatrix: (request: unknown) => invoke('eval:getMatrix', request),
-  loadIterationRun: (request: unknown) => invoke('eval:loadIterationRun', request),
+  startEvalRuns: (request: unknown) => invoke(C['eval:startRuns'], request),
+  stopEvalRun: (runId: string) => invoke(C['eval:stopRun'], runId),
+  listEvalRuns: () => invoke(C['eval:listRuns']),
+  loadPersistedEvalRuns: (request: unknown) => invoke(C['eval:loadPersisted'], request),
+  onEvalEvent: (cb: (event: unknown) => void) => subscribe(C['eval:event'], cb),
+  sendEvalUserMessage: (runId: string, message: string) => invoke(C['eval:sendUserMessage'], runId, message),
+  finishEvalRun: (runId: string) => invoke(C['eval:finishRun'], runId),
+  getEvalBufferedEvents: (runId: string) => invoke(C['eval:getBufferedEvents'], runId),
+  getEvalFeedback: (request: unknown) => invoke(C['eval:getFeedback'], request),
+  saveEvalFeedback: (request: unknown) => invoke(C['eval:saveFeedback'], request),
+  listEvalRunOutputs: (runId: string) => invoke(C['eval:listOutputs'], runId),
+  readEvalRunOutput: (runId: string, relativePath: string) => invoke(C['eval:readOutput'], runId, relativePath),
+  readEvalRunDiffPatch: (runId: string) => invoke(C['eval:readDiffPatch'], runId),
+  getEvalMatrix: (request: unknown) => invoke(C['eval:getMatrix'], request),
+  loadIterationRun: (request: unknown) => invoke(C['eval:loadIterationRun'], request),
 
   // Eval model comparison
-  runModelComparison: (request: unknown) => invoke('comparison:run', request),
-  listModelComparisons: (request: unknown) => invoke('comparison:list', request),
-  getModelComparison: (request: unknown) => invoke('comparison:getMatrix', request),
-  getComparisonFingerprintStatus: (request: unknown) => invoke('comparison:getFingerprintStatus', request),
+  runModelComparison: (request: unknown) => invoke(C['comparison:run'], request),
+  listModelComparisons: (request: unknown) => invoke(C['comparison:list'], request),
+  getModelComparison: (request: unknown) => invoke(C['comparison:getMatrix'], request),
+  getComparisonFingerprintStatus: (request: unknown) => invoke(C['comparison:getFingerprintStatus'], request),
 
   // Audit
-  startAudit: (request: unknown) => invoke('audit:start', request),
-  stopAudit: (runId: string) => invoke('audit:stopRun', runId),
-  getAuditRun: (runId: string) => invoke('audit:getRun', runId),
-  sendAuditUserMessage: (runId: string, message: string) => invoke('audit:sendUserMessage', runId, message),
-  finishAudit: (runId: string) => invoke('audit:finish', runId),
-  listAuditHistory: (request: unknown) => invoke('audit:listHistory', request),
-  readAuditReport: (path: string) => invoke('audit:readReport', path),
-  listActiveAuditRuns: () => invoke('audit:listActive'),
-  getAuditBufferedEvents: (runId: string) => invoke('audit:getBufferedEvents', runId),
-  onAuditEvent: (cb: (event: unknown) => void) => subscribe('audit:event', cb),
+  startAudit: (request: unknown) => invoke(C['audit:start'], request),
+  stopAudit: (runId: string) => invoke(C['audit:stopRun'], runId),
+  getAuditRun: (runId: string) => invoke(C['audit:getRun'], runId),
+  sendAuditUserMessage: (runId: string, message: string) => invoke(C['audit:sendUserMessage'], runId, message),
+  finishAudit: (runId: string) => invoke(C['audit:finish'], runId),
+  listAuditHistory: (request: unknown) => invoke(C['audit:listHistory'], request),
+  readAuditReport: (path: string) => invoke(C['audit:readReport'], path),
+  listActiveAuditRuns: () => invoke(C['audit:listActive']),
+  listAllAuditRuns: () => invoke(C['audit:listAll']),
+  getAuditBufferedEvents: (runId: string) => invoke(C['audit:getBufferedEvents'], runId),
+  onAuditEvent: (cb: (event: unknown) => void) => subscribe(C['audit:event'], cb),
 
   // Fix
-  startFix: (request: unknown) => invoke('fix:start', request),
-  stopFix: (runId: string) => invoke('fix:stopRun', runId),
-  getFixRun: (runId: string) => invoke('fix:getRun', runId),
-  sendFixUserMessage: (runId: string, message: string) => invoke('fix:sendUserMessage', runId, message),
-  finishFix: (runId: string) => invoke('fix:finish', runId),
-  runFixEvalsInTemp: (request: unknown) => invoke('fix:runEvalsInTemp', request),
-  getFixBenchmarks: (runId: string) => invoke('fix:getBenchmarks', runId),
-  listActiveFixRuns: () => invoke('fix:listActive'),
-  getFixBufferedEvents: (runId: string) => invoke('fix:getBufferedEvents', runId),
-  onFixEvent: (cb: (event: unknown) => void) => subscribe('fix:event', cb),
-  listFixDiff: (runId: string) => invoke('fix:listDiff', runId),
-  readFixDiffFile: (runId: string, relativePath: string) => invoke('fix:readDiffFile', runId, relativePath),
+  startFix: (request: unknown) => invoke(C['fix:start'], request),
+  stopFix: (runId: string) => invoke(C['fix:stopRun'], runId),
+  getFixRun: (runId: string) => invoke(C['fix:getRun'], runId),
+  sendFixUserMessage: (runId: string, message: string) => invoke(C['fix:sendUserMessage'], runId, message),
+  finishFix: (runId: string) => invoke(C['fix:finish'], runId),
+  runFixEvalsInTemp: (request: unknown) => invoke(C['fix:runEvalsInTemp'], request),
+  getFixBenchmarks: (runId: string) => invoke(C['fix:getBenchmarks'], runId),
+  listActiveFixRuns: () => invoke(C['fix:listActive']),
+  listAllFixRuns: () => invoke(C['fix:listAll']),
+  getFixBufferedEvents: (runId: string) => invoke(C['fix:getBufferedEvents'], runId),
+  onFixEvent: (cb: (event: unknown) => void) => subscribe(C['fix:event'], cb),
+  listFixDiff: (runId: string) => invoke(C['fix:listDiff'], runId),
+  readFixDiffFile: (runId: string, relativePath: string) => invoke(C['fix:readDiffFile'], runId, relativePath),
 
   // Create
-  startCreate: (request: unknown) => invoke('create:start', request),
-  stopCreate: (runId: string) => invoke('create:stopRun', runId),
-  getCreateRun: (runId: string) => invoke('create:getRun', runId),
-  sendCreateUserMessage: (runId: string, message: string) => invoke('create:sendUserMessage', runId, message),
-  finishCreate: (runId: string) => invoke('create:finish', runId),
-  listActiveCreateRuns: () => invoke('create:listActive'),
-  getCreateBufferedEvents: (runId: string) => invoke('create:getBufferedEvents', runId),
-  onCreateEvent: (cb: (event: unknown) => void) => subscribe('create:event', cb),
-  listCreateDiff: (runId: string) => invoke('create:listDiff', runId),
-  readCreateDiffFile: (runId: string, relativePath: string) => invoke('create:readDiffFile', runId, relativePath),
+  startCreate: (request: unknown) => invoke(C['create:start'], request),
+  stopCreate: (runId: string) => invoke(C['create:stopRun'], runId),
+  getCreateRun: (runId: string) => invoke(C['create:getRun'], runId),
+  sendCreateUserMessage: (runId: string, message: string) => invoke(C['create:sendUserMessage'], runId, message),
+  finishCreate: (runId: string) => invoke(C['create:finish'], runId),
+  listActiveCreateRuns: () => invoke(C['create:listActive']),
+  listAllCreateRuns: () => invoke(C['create:listAll']),
+  getCreateBufferedEvents: (runId: string) => invoke(C['create:getBufferedEvents'], runId),
+  onCreateEvent: (cb: (event: unknown) => void) => subscribe(C['create:event'], cb),
+  listCreateDiff: (runId: string) => invoke(C['create:listDiff'], runId),
+  readCreateDiffFile: (runId: string, relativePath: string) => invoke(C['create:readDiffFile'], runId, relativePath),
 
   // Meta
-  getVersionInfo: (options?: { force?: boolean }) => invoke('meta:getVersionInfo', options ?? {}),
+  getVersionInfo: (options?: { force?: boolean }) => invoke(C['meta:getVersionInfo'], options ?? {}),
 
   // Skill agent temp files
-  listSkillAgentTempFiles: (runId: string) => invoke('skillAgent:listTempFiles', runId),
-  readSkillAgentTempFile: (runId: string, relativePath: string) => invoke('skillAgent:readTempFile', runId, relativePath),
+  listSkillAgentTempFiles: (runId: string) => invoke(C['skillAgent:listTempFiles'], runId),
+  readSkillAgentTempFile: (runId: string, relativePath: string) => invoke(C['skillAgent:readTempFile'], runId, relativePath),
+
+  // Conversation deep-analysis runner (analyze-convo)
+  startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
+  stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),
+  getAnalyzeConvoRun: (runId: string) => invoke(C['analyzeConvo:getRun'], runId),
+  sendAnalyzeConvoUserMessage: (runId: string, message: string) =>
+    invoke(C['analyzeConvo:sendUserMessage'], runId, message),
+  finishAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:finish'], runId),
+  listActiveAnalyzeConvoRuns: () => invoke(C['analyzeConvo:listActive']),
+  listAllAnalyzeConvoRuns: () => invoke(C['analyzeConvo:listAll']),
+  getAnalyzeConvoBufferedEvents: (runId: string) => invoke(C['analyzeConvo:getBufferedEvents'], runId),
+  onAnalyzeConvoEvent: (cb: (event: unknown) => void) => subscribe(C['analyzeConvo:event'], cb),
 };
 
 // Install on window. We cast via `unknown` because the full type surface in
 // global.d.ts contains many specific types we keep as `unknown` here —
 // TypeScript will still catch usage mismatches at call sites.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).nakiros = client;
+(window as unknown as { nakiros: typeof client }).nakiros = client;

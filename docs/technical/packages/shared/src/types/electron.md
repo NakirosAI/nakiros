@@ -68,3 +68,32 @@ export interface AgentInstallSummary {
   gitignorePatched: boolean;
 }
 ```
+
+### `interface AgentRunNotificationPayload`
+
+Notification payload pushed when an agent run finishes outside the focused window. Surfaced by `showAgentRunNotification` so the UI can badge the topbar / runs center even when the user is on another screen.
+
+```ts
+export interface AgentRunNotificationPayload {
+  workspaceId: string;
+  workspaceName?: string;
+  conversationId?: string | null;
+  tabId?: string | null;
+  conversationTitle?: string;
+  provider?: AgentProvider;
+  durationSeconds: number;
+}
+```
+
+### `interface OpenAgentRunChatPayload`
+
+Payload emitted by `onOpenAgentRunChat` when the user clicks a notification — tells the UI which workspace/conversation to open in the chat panel.
+
+```ts
+export interface OpenAgentRunChatPayload {
+  workspaceId: string;
+  conversationId?: string | null;
+  tabId?: string | null;
+  eventId?: string;
+}
+```

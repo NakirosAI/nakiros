@@ -15,6 +15,13 @@ Communication runs over two channels:
   helper. The socket auto-reconnects with capped exponential backoff
   (max 10 s).
 
+Every channel name flows through `IPC_CHANNELS` from `@nakiros/shared` —
+no hardcoded channel string literals (`CLAUDE.md` mandate). The internal
+`invoke()` and `subscribe()` helpers take `IpcChannel` instead of `string`
+so a typo is a compile-time error, and an ESLint `no-restricted-syntax`
+guard at the monorepo root forbids passing a string literal as the first
+argument of either function.
+
 The exposed surface is intentionally `unknown`-typed at the implementation
 side — strict types live in `apps/frontend/src/global.d.ts` and are
 applied at every call site.
@@ -34,7 +41,9 @@ families: shell/clipboard, preferences, agent installer, web Notification
 helpers, onboarding, projects + project conversations, project skills,
 nakiros bundled skills (with conflict resolution), Claude global skills,
 plugin skills, eval runner (start/stop/list/feedback/matrix/comparison),
-audit runner, fix runner, create runner, meta version info, skill agent
+audit runner, fix runner, create runner, **analyze-convo runner** (start /
+stop / send / finish / list / event subscription — one method per channel
+in the `analyzeConvo:*` IPC group), meta version info, skill agent
 temp files. The browser `Notification` API is wrapped to display run
 completion notifications; clicks emit through `onOpenAgentRunChat`
 listeners.

@@ -36,37 +36,6 @@ export function Badge({ label }: { label: string }) {
 }
 
 /**
- * Segmented-control button used in the skill detail view (Files / Evals /
- * Audits). Visually flat, no border — relies on bg color to mark `active`.
- */
-export function TabButton({
-  active,
-  onClick,
-  disabled,
-  children,
-}: {
-  active: boolean;
-  onClick(): void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={clsx(
-        'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
-        active
-          ? 'bg-[var(--bg-muted)] text-[var(--text-primary)]'
-          : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]',
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-/**
  * Recursive file/folder tree for the selected skill. Leaf files invoke
  * `onSelect(relativePath)`; folders toggle expand/collapse locally. Depth-0
  * folders render expanded by default.
@@ -178,18 +147,6 @@ export function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
-/** Compact token count: `820 tok` under 1k, `1.2k tok` above. */
-export function formatTokens(n: number): string {
-  if (n < 1000) return `${n} tok`;
-  return `${(n / 1000).toFixed(1)}k tok`;
-}
-
-/** Compact duration: `420ms`, `12.3s`, `1m05s`. */
-export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60000)}m${Math.floor((ms % 60000) / 1000)}s`;
-}
 
 /**
  * Inline selector for the Claude model used to run evals. Rendered next to the

@@ -4,6 +4,7 @@ import {
   getSystemLanguage,
   savePreferences,
 } from '../../services/preferences.js';
+import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 /**
@@ -15,10 +16,7 @@ import type { HandlerRegistry } from './index.js';
  * - `preferences:save` — overwrites the stored preferences file
  */
 export const preferencesHandlers: HandlerRegistry = {
-  'preferences:get': () => getPreferences(),
-  'preferences:getSystemLanguage': () => getSystemLanguage(),
-  'preferences:save': (args) => {
-    const prefs = args[0] as AppPreferences;
-    savePreferences(prefs);
-  },
+  'preferences:get': createTypedHandler(getPreferences),
+  'preferences:getSystemLanguage': createTypedHandler(getSystemLanguage),
+  'preferences:save': createTypedHandler((prefs: AppPreferences) => savePreferences(prefs)),
 };

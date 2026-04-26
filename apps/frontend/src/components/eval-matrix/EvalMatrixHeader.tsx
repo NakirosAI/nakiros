@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { AlertTriangle, CheckCircle, Sparkles, TrendingDown, TrendingUp, Zap } from 'lucide-react';
 import type { EvalMatrixMetrics } from '@nakiros/shared';
+import { formatTokens } from '../../utils/format';
 
 /**
  * Top strip of the matrix: sparkline of aggregated pass-rate, tag summary,
@@ -113,7 +114,3 @@ function formatPct(n: number): string {
   return `${(n * 100).toFixed(0)}%`;
 }
 
-function formatTokens(n: number): string {
-  if (Math.abs(n) < 1000) return `${n}`;
-  return `${(n / 1000).toFixed(1)}k`;
-}

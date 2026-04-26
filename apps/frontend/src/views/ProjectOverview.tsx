@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, AlertTriangle, Lightbulb } from 'lucide-react';
 import type { ConversationAnalysis, Project } from '@nakiros/shared';
@@ -10,6 +10,8 @@ import {
   topFailingTools,
   topTipFrequencies,
 } from '../components/conversations/ConversationsAggregation';
+import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
+import { EmptyState, LoadingState } from '../components/ui';
 
 interface Props {
   /** Project whose conversation analyses are aggregated. */
@@ -32,14 +34,9 @@ type WindowKey = '10' | '30' | '90' | 'all';
  */
 export default function ProjectOverview({ project }: Props) {
   const { t } = useTranslation('overview');
-  const [analyses, setAnalyses] = useState<ConversationAnalysis[] | null>(null);
+  const analyses = useConversationAnalyses(project.id);
   const [windowKey, setWindowKey] = useState<WindowKey>('30');
   const [selected, setSelected] = useState<ConversationAnalysis | null>(null);
-
-  useEffect(() => {
-    setAnalyses(null);
-    window.nakiros.listProjectConversationsWithAnalysis(project.id).then(setAnalyses);
-  }, [project.id]);
 
   const windowed = useMemo(() => {
     if (!analyses) return [];
@@ -62,11 +59,7 @@ export default function ProjectOverview({ project }: Props) {
   );
 
   if (!analyses) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        {t('loading')}
-      </div>
-    );
+    return <LoadingState>{t('loading')}</LoadingState>;
   }
 
   return (
@@ -102,9 +95,7 @@ export default function ProjectOverview({ project }: Props) {
 
       <div className="flex-1 overflow-y-auto p-6">
         {analyses.length === 0 ? (
-          <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-            {t('noAnalyzedHint')}
-          </div>
+          <EmptyState title={t('noAnalyzedHint')} />
         ) : (
           <>
             {/* Headline stats */}

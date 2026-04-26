@@ -18,6 +18,7 @@ import {
   saveSkillFile,
 } from '../../services/skill-reader.js';
 import { eventBus } from '../event-bus.js';
+import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 /**
@@ -39,7 +40,7 @@ import type { HandlerRegistry } from './index.js';
  * Broadcasts `project:scanProgress` via `eventBus.broadcast` while `project:scan` runs.
  */
 export const projectHandlers: HandlerRegistry = {
-  'project:scan': () =>
+  'project:scan': createTypedHandler(() =>
     scanProjects((current, total, projectName) => {
       eventBus.broadcast('project:scanProgress', {
         provider: 'claude',
@@ -48,104 +49,87 @@ export const projectHandlers: HandlerRegistry = {
         projectName,
       });
     }),
-  'project:list': () => listProjects(),
-  'project:get': (args) => getProject(args[0] as string),
-  'project:dismiss': (args) => {
-    dismissProject(args[0] as string);
-  },
-  'project:getStats': () => null,
-  'project:getGlobalStats': () => null,
+  ),
+  'project:list': createTypedHandler(listProjects),
+  'project:get': createTypedHandler(getProject),
+  'project:dismiss': createTypedHandler(dismissProject),
+  'project:getStats': createTypedHandler(() => null),
+  'project:getGlobalStats': createTypedHandler(() => null),
 
-  'project:listConversations': (args) => {
-    const projectId = args[0] as string;
+  'project:listConversations': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
     return listConversations(project.providerProjectDir, projectId);
-  },
+  }),
 
-  'project:getConversationMessages': (args) => {
-    const projectId = args[0] as string;
-    const sessionId = args[1] as string;
+  'project:getConversationMessages': createTypedHandler((projectId: string, sessionId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
     return getConversationMessages(project.providerProjectDir, sessionId);
-  },
+  }),
 
-  'project:analyzeConversation': (args) => {
-    const projectId = args[0] as string;
-    const sessionId = args[1] as string;
+  'project:analyzeConversation': createTypedHandler((projectId: string, sessionId: string) => {
     const project = getProject(projectId);
     if (!project) return null;
     return analyzeConversation(project.providerProjectDir, sessionId, projectId);
-  },
+  }),
 
-  'project:listConversationsWithAnalysis': (args) => {
-    const projectId = args[0] as string;
+  'project:listConversationsWithAnalysis': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
     const convs = listConversations(project.providerProjectDir, projectId);
     return convs
       .map((c) => analyzeConversation(project.providerProjectDir, c.sessionId, projectId))
       .filter((x): x is NonNullable<typeof x> => x !== null);
-  },
+  }),
 
-  'project:loadDeepAnalysis': (args) => {
-    const sessionId = args[1] as string;
-    return loadDeepAnalysis(sessionId);
-  },
+  'project:loadDeepAnalysis': createTypedHandler((_projectId: string, sessionId: string) =>
+    loadDeepAnalysis(sessionId),
+  ),
 
-  'project:deepAnalyzeConversation': async (args) => {
-    const projectId = args[0] as string;
-    const sessionId = args[1] as string;
-    const project = getProject(projectId);
-    if (!project) {
-      throw new Error(`Project ${projectId} not found`);
-    }
-    return runDeepAnalysis(project.providerProjectDir, sessionId, projectId);
-  },
+  'project:deepAnalyzeConversation': createTypedHandler(
+    async (projectId: string, sessionId: string) => {
+      const project = getProject(projectId);
+      if (!project) throw new Error(`Project ${projectId} not found`);
+      return runDeepAnalysis(project.providerProjectDir, sessionId, projectId);
+    },
+  ),
 
-  'project:listSkills': (args) => {
-    const projectId = args[0] as string;
+  'project:listSkills': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
     return listSkills(project.projectPath, projectId);
-  },
+  }),
 
-  'project:getSkill': (args) => {
-    const projectId = args[0] as string;
-    const skillName = args[1] as string;
+  'project:getSkill': createTypedHandler((projectId: string, skillName: string) => {
     const project = getProject(projectId);
     if (!project) return null;
     return getSkill(project.projectPath, projectId, skillName);
-  },
+  }),
 
-  'project:saveSkill': (args) => {
-    const projectId = args[0] as string;
-    const skillName = args[1] as string;
-    const content = args[2] as string;
-    const project = getProject(projectId);
-    if (!project) return;
-    saveSkill(project.projectPath, skillName, content);
-  },
+  'project:saveSkill': createTypedHandler(
+    (projectId: string, skillName: string, content: string) => {
+      const project = getProject(projectId);
+      if (!project) return;
+      saveSkill(project.projectPath, skillName, content);
+    },
+  ),
 
-  'project:readSkillFile': (args) => {
-    const projectId = args[0] as string;
-    const skillName = args[1] as string;
-    const relativePath = args[2] as string;
-    const project = getProject(projectId);
-    if (!project) return null;
-    return readSkillFile(project.projectPath, skillName, relativePath);
-  },
+  'project:readSkillFile': createTypedHandler(
+    (projectId: string, skillName: string, relativePath: string) => {
+      const project = getProject(projectId);
+      if (!project) return null;
+      return readSkillFile(project.projectPath, skillName, relativePath);
+    },
+  ),
 
-  'project:saveSkillFile': (args) => {
-    const projectId = args[0] as string;
-    const skillName = args[1] as string;
-    const relativePath = args[2] as string;
-    const content = args[3] as string;
-    const project = getProject(projectId);
-    if (!project) return;
-    saveSkillFile(project.projectPath, skillName, relativePath, content);
-  },
+  'project:saveSkillFile': createTypedHandler(
+    (projectId: string, skillName: string, relativePath: string, content: string) => {
+      const project = getProject(projectId);
+      if (!project) return;
+      saveSkillFile(project.projectPath, skillName, relativePath, content);
+    },
+  ),
 
-  'project:getRecommendations': () => [],
+  'project:getRecommendations': createTypedHandler(() => []),
 };

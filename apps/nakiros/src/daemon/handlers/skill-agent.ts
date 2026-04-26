@@ -7,6 +7,7 @@ import type {
 } from '@nakiros/shared';
 
 import { getFixTempWorkdir } from '../../services/fix-runner.js';
+import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 // Nakiros-internal runtime paths — never surfaced in the draft file view.
@@ -45,8 +46,7 @@ const MAX_TEMP_TEXT_BYTES = 1_000_000;
  * - `skillAgent:readTempFile` — returns text, image data URL, or binary-size placeholder (> 1 MB)
  */
 export const skillAgentHandlers: HandlerRegistry = {
-  'skillAgent:listTempFiles': (args): SkillAgentTempFileEntry[] => {
-    const runId = args[0] as string;
+  'skillAgent:listTempFiles': createTypedHandler((runId: string): SkillAgentTempFileEntry[] => {
     const tempDir = getFixTempWorkdir(runId);
     if (!tempDir || !existsSync(tempDir)) return [];
 
@@ -81,35 +81,35 @@ export const skillAgentHandlers: HandlerRegistry = {
     walk(tempDir);
     entries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
     return entries;
-  },
+  }),
 
-  'skillAgent:readTempFile': (args): SkillAgentTempFileContent => {
-    const runId = args[0] as string;
-    const relativePath = args[1] as string;
-    const tempDir = getFixTempWorkdir(runId);
-    if (!tempDir) return { kind: 'missing' };
-    const abs = resolve(tempDir, relativePath);
-    if (!abs.startsWith(tempDir + '/') && abs !== tempDir) return { kind: 'missing' };
-    if (shouldHideTempEntry(relativePath)) return { kind: 'missing' };
-    if (!existsSync(abs)) return { kind: 'missing' };
+  'skillAgent:readTempFile': createTypedHandler(
+    (runId: string, relativePath: string): SkillAgentTempFileContent => {
+      const tempDir = getFixTempWorkdir(runId);
+      if (!tempDir) return { kind: 'missing' };
+      const abs = resolve(tempDir, relativePath);
+      if (!abs.startsWith(tempDir + '/') && abs !== tempDir) return { kind: 'missing' };
+      if (shouldHideTempEntry(relativePath)) return { kind: 'missing' };
+      if (!existsSync(abs)) return { kind: 'missing' };
 
-    const ext = relativePath.split('.').pop()?.toLowerCase() ?? '';
-    const imgMime = TEMP_FILE_IMAGE_MIME[ext];
-    try {
-      const stat = statSync(abs);
-      if (imgMime) {
-        const buf = readFileSync(abs);
-        return {
-          kind: 'image',
-          dataUrl: `data:${imgMime};base64,${buf.toString('base64')}`,
-        };
+      const ext = relativePath.split('.').pop()?.toLowerCase() ?? '';
+      const imgMime = TEMP_FILE_IMAGE_MIME[ext];
+      try {
+        const stat = statSync(abs);
+        if (imgMime) {
+          const buf = readFileSync(abs);
+          return {
+            kind: 'image',
+            dataUrl: `data:${imgMime};base64,${buf.toString('base64')}`,
+          };
+        }
+        if (stat.size > MAX_TEMP_TEXT_BYTES) {
+          return { kind: 'binary', sizeBytes: stat.size };
+        }
+        return { kind: 'text', content: readFileSync(abs, 'utf8') };
+      } catch {
+        return { kind: 'missing' };
       }
-      if (stat.size > MAX_TEMP_TEXT_BYTES) {
-        return { kind: 'binary', sizeBytes: stat.size };
-      }
-      return { kind: 'text', content: readFileSync(abs, 'utf8') };
-    } catch {
-      return { kind: 'missing' };
-    }
-  },
+    },
+  ),
 };

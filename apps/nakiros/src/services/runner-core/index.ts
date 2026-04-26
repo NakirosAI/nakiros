@@ -37,6 +37,19 @@ export {
 export { createIsolatedHome, destroyIsolatedHome, type IsolatedHome } from './isolated-home.js';
 export { isActiveRunStatus } from './run-status.js';
 export {
+  createRunner,
+  type BaseRun,
+  type BaseTurn,
+  type RehydrateResult,
+  type RunEntry,
+  type RunEventEnvelope,
+  type RunOpts,
+  type RunStatus,
+  type RunnerInstance,
+  type RunnerSpec,
+  type PostTurnHelpers,
+} from './runner.js';
+export {
   writeExecutionSettings,
   type ExecutionSettingsOptions,
 } from './execution-settings.js';

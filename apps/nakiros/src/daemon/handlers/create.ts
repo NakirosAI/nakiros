@@ -1,8 +1,4 @@
-import type {
-  AuditRunEvent,
-  StartAuditRequest,
-  StartEvalRunRequest,
-} from '@nakiros/shared';
+import type { AuditRunEvent, StartAuditRequest } from '@nakiros/shared';
 
 import {
   startCreate,
@@ -11,12 +7,19 @@ import {
   sendCreateUserMessage,
   finishCreate,
   listActiveCreateRuns,
+  listAllCreateRuns,
   getCreateBufferedEvents,
   listFixDiff,
   readFixDiffFile,
 } from '../../services/fix-runner.js';
-import { resolveEvalSkillDir } from './skill-dir.js';
-import { createEventBroadcaster, getRunOrThrow, resolveSkillDirForRun } from './run-helpers.js';
+import { resolveSkillDir } from './skill-dir.js';
+import {
+  createEventBroadcaster,
+  createTypedHandler,
+  getRunOrThrow,
+  resolveSkillDirForRun,
+  withBroadcastOnError,
+} from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 const broadcastCreateEvent = createEventBroadcaster<AuditRunEvent>('create:event');
@@ -33,40 +36,50 @@ const broadcastCreateEvent = createEventBroadcaster<AuditRunEvent>('create:event
  * Broadcasts `create:event` via `eventBus.broadcast`.
  */
 export const createHandlers: HandlerRegistry = {
-  'create:start': (args) => {
-    const request = args[0] as StartAuditRequest;
-    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+  'create:start': createTypedHandler((request: StartAuditRequest) => {
+    const skillDir = resolveSkillDir(request);
     return startCreate(request, { skillDir, onEvent: broadcastCreateEvent });
-  },
+  }),
 
-  'create:stopRun': (args) => {
-    stopCreate(args[0] as string);
-  },
+  'create:stopRun': createTypedHandler(
+    withBroadcastOnError('create:event', stopCreate, (runId: string) => runId),
+  ),
 
-  'create:getRun': (args) => getCreateRun(args[0] as string),
+  'create:getRun': createTypedHandler(getCreateRun),
 
-  'create:sendUserMessage': async (args) => {
-    const runId = args[0] as string;
-    const message = args[1] as string;
-    const run = getRunOrThrow(getCreateRun, runId, 'Create');
-    const skillDir = resolveSkillDirForRun(run);
-    await sendCreateUserMessage(runId, message, {
-      skillDir,
-      onEvent: broadcastCreateEvent,
-    });
-  },
+  'create:sendUserMessage': createTypedHandler(
+    withBroadcastOnError(
+      'create:event',
+      async (runId: string, message: string) => {
+        const run = getRunOrThrow(getCreateRun, runId, 'Create');
+        const skillDir = resolveSkillDirForRun(run);
+        await sendCreateUserMessage(runId, message, {
+          skillDir,
+          onEvent: broadcastCreateEvent,
+        });
+      },
+      (runId) => runId,
+    ),
+  ),
 
-  'create:finish': (args) => {
-    const runId = args[0] as string;
-    const run = getRunOrThrow(getCreateRun, runId, 'Create');
-    const skillDir = resolveSkillDirForRun(run);
-    finishCreate(runId, { skillDir, onEvent: broadcastCreateEvent });
-  },
+  'create:finish': createTypedHandler(
+    withBroadcastOnError(
+      'create:event',
+      (runId: string) => {
+        const run = getRunOrThrow(getCreateRun, runId, 'Create');
+        const skillDir = resolveSkillDirForRun(run);
+        finishCreate(runId, { skillDir, onEvent: broadcastCreateEvent });
+      },
+      (runId) => runId,
+    ),
+  ),
 
-  'create:listActive': () => listActiveCreateRuns(),
+  'create:listActive': createTypedHandler(listActiveCreateRuns),
 
-  'create:getBufferedEvents': (args) => getCreateBufferedEvents(args[0] as string),
+  'create:listAll': createTypedHandler(listAllCreateRuns),
 
-  'create:listDiff': (args) => listFixDiff(args[0] as string),
-  'create:readDiffFile': (args) => readFixDiffFile(args[0] as string, args[1] as string),
+  'create:getBufferedEvents': createTypedHandler(getCreateBufferedEvents),
+
+  'create:listDiff': createTypedHandler(listFixDiff),
+  'create:readDiffFile': createTypedHandler(readFixDiffFile),
 };

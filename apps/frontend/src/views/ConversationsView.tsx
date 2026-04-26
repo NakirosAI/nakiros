@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ConversationAnalysis, Project } from '@nakiros/shared';
 import { ConversationHealthBadges } from '../components/conversations/ConversationHealthBadges';
 import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
+import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
+import { EmptyState, LoadingState } from '../components/ui';
+import { formatLongDuration } from '../utils/format';
 
 interface Props {
   /** Project whose JSONL conversation analyses are listed. */
@@ -23,19 +26,12 @@ type FilterKey = 'all' | 'critical' | 'compactions' | 'friction' | 'cacheWaste' 
  */
 export default function ConversationsView({ project }: Props) {
   const { t } = useTranslation('conversations');
-  const [analyses, setAnalyses] = useState<ConversationAnalysis[]>([]);
-  const [loading, setLoading] = useState(true);
+  const fetched = useConversationAnalyses(project.id);
+  const analyses = fetched ?? [];
+  const loading = fetched === null;
   const [selected, setSelected] = useState<ConversationAnalysis | null>(null);
   const [sort, setSort] = useState<SortKey>('score');
   const [filter, setFilter] = useState<FilterKey>('all');
-
-  useEffect(() => {
-    setLoading(true);
-    window.nakiros.listProjectConversationsWithAnalysis(project.id).then((data) => {
-      setAnalyses(data);
-      setLoading(false);
-    });
-  }, [project.id]);
 
   const visible = useMemo(() => {
     const filtered = analyses.filter((a) => {
@@ -68,11 +64,7 @@ export default function ConversationsView({ project }: Props) {
   }, [analyses, sort, filter]);
 
   if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-        {t('loading')}
-      </div>
-    );
+    return <LoadingState>{t('loading')}</LoadingState>;
   }
 
   return (
@@ -114,9 +106,7 @@ export default function ConversationsView({ project }: Props) {
 
       <div className="flex-1 overflow-y-auto p-4">
         {visible.length === 0 ? (
-          <div className="rounded-[10px] border border-dashed border-[var(--line-strong)] px-4 py-3.5 text-[13px] text-[var(--text-muted)]">
-            {t('empty')}
-          </div>
+          <EmptyState title={t('empty')} />
         ) : (
           <ul className="flex flex-col gap-2">
             {visible.map((a) => (
@@ -191,7 +181,7 @@ function ConversationRow({
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-muted)]">
             <span>{new Date(analysis.lastMessageAt).toLocaleDateString()}</span>
-            <span>{formatDuration(analysis.durationMs)}</span>
+            <span>{formatLongDuration(analysis.durationMs)}</span>
             <span>{analysis.messageCount} msgs</span>
             {analysis.gitBranch && <span>{analysis.gitBranch}</span>}
           </div>
@@ -204,12 +194,3 @@ function ConversationRow({
   );
 }
 
-function formatDuration(ms: number): string {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  return rem === 0 ? `${h}h` : `${h}h${rem}m`;
-}

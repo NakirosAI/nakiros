@@ -25,8 +25,13 @@ import {
 } from '../../services/eval-runner.js';
 import { readIterationFeedback, saveEvalFeedback } from '../../services/eval-feedback.js';
 import { buildEvalMatrix } from '../../services/eval-matrix.js';
-import { resolveEvalSkillDir } from './skill-dir.js';
-import { createEventBroadcaster, getRunOrThrow } from './run-helpers.js';
+import { resolveSkillDir } from './skill-dir.js';
+import {
+  createEventBroadcaster,
+  createTypedHandler,
+  getRunOrThrow,
+  withBroadcastOnError,
+} from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 const broadcastEvalEvent = createEventBroadcaster<EvalRunEvent>('eval:event');
@@ -79,61 +84,71 @@ function getDefinitionForRun(run: SkillEvalRun): {
  * Broadcasts `eval:event` via `eventBus.broadcast` while runs are active.
  */
 export const evalHandlers: HandlerRegistry = {
-  'eval:startRuns': async (args) => {
-    const request = args[0] as StartEvalRunRequest;
-    return startEvalRuns(request, {
-      resolveSkillDir: resolveEvalSkillDir,
+  'eval:startRuns': createTypedHandler(async (request: StartEvalRunRequest) =>
+    startEvalRuns(request, {
+      resolveSkillDir,
       onEvent: broadcastEvalEvent,
-    });
-  },
+    }),
+  ),
 
-  'eval:stopRun': (args) => {
-    stopEvalRun(args[0] as string);
-  },
+  'eval:stopRun': createTypedHandler(
+    withBroadcastOnError('eval:event', stopEvalRun, (runId: string) => runId),
+  ),
 
-  'eval:listRuns': () => listEvalRuns(),
+  'eval:listRuns': createTypedHandler(listEvalRuns),
 
-  'eval:loadPersisted': (args) => {
-    const request = args[0] as StartEvalRunRequest;
-    const skillDir = resolveEvalSkillDir(request);
+  'eval:loadPersisted': createTypedHandler((request: StartEvalRunRequest) => {
+    const skillDir = resolveSkillDir(request);
     return loadPersistedRuns(skillDir);
-  },
+  }),
 
-  'eval:sendUserMessage': async (args) => {
-    const runId = args[0] as string;
-    const message = args[1] as string;
-    const run = getRunOrThrow(getEvalRun, runId, 'Eval');
-    const { skillDir, definition } = getDefinitionForRun(run);
-    await sendEvalUserMessage(runId, message, skillDir, definition, broadcastEvalEvent);
-  },
+  'eval:sendUserMessage': createTypedHandler(
+    withBroadcastOnError(
+      'eval:event',
+      async (runId: string, message: string) => {
+        const run = getRunOrThrow(getEvalRun, runId, 'Eval');
+        const { skillDir, definition } = getDefinitionForRun(run);
+        await sendEvalUserMessage(runId, message, skillDir, definition, broadcastEvalEvent);
+      },
+      (runId) => runId,
+    ),
+  ),
 
-  'eval:finishRun': async (args) => {
-    const runId = args[0] as string;
-    const run = getRunOrThrow(getEvalRun, runId, 'Eval');
-    const { definition } = getDefinitionForRun(run);
-    await finishEvalWaitingRun(runId, definition);
-  },
+  'eval:finishRun': createTypedHandler(
+    withBroadcastOnError(
+      'eval:event',
+      async (runId: string) => {
+        const run = getRunOrThrow(getEvalRun, runId, 'Eval');
+        const { definition } = getDefinitionForRun(run);
+        await finishEvalWaitingRun(runId, definition);
+      },
+      (runId) => runId,
+    ),
+  ),
 
-  'eval:getBufferedEvents': (args) => getEvalBufferedEvents(args[0] as string),
+  'eval:getBufferedEvents': createTypedHandler(getEvalBufferedEvents),
 
-  'eval:getFeedback': (args) => {
-    const request = args[0] as StartEvalRunRequest & { iteration: number };
-    const skillDir = resolveEvalSkillDir(request);
-    return readIterationFeedback(skillDir, request.iteration);
-  },
+  'eval:getFeedback': createTypedHandler(
+    (request: StartEvalRunRequest & { iteration: number }) => {
+      const skillDir = resolveSkillDir(request);
+      return readIterationFeedback(skillDir, request.iteration);
+    },
+  ),
 
-  'eval:saveFeedback': (args) => {
-    const request = args[0] as StartEvalRunRequest & {
-      iteration: number;
-      evalName: string;
-      feedback: string;
-    };
-    const skillDir = resolveEvalSkillDir(request);
-    saveEvalFeedback(skillDir, request.iteration, request.evalName, request.feedback);
-  },
+  'eval:saveFeedback': createTypedHandler(
+    (
+      request: StartEvalRunRequest & {
+        iteration: number;
+        evalName: string;
+        feedback: string;
+      },
+    ) => {
+      const skillDir = resolveSkillDir(request);
+      saveEvalFeedback(skillDir, request.iteration, request.evalName, request.feedback);
+    },
+  ),
 
-  'eval:listOutputs': (args): EvalRunOutputEntry[] => {
-    const runId = args[0] as string;
+  'eval:listOutputs': createTypedHandler((runId: string): EvalRunOutputEntry[] => {
     const run = getRunOrThrow(getEvalRun, runId, 'Eval');
     const outputsDir = join(run.workdir, 'outputs');
     if (!existsSync(outputsDir)) return [];
@@ -167,11 +182,9 @@ export const evalHandlers: HandlerRegistry = {
     walk(outputsDir);
     entries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
     return entries;
-  },
+  }),
 
-  'eval:readOutput': (args): string | null => {
-    const runId = args[0] as string;
-    const relativePath = args[1] as string;
+  'eval:readOutput': createTypedHandler((runId: string, relativePath: string): string | null => {
     const run = getRunOrThrow(getEvalRun, runId, 'Eval');
     const outputsDir = join(run.workdir, 'outputs');
     const abs = resolve(outputsDir, relativePath);
@@ -184,14 +197,13 @@ export const evalHandlers: HandlerRegistry = {
     } catch {
       return null;
     }
-  },
+  }),
 
   /**
    * Return the git diff captured from this run's sandbox. Null when the run
    * didn't use a sandbox (no git root) or when the diff file is absent.
    */
-  'eval:readDiffPatch': (args): string | null => {
-    const runId = args[0] as string;
+  'eval:readDiffPatch': createTypedHandler((runId: string): string | null => {
     const run = getRunOrThrow(getEvalRun, runId, 'Eval');
     const path = join(run.workdir, 'diff.patch');
     if (!existsSync(path)) return null;
@@ -200,17 +212,15 @@ export const evalHandlers: HandlerRegistry = {
     } catch {
       return null;
     }
-  },
+  }),
 
-  'eval:getMatrix': (args): EvalMatrix => {
-    const request = args[0] as GetEvalMatrixRequest;
-    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+  'eval:getMatrix': createTypedHandler((request: GetEvalMatrixRequest): EvalMatrix => {
+    const skillDir = resolveSkillDir(request);
     return buildEvalMatrix(skillDir, request.skillName);
-  },
+  }),
 
-  'eval:loadIterationRun': (args): IterationRunArtifact => {
-    const request = args[0] as LoadIterationRunRequest;
-    const skillDir = resolveEvalSkillDir(request as unknown as StartEvalRunRequest);
+  'eval:loadIterationRun': createTypedHandler((request: LoadIterationRunRequest): IterationRunArtifact => {
+    const skillDir = resolveSkillDir(request);
     const runDir = join(
       skillDir,
       'evals',
@@ -286,5 +296,5 @@ export const evalHandlers: HandlerRegistry = {
         ? { totalTokens: timing.total_tokens, durationMs: timing.duration_ms }
         : null,
     };
-  },
+  }),
 };

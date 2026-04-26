@@ -6,6 +6,7 @@ Shared TypeScript types consumed by the daemon, the frontend, and the landing. E
 
 ## Files
 
+- [agent-run.ts](./agent-run.md) — Unified `AgentRun` primitive shared by every kind (audit / eval / fix / create / future). Powers the topbar runs center and the global agent-run store.
 - [artifact-review.ts](./artifact-review.md) — Types for the artifact-review flow (agent-proposed doc/backlog edits with diff/yolo modes).
 - [bundled-skill-conflict.ts](./bundled-skill-conflict.md) — Conflict descriptors between the bundled Nakiros skill ROM and a user's locally-edited copy.
 - [collab.ts](./collab.md) — Multi-agent collaboration thread primitives: `CollabMessage` and `CollabSession`.
@@ -16,6 +17,7 @@ Shared TypeScript types consumed by the daemon, the frontend, and the landing. E
 - [file-change-review.ts](./file-change-review.md) — Types used by the file-changes review UI (before/after content, approval session).
 - [getting-started.ts](./getting-started.md) — Onboarding checklist state and the launch payload for pre-configured chat tabs.
 - [installer.ts](./installer.md) — Persisted workspace record types stored under `~/.nakiros/`.
+- [onboarding.ts](./onboarding.md) — Editor detection + install-progress types driving the `onboarding:*` IPC channels.
 - [preferences.ts](./preferences.md) — App-level preference types (theme, language, agent provider) plus the default MCP daemon URL.
 - [project.ts](./project.md) — Core shared types: project scanning, conversation analysis, skills, eval suite/run, audit run, fix benchmarks, dashboard stats.
 - [server.ts](./server.md) — Ambient-context types (`RepoContext`, `WorkspaceContext`) populated by the context-generation workflow.

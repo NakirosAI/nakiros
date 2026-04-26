@@ -11,6 +11,7 @@ import {
   readBundledSkillConflictDiff,
   resolveBundledSkillConflict,
 } from '../../services/bundled-skills-sync.js';
+import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 /**
@@ -27,18 +28,15 @@ import type { HandlerRegistry } from './index.js';
  * - `nakiros:readBundledSkillConflictDiff` — per-file diff used by the conflict UI
  */
 export const bundledSkillsHandlers: HandlerRegistry = {
-  'nakiros:listBundledSkills': () => listBundledSkills(),
-  'nakiros:getBundledSkill': (args) => readBundledSkill(args[0] as string),
-  'nakiros:readBundledSkillFile': (args) =>
-    readBundledSkillFile(args[0] as string, args[1] as string),
-  'nakiros:saveBundledSkillFile': (args) => {
-    saveBundledSkillFile(args[0] as string, args[1] as string, args[2] as string);
-  },
-  'nakiros:promoteBundledSkill': (args) => promoteBundledSkill(args[0] as string),
-  'nakiros:listBundledSkillConflicts': () => listBundledSkillConflicts(),
-  'nakiros:resolveBundledSkillConflict': (args) => {
-    resolveBundledSkillConflict(args[0] as string, args[1] as BundledSkillConflictResolution);
-  },
-  'nakiros:readBundledSkillConflictDiff': (args) =>
-    readBundledSkillConflictDiff(args[0] as string, args[1] as string),
+  'nakiros:listBundledSkills': createTypedHandler(listBundledSkills),
+  'nakiros:getBundledSkill': createTypedHandler(readBundledSkill),
+  'nakiros:readBundledSkillFile': createTypedHandler(readBundledSkillFile),
+  'nakiros:saveBundledSkillFile': createTypedHandler(saveBundledSkillFile),
+  'nakiros:promoteBundledSkill': createTypedHandler(promoteBundledSkill),
+  'nakiros:listBundledSkillConflicts': createTypedHandler(listBundledSkillConflicts),
+  'nakiros:resolveBundledSkillConflict': createTypedHandler(
+    (skillName: string, resolution: BundledSkillConflictResolution) =>
+      resolveBundledSkillConflict(skillName, resolution),
+  ),
+  'nakiros:readBundledSkillConflictDiff': createTypedHandler(readBundledSkillConflictDiff),
 };

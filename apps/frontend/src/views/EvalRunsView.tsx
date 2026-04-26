@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
-  CheckCircle,
   ChevronRight,
   ChevronDown,
   FileText,
@@ -9,23 +8,25 @@ import {
   Loader2,
   MessageSquare,
   RefreshCw,
-  Send,
+  RotateCw,
   Square,
-  XCircle,
-  AlertTriangle,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { MarkdownViewer } from '../components/ui';
+import { LoadingState, MarkdownViewer } from '../components/ui';
 import {
-  ConversationTurn,
-  liveEventsToBlocks,
-  legacyTurnToBlocks,
-  endsOnAssistant,
-  type LiveStreamEvent,
-} from '../components/ConversationTurn';
-import { ThinkingIndicator } from '../components/ThinkingIndicator';
+  AgentActivityFeed,
+  HumanInteractionPanel,
+  RESUME_PROMPTS,
+  RunErrorBanner,
+  RunInterruptedBadge,
+  RunStatusIcon,
+} from '../components/runs';
+import { formatComputeDuration, formatTokens } from '../utils/format';
+import { type LiveStreamEvent } from '../components/ConversationTurn';
+import { useEvalFeedback } from '../hooks/useEvalFeedback';
+import { usePolling } from '../hooks/usePolling';
 import type { SkillEvalRun, EvalRunEvent, EvalRunStatus, EvalRunOutputEntry, SkillScope } from '@nakiros/shared';
 
 interface Props {
@@ -77,50 +78,25 @@ export default function EvalRunsView({
   const [runs, setRuns] = useState<Map<string, SkillEvalRun>>(new Map());
   const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRunIds[0] ?? null);
   const [liveEventsByRun, setLiveEventsByRun] = useState<Map<string, LiveEvent[]>>(new Map());
+  const [handlerErrorByRun, setHandlerErrorByRun] = useState<Map<string, string>>(new Map());
   const startTime = useRef(Date.now());
   const [elapsed, setElapsed] = useState(0);
-  const [feedback, setFeedback] = useState<Record<string, string>>({});
 
-  // Load feedback for this iteration
-  useEffect(() => {
-    void window.nakiros
-      .getEvalFeedback({ scope, projectId, pluginName, marketplaceName, skillName, iteration })
-      .then(setFeedback);
-  }, [scope, projectId, pluginName, marketplaceName, skillName, iteration]);
-
-  async function saveFeedback(evalName: string, text: string) {
-    setFeedback((prev) => ({ ...prev, [evalName]: text }));
-    await window.nakiros.saveEvalFeedback({
-      scope,
-      projectId,
-      pluginName,
-      marketplaceName,
-      skillName,
-      iteration,
-      evalName,
-      feedback: text,
-    });
-  }
+  const { feedback, save: saveFeedback } = useEvalFeedback({
+    scope,
+    projectId,
+    pluginName,
+    marketplaceName,
+    skillName,
+    iteration,
+  });
 
   // Poll runs every 500ms while any run is not terminal, in addition to listening for events
-  useEffect(() => {
-    let mounted = true;
-
-    async function refresh() {
-      const all = await window.nakiros.listEvalRuns();
-      if (!mounted) return;
-      const filtered = all.filter((r) => initialRunIds.includes(r.runId));
-      setRuns(new Map(filtered.map((r) => [r.runId, r])));
-    }
-
-    void refresh();
-    const interval = setInterval(refresh, 500);
-
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [initialRunIds]);
+  usePolling(async () => {
+    const all = await window.nakiros.listEvalRuns();
+    const filtered = all.filter((r) => initialRunIds.includes(r.runId));
+    setRuns(new Map(filtered.map((r) => [r.runId, r])));
+  }, 500);
 
   // Subscribe to event stream — capture text + tool events for the live activity panel
   useEffect(() => {
@@ -148,16 +124,23 @@ export default function EvalRunsView({
           next.set(event.runId, []);
           return next;
         });
+        // Clear any stale handler error for this run.
+        setHandlerErrorByRun((prev) => {
+          if (!prev.has(event.runId)) return prev;
+          const next = new Map(prev);
+          next.delete(event.runId);
+          return next;
+        });
+      } else if (event.event.type === 'error') {
+        const message = event.event.error;
+        setHandlerErrorByRun((prev) => new Map(prev).set(event.runId, message));
       }
     });
     return unsubscribe;
   }, [initialRunIds]);
 
   // Elapsed timer
-  useEffect(() => {
-    const t = setInterval(() => setElapsed(Date.now() - startTime.current), 500);
-    return () => clearInterval(t);
-  }, []);
+  usePolling(() => setElapsed(Date.now() - startTime.current), 500);
 
   const runsList = useMemo(
     () => initialRunIds.map((id) => runs.get(id)).filter((r): r is SkillEvalRun => Boolean(r)),
@@ -232,9 +215,9 @@ export default function EvalRunsView({
             </>
           )}
           <span>·</span>
-          <span>{t('elapsed', { duration: formatDuration(elapsed, t) })}</span>
+          <span>{t('elapsed', { duration: formatComputeDuration(elapsed) })}</span>
           <span>·</span>
-          <span>{t('tokensUsed', { tokens: formatTokens(totalTokens, t) })}</span>
+          <span>{t('tokensUsed', { tokens: formatTokens(totalTokens, { unit: 'tok' }) })}</span>
           {!allDone && (
             <button
               onClick={handleStopAll}
@@ -300,15 +283,14 @@ export default function EvalRunsView({
             <RunDetail
               run={selected}
               liveEvents={liveEventsByRun.get(selected.runId) ?? []}
+              handlerError={handlerErrorByRun.get(selected.runId) ?? null}
               onStop={handleStop}
               feedback={feedback[selected.evalName] ?? ''}
               onSaveFeedback={(text) => saveFeedback(selected.evalName, text)}
               t={t}
             />
           ) : (
-            <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-              {t('selectRun')}
-            </div>
+            <LoadingState>{t('selectRun')}</LoadingState>
           )}
         </div>
       </div>
@@ -337,13 +319,13 @@ function RunListItem({
         selected ? 'bg-[var(--bg-muted)]' : 'hover:bg-[var(--bg-muted)]/50',
       )}
     >
-      <StatusIcon status={run.status} />
+      <RunStatusIcon status={run.status} />
       <span className={clsx('shrink-0', run.config === 'with_skill' ? 'text-[var(--primary)]' : 'text-amber-400')}>
         {label}
       </span>
       <span className="ml-auto truncate text-[10px] text-[var(--text-muted)]">
-        {run.tokensUsed > 0 && formatTokens(run.tokensUsed, t)}
-        {run.durationMs > 0 && ` · ${formatDuration(run.durationMs, t)}`}
+        {run.tokensUsed > 0 && formatTokens(run.tokensUsed, { unit: 'tok' })}
+        {run.durationMs > 0 && ` · ${formatComputeDuration(run.durationMs)}`}
       </span>
     </button>
   );
@@ -352,6 +334,7 @@ function RunListItem({
 function RunDetail({
   run,
   liveEvents,
+  handlerError,
   onStop,
   feedback,
   onSaveFeedback,
@@ -359,13 +342,13 @@ function RunDetail({
 }: {
   run: SkillEvalRun;
   liveEvents: LiveEvent[];
+  handlerError: string | null;
   onStop(runId: string): void;
   feedback: string;
   onSaveFeedback(text: string): void | Promise<void>;
   t: TFunction<'evals'>;
 }) {
   const [expanded, setExpanded] = useState<'turns' | 'stream' | null>('turns');
-  const [userInput, setUserInput] = useState('');
   const [sending, setSending] = useState(false);
   const [feedbackDraft, setFeedbackDraft] = useState(feedback);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
@@ -388,19 +371,12 @@ function RunDetail({
   const isWaiting = run.status === 'waiting_for_input';
   const feedbackDirty = feedbackDraft !== feedback;
 
-  async function handleSend() {
-    const trimmed = userInput.trim();
-    if (!trimmed || sending) return;
-    setSending(true);
-    setUserInput('');
-    try {
-      await window.nakiros.sendEvalUserMessage(run.runId, trimmed);
-    } catch (err) {
-      setUserInput(trimmed);
-      alert(t('alertSendFailed', { message: (err as Error).message }));
-    } finally {
-      setSending(false);
-    }
+  async function handleSendMessage(message: string) {
+    await window.nakiros.sendEvalUserMessage(run.runId, message);
+  }
+
+  async function handleResume() {
+    await window.nakiros.sendEvalUserMessage(run.runId, RESUME_PROMPTS.eval);
   }
 
   async function handleFinish() {
@@ -428,7 +404,7 @@ function RunDetail({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
-        <StatusIcon status={run.status} size="lg" />
+        <RunStatusIcon status={run.status} size="lg" />
         <div className="flex-1">
           <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
             <span>{run.evalName}</span>
@@ -445,17 +421,28 @@ function RunDetail({
             {run.tokensUsed > 0 && (
               <>
                 <span>·</span>
-                <span>{formatTokens(run.tokensUsed, t)}</span>
+                <span>{formatTokens(run.tokensUsed, { unit: 'tok' })}</span>
               </>
             )}
             {run.durationMs > 0 && (
               <>
                 <span>·</span>
-                <span>{formatDuration(run.durationMs, t)}</span>
+                <span>{formatComputeDuration(run.durationMs)}</span>
               </>
             )}
           </div>
         </div>
+        <RunInterruptedBadge interrupted={run.interruptedByReboot} />
+        {run.interruptedByReboot && run.status === 'waiting_for_input' && (
+          <button
+            onClick={handleResume}
+            disabled={sending}
+            className="flex items-center gap-1 rounded bg-amber-500/20 px-2 py-1 text-xs text-amber-400 transition-colors hover:bg-amber-500/30 disabled:opacity-50"
+          >
+            <RotateCw size={12} />
+            {t('resume', { defaultValue: 'Reprendre' })}
+          </button>
+        )}
         {isRunning && (
           <button
             onClick={() => onStop(run.runId)}
@@ -467,15 +454,8 @@ function RunDetail({
         )}
       </div>
 
-      {run.error && (
-        <div className="mx-4 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-          <div className="mb-1 flex items-center gap-1.5 font-semibold">
-            <AlertTriangle size={12} />
-            {t('errorLabel')}
-          </div>
-          <pre className="whitespace-pre-wrap break-all font-mono">{run.error}</pre>
-        </div>
-      )}
+      <RunErrorBanner message={run.error ?? handlerError} title={t('errorLabel')} />
+
 
       <div className="flex-1 overflow-y-auto p-4">
         {/* Prompt */}
@@ -489,48 +469,16 @@ function RunDetail({
           </pre>
         </Section>
 
-        {/* Conversation — user prompt + assistant turns with ordered text/tool
-            blocks. While the run is streaming, we append a provisional assistant
-            turn built from live events so the user sees each Read/Bash/Write
-            appear in place as it happens (like the Claude Code extension). */}
         {(run.turns.length > 0 || (isRunning && liveEvents.length > 0)) && (
-          <div className="mt-4 flex flex-col gap-2">
-            {run.turns.map((turn, i) => (
-              <ConversationTurn
-                key={i}
-                role={turn.role}
-                timestamp={turn.timestamp}
-                blocks={
-                  turn.blocks ??
-                  (turn.role === 'assistant'
-                    ? legacyTurnToBlocks(turn.content, turn.tools)
-                    : [{ type: 'text', text: turn.content }])
-                }
-              />
-            ))}
-
-            {/* Provisional turn: events streaming in right now, not yet saved
-                to run.turns. Disappears as soon as the real turn lands. */}
-            {isRunning &&
-              liveEvents.length > 0 &&
-              !endsOnAssistant(run.turns) && (
-                <ConversationTurn
-                  key="provisional"
-                  role="assistant"
-                  timestamp={new Date().toISOString()}
-                  blocks={liveEventsToBlocks(liveEvents)}
-                  streaming
-                  scrollRef={liveScrollRef}
-                />
-              )}
-
-            {isRunning &&
-              liveEvents.length === 0 &&
-              !endsOnAssistant(run.turns) && (
-                <ThinkingIndicator
-                  verbs={t('thinking.verbs', { returnObjects: true }) as string[]}
-                />
-              )}
+          <div className="mt-4">
+            <AgentActivityFeed
+              turns={run.turns}
+              liveEvents={liveEvents}
+              liveScrollRef={liveScrollRef}
+              isStreaming={isRunning}
+              thinkingVerbs={t('thinking.verbs', { returnObjects: true }) as string[]}
+              variant="inline"
+            />
           </div>
         )}
 
@@ -570,49 +518,24 @@ function RunDetail({
         )}
       </div>
 
-      {/* Interactive input panel */}
       {isWaiting && (
-        <div className="border-t border-amber-500/30 bg-amber-500/5 p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-amber-400">
-            <MessageSquare size={12} />
-            {t('waitingForInput')}
-          </div>
-          <div className="flex gap-2">
-            <textarea
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              placeholder={t('userInputPlaceholder')}
-              className="min-h-[60px] flex-1 resize-none rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--primary)]"
-              autoFocus
-            />
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={handleSend}
-                disabled={!userInput.trim() || sending}
-                aria-label={t('send')}
-                title={t('send')}
-                className="flex shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] p-2.5 text-white transition-colors hover:bg-[var(--primary)]/90 disabled:opacity-50"
-              >
-                <Send size={16} />
-              </button>
-              <button
-                onClick={handleFinish}
-                disabled={sending}
-                aria-label={t('finish')}
-                className="flex shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
-                title={t('finishTooltip')}
-              >
-                <Flag size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
+        <HumanInteractionPanel
+          isWaiting
+          onSend={handleSendMessage}
+          waitingBanner={t('waitingForInput')}
+          placeholderWaiting={t('userInputPlaceholder')}
+          extraButtons={
+            <button
+              onClick={handleFinish}
+              disabled={sending}
+              aria-label={t('finish')}
+              title={t('finishTooltip')}
+              className="flex shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] disabled:opacity-50"
+            >
+              <Flag size={16} />
+            </button>
+          }
+        />
       )}
     </div>
   );
@@ -643,41 +566,6 @@ function Section({
       {expanded && <div className="border-t border-[var(--line)] p-3">{children}</div>}
     </div>
   );
-}
-
-function StatusIcon({ status, size = 'sm' }: { status: EvalRunStatus; size?: 'sm' | 'lg' }) {
-  const sz = size === 'lg' ? 18 : 14;
-  switch (status) {
-    case 'completed':
-      return <CheckCircle size={sz} className="text-emerald-400" />;
-    case 'failed':
-      return <XCircle size={sz} className="text-red-400" />;
-    case 'stopped':
-      return <Square size={sz} className="text-[var(--text-muted)]" />;
-    case 'waiting_for_input':
-      return <MessageSquare size={sz} className="text-amber-400" />;
-    case 'running':
-    case 'starting':
-    case 'grading':
-      return <Loader2 size={sz} className="animate-spin text-[var(--primary)]" />;
-    case 'queued':
-    default:
-      return <span className="inline-block h-3 w-3 rounded-full border border-[var(--line-strong)]" />;
-  }
-}
-
-
-function formatTokens(n: number, t: TFunction<'evals'>): string {
-  if (n < 1000) return t('units.tokens', { count: n });
-  return t('units.tokensThousands', { value: (n / 1000).toFixed(1) });
-}
-
-function formatDuration(ms: number, t: TFunction<'evals'>): string {
-  if (ms < 1000) return t('units.milliseconds', { count: ms });
-  if (ms < 60000) return t('units.seconds', { value: (ms / 1000).toFixed(1) });
-  const min = Math.floor(ms / 60000);
-  const sec = Math.floor((ms % 60000) / 1000);
-  return t('units.minutes', { minutes: min, seconds: sec });
 }
 
 function formatBytes(n: number, t: TFunction<'evals'>): string {

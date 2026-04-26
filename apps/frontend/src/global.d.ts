@@ -1,12 +1,17 @@
 import type {
   AppPreferences,
-  AgentProvider,
   AgentInstallStatus,
   AgentInstallRequest,
   AgentInstallSummary,
+  AgentRunNotificationPayload,
   BundledSkillConflict,
   BundledSkillConflictFileDiff,
   BundledSkillConflictResolution,
+  DetectedEditor,
+  InstalledCommand,
+  OnboardingInstallResult,
+  OnboardingProgressEvent,
+  OpenAgentRunChatPayload,
   SkillDiffEntry,
   SkillDiffFilePayload,
   VersionInfo,
@@ -28,6 +33,8 @@ import type {
   AuditRun,
   AuditRunEvent,
   AuditHistoryEntry,
+  AnalyzeConvoRun,
+  AnalyzeConvoRunEvent,
   FixBenchmarks,
   SkillAgentTempFileEntry,
   SkillAgentTempFileContent,
@@ -46,48 +53,6 @@ import type {
 } from '@nakiros/shared';
 
 declare global {
-  interface DetectedEditor {
-    id: 'claude' | 'cursor' | 'codex';
-    label: string;
-    detected: boolean;
-    targetDir: string;
-  }
-
-  interface OnboardingProgressEvent {
-    label: string;
-    done: boolean;
-    error?: string;
-  }
-
-  interface OnboardingInstallResult {
-    success: boolean;
-    errors: string[];
-  }
-
-  interface InstalledCommand {
-    id: string;
-    command: string;
-    kind: 'agent' | 'workflow';
-    fileName: string;
-  }
-
-  interface AgentRunNotificationPayload {
-    workspaceId: string;
-    workspaceName?: string;
-    conversationId?: string | null;
-    tabId?: string | null;
-    conversationTitle?: string;
-    provider?: AgentProvider;
-    durationSeconds: number;
-  }
-
-  interface OpenAgentRunChatPayload {
-    workspaceId: string;
-    conversationId?: string | null;
-    tabId?: string | null;
-    eventId?: string;
-  }
-
   interface Window {
     nakiros: {
       // Generic shell / clipboard
@@ -159,7 +124,19 @@ declare global {
       analyzeProjectConversation(projectId: string, sessionId: string): Promise<ConversationAnalysis | null>;
       listProjectConversationsWithAnalysis(projectId: string): Promise<ConversationAnalysis[]>;
       loadConversationDeepAnalysis(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis | null>;
+      /** @deprecated kept for backward compat — prefer the streaming analyzeConvo:* family. */
       deepAnalyzeConversation(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis>;
+
+      // Conversation deep-analysis runner (analyze-convo Run kind)
+      startAnalyzeConvo(request: { projectId: string; sessionId: string }): Promise<AnalyzeConvoRun>;
+      stopAnalyzeConvo(runId: string): Promise<void>;
+      getAnalyzeConvoRun(runId: string): Promise<AnalyzeConvoRun | null>;
+      sendAnalyzeConvoUserMessage(runId: string, message: string): Promise<void>;
+      finishAnalyzeConvo(runId: string): Promise<void>;
+      listActiveAnalyzeConvoRuns(): Promise<AnalyzeConvoRun[]>;
+      listAllAnalyzeConvoRuns(): Promise<AnalyzeConvoRun[]>;
+      getAnalyzeConvoBufferedEvents(runId: string): Promise<AnalyzeConvoRunEvent['event'][]>;
+      onAnalyzeConvoEvent(cb: (event: AnalyzeConvoRunEvent) => void): () => void;
 
       listProjectSkills(projectId: string): Promise<Skill[]>;
       getProjectSkill(projectId: string, skillName: string): Promise<Skill | null>;
@@ -228,6 +205,7 @@ declare global {
       listAuditHistory(request: { scope: SkillScope; marketplaceName?: string; pluginName?: string; projectId?: string; skillName: string }): Promise<AuditHistoryEntry[]>;
       readAuditReport(path: string): Promise<string | null>;
       listActiveAuditRuns(): Promise<AuditRun[]>;
+      listAllAuditRuns(): Promise<AuditRun[]>;
       getAuditBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onAuditEvent(cb: (event: AuditRunEvent) => void): () => void;
 
@@ -240,6 +218,7 @@ declare global {
       runFixEvalsInTemp(request: { runId: string; evalNames?: string[]; includeBaseline?: boolean }): Promise<StartEvalRunResponse>;
       getFixBenchmarks(runId: string): Promise<FixBenchmarks>;
       listActiveFixRuns(): Promise<AuditRun[]>;
+      listAllFixRuns(): Promise<AuditRun[]>;
       getFixBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onFixEvent(cb: (event: AuditRunEvent) => void): () => void;
       listFixDiff(runId: string): Promise<SkillDiffEntry[]>;
@@ -252,6 +231,7 @@ declare global {
       sendCreateUserMessage(runId: string, message: string): Promise<void>;
       finishCreate(runId: string): Promise<void>;
       listActiveCreateRuns(): Promise<AuditRun[]>;
+      listAllCreateRuns(): Promise<AuditRun[]>;
       getCreateBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onCreateEvent(cb: (event: AuditRunEvent) => void): () => void;
       listCreateDiff(runId: string): Promise<SkillDiffEntry[]>;

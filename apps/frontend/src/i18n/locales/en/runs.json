@@ -1,0 +1,41 @@
+{
+  "back": "Back",
+  "stop": "Stop",
+  "finish": "Finish",
+  "discard": "Discard",
+  "resume": "Reprendre",
+  "interruptedBadge": "Interrompu",
+  "interruptedTooltip": "Ce run a été coupé par un redémarrage du daemon. Clique sur Reprendre pour relancer la conversation.",
+  "error": {
+    "title": "Error"
+  },
+  "input": {
+    "send": "Send",
+    "waitingBanner": "Agent is waiting for your input",
+    "placeholderWaiting": "Type your response… (Enter to send, Shift+Enter for new line)",
+    "placeholderRunning": "Agent is running, message will queue…",
+    "placeholderIdle": "Type a message…",
+    "sendFailed": "Failed to send: {{message}}"
+  },
+  "status": {
+    "queued": "queued",
+    "starting": "starting",
+    "running": "running",
+    "waiting_for_input": "waiting",
+    "awaiting_input": "waiting",
+    "grading": "grading",
+    "completed": "completed",
+    "done": "completed",
+    "failed": "failed",
+    "stopped": "stopped",
+    "cancelled": "stopped",
+    "pending": "pending"
+  },
+  "thinking": {
+    "verbs": [
+      "Thinking…",
+      "Reading…",
+      "Working…"
+    ]
+  }
+}

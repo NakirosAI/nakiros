@@ -20,30 +20,16 @@ import type {
   AgentInstallStatus,
   AgentInstallSummary,
 } from '@nakiros/shared';
+import { EDITOR_DEFINITIONS } from '@nakiros/shared';
 
 /** Workflow runtime — installed once globally at ~/.nakiros/ */
 const GLOBAL_RUNTIME_DIR = resolve(homedir(), '.nakiros');
 
-const ENVIRONMENTS: Record<
-  AgentEnvironmentId,
-  { label: string; markerRelativePath: string; targetRelativePath: string }
-> = {
-  cursor: {
-    label: 'Cursor',
-    markerRelativePath: '.cursor',
-    targetRelativePath: '.cursor/commands',
-  },
-  codex: {
-    label: 'Codex',
-    markerRelativePath: '.codex',
-    targetRelativePath: '.codex/prompts',
-  },
-  claude: {
-    label: 'Claude Code',
-    markerRelativePath: '.claude',
-    targetRelativePath: '.claude/commands',
-  },
-};
+/** Path of the commands directory for one environment relative to its base path (`~` or repo root). */
+function commandsRelativePath(id: AgentEnvironmentId): string {
+  const def = EDITOR_DEFINITIONS[id];
+  return `${def.homeMarkerRelative}/${def.commandsSubdir}`;
+}
 
 function readCommandTemplates(): Record<string, string> {
   const dir = resolve(GLOBAL_RUNTIME_DIR, 'commands');
@@ -155,8 +141,8 @@ export function installAgentsGlobally(): GlobalInstallSummary {
   let commandFilesOverwritten = 0;
 
   for (const id of ids) {
-    const env = ENVIRONMENTS[id];
-    const targetDir = resolve(home, env.targetRelativePath);
+    const def = EDITOR_DEFINITIONS[id];
+    const targetDir = resolve(home, commandsRelativePath(id));
     mkdirSync(targetDir, { recursive: true });
 
     let copiedForEnv = 0;
@@ -177,7 +163,7 @@ export function installAgentsGlobally(): GlobalInstallSummary {
 
     environments.push({
       id,
-      label: env.label,
+      label: def.label,
       targetDir,
       commandFilesCopied: copiedForEnv,
       commandFilesOverwritten: overwrittenForEnv,
@@ -207,8 +193,7 @@ export function installAgents(request: AgentInstallRequest): AgentInstallSummary
   let commandFilesOverwritten = 0;
 
   for (const target of request.targets) {
-    const env = ENVIRONMENTS[target];
-    const envTargetPath = resolve(repoPath, env.targetRelativePath);
+    const envTargetPath = resolve(repoPath, commandsRelativePath(target));
     mkdirSync(envTargetPath, { recursive: true });
 
     for (const [fileName, content] of Object.entries(readCommandTemplates())) {
@@ -238,13 +223,13 @@ export function getGlobalInstallStatus(): GlobalInstallStatus {
   const home = homedir();
   const ids: AgentEnvironmentId[] = ['claude', 'codex', 'cursor'];
   const environments = ids.map((id) => {
-    const env = ENVIRONMENTS[id];
-    const targetDir = resolve(home, env.targetRelativePath);
+    const def = EDITOR_DEFINITIONS[id];
+    const targetDir = resolve(home, commandsRelativePath(id));
     const commandFiles = Object.keys(readCommandTemplates());
     const installed = commandFiles.filter((file) => existsSync(resolve(targetDir, file))).length;
     return {
       id,
-      label: env.label,
+      label: def.label,
       targetDir,
       installed,
       total: commandFiles.length,
@@ -261,16 +246,16 @@ export function getGlobalInstallStatus(): GlobalInstallStatus {
 // ─── Agents par repo ────────────────────────────────────────────────────────
 
 function getEnvironmentStatus(repoPath: string, id: AgentEnvironmentId): AgentEnvironmentStatus {
-  const env = ENVIRONMENTS[id];
-  const markerExists = existsSync(resolve(repoPath, env.markerRelativePath));
-  const targetPath = resolve(repoPath, env.targetRelativePath);
+  const def = EDITOR_DEFINITIONS[id];
+  const markerExists = existsSync(resolve(repoPath, def.homeMarkerRelative));
+  const targetPath = resolve(repoPath, commandsRelativePath(id));
   const commandFiles = Object.keys(readCommandTemplates());
   const installedCount = commandFiles.filter((file) =>
     existsSync(resolve(targetPath, file))).length;
 
   return {
     id,
-    label: env.label,
+    label: def.label,
     targetPath,
     markerExists,
     installedCount,

@@ -20,13 +20,17 @@ import { getConversationMessages } from './conversation-parser.js';
 // is genuinely too big for Haiku's 200k window.
 // ---------------------------------------------------------------------------
 
-const HAIKU_MODEL = 'haiku';
-const SONNET_MODEL = 'sonnet';
-const HAIKU_INPUT_BUDGET = 170_000; // leaves headroom for skill + output
-const MAX_PROMPT_TOKENS = 950_000; // Sonnet 1M with comfortable margin
+/** Claude CLI model id used when the prompt fits in Haiku's 200k window. */
+export const HAIKU_MODEL = 'haiku';
+/** Claude CLI model id used when the prompt requires the Sonnet 1M window. */
+export const SONNET_MODEL = 'sonnet';
+/** Threshold below which Haiku is preferred (leaves headroom for skill + output). */
+export const HAIKU_INPUT_BUDGET = 170_000;
+/** Hard cap on the prompt size — Sonnet 1M with a comfortable margin. */
+export const MAX_PROMPT_TOKENS = 950_000;
 
-// Where we persist completed reports so re-opening doesn't re-bill.
-const ANALYSES_DIR = join(homedir(), '.nakiros', 'analyses');
+/** Where we persist completed reports so re-opening doesn't re-bill. */
+export const ANALYSES_DIR = join(homedir(), '.nakiros', 'analyses');
 
 /** Alias of {@link ConversationDeepAnalysis} for modules that only import from this file. */
 export type DeepAnalysisResult = ConversationDeepAnalysis;
@@ -62,8 +66,8 @@ export async function runDeepAnalysis(
   }
 
   const messages = getConversationMessages(providerProjectDir, sessionId);
-  const prompt = buildPrompt(stage1, messages);
-  const inputTokens = estimateTokens(prompt);
+  const prompt = buildAnalyzeConvoPrompt(stage1, messages);
+  const inputTokens = estimatePromptTokens(prompt);
 
   const model: 'haiku' | 'sonnet' =
     inputTokens <= HAIKU_INPUT_BUDGET ? 'haiku' : 'sonnet';
@@ -94,7 +98,15 @@ export async function runDeepAnalysis(
 // single prompt the skill expects.
 // ---------------------------------------------------------------------------
 
-function buildPrompt(
+/**
+ * Build the prompt sent to Claude for a deep conversation analysis. Combines
+ * stage-1 deterministic signals + the raw turn-by-turn conversation, wrapped
+ * in `<instructions>` / `<stage1-signals>` / `<conversation>` blocks.
+ *
+ * Exposed so the streaming `analyze-convo-runner` can reuse the same prompt
+ * shape as the legacy one-shot `runDeepAnalysis`.
+ */
+export function buildAnalyzeConvoPrompt(
   stage1: ConversationAnalysis,
   messages: ReturnType<typeof getConversationMessages>,
 ): string {
@@ -168,9 +180,12 @@ function buildPrompt(
 // average English, closer to 2-3 for code-heavy text — we err conservative).
 // ---------------------------------------------------------------------------
 
-function estimateTokens(text: string): number {
-  // 3 chars/token → slight over-estimate that keeps us on the safe side of
-  // model windows.
+/**
+ * Char-count → token estimate (3 chars/token, intentional slight
+ * over-estimate that keeps us on the safe side of Claude model windows).
+ * Used for model routing — not a substitute for the real tokenizer.
+ */
+export function estimatePromptTokens(text: string): number {
   return Math.ceil(text.length / 3);
 }
 
@@ -222,11 +237,13 @@ function spawnClaude(prompt: string, model: string): Promise<string> {
 // Persistence
 // ---------------------------------------------------------------------------
 
-function analysisFilePath(sessionId: string): string {
+/** Cached report path for a session id. */
+export function analysisFilePath(sessionId: string): string {
   return join(ANALYSES_DIR, `${sessionId}.json`);
 }
 
-function persistAnalysis(result: DeepAnalysisResult): void {
+/** Persist a completed deep-analysis report to the shared cache directory. */
+export function persistAnalysis(result: DeepAnalysisResult): void {
   if (!existsSync(ANALYSES_DIR)) mkdirSync(ANALYSES_DIR, { recursive: true });
   writeFileSync(analysisFilePath(result.sessionId), JSON.stringify(result, null, 2));
 }

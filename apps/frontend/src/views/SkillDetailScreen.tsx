@@ -17,6 +17,7 @@ import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
 import EvalMatrixGrid from '../components/skill/EvalMatrixGrid';
 import SkillFilesTab from '../components/skill/SkillFilesTab';
+import SkillIterationsTab from '../components/skill/SkillIterationsTab';
 
 interface Props {
   /** Project owning the skill. */
@@ -127,7 +128,7 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
         <Tab id="evals" label="Evals" icon={<FlaskConical size={13} strokeWidth={2} />} count={skill?.evals?.definitions.length} active={tab} setTab={setTab} />
         <Tab id="fix" label="Fix" icon={<Wrench size={13} strokeWidth={2} />} active={tab} setTab={setTab} />
         <Tab id="files" label="Files" icon={<FileText size={13} strokeWidth={2} />} count={skill?.files.length} active={tab} setTab={setTab} />
-        <Tab id="iters" label="Iterations" icon={<Layers size={13} strokeWidth={2} />} count={skill?.evals?.iterations.length} active={tab} setTab={setTab} disabled />
+        <Tab id="iters" label="Iterations" icon={<Layers size={13} strokeWidth={2} />} count={skill?.evals?.iterations.length} active={tab} setTab={setTab} />
       </div>
 
       {/* Tab body */}
@@ -150,9 +151,7 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
         {!skillError && skill && tab === 'files' && (
           <SkillFilesTab projectId={project.id} skill={skill} />
         )}
-        {!skillError && skill && tab !== 'audit' && tab !== 'evals' && tab !== 'fix' && tab !== 'files' && (
-          <ComingSoon tab={tab} />
-        )}
+        {!skillError && skill && tab === 'iters' && <SkillIterationsTab skill={skill} />}
       </div>
     </div>
   );
@@ -404,22 +403,6 @@ function FixTab() {
               {t('fixTab.comingHint', { defaultValue: 'Wired up in Phase 4 (RunScreen)' })}
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Coming-soon placeholder for non-audit tabs ─────────────────────────────
-
-function ComingSoon({ tab }: { tab: Exclude<SkillTab, 'audit'> }) {
-  return (
-    <div className="flex h-full items-center justify-center">
-      <div className="rounded-n-lg border border-n-border-default bg-n-surface px-8 py-7 text-center">
-        <div className="font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-subtle">{tab}</div>
-        <div className="mt-2 text-[15px] text-n-fg">Coming soon</div>
-        <div className="mt-1 text-[12.5px] text-n-muted">
-          This tab is part of a later phase of the migration.
         </div>
       </div>
     </div>

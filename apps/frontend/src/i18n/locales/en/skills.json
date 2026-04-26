@@ -26,6 +26,13 @@
     "assertions": "assertions",
     "noDefinitions": "No eval defined for this skill yet."
   },
+  "iterationsTab": {
+    "heading": "Iterations · history",
+    "count_one": "{{count}} iteration",
+    "count_other": "{{count}} iterations",
+    "empty": "No iteration recorded yet.",
+    "emptyHint": "Run a first batch of evals to populate the history."
+  },
   "filesTab": {
     "empty": "No file in this skill folder.",
     "emptyFile": "This file is empty.",

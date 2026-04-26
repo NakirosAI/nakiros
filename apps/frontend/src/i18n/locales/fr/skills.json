@@ -26,6 +26,13 @@
     "assertions": "assertions",
     "noDefinitions": "Aucun eval défini pour ce skill."
   },
+  "iterationsTab": {
+    "heading": "Itérations · historique",
+    "count_one": "{{count}} itération",
+    "count_other": "{{count}} itérations",
+    "empty": "Aucune itération enregistrée.",
+    "emptyHint": "Lance une première série d'évals pour peupler l'historique."
+  },
   "filesTab": {
     "empty": "Aucun fichier dans ce skill.",
     "emptyFile": "Ce fichier est vide.",

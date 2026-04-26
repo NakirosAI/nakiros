@@ -6,6 +6,8 @@ import { PreferencesProvider } from '../../hooks/usePreferences';
 import { ProjectProvider } from '../../hooks/useProject';
 import Home from '../../views/Home';
 import ProjectOverviewScreen from '../../views/ProjectOverviewScreen';
+import SkillsScreen from '../../views/SkillsScreen';
+import SkillDetailScreen from '../../views/SkillDetailScreen';
 import NewShellTopBar from './NewShellTopBar';
 import NewShellSidebar from './NewShellSidebar';
 
@@ -101,7 +103,11 @@ export default function NewShell({
             );
           }
           const view: ProjectTabView = tab.view ?? 'overview';
-          const setView = (next: ProjectTabView) => updateTab(tab.id, { view: next });
+          // Always clear `skillId` when navigating to a different sub-view so
+          // the skill detail doesn't survive a sidebar switch and pollute the
+          // next view's render.
+          const setView = (next: ProjectTabView) =>
+            updateTab(tab.id, { view: next, skillId: null });
           return (
             <PreferencesProvider
               preferences={preferences}
@@ -126,7 +132,22 @@ export default function NewShell({
                   {view === 'overview' && (
                     <ProjectOverviewScreen key={project.id} project={project} />
                   )}
-                  {view !== 'overview' && (
+                  {view === 'skills' && !tab.skillId && (
+                    <SkillsScreen
+                      key={project.id}
+                      project={project}
+                      onOpenSkill={(skillName) => updateTab(tab.id, { skillId: skillName })}
+                    />
+                  )}
+                  {view === 'skills' && tab.skillId && (
+                    <SkillDetailScreen
+                      key={`${project.id}/${tab.skillId}`}
+                      project={project}
+                      skillName={tab.skillId}
+                      onBack={() => updateTab(tab.id, { skillId: null })}
+                    />
+                  )}
+                  {view !== 'overview' && view !== 'skills' && (
                     <ComingSoon view={view} onBack={() => setView('overview')} />
                   )}
                 </section>

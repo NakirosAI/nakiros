@@ -33,7 +33,7 @@ interface NewShellSidebarProps {
 export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarProps) {
   const items: SidebarItem[] = [
     { id: 'overview', label: 'Overview', icon: <Home size={18} strokeWidth={2} />, disabled: false },
-    { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: true, comingIn: 'Phase 3' },
+    { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false },
     { id: 'convs', label: 'Conversations', icon: <MessageSquare size={18} strokeWidth={2} />, disabled: true, comingIn: 'Phase 5' },
     { id: 'recs', label: 'Recommendations', icon: <Lightbulb size={18} strokeWidth={2} />, disabled: true, comingIn: 'Phase 5' },
   ];

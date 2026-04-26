@@ -1,4 +1,22 @@
 {
+  "skillsTitle": "Skills",
+  "skillsCount_one": "{{count}} skill",
+  "skillsCount_other": "{{count}} skills",
+  "searchPlaceholder": "Search skills…",
+  "noMatch": "No skill matches your search.",
+  "emptyState": "This project has no skill yet.",
+  "back": "Back",
+  "notFound": "Skill not found",
+  "runAudit": "Audit",
+  "runFix": "Fix",
+  "auditTab": {
+    "empty": "No audit has been recorded for this skill yet.",
+    "emptyReport": "This audit report is empty.",
+    "title": "Audit —",
+    "file": "File:",
+    "scoreLabel": "score",
+    "fixFromAudit": "Fix from this audit"
+  },
   "loading": "Loading skills…",
   "heading": "Skills ({{count}})",
   "newSkill": "New skill",

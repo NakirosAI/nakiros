@@ -33,6 +33,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Fast guard — catches things like hardcoded IPC channel literals
+      # (`invoke('eval:start', …)`) before the slower typecheck/build steps.
+      - name: Lint
+        run: pnpm lint
+
       # @nakiros/shared is a workspace package exported from dist/. The
       # consumer typechecks can't resolve it until it has been built.
       - name: Build workspace packages

@@ -18,7 +18,9 @@ Communication runs over two channels:
 Every channel name flows through `IPC_CHANNELS` from `@nakiros/shared` —
 no hardcoded channel string literals (`CLAUDE.md` mandate). The internal
 `invoke()` and `subscribe()` helpers take `IpcChannel` instead of `string`
-so a typo is a compile-time error.
+so a typo is a compile-time error, and an ESLint `no-restricted-syntax`
+guard at the monorepo root forbids passing a string literal as the first
+argument of either function.
 
 The exposed surface is intentionally `unknown`-typed at the implementation
 side — strict types live in `apps/frontend/src/global.d.ts` and are

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import HBar from '../viz/HBar';
+import Sparkline from '../viz/Sparkline';
 
 /*
  * Dev-only sandbox for the new-design OKLch token set introduced in the
@@ -242,6 +244,35 @@ export default function TokenSandbox() {
           </div>
         </Section>
 
+        <Section title="Viz primitives (PR3a)">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-n-md border border-n-border-default bg-n-surface p-4">
+              <div className="mb-2 font-n-mono text-xs uppercase tracking-wide text-n-subtle">
+                Sparkline
+              </div>
+              <div className="space-y-3">
+                <SparklineSwatch label="rising" data={[2, 4, 3, 6, 5, 8, 12]} />
+                <SparklineSwatch label="falling" data={[12, 10, 11, 7, 6, 4, 3]} />
+                <SparklineSwatch label="flat" data={[5, 5, 5, 5, 5]} stroke="var(--n-fg-muted)" fill="oklch(0.96 0.005 240 / 0.05)" />
+                <SparklineSwatch label="watch" data={[3, 5, 4, 7, 9, 8, 11]} stroke="var(--n-watch)" fill="var(--n-watch-soft)" />
+                <SparklineSwatch label="critical, dot" data={[8, 6, 9, 4, 7, 3, 2]} stroke="var(--n-critical)" fill="var(--n-critical-soft)" dot />
+              </div>
+            </div>
+            <div className="rounded-n-md border border-n-border-default bg-n-surface p-4">
+              <div className="mb-2 font-n-mono text-xs uppercase tracking-wide text-n-subtle">
+                HBar
+              </div>
+              <div className="space-y-3">
+                <HBarSwatch label="20% accent" value={20} max={100} />
+                <HBarSwatch label="60% healthy" value={60} max={100} color="var(--n-healthy)" />
+                <HBarSwatch label="85% watch, h=6" value={85} max={100} color="var(--n-watch)" height={6} />
+                <HBarSwatch label="100% critical" value={100} max={100} color="var(--n-critical)" />
+                <HBarSwatch label="0%" value={0} max={100} />
+              </div>
+            </div>
+          </div>
+        </Section>
+
         <Section title="Animations">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 rounded-n-md border border-n-border-default bg-n-surface px-3 py-2 text-sm text-n-muted">
@@ -269,6 +300,53 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Grid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">{children}</div>;
+}
+
+function SparklineSwatch({
+  label,
+  data,
+  stroke,
+  fill,
+  dot,
+}: {
+  label: string;
+  data: number[];
+  stroke?: string;
+  fill?: string;
+  dot?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="font-n-mono text-[11px] text-n-muted">{label}</span>
+      <Sparkline data={data} stroke={stroke} fill={fill} dot={dot} />
+    </div>
+  );
+}
+
+function HBarSwatch({
+  label,
+  value,
+  max,
+  color,
+  height,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color?: string;
+  height?: number;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <span className="font-n-mono text-[11px] text-n-muted">{label}</span>
+        <span className="font-n-mono text-[10.5px] tabular-nums text-n-faint">
+          {value}/{max}
+        </span>
+      </div>
+      <HBar value={value} max={max} color={color} height={height} />
+    </div>
+  );
 }
 
 function Swatch({ label, cls }: { label: string; cls: string }) {

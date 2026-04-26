@@ -8,6 +8,7 @@ import HomeScreen from '../../views/HomeScreen';
 import ProjectOverviewScreen from '../../views/ProjectOverviewScreen';
 import SkillsScreen from '../../views/SkillsScreen';
 import SkillDetailScreen from '../../views/SkillDetailScreen';
+import type { SkillTabIdentity } from '../../hooks/useTabs';
 import NewShellTopBar from './NewShellTopBar';
 import NewShellSidebar from './NewShellSidebar';
 
@@ -65,6 +66,16 @@ export default function NewShell({
     openTab({ kind: 'run', runId: run.id, label: run.title });
   };
 
+  /**
+   * Opens a skill detail tab for any cross-scope skill (global,
+   * plugin, nakiros bundled). Project-scoped skills still go through
+   * the in-project sidebar instead of a standalone tab so the
+   * existing layout doesn't change.
+   */
+  const handleOpenSkillTab = (identity: SkillTabIdentity, label: string) => {
+    openTab({ kind: 'skill', identity, label });
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-n-canvas font-n-sans text-n-fg">
       <NewShellTopBar
@@ -84,6 +95,7 @@ export default function NewShell({
             onOpenProject={handleOpenProject}
             onRescan={onRescan}
             onDismissProject={onDismissProject}
+            onOpenSkillTab={handleOpenSkillTab}
           />
         )}
 
@@ -137,8 +149,11 @@ export default function NewShell({
                   {view === 'skills' && tab.skillId && (
                     <SkillDetailScreen
                       key={`${project.id}/${tab.skillId}`}
-                      project={project}
-                      skillName={tab.skillId}
+                      identity={{
+                        scope: 'project',
+                        projectId: project.id,
+                        skillName: tab.skillId,
+                      }}
                       onBack={() => updateTab(tab.id, { skillId: null })}
                     />
                   )}
@@ -158,6 +173,13 @@ export default function NewShell({
               <span className="font-n-mono text-n-subtle">runId={activeTab.runId}</span>
             </div>
           </div>
+        )}
+
+        {activeTab.kind === 'skill' && (
+          <SkillDetailScreen
+            key={`skilltab/${activeTab.id}`}
+            identity={activeTab.identity}
+          />
         )}
       </main>
     </div>

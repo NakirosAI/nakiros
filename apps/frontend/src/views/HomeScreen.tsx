@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { ConversationAnalysis, Project, Skill } from '@nakiros/shared';
+import type { SkillTabIdentity } from '../hooks/useTabs';
 
 interface HomeScreenProps {
   /** Projects loaded by App.tsx at boot — cheap pre-render data. */
@@ -24,9 +25,11 @@ interface HomeScreenProps {
   /** Triggered by per-project dismiss action — currently unused but kept
    *  for parity with the legacy `Home` API. */
   onDismissProject(projectId: string): Promise<void>;
+  /** Opens a non-project skill in a dedicated `kind: 'skill'` tab. */
+  onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
 }
 
-type HomeTabKey = 'projects' | 'plugins' | 'globals';
+type HomeTabKey = 'projects' | 'plugins' | 'globals' | 'nakiros';
 
 /**
  * New-design Home screen — port of `screens-home.jsx` from the
@@ -51,6 +54,7 @@ export default function HomeScreen({
   bootError,
   onOpenProject,
   onRescan,
+  onOpenSkillTab,
 }: HomeScreenProps) {
   const { t } = useTranslation('home');
   const [tab, setTab] = useState<HomeTabKey>('projects');
@@ -60,6 +64,8 @@ export default function HomeScreen({
   const [pluginsError, setPluginsError] = useState<string | null>(null);
   const [globalSkills, setGlobalSkills] = useState<Skill[] | null>(null);
   const [globalsError, setGlobalsError] = useState<string | null>(null);
+  const [bundledSkills, setBundledSkills] = useState<Skill[] | null>(null);
+  const [bundledError, setBundledError] = useState<string | null>(null);
 
   // Lazy-load the secondary tabs the first time the user opens them
   // so the projects tab paints fast on boot.
@@ -99,6 +105,24 @@ export default function HomeScreen({
     };
   }, [tab, globalSkills]);
 
+  useEffect(() => {
+    if (tab !== 'nakiros' || bundledSkills !== null) return;
+    let cancelled = false;
+    window.nakiros
+      .listBundledSkills()
+      .then((skills) => {
+        if (cancelled) return;
+        setBundledSkills(skills);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setBundledError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, bundledSkills]);
+
   const tabs: Array<{ id: HomeTabKey; label: string; icon: React.ReactNode; count: number | null }> = [
     {
       id: 'projects',
@@ -117,6 +141,12 @@ export default function HomeScreen({
       label: t('tabs.globals', { defaultValue: 'Globals' }),
       icon: <Globe size={13} strokeWidth={2} />,
       count: globalSkills === null ? null : globalSkills.length,
+    },
+    {
+      id: 'nakiros',
+      label: t('tabs.nakiros', { defaultValue: 'Nakiros' }),
+      icon: <Layers size={13} strokeWidth={2} />,
+      count: bundledSkills === null ? null : bundledSkills.length,
     },
   ];
 
@@ -142,8 +172,8 @@ export default function HomeScreen({
         <div className="flex flex-shrink-0 gap-2">
           <button
             type="button"
-            disabled
-            className="inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-3 font-n-mono text-[12px] text-n-muted opacity-60"
+            onClick={() => setTab('nakiros')}
+            className="inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-3 font-n-mono text-[12px] text-n-muted hover:bg-n-raised hover:text-n-fg"
           >
             <Layers size={13} strokeWidth={2} />
             {t('hero.nakirosSkills', { defaultValue: 'Nakiros Skills' })}
@@ -201,10 +231,28 @@ export default function HomeScreen({
         <ProjectsTab projects={projects} search={search} onOpen={onOpenProject} />
       )}
       {tab === 'plugins' && (
-        <PluginsTab skills={pluginSkills} error={pluginsError} search={search} />
+        <PluginsTab
+          skills={pluginSkills}
+          error={pluginsError}
+          search={search}
+          onOpenSkillTab={onOpenSkillTab}
+        />
       )}
       {tab === 'globals' && (
-        <GlobalsTab skills={globalSkills} error={globalsError} search={search} />
+        <GlobalsTab
+          skills={globalSkills}
+          error={globalsError}
+          search={search}
+          onOpenSkillTab={onOpenSkillTab}
+        />
+      )}
+      {tab === 'nakiros' && (
+        <NakirosTab
+          skills={bundledSkills}
+          error={bundledError}
+          search={search}
+          onOpenSkillTab={onOpenSkillTab}
+        />
       )}
       </div>
     </div>
@@ -489,10 +537,12 @@ function PluginsTab({
   skills,
   error,
   search,
+  onOpenSkillTab,
 }: {
   skills: Skill[] | null;
   error: string | null;
   search: string;
+  onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
 }) {
   const { t } = useTranslation('home');
 
@@ -548,39 +598,80 @@ function PluginsTab({
   return (
     <div className="grid gap-2">
       {filtered.map((group) => (
-        <PluginRow key={`${group.marketplaceName}::${group.pluginName}`} group={group} />
+        <PluginRow
+          key={`${group.marketplaceName}::${group.pluginName}`}
+          group={group}
+          onOpenSkillTab={onOpenSkillTab}
+        />
       ))}
     </div>
   );
 }
 
-function PluginRow({ group }: { group: PluginGroup }) {
+function PluginRow({
+  group,
+  onOpenSkillTab,
+}: {
+  group: PluginGroup;
+  onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
+}) {
   const totalAudits = group.skills.reduce((acc, s) => acc + s.auditCount, 0);
   const totalEvals = group.skills.reduce((acc, s) => acc + (s.evals?.definitions.length ?? 0), 0);
   return (
-    <div className="flex items-center gap-3.5 rounded-n-md border border-n-border-subtle bg-n-surface px-4 py-3">
-      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-n-sm bg-n-sunken">
-        <Plug size={13} strokeWidth={2} className="text-n-accent" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate font-n-mono text-[13px] text-n-fg">{group.pluginName}</span>
-          {group.marketplaceName && (
-            <span className="font-n-mono text-[10.5px] text-n-faint">
-              · {group.marketplaceName}
-            </span>
-          )}
+    <div className="overflow-hidden rounded-n-md border border-n-border-subtle bg-n-surface">
+      {/* Plugin header */}
+      <div className="flex items-center gap-3.5 border-b border-n-border-subtle px-4 py-2.5">
+        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-n-sm bg-n-sunken">
+          <Plug size={13} strokeWidth={2} className="text-n-accent" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-n-mono text-[13px] text-n-fg">{group.pluginName}</span>
+            {group.marketplaceName && (
+              <span className="font-n-mono text-[10.5px] text-n-faint">
+                · {group.marketplaceName}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 font-n-mono text-[11px] text-n-subtle">
+            {group.skills.length} skill{group.skills.length > 1 ? 's' : ''}
+            {totalEvals > 0 && <> · {totalEvals} evals</>}
+            {totalAudits > 0 && <> · {totalAudits} audits</>}
+          </div>
         </div>
-        <div className="mt-0.5 font-n-mono text-[11px] text-n-subtle">
-          {group.skills.length} skill{group.skills.length > 1 ? 's' : ''}
-          {totalEvals > 0 && <> · {totalEvals} evals</>}
-          {totalAudits > 0 && <> · {totalAudits} audits</>}
-        </div>
+        <span className="inline-flex items-center gap-1.5 font-n-mono text-[10.5px] text-n-healthy">
+          <span className="h-1.5 w-1.5 rounded-full bg-n-healthy" />
+          enabled
+        </span>
       </div>
-      <span className="inline-flex items-center gap-1.5 font-n-mono text-[10.5px] text-n-healthy">
-        <span className="h-1.5 w-1.5 rounded-full bg-n-healthy" />
-        enabled
-      </span>
+
+      {/* Skills list (clickable) */}
+      <div className="divide-y divide-n-border-subtle">
+        {group.skills.map((skill) => (
+          <button
+            key={skill.name}
+            type="button"
+            onClick={() =>
+              onOpenSkillTab(
+                {
+                  scope: 'plugin',
+                  marketplaceName: group.marketplaceName ?? '',
+                  pluginName: group.pluginName,
+                  skillName: skill.name,
+                },
+                skill.name,
+              )
+            }
+            className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-n-raised"
+          >
+            <Sparkles size={11} strokeWidth={2} className="flex-shrink-0 text-n-accent" />
+            <span className="truncate font-n-mono text-[12px] text-n-fg">{skill.name}</span>
+            <span className="flex-1" />
+            <SkillScoreBadge skill={skill} />
+            <ChevronRight size={12} strokeWidth={2} className="text-n-faint" />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -591,10 +682,12 @@ function GlobalsTab({
   skills,
   error,
   search,
+  onOpenSkillTab,
 }: {
   skills: Skill[] | null;
   error: string | null;
   search: string;
+  onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
 }) {
   const { t } = useTranslation('home');
 
@@ -638,45 +731,152 @@ function GlobalsTab({
       </SectionLabel>
       <div className="grid gap-1.5">
         {filtered.map((skill) => (
-          <GlobalRow key={skill.name} skill={skill} />
+          <GlobalRow key={skill.name} skill={skill} onOpenSkillTab={onOpenSkillTab} />
         ))}
       </div>
     </div>
   );
 }
 
-function GlobalRow({ skill }: { skill: Skill }) {
-  const latest = skill.evals?.latestPassRate;
-  const score = typeof latest === 'number' ? Math.round(latest * 100) : null;
-  const scoreTone =
-    score === null
-      ? 'var(--n-fg-faint)'
-      : score >= 85
-        ? 'var(--n-healthy)'
-        : score >= 70
-          ? 'var(--n-accent)'
-          : 'var(--n-watch)';
+function GlobalRow({
+  skill,
+  onOpenSkillTab,
+}: {
+  skill: Skill;
+  onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
+}) {
   return (
-    <div className="flex items-center gap-3.5 rounded-n-md border border-n-border-subtle bg-n-surface px-3.5 py-2.5">
+    <button
+      type="button"
+      onClick={() =>
+        onOpenSkillTab({ scope: 'claude-global', skillName: skill.name }, skill.name)
+      }
+      className="flex w-full items-center gap-3.5 rounded-n-md border border-n-border-subtle bg-n-surface px-3.5 py-2.5 text-left transition-colors hover:bg-n-raised"
+    >
       <Sparkles size={13} strokeWidth={2.25} className="text-n-accent" />
       <span className="font-n-mono text-[13px] font-medium text-n-fg">{skill.name}</span>
       <span className="flex-1" />
       <span className="truncate font-n-mono text-[11px] text-n-faint" title={skill.skillPath}>
         {skill.skillPath}
       </span>
-      {score !== null && (
-        <span
-          className="inline-flex items-center rounded-n-xs border px-1.5 py-0.5 font-n-mono text-[10.5px] tabular-nums"
-          style={{
-            background: `${scoreTone}14`,
-            color: scoreTone,
-            borderColor: `${scoreTone}33`,
-          }}
-        >
-          {score}
-        </span>
-      )}
+      <SkillScoreBadge skill={skill} />
+      <ChevronRight size={12} strokeWidth={2} className="text-n-faint" />
+    </button>
+  );
+}
+
+// ── Nakiros bundled skills tab ─────────────────────────────────────────────
+
+function NakirosTab({
+  skills,
+  error,
+  search,
+  onOpenSkillTab,
+}: {
+  skills: Skill[] | null;
+  error: string | null;
+  search: string;
+  onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
+}) {
+  const { t } = useTranslation('home');
+
+  const filtered = useMemo(() => {
+    if (!skills) return [];
+    if (!search.trim()) return skills;
+    const q = search.toLowerCase();
+    return skills.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.skillPath.toLowerCase().includes(q),
+    );
+  }, [skills, search]);
+
+  if (error) {
+    return (
+      <div className="rounded-n-md border border-n-critical bg-n-critical-soft px-3 py-2 font-n-mono text-[12px] text-n-critical">
+        {error}
+      </div>
+    );
+  }
+
+  if (skills === null) {
+    return <LoadingState text={t('common:loading', { defaultValue: 'Loading…' })} />;
+  }
+
+  if (skills.length === 0) {
+    return (
+      <EmptyCard
+        text={t('nakirosTab.empty', { defaultValue: 'No bundled skill installed.' })}
+      />
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <EmptyCard text={t('nakirosTab.noMatch', { defaultValue: 'No bundled skill matches your search.' })} />
+    );
+  }
+
+  return (
+    <div>
+      <SectionLabel>
+        {t('nakirosTab.heading', { defaultValue: 'Skills bundled with Nakiros' })}
+      </SectionLabel>
+      <div className="grid gap-1.5">
+        {filtered.map((skill) => (
+          <BundledRow key={skill.name} skill={skill} onOpenSkillTab={onOpenSkillTab} />
+        ))}
+      </div>
     </div>
+  );
+}
+
+function BundledRow({
+  skill,
+  onOpenSkillTab,
+}: {
+  skill: Skill;
+  onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onOpenSkillTab({ scope: 'nakiros-bundled', skillName: skill.name }, skill.name)
+      }
+      className="flex w-full items-center gap-3.5 rounded-n-md border border-n-border-subtle bg-n-surface px-3.5 py-2.5 text-left transition-colors hover:bg-n-raised"
+    >
+      <Layers size={13} strokeWidth={2.25} className="text-n-violet" />
+      <span className="font-n-mono text-[13px] font-medium text-n-fg">{skill.name}</span>
+      <span className="flex-1" />
+      <span className="truncate font-n-mono text-[11px] text-n-faint" title={skill.skillPath}>
+        {skill.skillPath}
+      </span>
+      <SkillScoreBadge skill={skill} />
+      <ChevronRight size={12} strokeWidth={2} className="text-n-faint" />
+    </button>
+  );
+}
+
+function SkillScoreBadge({ skill }: { skill: Skill }) {
+  const latest = skill.evals?.latestPassRate;
+  const score = typeof latest === 'number' ? Math.round(latest * 100) : null;
+  if (score === null) return null;
+  const tone =
+    score >= 85
+      ? 'var(--n-healthy)'
+      : score >= 70
+        ? 'var(--n-accent)'
+        : 'var(--n-watch)';
+  return (
+    <span
+      className="inline-flex items-center rounded-n-xs border px-1.5 py-0.5 font-n-mono text-[10.5px] tabular-nums"
+      style={{
+        background: `${tone}14`,
+        color: tone,
+        borderColor: `${tone}33`,
+      }}
+    >
+      {score}
+    </span>
   );
 }
 

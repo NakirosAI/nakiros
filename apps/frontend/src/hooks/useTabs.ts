@@ -46,13 +46,34 @@ interface RunTab {
   label: string;
 }
 
-export type Tab = HomeTab | ProjectTab | RunTab;
+/**
+ * Identity of a skill across every supported scope. Mirrors the
+ * `SkillScope` discriminator used by the daemon's skill-related
+ * IPC channels, with the extra fields the underlying lookup needs
+ * (projectId / pluginName / marketplaceName).
+ */
+export type SkillTabIdentity =
+  | { scope: 'project'; projectId: string; skillName: string }
+  | { scope: 'claude-global'; skillName: string }
+  | { scope: 'plugin'; marketplaceName: string; pluginName: string; skillName: string }
+  | { scope: 'nakiros-bundled'; skillName: string };
+
+interface SkillTab {
+  id: string;
+  kind: 'skill';
+  /** Discriminated identity used to look the skill up + read its files. */
+  identity: SkillTabIdentity;
+  label: string;
+}
+
+export type Tab = HomeTab | ProjectTab | RunTab | SkillTab;
 
 /** Args accepted by {@link UseTabsApi.openTab}. The id is generated. */
 export type OpenTabInput =
   | Omit<HomeTab, 'id'>
   | Omit<ProjectTab, 'id'>
-  | Omit<RunTab, 'id'>;
+  | Omit<RunTab, 'id'>
+  | Omit<SkillTab, 'id'>;
 
 interface UseTabsApi {
   tabs: Tab[];
@@ -86,6 +107,21 @@ function newId(): string {
   return 't' + Math.random().toString(36).slice(2, 7);
 }
 
+/**
+ * Two skill tabs are considered "the same" when they point at the
+ * same skill in the same scope (and same plugin/project/marketplace
+ * keys). Used by `useTabs.openTab` to dedupe.
+ */
+function sameSkillIdentity(a: SkillTabIdentity, b: SkillTabIdentity): boolean {
+  if (a.scope !== b.scope) return false;
+  if (a.skillName !== b.skillName) return false;
+  if (a.scope === 'project' && b.scope === 'project') return a.projectId === b.projectId;
+  if (a.scope === 'plugin' && b.scope === 'plugin') {
+    return a.marketplaceName === b.marketplaceName && a.pluginName === b.pluginName;
+  }
+  return true;
+}
+
 function makeHomeTab(): Tab {
   return { id: newId(), kind: 'home', label: 'Home' };
 }
@@ -116,6 +152,14 @@ export function useTabs(initial?: Tab[]): UseTabsApi {
       } else if (input.kind === 'run') {
         const existing = prev.find(
           (t): t is RunTab => t.kind === 'run' && t.runId === input.runId,
+        );
+        if (existing) {
+          focusedId = existing.id;
+          return prev;
+        }
+      } else if (input.kind === 'skill') {
+        const existing = prev.find(
+          (t): t is SkillTab => t.kind === 'skill' && sameSkillIdentity(t.identity, input.identity),
         );
         if (existing) {
           focusedId = existing.id;

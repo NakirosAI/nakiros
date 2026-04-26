@@ -10,10 +10,12 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import type { Skill, SkillFileEntry } from '@nakiros/shared';
+import type { SkillTabIdentity } from '../../hooks/useTabs';
+import { readSkillFileByIdentity } from '../../lib/skill-identity';
 
 interface SkillFilesTabProps {
-  /** Project owning the skill — needed to call `readSkillFile`. */
-  projectId: string;
+  /** Cross-scope identity used to dispatch the `readSkillFile*` IPC. */
+  identity: SkillTabIdentity;
   /** The skill currently displayed in the detail screen. */
   skill: Skill;
 }
@@ -36,7 +38,7 @@ interface SkillFilesTabProps {
  * it either). The Save/Edit button can come back in a follow-up if
  * needed.
  */
-export default function SkillFilesTab({ projectId, skill }: SkillFilesTabProps) {
+export default function SkillFilesTab({ identity, skill }: SkillFilesTabProps) {
   const { t } = useTranslation('skills');
 
   const initialPath = useMemo(() => firstPreviewablePath(skill.files), [skill.files]);
@@ -61,7 +63,7 @@ export default function SkillFilesTab({ projectId, skill }: SkillFilesTabProps) 
         {selectedPath === null ? (
           <EmptyPreview text={t('filesTab.pickAFile', { defaultValue: 'Select a file to preview' })} />
         ) : (
-          <FilePreview projectId={projectId} skillName={skill.name} path={selectedPath} />
+          <FilePreview identity={identity} path={selectedPath} />
         )}
       </section>
     </div>
@@ -166,12 +168,10 @@ function TreeNode({
 // ── Preview ────────────────────────────────────────────────────────────────
 
 function FilePreview({
-  projectId,
-  skillName,
+  identity,
   path,
 }: {
-  projectId: string;
-  skillName: string;
+  identity: SkillTabIdentity;
   path: string;
 }) {
   const { t } = useTranslation('skills');
@@ -184,8 +184,7 @@ function FilePreview({
     setLoading(true);
     setError(null);
     setContent(null);
-    window.nakiros
-      .readSkillFile(projectId, skillName, path)
+    readSkillFileByIdentity(identity, path)
       .then((data) => {
         if (cancelled) return;
         setContent(typeof data === 'string' ? data : '');
@@ -200,7 +199,15 @@ function FilePreview({
     return () => {
       cancelled = true;
     };
-  }, [projectId, skillName, path]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    identity.scope,
+    identity.skillName,
+    identity.scope === 'project' ? identity.projectId : '',
+    identity.scope === 'plugin' ? identity.marketplaceName : '',
+    identity.scope === 'plugin' ? identity.pluginName : '',
+    path,
+  ]);
 
   const isMarkdown = path.toLowerCase().endsWith('.md');
   const isImage = isImagePath(path);

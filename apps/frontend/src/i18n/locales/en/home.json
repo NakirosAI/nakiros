@@ -31,7 +31,8 @@
   "tabs": {
     "projects": "Projects",
     "plugins": "Plugins",
-    "globals": "Globals"
+    "globals": "Globals",
+    "nakiros": "Nakiros"
   },
   "searchPlaceholder": "Search projects, skills, paths…",
   "projectsTab": {
@@ -49,5 +50,10 @@
     "heading": "Skills installed at ~/.claude/skills",
     "empty": "No skill installed in ~/.claude/skills.",
     "noMatch": "No global matches your search."
+  },
+  "nakirosTab": {
+    "heading": "Skills bundled with Nakiros",
+    "empty": "No bundled skill installed.",
+    "noMatch": "No bundled skill matches your search."
   }
 }

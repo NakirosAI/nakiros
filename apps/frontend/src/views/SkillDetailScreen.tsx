@@ -11,21 +11,26 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
-import type { AuditHistoryEntry, Project, Skill } from '@nakiros/shared';
+import type { AuditHistoryEntry, Skill } from '@nakiros/shared';
 import ScoreRing from '../components/viz/ScoreRing';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
 import EvalMatrixGrid from '../components/skill/EvalMatrixGrid';
 import SkillFilesTab from '../components/skill/SkillFilesTab';
 import SkillIterationsTab from '../components/skill/SkillIterationsTab';
+import type { SkillTabIdentity } from '../hooks/useTabs';
+import {
+  auditHistoryRequestForIdentity,
+  evalMatrixRequestForIdentity,
+  loadSkillByIdentity,
+} from '../lib/skill-identity';
 
 interface Props {
-  /** Project owning the skill. */
-  project: Project;
-  /** Folder name of the skill (matches `Skill.name`). */
-  skillName: string;
-  /** Activated when the user hits "Back" — returns to the skills list. */
-  onBack(): void;
+  /** Cross-scope identity of the skill — drives every IPC call. */
+  identity: SkillTabIdentity;
+  /** Optional Back action — when omitted (e.g. when the screen is
+   *  hosted in its own tab) the breadcrumb hides the button. */
+  onBack?(): void;
 }
 
 type SkillTab = 'audit' | 'evals' | 'fix' | 'files' | 'iters';
@@ -53,21 +58,23 @@ interface AuditScore {
  * fragile. We surface the score via a best-effort regex on the
  * Markdown so the ScoreRing has something to display when present.
  */
-export default function SkillDetailScreen({ project, skillName, onBack }: Props) {
+export default function SkillDetailScreen({ identity, onBack }: Props) {
   const { t } = useTranslation('skills');
   const [skill, setSkill] = useState<Skill | null>(null);
   const [skillError, setSkillError] = useState<string | null>(null);
   const [tab, setTab] = useState<SkillTab>('audit');
 
+  // Re-key the load on every identity field that matters so opening
+  // the screen on a different skill triggers a fresh fetch.
+  const identityKey = identityKeyOf(identity);
+
   useEffect(() => {
     let cancelled = false;
     setSkill(null);
     setSkillError(null);
-    window.nakiros
-      .listProjectSkills(project.id)
-      .then((list) => {
+    loadSkillByIdentity(identity)
+      .then((found) => {
         if (cancelled) return;
-        const found = list.find((s) => s.name === skillName);
         if (!found) {
           setSkillError(t('notFound', { defaultValue: 'Skill not found' }));
           return;
@@ -81,24 +88,35 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
     return () => {
       cancelled = true;
     };
-  }, [project.id, skillName, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identityKey, t]);
+
+  const evalRequest = useMemo(() => evalMatrixRequestForIdentity(identity), [identityKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const breadcrumbPath = skill?.skillPath ?? '';
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden font-n-sans">
       {/* Breadcrumb header */}
       <div className="flex flex-wrap items-center gap-3.5 border-b border-n-border-subtle px-7 py-3.5">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 bg-transparent text-[12.5px] text-n-muted hover:text-n-fg"
-        >
-          <ArrowLeft size={14} strokeWidth={2} /> {t('back', { defaultValue: 'Back' })}
-        </button>
-        <span className="h-3.5 w-px bg-n-border-subtle" />
+        {onBack && (
+          <>
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-1.5 bg-transparent text-[12.5px] text-n-muted hover:text-n-fg"
+            >
+              <ArrowLeft size={14} strokeWidth={2} /> {t('back', { defaultValue: 'Back' })}
+            </button>
+            <span className="h-3.5 w-px bg-n-border-subtle" />
+          </>
+        )}
         <Sparkles size={16} strokeWidth={2} className="text-n-accent" />
-        <strong className="font-n-mono text-[14px] font-medium text-n-fg">{skillName}</strong>
-        <span className="font-n-mono text-[11px] text-n-faint">
-          /{project.name}/.claude/skills/{skillName}
+        <strong className="font-n-mono text-[14px] font-medium text-n-fg">{identity.skillName}</strong>
+        <span
+          className="truncate font-n-mono text-[11px] text-n-faint"
+          title={breadcrumbPath}
+        >
+          {breadcrumbPath || scopeLabel(identity)}
         </span>
         <span className="flex-1" />
         <div className="flex gap-1.5">
@@ -139,17 +157,14 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
           </div>
         )}
         {!skillError && skill && tab === 'audit' && (
-          <AuditTab project={project} skill={skill} />
+          <AuditTab identity={identity} skill={skill} />
         )}
         {!skillError && skill && tab === 'evals' && (
-          <EvalMatrixGrid
-            skill={skill}
-            request={{ scope: 'project', projectId: project.id, skillName: skill.name }}
-          />
+          <EvalMatrixGrid skill={skill} request={evalRequest} />
         )}
         {!skillError && skill && tab === 'fix' && <FixTab />}
         {!skillError && skill && tab === 'files' && (
-          <SkillFilesTab projectId={project.id} skill={skill} />
+          <SkillFilesTab identity={identity} skill={skill} />
         )}
         {!skillError && skill && tab === 'iters' && <SkillIterationsTab skill={skill} />}
       </div>
@@ -203,7 +218,7 @@ function Tab({
 
 // ── Audit tab ──────────────────────────────────────────────────────────────
 
-function AuditTab({ project, skill }: { project: Project; skill: Skill }) {
+function AuditTab({ identity, skill }: { identity: SkillTabIdentity; skill: Skill }) {
   const { t } = useTranslation('skills');
   const [history, setHistory] = useState<AuditHistoryEntry[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -217,7 +232,7 @@ function AuditTab({ project, skill }: { project: Project; skill: Skill }) {
     setHistory(null);
     setHistoryError(null);
     window.nakiros
-      .listAuditHistory({ scope: 'project', projectId: project.id, skillName: skill.name })
+      .listAuditHistory(auditHistoryRequestForIdentity(identity))
       .then((entries) => {
         if (cancelled) return;
         setHistory(entries);
@@ -230,7 +245,7 @@ function AuditTab({ project, skill }: { project: Project; skill: Skill }) {
     return () => {
       cancelled = true;
     };
-  }, [project.id, skill.name]);
+  }, [identityKeyOf(identity)]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Read the selected report.
   useEffect(() => {
@@ -301,7 +316,7 @@ function AuditTab({ project, skill }: { project: Project; skill: Skill }) {
             </div>
             <div className="mt-1.5 text-[12px] text-n-subtle">
               {t('auditTab.file', { defaultValue: 'File:' })}{' '}
-              <span className="font-n-mono">.claude/skills/{skill.name}/SKILL.md</span>
+              <span className="font-n-mono">{skill.skillPath}/SKILL.md</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -410,6 +425,36 @@ function FixTab() {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/** Stable string key derived from a `SkillTabIdentity` — used as a
+ *  dependency value in `useEffect` so we re-run on identity change. */
+function identityKeyOf(identity: SkillTabIdentity): string {
+  switch (identity.scope) {
+    case 'project':
+      return `project:${identity.projectId}:${identity.skillName}`;
+    case 'plugin':
+      return `plugin:${identity.marketplaceName}:${identity.pluginName}:${identity.skillName}`;
+    case 'claude-global':
+      return `claude-global:${identity.skillName}`;
+    case 'nakiros-bundled':
+      return `nakiros-bundled:${identity.skillName}`;
+  }
+}
+
+/** Short human label for the breadcrumb when `skill.skillPath` is
+ *  not yet loaded (ex: 'global skill', 'plugin · stripe/charge'). */
+function scopeLabel(identity: SkillTabIdentity): string {
+  switch (identity.scope) {
+    case 'project':
+      return 'project skill';
+    case 'claude-global':
+      return 'global skill';
+    case 'plugin':
+      return `plugin · ${identity.marketplaceName}/${identity.pluginName}`;
+    case 'nakiros-bundled':
+      return 'nakiros bundled';
+  }
+}
 
 /**
  * Best-effort score extraction from an audit Markdown report. Looks

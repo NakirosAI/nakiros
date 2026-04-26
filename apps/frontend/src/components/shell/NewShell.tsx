@@ -4,7 +4,7 @@ import type { AgentRun, AppPreferences, Project } from '@nakiros/shared';
 import { useTabs, type ProjectTabView, type Tab } from '../../hooks/useTabs';
 import { PreferencesProvider } from '../../hooks/usePreferences';
 import { ProjectProvider } from '../../hooks/useProject';
-import Home from '../../views/Home';
+import HomeScreen from '../../views/HomeScreen';
 import ProjectOverviewScreen from '../../views/ProjectOverviewScreen';
 import SkillsScreen from '../../views/SkillsScreen';
 import SkillDetailScreen from '../../views/SkillDetailScreen';
@@ -78,17 +78,12 @@ export default function NewShell({
       />
       <main className="flex flex-1 overflow-hidden">
         {activeTab.kind === 'home' && (
-          <Home
+          <HomeScreen
             projects={projects}
             bootError={bootError}
             onOpenProject={handleOpenProject}
             onRescan={onRescan}
             onDismissProject={onDismissProject}
-            // Skill catalog screens are folded into Home in Phase 6;
-            // until then these jumps are unavailable in the new shell.
-            onOpenNakirosSkills={() => undefined}
-            onOpenGlobalSkills={() => undefined}
-            onOpenPluginSkills={() => undefined}
           />
         )}
 

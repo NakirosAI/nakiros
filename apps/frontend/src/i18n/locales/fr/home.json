@@ -22,5 +22,32 @@
   "rescan": "Rescanner",
   "projects": "Projets",
   "dismiss": "Ignorer ce projet",
-  "noProjects": "Aucun projet Claude Code détecté. Lance un rescan ou commence à utiliser Claude Code."
+  "noProjects": "Aucun projet Claude Code détecté. Lance un rescan ou commence à utiliser Claude Code.",
+  "hero": {
+    "tagline": "Analyse, audite et améliore les skills qui pilotent tes agents Claude Code — entièrement sur ta machine.",
+    "nakirosSkills": "Nakiros Skills",
+    "rescan": "Rescanner"
+  },
+  "tabs": {
+    "projects": "Projets",
+    "plugins": "Plugins",
+    "globals": "Globaux"
+  },
+  "searchPlaceholder": "Rechercher projets, skills, chemins…",
+  "projectsTab": {
+    "heading": "Projets",
+    "found": "{{count}} trouvés",
+    "scannedFrom": "scanné depuis ~/.claude/projects",
+    "noMatch": "Aucun projet ne correspond à ta recherche.",
+    "empty": "Aucun projet scanné."
+  },
+  "pluginsTab": {
+    "empty": "Aucun skill plugin détecté.",
+    "noMatch": "Aucun plugin ne correspond à ta recherche."
+  },
+  "globalsTab": {
+    "heading": "Skills installés à ~/.claude/skills",
+    "empty": "Aucun skill installé dans ~/.claude/skills.",
+    "noMatch": "Aucun global ne correspond à ta recherche."
+  }
 }

@@ -22,5 +22,32 @@
   "rescan": "Rescan",
   "projects": "Projects",
   "dismiss": "Dismiss this project",
-  "noProjects": "No Claude Code project detected. Run a rescan or start using Claude Code."
+  "noProjects": "No Claude Code project detected. Run a rescan or start using Claude Code.",
+  "hero": {
+    "tagline": "Analyze, audit, and improve the skills powering your Claude Code agents — entirely on your machine.",
+    "nakirosSkills": "Nakiros Skills",
+    "rescan": "Rescan"
+  },
+  "tabs": {
+    "projects": "Projects",
+    "plugins": "Plugins",
+    "globals": "Globals"
+  },
+  "searchPlaceholder": "Search projects, skills, paths…",
+  "projectsTab": {
+    "heading": "Projects",
+    "found": "{{count}} found",
+    "scannedFrom": "scanned ~/.claude/projects",
+    "noMatch": "No project matches your search.",
+    "empty": "No project scanned yet."
+  },
+  "pluginsTab": {
+    "empty": "No plugin skill detected.",
+    "noMatch": "No plugin matches your search."
+  },
+  "globalsTab": {
+    "heading": "Skills installed at ~/.claude/skills",
+    "empty": "No skill installed in ~/.claude/skills.",
+    "noMatch": "No global matches your search."
+  }
 }

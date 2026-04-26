@@ -3,6 +3,9 @@
   "stop": "Stop",
   "finish": "Finish",
   "discard": "Discard",
+  "resume": "Reprendre",
+  "interruptedBadge": "Interrompu",
+  "interruptedTooltip": "Ce run a été coupé par un redémarrage du daemon. Clique sur Reprendre pour relancer la conversation.",
   "error": {
     "title": "Error"
   },

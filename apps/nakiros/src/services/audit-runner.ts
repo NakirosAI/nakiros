@@ -12,6 +12,7 @@ import type {
 import {
   cleanupRunWorkdir,
   createRunner,
+  encodeProjectPath,
   isActiveRunStatus,
   type RehydrateResult,
   type RunEntry,
@@ -69,6 +70,28 @@ function prepareWorkdir(skillDir: string, skillName: string, runId: string): str
   }
 
   return workdir;
+}
+
+/**
+ * True when the Claude session file backing this run still lives at the
+ * canonical `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` path. If
+ * the previous daemon (or a sweeping helper) wiped it, `--resume` would fail
+ * with "No conversation found with session ID …" — better to surface the run
+ * as `stopped` than offer a broken Reprendre button.
+ */
+function auditRunHasResumableSessionFile(blob: { sessionId?: string | null; workdir?: string }, workdir: string): boolean {
+  if (!blob.sessionId) {
+    console.log(`[audit-runner] Resume check: sessionId is null/missing — not resumable`);
+    return false;
+  }
+  if (!existsSync(workdir)) {
+    console.log(`[audit-runner] Resume check: workdir ${workdir} doesn't exist — not resumable`);
+    return false;
+  }
+  const sessionFile = join(homedir(), '.claude', 'projects', encodeProjectPath(workdir), `${blob.sessionId}.jsonl`);
+  const exists = existsSync(sessionFile);
+  console.log(`[audit-runner] Resume check: sessionFile=${sessionFile} → ${exists ? 'OK' : 'MISSING'}`);
+  return exists;
 }
 
 /**
@@ -163,13 +186,17 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     // Stopped/failed are genuinely disposable.
     if (blob.status === 'stopped' || blob.status === 'failed') return { kind: 'cleanup' };
 
-    // Running/starting with no sessionId → can't resume; drop.
-    if ((blob.status === 'starting' || blob.status === 'running') && !blob.sessionId) {
-      return { kind: 'cleanup' };
-    }
-
-    const restoredStatus: AuditRun['status'] =
-      blob.status === 'starting' || blob.status === 'running' ? 'waiting_for_input' : blob.status;
+    const wasActive = blob.status === 'starting' || blob.status === 'running';
+    // Running/starting WITHOUT sessionId — or WITH a sessionId whose Claude
+    // session file no longer lives on disk — can't be resumed via `--resume`.
+    // Collapse to `stopped` instead of wiping so the user still sees the
+    // partial conversation in the runs center and can dismiss when ready.
+    const canResume = !wasActive || auditRunHasResumableSessionFile(blob, workdir);
+    const restoredStatus: AuditRun['status'] = wasActive
+      ? canResume
+        ? 'waiting_for_input'
+        : 'stopped'
+      : blob.status;
 
     const restoredRun: AuditRun = {
       runId: blob.runId,
@@ -186,8 +213,19 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       tokensUsed: typeof blob.tokensUsed === 'number' ? blob.tokensUsed : 0,
       durationMs: typeof blob.durationMs === 'number' ? blob.durationMs : 0,
       startedAt: blob.startedAt ?? new Date().toISOString(),
-      finishedAt: blob.finishedAt ?? null,
+      finishedAt: restoredStatus === 'stopped' && wasActive
+        ? new Date().toISOString()
+        : (blob.finishedAt ?? null),
       error: blob.error ?? null,
+      // Surface the interruption to the UI when we collapsed an active run.
+      // A `waiting_for_input` that was already waiting on disk keeps its
+      // existing flag (preserved across reboots until the user resumes).
+      // The flag is only useful when the run is actually resumable — for
+      // `stopped` collapses (no sessionId), it stays false.
+      interruptedByReboot:
+        restoredStatus === 'waiting_for_input' && wasActive
+          ? true
+          : blob.interruptedByReboot,
     };
 
     console.log(`[audit-runner] Restored audit ${restoredRun.runId} for "${restoredRun.skillName}" (status=${restoredStatus})`);

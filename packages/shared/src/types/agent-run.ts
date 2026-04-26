@@ -6,7 +6,7 @@ import type { SkillScope } from './project.js';
  * on the frontend. New kinds (e.g. `analyze-convo`) extend this union without
  * changing the surrounding contract.
  */
-export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create';
+export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'analyze-convo';
 
 /**
  * Lifecycle status surfaced to the UI. Mapped from each runner's native
@@ -47,11 +47,21 @@ export interface SkillRunTarget {
 }
 
 /**
- * Discriminated union of every supported target shape. New target kinds
- * (e.g. `{ type: 'conversation'; conversationId: string; … }`) extend this
- * union when their corresponding agent-run kind ships.
+ * A conversation-bound target — used by the `analyze-convo` kind. Carries
+ * the project id + Claude Code session id so the runner can locate the JSONL
+ * and the frontend can deep-link back to the diagnostic view.
  */
-export type AgentRunTarget = SkillRunTarget;
+export interface ConversationRunTarget {
+  type: 'conversation';
+  projectId: string;
+  sessionId: string;
+}
+
+/**
+ * Discriminated union of every supported target shape. New target kinds
+ * extend this union when their corresponding agent-run kind ships.
+ */
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget;
 
 /**
  * Kind-specific opaque payload riding alongside an `AgentRun`. The store

@@ -68,12 +68,14 @@ export function useSkillsViewState(config: SkillsViewConfig) {
       const focus = agentRunFocus.consume();
       if (!focus) return;
       if (focus.target.type !== 'skill') return;
-      if (!config.matchesScope(focus.target)) {
+      // Bind the narrowed target so it survives the closure inside `find`.
+      const skillTarget = focus.target;
+      if (!config.matchesScope(skillTarget)) {
         // Wrong scope — push it back so the matching view can take it.
         agentRunFocus.set(focus);
         return;
       }
-      const match = skills.find((s) => config.keyOf(s) === config.keyOfRun(focus.target));
+      const match = skills.find((s) => config.keyOf(s) === config.keyOfRun(skillTarget));
       if (!match) return;
       setSelectedKey(config.keyOf(match));
 

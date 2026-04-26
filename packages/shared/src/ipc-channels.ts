@@ -147,6 +147,17 @@ export const IPC_CHANNELS = {
   // Draft files (shared by fix + create — reads from the run's temp workdir)
   'skillAgent:listTempFiles': 'skillAgent:listTempFiles',
   'skillAgent:readTempFile': 'skillAgent:readTempFile',
+
+  // Conversation deep-analysis runner (analyze-convo Run kind)
+  'analyzeConvo:start': 'analyzeConvo:start',
+  'analyzeConvo:stopRun': 'analyzeConvo:stopRun',
+  'analyzeConvo:getRun': 'analyzeConvo:getRun',
+  'analyzeConvo:sendUserMessage': 'analyzeConvo:sendUserMessage',
+  'analyzeConvo:finish': 'analyzeConvo:finish',
+  'analyzeConvo:event': 'analyzeConvo:event',
+  'analyzeConvo:listActive': 'analyzeConvo:listActive',
+  'analyzeConvo:listAll': 'analyzeConvo:listAll',
+  'analyzeConvo:getBufferedEvents': 'analyzeConvo:getBufferedEvents',
 } as const;
 
 /** Union of every IPC channel key declared in {@link IPC_CHANNELS}. */

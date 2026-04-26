@@ -32,6 +32,12 @@ interface Props {
    * (e.g. AuditView's tab switcher). Rendered after the actions.
    */
   extras?: ReactNode;
+  /**
+   * Optional slot rendered immediately after the status badge — used by
+   * callers to surface secondary badges such as `RunInterruptedBadge`
+   * without having to re-implement the header layout.
+   */
+  badgeExtras?: ReactNode;
 }
 
 /**
@@ -48,6 +54,7 @@ export function RunControlHeader({
   onBack,
   actions,
   extras,
+  badgeExtras,
 }: Props) {
   const { t } = useTranslation('runs');
   return (
@@ -62,6 +69,7 @@ export function RunControlHeader({
       {icon}
       <span className="text-sm font-semibold text-[var(--text-primary)]">{title}</span>
       <RunStatusBadge status={status} />
+      {badgeExtras}
 
       <div className="ml-auto flex items-center gap-3 text-xs text-[var(--text-muted)]">
         <span>{formatTokens(tokensUsed ?? 0, { unit: 'tok' })}</span>

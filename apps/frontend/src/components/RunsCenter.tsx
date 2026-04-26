@@ -277,6 +277,7 @@ const KIND_ICONS: Record<AgentRunKind, ComponentType<{ size?: number; className?
   eval: Sparkles,
   fix: Wrench,
   create: Sparkles,
+  'analyze-convo': Sparkles,
 };
 
 function KindIcon({ run }: { run: AgentRun }) {

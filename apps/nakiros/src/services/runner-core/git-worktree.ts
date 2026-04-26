@@ -223,7 +223,7 @@ function forceRemoveSandbox(path: string): void {
  * already saved its `diff.patch` to the artefact directory; an interrupted
  * one has nothing worth keeping.
  */
-export function sweepOrphanSandboxes(): { deleted: number } {
+export function sweepOrphanSandboxes(keep?: ReadonlySet<string>): { deleted: number } {
   if (!existsSync(SANDBOX_ROOT)) return { deleted: 0 };
   let entries: string[];
   try {
@@ -240,6 +240,10 @@ export function sweepOrphanSandboxes(): { deleted: number } {
     } catch {
       continue;
     }
+    // Preserve sandboxes that a rehydrated run still references — without this
+    // the user's "Reprendre" on a rebooted eval would `--resume` against a
+    // sandbox that's just been deleted, hitting "No conversation found".
+    if (keep && keep.has(p)) continue;
     destroyEvalSandbox(p);
     deleted++;
   }

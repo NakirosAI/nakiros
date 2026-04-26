@@ -27,6 +27,7 @@ import {
   createTypedHandler,
   getRunOrThrow,
   resolveSkillDirForRun,
+  withBroadcastOnError,
 } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
@@ -58,46 +59,70 @@ export const fixHandlers: HandlerRegistry = {
     return startFix(request, { skillDir, onEvent: broadcastFixEvent });
   }),
 
-  'fix:stopRun': createTypedHandler(stopFix),
+  'fix:stopRun': createTypedHandler(
+    withBroadcastOnError('fix:event', stopFix, (runId: string) => runId),
+  ),
 
   'fix:getRun': createTypedHandler(getFixRun),
 
-  'fix:sendUserMessage': createTypedHandler(async (runId: string, message: string) => {
-    const run = getRunOrThrow(getFixRun, runId, 'Fix');
-    const skillDir = resolveSkillDirForRun(run);
-    await sendFixUserMessage(runId, message, { skillDir, onEvent: broadcastFixEvent });
-  }),
+  'fix:sendUserMessage': createTypedHandler(
+    withBroadcastOnError(
+      'fix:event',
+      async (runId: string, message: string) => {
+        const run = getRunOrThrow(getFixRun, runId, 'Fix');
+        const skillDir = resolveSkillDirForRun(run);
+        await sendFixUserMessage(runId, message, { skillDir, onEvent: broadcastFixEvent });
+      },
+      (runId) => runId,
+    ),
+  ),
 
-  'fix:finish': createTypedHandler((runId: string) => {
-    const run = getRunOrThrow(getFixRun, runId, 'Fix');
-    const skillDir = resolveSkillDirForRun(run);
-    finishFix(runId, { skillDir, onEvent: broadcastFixEvent });
-  }),
+  'fix:finish': createTypedHandler(
+    withBroadcastOnError(
+      'fix:event',
+      (runId: string) => {
+        const run = getRunOrThrow(getFixRun, runId, 'Fix');
+        const skillDir = resolveSkillDirForRun(run);
+        finishFix(runId, { skillDir, onEvent: broadcastFixEvent });
+      },
+      (runId) => runId,
+    ),
+  ),
 
   /**
    * Kick off a full eval batch against the fix's temp workdir (in-progress copy).
    * Results are written INSIDE the temp workdir, so the real skill stays untouched
    * until the user syncs. The fix agent can read benchmark.json between turns.
+   *
+   * Errors broadcast on `eval:event` (not `fix:event`) — the runs that would
+   * have streamed there if start had succeeded; the EvalRunsView opened from
+   * the fix overlay listens to `eval:event`.
    */
-  'fix:runEvalsInTemp': createTypedHandler(async (request: RunEvalsInTempRequest) => {
-    const run = getRunOrThrow(getFixRun, request.runId, 'Fix');
-    const tempDir = getFixTempWorkdir(request.runId);
-    if (!tempDir) throw new Error(`No temp workdir for fix ${request.runId}`);
-    return startEvalRuns(
-      {
-        scope: run.scope,
-        projectId: run.projectId,
-        skillName: run.skillName,
-        evalNames: request.evalNames,
-        includeBaseline: request.includeBaseline,
-        skillDirOverride: tempDir,
+  'fix:runEvalsInTemp': createTypedHandler(
+    withBroadcastOnError(
+      'eval:event',
+      async (request: RunEvalsInTempRequest) => {
+        const run = getRunOrThrow(getFixRun, request.runId, 'Fix');
+        const tempDir = getFixTempWorkdir(request.runId);
+        if (!tempDir) throw new Error(`No temp workdir for fix ${request.runId}`);
+        return startEvalRuns(
+          {
+            scope: run.scope,
+            projectId: run.projectId,
+            skillName: run.skillName,
+            evalNames: request.evalNames,
+            includeBaseline: request.includeBaseline,
+            skillDirOverride: tempDir,
+          },
+          {
+            resolveSkillDir,
+            onEvent: broadcastEvalEvent,
+          },
+        );
       },
-      {
-        resolveSkillDir,
-        onEvent: broadcastEvalEvent,
-      },
-    );
-  }),
+      (request) => request.runId,
+    ),
+  ),
 
   'fix:listActive': createTypedHandler(listActiveFixRuns),
 

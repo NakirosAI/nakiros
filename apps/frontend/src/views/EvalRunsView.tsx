@@ -8,6 +8,7 @@ import {
   Loader2,
   MessageSquare,
   RefreshCw,
+  RotateCw,
   Square,
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -17,7 +18,9 @@ import { LoadingState, MarkdownViewer } from '../components/ui';
 import {
   AgentActivityFeed,
   HumanInteractionPanel,
+  RESUME_PROMPTS,
   RunErrorBanner,
+  RunInterruptedBadge,
   RunStatusIcon,
 } from '../components/runs';
 import { formatComputeDuration, formatTokens } from '../utils/format';
@@ -75,6 +78,7 @@ export default function EvalRunsView({
   const [runs, setRuns] = useState<Map<string, SkillEvalRun>>(new Map());
   const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRunIds[0] ?? null);
   const [liveEventsByRun, setLiveEventsByRun] = useState<Map<string, LiveEvent[]>>(new Map());
+  const [handlerErrorByRun, setHandlerErrorByRun] = useState<Map<string, string>>(new Map());
   const startTime = useRef(Date.now());
   const [elapsed, setElapsed] = useState(0);
 
@@ -120,6 +124,16 @@ export default function EvalRunsView({
           next.set(event.runId, []);
           return next;
         });
+        // Clear any stale handler error for this run.
+        setHandlerErrorByRun((prev) => {
+          if (!prev.has(event.runId)) return prev;
+          const next = new Map(prev);
+          next.delete(event.runId);
+          return next;
+        });
+      } else if (event.event.type === 'error') {
+        const message = event.event.error;
+        setHandlerErrorByRun((prev) => new Map(prev).set(event.runId, message));
       }
     });
     return unsubscribe;
@@ -269,6 +283,7 @@ export default function EvalRunsView({
             <RunDetail
               run={selected}
               liveEvents={liveEventsByRun.get(selected.runId) ?? []}
+              handlerError={handlerErrorByRun.get(selected.runId) ?? null}
               onStop={handleStop}
               feedback={feedback[selected.evalName] ?? ''}
               onSaveFeedback={(text) => saveFeedback(selected.evalName, text)}
@@ -319,6 +334,7 @@ function RunListItem({
 function RunDetail({
   run,
   liveEvents,
+  handlerError,
   onStop,
   feedback,
   onSaveFeedback,
@@ -326,6 +342,7 @@ function RunDetail({
 }: {
   run: SkillEvalRun;
   liveEvents: LiveEvent[];
+  handlerError: string | null;
   onStop(runId: string): void;
   feedback: string;
   onSaveFeedback(text: string): void | Promise<void>;
@@ -356,6 +373,10 @@ function RunDetail({
 
   async function handleSendMessage(message: string) {
     await window.nakiros.sendEvalUserMessage(run.runId, message);
+  }
+
+  async function handleResume() {
+    await window.nakiros.sendEvalUserMessage(run.runId, RESUME_PROMPTS.eval);
   }
 
   async function handleFinish() {
@@ -411,6 +432,17 @@ function RunDetail({
             )}
           </div>
         </div>
+        <RunInterruptedBadge interrupted={run.interruptedByReboot} />
+        {run.interruptedByReboot && run.status === 'waiting_for_input' && (
+          <button
+            onClick={handleResume}
+            disabled={sending}
+            className="flex items-center gap-1 rounded bg-amber-500/20 px-2 py-1 text-xs text-amber-400 transition-colors hover:bg-amber-500/30 disabled:opacity-50"
+          >
+            <RotateCw size={12} />
+            {t('resume', { defaultValue: 'Reprendre' })}
+          </button>
+        )}
         {isRunning && (
           <button
             onClick={() => onStop(run.runId)}
@@ -422,7 +454,7 @@ function RunDetail({
         )}
       </div>
 
-      <RunErrorBanner message={run.error} title={t('errorLabel')} />
+      <RunErrorBanner message={run.error ?? handlerError} title={t('errorLabel')} />
 
 
       <div className="flex-1 overflow-y-auto p-4">

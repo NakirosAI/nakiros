@@ -6,11 +6,33 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHandlerRegistry } from './handlers/index.js';
 import { eventBus } from './event-bus.js';
-import { restoreOrCleanupTempWorkdirs } from '../services/fix-runner.js';
-import { restoreOrCleanupAuditWorkdirs } from '../services/audit-runner.js';
+import {
+  listAllCreateRuns,
+  listAllFixRuns,
+  restoreOrCleanupTempWorkdirs,
+} from '../services/fix-runner.js';
+import { listAllAuditRuns, restoreOrCleanupAuditWorkdirs } from '../services/audit-runner.js';
+import {
+  listAllAnalyzeConvoRuns,
+  restoreOrCleanupAnalyzeConvoWorkdirs,
+} from '../services/analyze-convo-runner.js';
+import {
+  getResumableSandboxPaths,
+  listRuns as listAllEvalRuns,
+  restoreEvalRunsForSkillDirs,
+} from '../services/eval-runner.js';
+import { listProjects } from '../services/project-scanner.js';
+import { listSkills as listProjectSkills } from '../services/skill-reader.js';
+import { listBundledSkills } from '../services/bundled-skills-reader.js';
+import { listClaudeGlobalSkills } from '../services/claude-global-skills-reader.js';
+import { listPluginSkills } from '../services/plugin-skills-reader.js';
 import { cleanupEvalArtifacts } from '../services/eval-artifact-cleanup.js';
 import { syncBundledSkills } from '../services/bundled-skills-sync.js';
-import { sweepOrphanNakirosProjectEntries, sweepOrphanSandboxes } from '../services/runner-core/index.js';
+import {
+  encodeProjectPath,
+  sweepOrphanNakirosProjectEntries,
+  sweepOrphanSandboxes,
+} from '../services/runner-core/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -32,6 +54,62 @@ const PLACEHOLDER_HTML = `<!DOCTYPE html>
   <p>Then reload this page.</p>
 </body>
 </html>`;
+
+/**
+ * Build the set of `~/.claude/projects/<encoded>` entry names that any
+ * registered run still references. Passed to
+ * {@link sweepOrphanNakirosProjectEntries} so the sweep only deletes entries
+ * with no live owner — the `Reprendre` flow needs the session file at the
+ * encoded cwd path to still be there.
+ */
+function collectLiveProjectEntryNames(): Set<string> {
+  const names = new Set<string>();
+  const add = (cwd: string | null | undefined): void => {
+    if (cwd) names.add(encodeProjectPath(cwd));
+  };
+  for (const run of listAllAuditRuns()) add(run.workdir);
+  for (const run of listAllFixRuns()) add(run.workdir);
+  for (const run of listAllCreateRuns()) add(run.workdir);
+  for (const run of listAllAnalyzeConvoRuns()) add(run.workdir);
+  for (const run of listAllEvalRuns()) {
+    add(run.workdir);
+    add(run.executionDir);
+  }
+  return names;
+}
+
+/**
+ * Walk every skill source the daemon knows about and return the absolute
+ * `skillPath` of each. Used by the eval boot rehydrate to replay
+ * `loadPersistedRuns` on every directory that may contain past iterations.
+ */
+function collectAllSkillDirs(): string[] {
+  const dirs = new Set<string>();
+  const safe = <T>(fn: () => T[], label: string): T[] => {
+    try {
+      return fn();
+    } catch (err) {
+      console.warn(`[nakiros] ${label} failed:`, err instanceof Error ? err.message : err);
+      return [];
+    }
+  };
+
+  for (const skill of safe(() => listBundledSkills(), 'listBundledSkills')) {
+    dirs.add(skill.skillPath);
+  }
+  for (const skill of safe(() => listClaudeGlobalSkills(), 'listClaudeGlobalSkills')) {
+    dirs.add(skill.skillPath);
+  }
+  for (const skill of safe(() => listPluginSkills(), 'listPluginSkills')) {
+    dirs.add(skill.skillPath);
+  }
+  for (const project of safe(() => listProjects(), 'listProjects')) {
+    for (const skill of safe(() => listProjectSkills(project.projectPath, project.id), `listProjectSkills(${project.id})`)) {
+      dirs.add(skill.skillPath);
+    }
+  }
+  return Array.from(dirs);
+}
 
 function findFrontendDir(override?: string): string | null {
   if (override && existsSync(override)) return override;
@@ -68,18 +146,39 @@ export function bootstrapDaemonRuntime(): void {
   }
   restoreOrCleanupTempWorkdirs();
   restoreOrCleanupAuditWorkdirs();
+  restoreOrCleanupAnalyzeConvoWorkdirs();
+  // Eval runs persist per-skill (`{skillDir}/evals/workspace/iteration-N/…`),
+  // not under a flat `~/.nakiros/runs/eval/`. To surface them in the
+  // runs-center on first paint we walk every known skill source and replay
+  // `loadPersistedRuns` once per directory. Bounded by the total number of
+  // skills the user has across project / bundled / claude-global / plugin
+  // scopes — fast in practice, and any failure is per-skill (logged).
+  try {
+    const skillDirs = collectAllSkillDirs();
+    restoreEvalRunsForSkillDirs(skillDirs);
+  } catch (err) {
+    console.warn('[nakiros] eval boot rehydrate failed:', err instanceof Error ? err.message : err);
+  }
   cleanupEvalArtifacts();
   // Reclaim `~/.claude/projects/*` entries left behind by previous runs whose
-  // workdir has since been deleted. Only targets Nakiros-named orphans, never
+  // workdir has since been deleted. We pass the encoded names of every cwd
+  // referenced by a still-registered run (audit/fix/create workdirs + eval
+  // executionDirs) so the sweep keeps the session files our user is about
+  // to "Reprendre" against. Only targets Nakiros-named orphans, never
   // user-created projects.
-  const sweep = sweepOrphanNakirosProjectEntries();
+  const keepProjectEntries = collectLiveProjectEntryNames();
+  const sweep = sweepOrphanNakirosProjectEntries(keepProjectEntries);
   if (sweep.deleted > 0) {
-    console.log(`[nakiros] Swept ${sweep.deleted} orphan Claude project entr${sweep.deleted === 1 ? 'y' : 'ies'} (scanned ${sweep.scanned}).`);
+    console.log(`[nakiros] Swept ${sweep.deleted} orphan Claude project entr${sweep.deleted === 1 ? 'y' : 'ies'} (scanned ${sweep.scanned}, kept ${keepProjectEntries.size}).`);
   }
   // Worktrees from a previous (crashed) session leave directories under
   // ~/.nakiros/sandboxes/ and stale entries in the source repo's worktree
   // list. Boot sweep drops all of them.
-  const sandboxes = sweepOrphanSandboxes();
+  // Preserve sandboxes still referenced by rehydrated `waiting_for_input`
+  // eval runs — without this the user's "Reprendre" would `--resume` against
+  // a directory the sweep just deleted ("No conversation found with session
+  // ID …").
+  const sandboxes = sweepOrphanSandboxes(getResumableSandboxPaths());
   if (sandboxes.deleted > 0) {
     console.log(`[nakiros] Swept ${sandboxes.deleted} orphan eval sandbox${sandboxes.deleted === 1 ? '' : 'es'}.`);
   }

@@ -47,6 +47,13 @@ export interface BaseRun {
   startedAt: string;
   finishedAt: string | null;
   error: string | null;
+  /**
+   * `true` when the run's last transition to `waiting_for_input` was a
+   * boot-time collapse (subprocess died with the previous daemon). Set by
+   * `spec.rehydrate`, cleared by `executeTurn` once the user has actually
+   * resumed. Drives the UI's "Reprendre" affordance.
+   */
+  interruptedByReboot?: boolean;
 }
 
 /** Wrapped event broadcast by every runner — `{ runId, event }`. */
@@ -260,6 +267,9 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
     const { run } = entry;
 
     entry.eventLog.resetForNewTurn();
+    // A turn started = the run is no longer "merely interrupted by a reboot"
+    // — the user (or the runner itself) is actively driving again.
+    if (run.interruptedByReboot) run.interruptedByReboot = false;
     run.status = 'starting';
     persist(entry);
     entry.eventLog.emit({ type: 'status', status: 'starting' } as unknown as TEvent);
@@ -291,6 +301,11 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       isKilled: () => entry.killed,
       onSession: (id) => {
         run.sessionId = id;
+        // Persist immediately — without this, a daemon kill mid-turn would
+        // leave `run.json` on disk with `sessionId: null` (from the last
+        // persist at status='running'), and rehydrate would then have no
+        // way to resume the run via `--resume`.
+        persist(entry);
       },
       onText: (text) => {
         assistantText += text;
@@ -469,8 +484,12 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
 
   function restoreOrCleanup(broadcast: (event: RunEventEnvelope<TEvent>) => void): void {
     const root = spec.runsRoot();
-    if (!existsSync(root)) return;
+    if (!existsSync(root)) {
+      console.log(`[${spec.kind}-runner] Boot recovery: root ${root} not found, skipping.`);
+      return;
+    }
     const entries = readdirSync(root, { withFileTypes: true });
+    console.log(`[${spec.kind}-runner] Boot recovery: scanning ${entries.length} entries under ${root}`);
 
     for (const dirent of entries) {
       if (!dirent.isDirectory()) continue;
@@ -483,11 +502,16 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       }
 
       const persisted = loadRunJson<unknown>(workdir);
-      if (!persisted) continue;
+      if (!persisted) {
+        console.log(`[${spec.kind}-runner] Boot recovery: ${dirent.name} → no run.json, skip`);
+        continue;
+      }
 
       if (!spec.rehydrate) continue;
+      const blob = persisted as { runId?: string; status?: string; sessionId?: string | null };
       const result = spec.rehydrate(persisted, workdir);
       if (result.kind === 'cleanup') {
+        console.log(`[${spec.kind}-runner] Boot recovery: ${blob.runId ?? dirent.name} (status=${blob.status ?? '?'}, sessionId=${blob.sessionId ?? 'null'}) → CLEANUP (reason=${result.reason ?? 'spec.rehydrate returned cleanup'})`);
         spec.cleanupOnTerminal({
           run: { workdir } as TRun,
           child: null,
@@ -497,6 +521,8 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
         });
         continue;
       }
+
+      console.log(`[${spec.kind}-runner] Boot recovery: ${result.run.runId} → REHYDRATE (status=${result.run.status}, interruptedByReboot=${result.run.interruptedByReboot ?? false})`);
 
       const opts: RunOpts<TEvent> = {
         onEvent: (event) => broadcast(event),

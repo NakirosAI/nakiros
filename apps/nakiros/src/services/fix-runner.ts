@@ -14,6 +14,7 @@ import type {
 import {
   cleanupRunWorkdir,
   createRunner,
+  encodeProjectPath,
   isActiveRunStatus,
   type RehydrateResult,
   type RunEntry,
@@ -392,8 +393,20 @@ You are creating a NEW skill from scratch. Your current working directory is a T
       return { kind: 'cleanup' };
     }
 
-    // Non-terminal → rehydrate. Subprocess is gone; collapse to waiting_for_input
-    // so the user can resume via --resume.
+    // Non-terminal → rehydrate. Subprocess is gone. If we have a sessionId
+    // AND the session file still lives at
+    // `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl`, we can resume via
+    // `--resume` → collapse to waiting_for_input + flag interruptedByReboot
+    // so the UI surfaces "Reprendre". Otherwise the run is unresumable →
+    // collapse to `stopped` so the user still sees the partial conversation
+    // and can dismiss it.
+    const wasActive = blob.status === 'starting' || blob.status === 'running';
+    const sessionFile =
+      blob.sessionId
+        ? join(homedir(), '.claude', 'projects', encodeProjectPath(workdir), `${blob.sessionId}.jsonl`)
+        : null;
+    const canResume = !wasActive || (Boolean(blob.sessionId) && sessionFile !== null && existsSync(sessionFile));
+    const restoredStatus: AuditRun['status'] = canResume ? 'waiting_for_input' : 'stopped';
     const restoredRun: AuditRun = {
       runId: blob.runId,
       scope: blob.scope,
@@ -401,7 +414,7 @@ You are creating a NEW skill from scratch. Your current working directory is a T
       pluginName: blob.pluginName,
       marketplaceName: blob.marketplaceName,
       skillName: blob.skillName,
-      status: 'waiting_for_input',
+      status: restoredStatus,
       sessionId: blob.sessionId ?? null,
       workdir,
       reportPath: blob.reportPath ?? null,
@@ -409,8 +422,12 @@ You are creating a NEW skill from scratch. Your current working directory is a T
       tokensUsed: typeof blob.tokensUsed === 'number' ? blob.tokensUsed : 0,
       durationMs: typeof blob.durationMs === 'number' ? blob.durationMs : 0,
       startedAt: blob.startedAt ?? new Date().toISOString(),
-      finishedAt: null,
+      finishedAt: restoredStatus === 'stopped' ? new Date().toISOString() : null,
       error: null,
+      interruptedByReboot:
+        restoredStatus === 'waiting_for_input' && wasActive
+          ? true
+          : blob.interruptedByReboot,
     };
 
     console.log(

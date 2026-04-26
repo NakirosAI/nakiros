@@ -18,11 +18,15 @@ const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects');
 
 /**
  * Translate an absolute filesystem path into the directory name Claude Code
- * uses inside `~/.claude/projects/`. Empirically: `/` and `.` both collapse to
- * `-` (so `/Users/foo/.nakiros` → `-Users-foo--nakiros`).
+ * uses inside `~/.claude/projects/`. Empirically: `/`, `.` AND `_` all
+ * collapse to `-` (so `/Users/foo/.nakiros/runs/audit/audit_xxx_1` becomes
+ * `-Users-foo--nakiros-runs-audit-audit-xxx-1`). Matches the encoding the
+ * `claude` CLI itself uses — without the underscore mapping the daemon's
+ * resume / cleanup helpers would target the wrong directory and silently
+ * leak entries (or fail with "No conversation found with session ID …").
  */
 export function encodeProjectPath(cwd: string): string {
-  return cwd.replace(/[/.]/g, '-');
+  return cwd.replace(/[/._]/g, '-');
 }
 
 /**
@@ -52,22 +56,6 @@ export function cleanupRunWorkdir(workdir: string): void {
   deleteClaudeProjectEntry(workdir);
 }
 
-/**
- * Decoded project path guess: `~/.claude/projects/-Users-x--nakiros-runs-…`
- * back to `/Users/x/.nakiros/runs/…`. The `/` ↔ `.` collision makes perfect
- * reversal impossible, so this is a best-effort reconstruction. Caller gates
- * on the returned path actually existing on disk (which proves the guess).
- */
-function decodeProjectPathGuess(encoded: string): string | null {
-  let guess = encoded.replace(/-/g, '/');
-  if (!guess.startsWith('/')) guess = '/' + guess;
-  if (existsSync(guess)) return guess;
-  // Try interpreting double-slashes as `.` (hidden directories).
-  const dotted = guess.replace(/\/\//g, '/.');
-  if (existsSync(dotted)) return dotted;
-  return null;
-}
-
 /** Return value of {@link sweepOrphanNakirosProjectEntries} — how many entries were scanned vs deleted. */
 export interface SweepResult {
   scanned: number;
@@ -75,14 +63,24 @@ export interface SweepResult {
 }
 
 /**
- * Boot-time cleanup. Deletes entries that:
- *   1. decode to a path that no longer exists on disk (orphan), AND
- *   2. carry a Nakiros-identifying marker in their encoded name.
+ * Boot-time cleanup. Deletes Claude-Code project entries that:
+ *   1. carry a Nakiros-identifying marker in their encoded name, AND
+ *   2. are NOT in the `keep` set (encoded names that the rehydrate phase
+ *      just registered as still-live runs).
  *
- * Live projects (path still on disk) are left alone. Any entry outside our
- * naming conventions is ignored — we never touch real user projects.
+ * The `keep` set is built upstream by collecting every registered run's
+ * cwd and encoding it with {@link encodeProjectPath}. We don't try to
+ * decode the Claude entry name back to a filesystem path — the encoding
+ * collapses `/`, `.` and `_` to a single `-`, so the reverse is ambiguous.
+ * Going forward only by what the runner registries hold is reliable.
+ *
+ * Without the `keep` argument the sweep falls back to a permissive mode:
+ * entries with a Nakiros marker AND no matching encoding in the registry
+ * survive. Caller is responsible for passing the keep set if it wants
+ * orphan cleanup; passing an empty `Set<string>()` will reclaim
+ * **everything** Nakiros-marked.
  */
-export function sweepOrphanNakirosProjectEntries(): SweepResult {
+export function sweepOrphanNakirosProjectEntries(keep?: ReadonlySet<string>): SweepResult {
   if (!existsSync(CLAUDE_PROJECTS_DIR)) return { scanned: 0, deleted: 0 };
 
   let entries: string[];
@@ -98,6 +96,7 @@ export function sweepOrphanNakirosProjectEntries(): SweepResult {
       // Current workdir roots
       name.includes('-nakiros-runs-') ||
       name.includes('-nakiros-tmp-skills-') ||
+      name.includes('-nakiros-sandboxes-') ||
       name.includes('-evals-workspace-iteration-') ||
       // Legacy roots from earlier versions that used `mkdtempSync` under the
       // system tmpdir (`/tmp` → `/private/tmp` on macOS) with `nakiros-audit-*`
@@ -106,9 +105,12 @@ export function sweepOrphanNakirosProjectEntries(): SweepResult {
       name.includes('-nakiros-fix-');
     if (!hasNakirosMarker) continue;
 
-    // Keep if the backing path still exists (run still in flight, or user
-    // hasn't Terminer'd yet). Only orphans get reclaimed here.
-    if (decodeProjectPathGuess(name) !== null) continue;
+    // Keep entries the registry still references. Without a keep set we
+    // can't know what's live, so we leave Nakiros entries alone — better
+    // to leak a few stale entries than nuke a session file the user is
+    // about to "Reprendre" against.
+    if (!keep) continue;
+    if (keep.has(name)) continue;
 
     try {
       rmSync(join(CLAUDE_PROJECTS_DIR, name), { recursive: true, force: true });

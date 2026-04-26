@@ -341,6 +341,18 @@ const client = {
   // Skill agent temp files
   listSkillAgentTempFiles: (runId: string) => invoke(C['skillAgent:listTempFiles'], runId),
   readSkillAgentTempFile: (runId: string, relativePath: string) => invoke(C['skillAgent:readTempFile'], runId, relativePath),
+
+  // Conversation deep-analysis runner (analyze-convo)
+  startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
+  stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),
+  getAnalyzeConvoRun: (runId: string) => invoke(C['analyzeConvo:getRun'], runId),
+  sendAnalyzeConvoUserMessage: (runId: string, message: string) =>
+    invoke(C['analyzeConvo:sendUserMessage'], runId, message),
+  finishAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:finish'], runId),
+  listActiveAnalyzeConvoRuns: () => invoke(C['analyzeConvo:listActive']),
+  listAllAnalyzeConvoRuns: () => invoke(C['analyzeConvo:listAll']),
+  getAnalyzeConvoBufferedEvents: (runId: string) => invoke(C['analyzeConvo:getBufferedEvents'], runId),
+  onAnalyzeConvoEvent: (cb: (event: unknown) => void) => subscribe(C['analyzeConvo:event'], cb),
 };
 
 // Install on window. We cast via `unknown` because the full type surface in

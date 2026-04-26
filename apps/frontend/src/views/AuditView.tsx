@@ -3,6 +3,7 @@ import {
   CheckCircle,
   FileText,
   MessageSquare,
+  RotateCw,
   Sparkles,
   Square,
 } from 'lucide-react';
@@ -12,8 +13,10 @@ import { LoadingState, MarkdownViewer, TabButton } from '../components/ui';
 import {
   AgentActivityFeed,
   HumanInteractionPanel,
+  RESUME_PROMPTS,
   RunControlHeader,
   RunErrorBanner,
+  RunInterruptedBadge,
 } from '../components/runs';
 import { agentRunStore } from '../lib/agent-run-store';
 import { useElapsedTimer } from '../hooks/useElapsedTimer';
@@ -65,7 +68,7 @@ export default function AuditView({ skillName, initialRun, onClose }: Props) {
   const [reportContent, setReportContent] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('conversation');
 
-  const { run, liveEvents, liveScrollRef } = useRunState<AuditRun, AuditRunEvent['event']>(
+  const { run, liveEvents, liveScrollRef, handlerError } = useRunState<AuditRun, AuditRunEvent['event']>(
     initialRun.runId,
     initialRun,
     AUDIT_RUN_API,
@@ -101,6 +104,16 @@ export default function AuditView({ skillName, initialRun, onClose }: Props) {
   }
 
   /**
+   * Resume an audit run that was rehydrated `waiting_for_input` after a
+   * daemon reboot. Sends a synthetic continuation prompt to the agent via
+   * `--resume`. The factory clears `interruptedByReboot` once the next turn
+   * starts, so the badge disappears automatically.
+   */
+  async function handleResume() {
+    await window.nakiros.sendAuditUserMessage(initialRun.runId, RESUME_PROMPTS.audit);
+  }
+
+  /**
    * User is satisfied with the archived audit report — discard the in-memory
    * run + workdir (conversation + events) so the skill can be audited fresh
    * next time. The report file in `{skill}/audits/` is kept.
@@ -111,8 +124,18 @@ export default function AuditView({ skillName, initialRun, onClose }: Props) {
     onClose();
   }
 
+  const { t: tRuns } = useTranslation('runs');
   const headerActions = (
     <>
+      {run.interruptedByReboot && isWaiting && (
+        <button
+          onClick={handleResume}
+          className="ml-2 flex items-center gap-1 rounded bg-amber-500/20 px-2 py-1 text-amber-400 transition-colors hover:bg-amber-500/30"
+        >
+          <RotateCw size={12} />
+          {tRuns('resume')}
+        </button>
+      )}
       {isRunning && (
         <button
           onClick={handleStop}
@@ -162,6 +185,7 @@ export default function AuditView({ skillName, initialRun, onClose }: Props) {
         onBack={onClose}
         actions={headerActions}
         extras={headerExtras}
+        badgeExtras={<RunInterruptedBadge interrupted={run.interruptedByReboot} />}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -183,7 +207,7 @@ export default function AuditView({ skillName, initialRun, onClose }: Props) {
           <LoadingState>{t('report.notYetProduced')}</LoadingState>
         )}
 
-        <RunErrorBanner message={run.error} />
+        <RunErrorBanner message={run.error ?? handlerError} />
       </div>
 
       {isWaiting && <HumanInteractionPanel isWaiting onSend={handleSend} />}

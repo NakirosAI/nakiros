@@ -18,6 +18,7 @@ import {
   createTypedHandler,
   getRunOrThrow,
   resolveSkillDirForRun,
+  withBroadcastOnError,
 } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
@@ -40,24 +41,38 @@ export const createHandlers: HandlerRegistry = {
     return startCreate(request, { skillDir, onEvent: broadcastCreateEvent });
   }),
 
-  'create:stopRun': createTypedHandler(stopCreate),
+  'create:stopRun': createTypedHandler(
+    withBroadcastOnError('create:event', stopCreate, (runId: string) => runId),
+  ),
 
   'create:getRun': createTypedHandler(getCreateRun),
 
-  'create:sendUserMessage': createTypedHandler(async (runId: string, message: string) => {
-    const run = getRunOrThrow(getCreateRun, runId, 'Create');
-    const skillDir = resolveSkillDirForRun(run);
-    await sendCreateUserMessage(runId, message, {
-      skillDir,
-      onEvent: broadcastCreateEvent,
-    });
-  }),
+  'create:sendUserMessage': createTypedHandler(
+    withBroadcastOnError(
+      'create:event',
+      async (runId: string, message: string) => {
+        const run = getRunOrThrow(getCreateRun, runId, 'Create');
+        const skillDir = resolveSkillDirForRun(run);
+        await sendCreateUserMessage(runId, message, {
+          skillDir,
+          onEvent: broadcastCreateEvent,
+        });
+      },
+      (runId) => runId,
+    ),
+  ),
 
-  'create:finish': createTypedHandler((runId: string) => {
-    const run = getRunOrThrow(getCreateRun, runId, 'Create');
-    const skillDir = resolveSkillDirForRun(run);
-    finishCreate(runId, { skillDir, onEvent: broadcastCreateEvent });
-  }),
+  'create:finish': createTypedHandler(
+    withBroadcastOnError(
+      'create:event',
+      (runId: string) => {
+        const run = getRunOrThrow(getCreateRun, runId, 'Create');
+        const skillDir = resolveSkillDirForRun(run);
+        finishCreate(runId, { skillDir, onEvent: broadcastCreateEvent });
+      },
+      (runId) => runId,
+    ),
+  ),
 
   'create:listActive': createTypedHandler(listActiveCreateRuns),
 

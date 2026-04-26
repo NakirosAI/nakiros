@@ -15,6 +15,7 @@ import { auditHandlers } from './audit.js';
 import { fixHandlers } from './fix.js';
 import { createHandlers } from './create.js';
 import { skillAgentHandlers } from './skill-agent.js';
+import { analyzeConvoHandlers } from './analyze-convo.js';
 
 /** Signature every IPC handler must implement — takes an arg array, returns a value or promise. */
 export type IpcHandler = (args: unknown[]) => Promise<unknown> | unknown;
@@ -49,5 +50,6 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...fixHandlers,
     ...createHandlers,
     ...skillAgentHandlers,
+    ...analyzeConvoHandlers,
   };
 }

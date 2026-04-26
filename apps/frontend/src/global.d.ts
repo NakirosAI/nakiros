@@ -33,6 +33,8 @@ import type {
   AuditRun,
   AuditRunEvent,
   AuditHistoryEntry,
+  AnalyzeConvoRun,
+  AnalyzeConvoRunEvent,
   FixBenchmarks,
   SkillAgentTempFileEntry,
   SkillAgentTempFileContent,
@@ -122,7 +124,19 @@ declare global {
       analyzeProjectConversation(projectId: string, sessionId: string): Promise<ConversationAnalysis | null>;
       listProjectConversationsWithAnalysis(projectId: string): Promise<ConversationAnalysis[]>;
       loadConversationDeepAnalysis(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis | null>;
+      /** @deprecated kept for backward compat — prefer the streaming analyzeConvo:* family. */
       deepAnalyzeConversation(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis>;
+
+      // Conversation deep-analysis runner (analyze-convo Run kind)
+      startAnalyzeConvo(request: { projectId: string; sessionId: string }): Promise<AnalyzeConvoRun>;
+      stopAnalyzeConvo(runId: string): Promise<void>;
+      getAnalyzeConvoRun(runId: string): Promise<AnalyzeConvoRun | null>;
+      sendAnalyzeConvoUserMessage(runId: string, message: string): Promise<void>;
+      finishAnalyzeConvo(runId: string): Promise<void>;
+      listActiveAnalyzeConvoRuns(): Promise<AnalyzeConvoRun[]>;
+      listAllAnalyzeConvoRuns(): Promise<AnalyzeConvoRun[]>;
+      getAnalyzeConvoBufferedEvents(runId: string): Promise<AnalyzeConvoRunEvent['event'][]>;
+      onAnalyzeConvoEvent(cb: (event: AnalyzeConvoRunEvent) => void): () => void;
 
       listProjectSkills(projectId: string): Promise<Skill[]>;
       getProjectSkill(projectId: string, skillName: string): Promise<Skill | null>;

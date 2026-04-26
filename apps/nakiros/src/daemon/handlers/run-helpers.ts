@@ -81,3 +81,57 @@ export function createTypedHandler<TArgs extends unknown[], TResult>(
 ): (rawArgs: unknown[]) => TResult | Promise<TResult> {
   return (rawArgs) => fn(...(rawArgs as TArgs));
 }
+
+/**
+ * Wrap a handler so any synchronous or async throw broadcasts a
+ * `{ runId, event: { type: 'error', error } }` payload on the given channel
+ * **before** the exception propagates back to the HTTP layer (re-thrown,
+ * so the IPC response is still in error and the caller's promise rejects).
+ *
+ * Use only on handlers that mutate a known run AND whose frontend caller
+ * is subscribed to the channel — otherwise the frontend has no signal when
+ * the handler throws before the runner can emit anything (e.g.
+ * `fix:runEvalsInTemp` failing on a missing `evals.json`). For `*:start`
+ * handlers (no runId yet) the HTTP error is sufficient — don't wrap them.
+ *
+ * The error event is broadcast-only: it does NOT go through `EventLog`
+ * and is therefore not persisted to `events.jsonl` (the buffer is for
+ * turn replay, not handler failures).
+ *
+ * @param channel - canonical event channel, e.g. `'audit:event'`
+ * @param fn - the handler to wrap (its signature drives `TArgs` inference)
+ * @param getRunId - extracts the affected run id from the handler args
+ *
+ * @example
+ * 'fix:runEvalsInTemp': createTypedHandler(
+ *   withBroadcastOnError(
+ *     'eval:event',
+ *     async (req: RunEvalsInTempRequest) => { ... },
+ *     (req) => req.runId,
+ *   ),
+ * ),
+ */
+export function withBroadcastOnError<TArgs extends unknown[], TResult>(
+  channel: IpcChannel,
+  fn: (...args: TArgs) => TResult | Promise<TResult>,
+  getRunId: (...args: TArgs) => string,
+): (...args: TArgs) => Promise<TResult> {
+  return async (...args) => {
+    try {
+      return await fn(...args);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      let runId = '';
+      try {
+        runId = getRunId(...args);
+      } catch {
+        // best-effort — broadcast with empty runId if extraction fails
+      }
+      eventBus.broadcast(IPC_CHANNELS[channel], {
+        runId,
+        event: { type: 'error', error: message },
+      });
+      throw err;
+    }
+  };
+}

@@ -26,7 +26,12 @@ import {
 import { readIterationFeedback, saveEvalFeedback } from '../../services/eval-feedback.js';
 import { buildEvalMatrix } from '../../services/eval-matrix.js';
 import { resolveSkillDir } from './skill-dir.js';
-import { createEventBroadcaster, createTypedHandler, getRunOrThrow } from './run-helpers.js';
+import {
+  createEventBroadcaster,
+  createTypedHandler,
+  getRunOrThrow,
+  withBroadcastOnError,
+} from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 const broadcastEvalEvent = createEventBroadcaster<EvalRunEvent>('eval:event');
@@ -86,7 +91,9 @@ export const evalHandlers: HandlerRegistry = {
     }),
   ),
 
-  'eval:stopRun': createTypedHandler(stopEvalRun),
+  'eval:stopRun': createTypedHandler(
+    withBroadcastOnError('eval:event', stopEvalRun, (runId: string) => runId),
+  ),
 
   'eval:listRuns': createTypedHandler(listEvalRuns),
 
@@ -95,17 +102,29 @@ export const evalHandlers: HandlerRegistry = {
     return loadPersistedRuns(skillDir);
   }),
 
-  'eval:sendUserMessage': createTypedHandler(async (runId: string, message: string) => {
-    const run = getRunOrThrow(getEvalRun, runId, 'Eval');
-    const { skillDir, definition } = getDefinitionForRun(run);
-    await sendEvalUserMessage(runId, message, skillDir, definition, broadcastEvalEvent);
-  }),
+  'eval:sendUserMessage': createTypedHandler(
+    withBroadcastOnError(
+      'eval:event',
+      async (runId: string, message: string) => {
+        const run = getRunOrThrow(getEvalRun, runId, 'Eval');
+        const { skillDir, definition } = getDefinitionForRun(run);
+        await sendEvalUserMessage(runId, message, skillDir, definition, broadcastEvalEvent);
+      },
+      (runId) => runId,
+    ),
+  ),
 
-  'eval:finishRun': createTypedHandler(async (runId: string) => {
-    const run = getRunOrThrow(getEvalRun, runId, 'Eval');
-    const { definition } = getDefinitionForRun(run);
-    await finishEvalWaitingRun(runId, definition);
-  }),
+  'eval:finishRun': createTypedHandler(
+    withBroadcastOnError(
+      'eval:event',
+      async (runId: string) => {
+        const run = getRunOrThrow(getEvalRun, runId, 'Eval');
+        const { definition } = getDefinitionForRun(run);
+        await finishEvalWaitingRun(runId, definition);
+      },
+      (runId) => runId,
+    ),
+  ),
 
   'eval:getBufferedEvents': createTypedHandler(getEvalBufferedEvents),
 

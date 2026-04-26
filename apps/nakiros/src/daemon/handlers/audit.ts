@@ -18,6 +18,7 @@ import {
   createTypedHandler,
   getRunOrThrow,
   resolveSkillDirForRun,
+  withBroadcastOnError,
 } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
@@ -40,15 +41,23 @@ export const auditHandlers: HandlerRegistry = {
     return startAudit(request, { skillDir, onEvent: broadcastAuditEvent });
   }),
 
-  'audit:stopRun': createTypedHandler(stopAudit),
+  'audit:stopRun': createTypedHandler(
+    withBroadcastOnError('audit:event', stopAudit, (runId: string) => runId),
+  ),
 
   'audit:getRun': createTypedHandler(getAuditRun),
 
-  'audit:sendUserMessage': createTypedHandler(async (runId: string, message: string) => {
-    const run = getRunOrThrow(getAuditRun, runId, 'Audit');
-    const skillDir = resolveSkillDirForRun(run);
-    await sendAuditUserMessage(runId, message, { skillDir, onEvent: broadcastAuditEvent });
-  }),
+  'audit:sendUserMessage': createTypedHandler(
+    withBroadcastOnError(
+      'audit:event',
+      async (runId: string, message: string) => {
+        const run = getRunOrThrow(getAuditRun, runId, 'Audit');
+        const skillDir = resolveSkillDirForRun(run);
+        await sendAuditUserMessage(runId, message, { skillDir, onEvent: broadcastAuditEvent });
+      },
+      (runId) => runId,
+    ),
+  ),
 
   'audit:listHistory': createTypedHandler((request: SkillScopeRef) => {
     const skillDir = resolveSkillDir(request);
@@ -61,7 +70,9 @@ export const auditHandlers: HandlerRegistry = {
 
   'audit:listAll': createTypedHandler(listAllAuditRuns),
 
-  'audit:finish': createTypedHandler(finishAudit),
+  'audit:finish': createTypedHandler(
+    withBroadcastOnError('audit:event', finishAudit, (runId: string) => runId),
+  ),
 
   'audit:getBufferedEvents': createTypedHandler(getAuditBufferedEvents),
 };

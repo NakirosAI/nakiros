@@ -7,6 +7,8 @@ import { gradeLlmAssertionsBatch, JUDGE_MODEL } from './eval-llm-grader.js';
 import { writeIterationBenchmark } from './eval-benchmark.js';
 import { cleanupEvalArtifacts } from './eval-artifact-cleanup.js';
 
+import { homedir } from 'os';
+
 import {
   EventLog,
   buildClaudeArgs,
@@ -16,6 +18,7 @@ import {
   deleteClaudeProjectEntry,
   destroyEvalSandbox,
   destroyTmpSandbox,
+  encodeProjectPath,
   findGitRoot,
   generateRunId,
   listSandboxUntracked,
@@ -694,6 +697,8 @@ async function executeTurn(
   const { run } = entry;
 
   entry.eventLog.resetForNewTurn();
+  // A turn started = the run is no longer "merely interrupted by a reboot".
+  if (run.interruptedByReboot) run.interruptedByReboot = false;
   run.status = 'starting';
   writeRunJson(run);
   entry.eventLog.emit({ type: 'status', status: 'starting' });
@@ -738,7 +743,12 @@ async function executeTurn(
     cliArgs,
     onChildSpawned: (c) => { entry.child = c; },
     isKilled: () => entry.killed,
-    onSession: (id) => { run.sessionId = id; },
+    onSession: (id) => {
+      run.sessionId = id;
+      // Persist immediately so a daemon kill mid-turn doesn't lose the
+      // sessionId — without this, rehydrate has no way to resume via --resume.
+      writeRunJson(run);
+    },
     onText: (text) => {
       assistantText += text;
       blocks.push({ type: 'text', text });
@@ -1035,23 +1045,108 @@ export function loadPersistedRuns(skillDir: string): SkillEvalRun[] {
 }
 
 /**
+ * Boot-time scan: replay {@link loadPersistedRuns} on every known skill
+ * directory so eval runs from a previous daemon session show up in the
+ * runs-center drawer immediately, without the user having to navigate into
+ * each skill's eval view first.
+ *
+ * `skillDirs` is supplied by the caller (server bootstrap) to avoid pulling
+ * the project / bundled / global / plugin skill readers into this module.
+ * Failures are swallowed per-skill — one corrupt workspace must not block
+ * the whole rehydration.
+ */
+/**
+ * Return every sandbox path currently referenced by a registered run that
+ * could still be resumed. Passed to `sweepOrphanSandboxes` at boot so the
+ * sweep doesn't delete the very sandboxes the user is about to "Reprendre"
+ * against — that would yield "No conversation found with session ID …" on
+ * `claude --resume`.
+ */
+export function getResumableSandboxPaths(): Set<string> {
+  const out = new Set<string>();
+  for (const entry of runs.values()) {
+    if (entry.run.status !== 'waiting_for_input') continue;
+    const dir = entry.run.executionDir;
+    if (dir && dir !== entry.run.workdir) out.add(dir);
+  }
+  return out;
+}
+
+export function restoreEvalRunsForSkillDirs(skillDirs: string[]): number {
+  let registered = 0;
+  const before = runs.size;
+  for (const dir of skillDirs) {
+    try {
+      loadPersistedRuns(dir);
+    } catch (err) {
+      console.warn(`[eval-runner] Boot rehydrate failed for ${dir}: ${(err as Error).message}`);
+    }
+  }
+  registered = runs.size - before;
+  if (registered > 0) {
+    console.log(`[eval-runner] Rehydrated ${registered} eval run${registered === 1 ? '' : 's'} from disk.`);
+  }
+  return registered;
+}
+
+/**
  * Inject a persisted run into the in-memory registry. Active statuses other
  * than `waiting_for_input` are collapsed to `stopped` (their subprocess died
  * with the previous daemon). The EventLog is created with a no-op broadcaster;
  * the next IPC call rebinds it via {@link rebindEventLog}.
  */
+/**
+ * True when both the eval's executionDir AND its claude session file still
+ * exist on disk. We need both to actually resume via `--resume <sessionId>`:
+ * the cwd is the executionDir; Claude reads
+ * `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` for the conversation.
+ * If either is missing, resuming would surface "No conversation found".
+ */
+function evalRunHasResumableSessionFile(run: SkillEvalRun): boolean {
+  if (!run.sessionId) return false;
+  const cwd = run.executionDir ?? run.workdir;
+  if (!existsSync(cwd)) return false;
+  const sessionFile = join(homedir(), '.claude', 'projects', encodeProjectPath(cwd), `${run.sessionId}.jsonl`);
+  return existsSync(sessionFile);
+}
+
 function rehydratePersistedRun(run: SkillEvalRun): SkillEvalRun {
+  const wasInFlight =
+    run.status === 'queued' ||
+    run.status === 'starting' ||
+    run.status === 'running' ||
+    run.status === 'grading';
+
+  // Defensive: don't claim a run is resumable unless its session file is
+  // actually on disk. A previous boot of the daemon (running pre-fix code)
+  // may have already wiped the sandbox + session — in that case mark stopped
+  // so the user sees the partial run but doesn't get a "Reprendre" button
+  // that would just throw "No conversation found with session ID …".
+  const canResume = !wasInFlight || evalRunHasResumableSessionFile(run);
   const restoredStatus: EvalRunStatus =
     run.status === 'waiting_for_input'
-      ? 'waiting_for_input'
+      ? evalRunHasResumableSessionFile(run)
+        ? 'waiting_for_input'
+        : 'stopped'
       : run.status === 'completed' || run.status === 'failed' || run.status === 'stopped'
         ? run.status
-        : 'stopped';
+        : canResume
+          ? 'waiting_for_input'
+          : 'stopped';
+
+  const interruptedByReboot =
+    restoredStatus === 'waiting_for_input' && wasInFlight
+      ? true
+      : run.interruptedByReboot;
 
   const restoredRun: SkillEvalRun = {
     ...run,
     status: restoredStatus,
-    finishedAt: run.finishedAt ?? (restoredStatus === 'stopped' ? new Date().toISOString() : run.finishedAt),
+    finishedAt:
+      restoredStatus === 'stopped' && wasInFlight
+        ? new Date().toISOString()
+        : run.finishedAt,
+    interruptedByReboot,
   };
 
   const eventLog = new EventLog<EvalRunEvent['event']>({
@@ -1064,17 +1159,29 @@ function rehydratePersistedRun(run: SkillEvalRun): SkillEvalRun {
   // user opens this run before any new event lands.
   eventLog.restore();
 
+  // Reconstruct the sandbox reference so resume turns spawn `claude` in the
+  // right cwd. We only need the {kind,path,gitRoot?} identity — no validation
+  // here; the sandbox dir is preserved by the boot keep-set passed to
+  // `sweepOrphanSandboxes`. If the directory doesn't actually exist anymore
+  // the next turn will fail naturally.
+  const executionDir = restoredRun.executionDir ?? null;
+  const sandboxRef: RunEntry['sandbox'] = !executionDir || executionDir === restoredRun.workdir
+    ? null
+    : restoredRun.usesSandbox
+      ? { kind: 'git-worktree', path: executionDir, gitRoot: '' }
+      : { kind: 'tmp', path: executionDir };
+
   runs.set(restoredRun.runId, {
     run: restoredRun,
     child: null,
     onEvent: () => undefined,
     killed: false,
     eventLog,
-    sandbox: null, // sandbox is gone with the previous daemon
+    sandbox: sandboxRef,
   });
 
-  if (run.status !== restoredStatus) {
-    // Persist the collapse so the next reload doesn't keep flipping it.
+  if (run.status !== restoredStatus || restoredRun.interruptedByReboot !== run.interruptedByReboot) {
+    // Persist the collapse + the flag so the next reload doesn't keep flipping it.
     writeRunJson(restoredRun);
   }
 

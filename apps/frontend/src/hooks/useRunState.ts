@@ -11,12 +11,14 @@ import type { LiveStreamEvent } from '../components/ConversationTurn';
 
 /**
  * Shape of inner events emitted by audit/fix/create streams. A run-specific
- * event type narrows this further; the hook only touches text/tool/status.
+ * event type narrows this further; the hook only touches text/tool/status
+ * and the handler-level `error` variant emitted by `withBroadcastOnError`.
  */
 export type RunStreamInnerEvent =
   | { type: 'text'; text: string }
   | { type: 'tool'; name: string; display: string }
   | { type: 'status'; status: string }
+  | { type: 'error'; error: string }
   | { type: string };
 
 /**
@@ -35,6 +37,15 @@ export interface UseRunStateResult<R> {
   setRun: Dispatch<SetStateAction<R>>;
   liveEvents: LiveStreamEvent[];
   liveScrollRef: RefObject<HTMLDivElement | null>;
+  /**
+   * Latest handler-level error received on the channel (from
+   * `withBroadcastOnError`). Cleared when a new turn starts. Out-of-band
+   * relative to `run.error` (which carries runner failures). Display via
+   * `RunErrorBanner` alongside or instead of `run.error`.
+   */
+  handlerError: string | null;
+  /** Programmatically clear the handler error (e.g. after the user dismisses it). */
+  clearHandlerError(): void;
 }
 
 /**
@@ -57,6 +68,7 @@ export function useRunState<
 ): UseRunStateResult<R> {
   const [run, setRun] = useState<R>(initialRun);
   const [liveEvents, setLiveEvents] = useState<LiveStreamEvent[]>([]);
+  const [handlerError, setHandlerError] = useState<string | null>(null);
   const liveScrollRef = useRef<HTMLDivElement>(null);
   const onInnerEventRef = useRef(onInnerEvent);
   onInnerEventRef.current = onInnerEvent;
@@ -102,8 +114,14 @@ export function useRunState<
         setLiveEvents((prev) => [...prev, { type: 'tool', name: t.name, display: t.display, ts: Date.now() }]);
       } else if (event.type === 'status') {
         const status = (event as { status: string }).status;
-        if (status === 'starting') setLiveEvents([]);
+        if (status === 'starting') {
+          setLiveEvents([]);
+          // A new turn starts → clear stale handler error from a prior failure.
+          setHandlerError(null);
+        }
         setRun((prev) => ({ ...prev, status: status as R['status'] }));
+      } else if (event.type === 'error') {
+        setHandlerError((event as { error: string }).error);
       }
       onInnerEventRef.current?.(event);
     });
@@ -115,5 +133,12 @@ export function useRunState<
     }
   }, [liveEvents]);
 
-  return { run, setRun, liveEvents, liveScrollRef };
+  return {
+    run,
+    setRun,
+    liveEvents,
+    liveScrollRef,
+    handlerError,
+    clearHandlerError: () => setHandlerError(null),
+  };
 }

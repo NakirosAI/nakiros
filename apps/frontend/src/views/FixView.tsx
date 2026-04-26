@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Play,
   Plus,
+  RotateCw,
   Trash2,
   UploadCloud,
   Wrench,
@@ -15,8 +16,10 @@ import { TabButton } from '../components/ui';
 import {
   AgentActivityFeed,
   HumanInteractionPanel,
+  RESUME_PROMPTS,
   RunControlHeader,
   RunErrorBanner,
+  RunInterruptedBadge,
 } from '../components/runs';
 import { agentRunStore } from '../lib/agent-run-store';
 import { useElapsedTimer } from '../hooks/useElapsedTimer';
@@ -92,7 +95,7 @@ export default function FixView({
         getBufferedEvents: window.nakiros.getFixBufferedEvents,
         onEvent: window.nakiros.onFixEvent,
       };
-  const { run, liveEvents, liveScrollRef } = useRunState<AuditRun, AuditRunEvent['event']>(
+  const { run, liveEvents, liveScrollRef, handlerError } = useRunState<AuditRun, AuditRunEvent['event']>(
     initialRun.runId,
     initialRun,
     api,
@@ -130,6 +133,15 @@ export default function FixView({
 
   async function handleSend(message: string) {
     await api.sendUserMessage(initialRun.runId, message);
+  }
+
+  /**
+   * Resume a fix/create run rehydrated `waiting_for_input` after a daemon
+   * reboot. Sends a synthetic continuation prompt scoped to the mode so the
+   * agent picks up where it stopped instead of starting over.
+   */
+  async function handleResume() {
+    await api.sendUserMessage(initialRun.runId, isCreate ? RESUME_PROMPTS.create : RESUME_PROMPTS.fix);
   }
 
   async function handleSync() {
@@ -175,8 +187,18 @@ export default function FixView({
     }
   }
 
+  const { t: tRuns } = useTranslation('runs');
   const headerActions = (
     <>
+      {run.interruptedByReboot && isWaiting && (
+        <button
+          onClick={handleResume}
+          className="ml-2 flex items-center gap-1 rounded bg-amber-500/20 px-2 py-1 text-amber-400 transition-colors hover:bg-amber-500/30"
+        >
+          <RotateCw size={12} />
+          {tRuns('resume')}
+        </button>
+      )}
       {isWaiting && !isCreate && (
         <button
           onClick={handleRunEvalsInTemp}
@@ -237,6 +259,7 @@ export default function FixView({
           durationMs={isTerminal ? run.durationMs : elapsed}
           onBack={onClose}
           actions={headerActions}
+          badgeExtras={<RunInterruptedBadge interrupted={run.interruptedByReboot} />}
         />
 
         {/* Evolution matrix — shows the live eval history against the in-progress
@@ -290,7 +313,7 @@ export default function FixView({
             />
           )}
 
-          <RunErrorBanner message={run.error} title={t('errors.heading')} />
+          <RunErrorBanner message={run.error ?? handlerError} title={t('errors.heading')} />
         </div>
 
         {(isWaiting || isRunning) && (

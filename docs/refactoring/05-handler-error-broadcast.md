@@ -1,7 +1,6 @@
 # Cadrage — Broadcast d'erreur structuré pour handlers IPC
 
 > Branche cible : à ouvrir · Statut : à cadrer · Date : 2026-04-26
-> Documents compagnons : [`01-code-audit.md`](./01-code-audit.md) §2.3, [`03-base-runner.md`](./03-base-runner.md)
 
 ## Pourquoi
 
@@ -73,6 +72,25 @@ Alternative plus simple : un canal d'erreur séparé, dédié, partagé entre ru
 1. **Re-throw ou swallow ?** Re-throw permet à la couche HTTP de répondre en 500. Sans re-throw, le frontend reçoit `{ ok: true, result: undefined }` ce qui est trompeur. **Recommandation : re-throw.**
 2. **Event d'erreur persisté dans le replay buffer ?** Le buffer est destiné aux events de turn (text/tool). Une erreur de handler n'est pas un event de turn — elle ne devrait PAS aller dans `events.jsonl`. **Recommandation : broadcast-only, pas de persistance.**
 3. **Seulement sur les handlers de mutation ?** Voir §2 ci-dessus. **Recommandation : oui, seulement ceux qui s'attendent à un event-flow.**
+
+## Critères de succès
+
+1. `fix:runEvalsInTemp` appelé sur un run sans temp workdir → un event
+   `{ type: 'error', error: '...' }` arrive sur `eval:event`, le bouton
+   "Running evals" repasse en idle, un toast/banner inline affiche le
+   message côté UI.
+2. `eval:startRuns` sur un skill sans `evals.json` → idem côté
+   `eval:event` ; pas de spinner figé.
+3. Les flows nominaux (start → run → done success) ne broadcastent
+   **pas** d'event `'error'`.
+4. La réponse HTTP du `invoke()` est toujours en erreur sur les handlers
+   wrappés (re-throw confirmé). La promise frontend rejette avec le même
+   message que l'event.
+5. `events.jsonl` ne contient pas d'events `'error'` issus de
+   `withBroadcastOnError` (broadcast-only — pas de pollution du replay
+   buffer).
+6. tsc clean. Smoke par kind + un test négatif explicite (forcer un
+   throw dans `fix:runEvalsInTemp`).
 
 ## Effort estimé
 

@@ -2,7 +2,7 @@
 
 **Path:** `apps/nakiros/src/services/runner-core/runner.ts`
 
-Kind-agnostic lifecycle backbone for Nakiros runners. The factory `createRunner(spec)` owns the registry, the `claude` turn execution, EventLog wiring, persistence, and boot rehydration. Each kind (audit / fix / create) supplies a small {@link RunnerSpec} contributing only the differences: workdir prep, first-turn prompt, post-turn policy, finish, cleanup. **eval-runner is intentionally NOT migrated** onto this factory — its batch + sandbox + grading model diverges too sharply (see [docs/refactoring/03-base-runner.md](../../../../../../../docs/refactoring/03-base-runner.md)).
+Kind-agnostic lifecycle backbone for Nakiros runners. The factory `createRunner(spec)` owns the registry, the `claude` turn execution, EventLog wiring, persistence, and boot rehydration. Each kind (audit / fix / create) supplies a small {@link RunnerSpec} contributing only the differences: workdir prep, first-turn prompt, post-turn policy, finish, cleanup. **eval-runner is intentionally NOT migrated** onto this factory — its batch + sandbox + grading model diverges too sharply (per-run lifecycle vs N-runs-in-batch + async grading + executionDir ≠ workdir).
 
 ## Exports
 

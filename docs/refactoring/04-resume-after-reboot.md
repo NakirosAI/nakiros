@@ -1,14 +1,13 @@
 # Cadrage — Bouton "Reprendre" après interruption daemon
 
 > Branche cible : à ouvrir · Statut : à cadrer · Date : 2026-04-25
-> Documents compagnons : [`02-agent-run-primitive.md`](./02-agent-run-primitive.md), [`03-base-runner.md`](./03-base-runner.md)
 
 ## Pourquoi
 
 Aujourd'hui, après un reboot du daemon en plein run :
 
 - audit / fix / create : les runs en `running` ou `starting` sont **collapsés en `waiting_for_input`** par le hook `spec.rehydrate` (avec `sessionId` préservé). Le user rouvre la vue et voit une conversation qui s'arrête abruptement.
-- eval : les runs en `running` / `grading` sont collapsés en `stopped` — non reprenables. Les runs `waiting_for_input` survivent (cf. doc 03 §3).
+- eval : les runs en `running` / `grading` sont collapsés en `stopped` — non reprenables. Les runs `waiting_for_input` survivent via la rehydratation lazy de `loadPersistedRuns`.
 
 **Limite UX** : un run rehydraté ressemble exactement à un run qui attend vraiment une question de l'utilisateur. Le user n'a aucun signal "ça a été interrompu, tu peux reprendre" et finit par taper un message au hasard pour relancer.
 
@@ -109,4 +108,4 @@ Ajouter à la namespace `runs` :
 
 - **Auto-recovery sans intervention user** — pas demandé, et plus risqué (peut consommer des tokens sans signal).
 - **Résolution mid-grading pour eval** — recréer la sandbox + re-runner les scripts, complexe et probablement pas plus économique qu'un run frais.
-- **Notifications système quand un run rehydraté attend** — la décision doc 02 §6 est "pas de notif OS". Le badge in-app suffit.
+- **Notifications système quand un run rehydraté attend** — décision projet : pas de notif OS (peu utile sans autorisation explicite). Le badge in-app suffit.

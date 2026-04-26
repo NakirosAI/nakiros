@@ -3,6 +3,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import TokenSandbox from './components/_dev/TokenSandbox';
+// Geist self-hosted via @fontsource — referenced in --n-font-sans/mono.
+import '@fontsource/geist/400.css';
+import '@fontsource/geist/500.css';
+import '@fontsource/geist/600.css';
+import '@fontsource/geist/700.css';
+import '@fontsource/geist-mono/400.css';
+import '@fontsource/geist-mono/500.css';
 import './styles/globals.css';
 import { i18nReady } from './i18n/index';
 

@@ -4,6 +4,7 @@ import ProjectOverview from '../../views/ProjectOverview';
 import ConversationsView from '../../views/ConversationsView';
 import SkillsView from '../../views/SkillsView';
 import RecommendationsView from '../../views/RecommendationsView';
+import { AppearanceSettings } from '../settings/AppearanceSettings';
 
 interface DashboardRouterProps {
   /** Active sidebar tab — selects which view component to render. */
@@ -35,7 +36,9 @@ export function DashboardRouter({ activeTab, project }: DashboardRouterProps) {
     case 'settings':
       return (
         <div className="flex-1 overflow-y-auto p-6">
-          <p className="text-[var(--text-muted)]">Project settings — coming soon</p>
+          <div className="mx-auto max-w-2xl space-y-6">
+            <AppearanceSettings />
+          </div>
         </div>
       );
     default:

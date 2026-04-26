@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/geist": "^5.2.8",
+    "@fontsource/geist-mono": "^5.2.7",
     "@nakiros/shared": "workspace:*",
     "@types/diff": "^8.0.0",
     "class-variance-authority": "^0.7.1",

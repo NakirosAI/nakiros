@@ -6,5 +6,14 @@
   "timeAgoNow": "à l'instant",
   "timeAgoMinutes": "il y a {{count}}min",
   "timeAgoHours": "il y a {{count}}h",
-  "timeAgoDays": "il y a {{count}}j"
+  "timeAgoDays": "il y a {{count}}j",
+  "appearanceTitle": "Apparence",
+  "appearanceDescription": "Personnalisez la densité d'affichage et la teinte d'accent de l'interface.",
+  "densityTitle": "Densité",
+  "densityStandard": "Standard",
+  "densityCompact": "Compact",
+  "densityComfy": "Confortable",
+  "accentTitle": "Couleur d'accent",
+  "accentHueLabel": "Teinte (OKLch)",
+  "accentReset": "Réinitialiser"
 }

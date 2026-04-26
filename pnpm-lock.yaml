@@ -33,6 +33,12 @@ importers:
 
   apps/frontend:
     dependencies:
+      '@fontsource/geist':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource/geist-mono':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@nakiros/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -535,6 +541,12 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@fontsource/geist-mono@5.2.7':
+    resolution: {integrity: sha512-xVPVFISJg/K0VVd+aQN0Y7X/sw9hUcJPyDWFJ5GpyU3bHELhoRsJkPSRSHXW32mOi0xZCUQDOaPj1sqIFJ1FGg==}
+
+  '@fontsource/geist@5.2.8':
+    resolution: {integrity: sha512-pI54klK6vz8fVpAVyV+iODGLEzw73cs1XJqV9PIXgW8MYMmBcwK6lKKaWqJrNHwEx8ppz9cuhussb6arXQ/PVQ==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -3750,6 +3762,10 @@ snapshots:
       react-dom: 19.2.4(react@19.2.4)
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@fontsource/geist-mono@5.2.7': {}
+
+  '@fontsource/geist@5.2.8': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

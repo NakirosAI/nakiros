@@ -13,6 +13,7 @@ import type { AuditHistoryEntry, Project, Skill } from '@nakiros/shared';
 import ScoreRing from '../components/viz/ScoreRing';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
+import EvalMatrixGrid from '../components/skill/EvalMatrixGrid';
 
 interface Props {
   /** Project owning the skill. */
@@ -120,7 +121,7 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
       {/* Tab strip */}
       <div className="flex items-center gap-1 border-b border-n-border-subtle px-7">
         <Tab id="audit" label="Audit" icon={<ShieldCheck size={13} strokeWidth={2} />} count={skill?.auditCount} active={tab} setTab={setTab} />
-        <Tab id="evals" label="Evals" icon={<FlaskConical size={13} strokeWidth={2} />} count={skill?.evals?.definitions.length} active={tab} setTab={setTab} disabled />
+        <Tab id="evals" label="Evals" icon={<FlaskConical size={13} strokeWidth={2} />} count={skill?.evals?.definitions.length} active={tab} setTab={setTab} />
         <Tab id="fix" label="Fix" icon={<Wrench size={13} strokeWidth={2} />} active={tab} setTab={setTab} disabled />
         <Tab id="files" label="Files" icon={<FileText size={13} strokeWidth={2} />} count={skill?.files.length} active={tab} setTab={setTab} disabled />
         <Tab id="iters" label="Iterations" icon={<Layers size={13} strokeWidth={2} />} count={skill?.evals?.iterations.length} active={tab} setTab={setTab} disabled />
@@ -136,7 +137,13 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
         {!skillError && skill && tab === 'audit' && (
           <AuditTab project={project} skill={skill} />
         )}
-        {!skillError && skill && tab !== 'audit' && (
+        {!skillError && skill && tab === 'evals' && (
+          <EvalMatrixGrid
+            skill={skill}
+            request={{ scope: 'project', projectId: project.id, skillName: skill.name }}
+          />
+        )}
+        {!skillError && skill && tab !== 'audit' && tab !== 'evals' && (
           <ComingSoon tab={tab} />
         )}
       </div>

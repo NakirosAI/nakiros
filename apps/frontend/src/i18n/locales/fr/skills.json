@@ -17,6 +17,15 @@
     "scoreLabel": "score",
     "fixFromAudit": "Fix depuis cet audit"
   },
+  "evalsTab": {
+    "empty": "Aucune itération d'eval enregistrée.",
+    "emptyHint": "Lance une première série via le bouton Run evals (bientôt disponible).",
+    "noBaselineHint": "aucun run baseline",
+    "includeBaseline": "Inclure baseline (without-skill)",
+    "defined": "Evals définies",
+    "assertions": "assertions",
+    "noDefinitions": "Aucun eval défini pour ce skill."
+  },
   "loading": "Chargement des skills…",
   "heading": "Skills ({{count}})",
   "newSkill": "Nouveau skill",

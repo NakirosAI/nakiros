@@ -4,7 +4,9 @@ import {
   ArrowLeft,
   FileText,
   FlaskConical,
+  GitCompare,
   Layers,
+  Play,
   ShieldCheck,
   Sparkles,
   Wrench,
@@ -122,7 +124,7 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
       <div className="flex items-center gap-1 border-b border-n-border-subtle px-7">
         <Tab id="audit" label="Audit" icon={<ShieldCheck size={13} strokeWidth={2} />} count={skill?.auditCount} active={tab} setTab={setTab} />
         <Tab id="evals" label="Evals" icon={<FlaskConical size={13} strokeWidth={2} />} count={skill?.evals?.definitions.length} active={tab} setTab={setTab} />
-        <Tab id="fix" label="Fix" icon={<Wrench size={13} strokeWidth={2} />} active={tab} setTab={setTab} disabled />
+        <Tab id="fix" label="Fix" icon={<Wrench size={13} strokeWidth={2} />} active={tab} setTab={setTab} />
         <Tab id="files" label="Files" icon={<FileText size={13} strokeWidth={2} />} count={skill?.files.length} active={tab} setTab={setTab} disabled />
         <Tab id="iters" label="Iterations" icon={<Layers size={13} strokeWidth={2} />} count={skill?.evals?.iterations.length} active={tab} setTab={setTab} disabled />
       </div>
@@ -143,7 +145,8 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
             request={{ scope: 'project', projectId: project.id, skillName: skill.name }}
           />
         )}
-        {!skillError && skill && tab !== 'audit' && tab !== 'evals' && (
+        {!skillError && skill && tab === 'fix' && <FixTab />}
+        {!skillError && skill && tab !== 'audit' && tab !== 'evals' && tab !== 'fix' && (
           <ComingSoon tab={tab} />
         )}
       </div>
@@ -339,6 +342,66 @@ function AuditTab({ project, skill }: { project: Project; skill: Skill }) {
           <AuditMarkdownViewer content={content} />
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Fix tab ────────────────────────────────────────────────────────────────
+
+/**
+ * Fix tab landing — port of `FixTab` from
+ * `apps/Nakiros-new-design/screens-skills.jsx:413-436`. The actual fix
+ * run streams in the global `RunScreen` (Phase 4 of the migration
+ * plan); this tab is just the entry point with two CTAs that wire up
+ * later (PR6 keeps them disabled until the run shell is ready).
+ */
+function FixTab() {
+  const { t } = useTranslation('skills');
+  return (
+    <div className="mx-auto max-w-[760px] px-7 py-10 font-n-sans">
+      <div className="rounded-n-lg border border-n-border-subtle bg-n-surface p-5">
+        <div className="flex items-start gap-4">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-n-md bg-n-violet-soft text-n-violet">
+            <Wrench size={20} strokeWidth={2} />
+          </div>
+          <div className="flex-1">
+            <h3 className="m-0 text-[15px] font-semibold text-n-fg">
+              {t('fixTab.title', { defaultValue: 'Lance un Fix sur ce skill' })}
+            </h3>
+            <p className="mt-1.5 text-[13px] leading-snug text-n-muted">
+              {t('fixTab.intro', {
+                defaultValue:
+                  'Le fix s\'appuie sur l\'audit le plus récent et les évals existantes. Il travaille sur une copie sandbox',
+              })}{' '}
+              (<span className="font-n-mono text-n-fg">tmp_skill</span>),{' '}
+              {t('fixTab.introCont', {
+                defaultValue: 'itère, et déploie au "Finish".',
+              })}
+            </p>
+            <div className="mt-3.5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled
+                className="inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[12px] text-n-accent opacity-60"
+              >
+                <Play size={12} strokeWidth={2.25} />
+                {t('fixTab.run', { defaultValue: 'Lancer le fix' })}
+              </button>
+              <button
+                type="button"
+                disabled
+                className="inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-3 font-n-mono text-[12px] text-n-muted opacity-60"
+              >
+                <GitCompare size={12} strokeWidth={2} />
+                {t('fixTab.viewLastDiff', { defaultValue: 'Voir le dernier diff' })}
+              </button>
+            </div>
+            <div className="mt-3 font-n-mono text-[10.5px] uppercase tracking-[0.6px] text-n-faint">
+              {t('fixTab.comingHint', { defaultValue: 'Wired up in Phase 4 (RunScreen)' })}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

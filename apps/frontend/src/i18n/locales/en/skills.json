@@ -26,6 +26,14 @@
     "assertions": "assertions",
     "noDefinitions": "No eval defined for this skill yet."
   },
+  "fixTab": {
+    "title": "Run a Fix on this skill",
+    "intro": "The fix builds on the latest audit and existing evals. It works on a sandbox copy",
+    "introCont": "iterates, and deploys when you hit \"Finish\".",
+    "run": "Run fix",
+    "viewLastDiff": "View last diff",
+    "comingHint": "Wired up in Phase 4 (RunScreen)"
+  },
   "diff": {
     "back": "Back to matrix",
     "export": "Export diff",

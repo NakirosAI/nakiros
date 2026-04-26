@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentRun, Project, AppPreferences, BundledSkillConflict } from '@nakiros/shared';
+import { DEFAULT_ACCENT_HUE, DEFAULT_DENSITY } from '@nakiros/shared';
 import Home from './views/Home';
 import ScanView from './views/ScanView';
 import Dashboard from './views/Dashboard';
@@ -8,6 +9,7 @@ import NakirosSkillsView from './views/NakirosSkillsView';
 import GlobalSkillsView from './views/GlobalSkillsView';
 import PluginSkillsView from './views/PluginSkillsView';
 import BundledSkillConflictsView from './views/BundledSkillConflictsView';
+import NewShell from './components/shell/NewShell';
 import { resolveLanguage } from './utils/language';
 import i18n from './i18n/index';
 import { PreferencesProvider } from './hooks/usePreferences';
@@ -16,10 +18,22 @@ import { useAgentRunsSync } from './hooks/useAgentRunsSync';
 import { AgentRunNavigationProvider } from './hooks/useAgentRunNavigation';
 import { agentRunFocus } from './lib/agent-run-focus';
 
+/**
+ * Stable per-mount detection of the `?shell=new` flag introduced by
+ * Phase 1 PR2b. Module-level constant so the conditional render below
+ * doesn't disturb React's hook order (the flag can't change without a
+ * full reload, just like `?dev=tokens`).
+ */
+const SHELL_NEW =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('shell') === 'new';
+
 const FALLBACK_PREFERENCES: AppPreferences = {
   theme: 'dark',
   language: 'system',
   updatedAt: '',
+  density: DEFAULT_DENSITY,
+  accentHue: DEFAULT_ACCENT_HUE,
 };
 
 type View =
@@ -65,6 +79,8 @@ export default function App() {
         language: prefs.language ?? 'system',
         updatedAt: prefs.updatedAt ?? '',
         mcpServerUrl: prefs.mcpServerUrl,
+        density: prefs.density ?? DEFAULT_DENSITY,
+        accentHue: prefs.accentHue ?? DEFAULT_ACCENT_HUE,
       };
       setPreferences(resolvedPrefs);
       void i18n.changeLanguage(resolveLanguage(resolvedPrefs.language));
@@ -102,6 +118,22 @@ export default function App() {
     document.documentElement.dataset.theme = 'dark';
     document.documentElement.style.colorScheme = 'dark';
   }, []);
+
+  // Apply new-design preferences (density + accent hue) to <html>.
+  // `data-density` triggers --n-row-h / --n-pad-card overrides in tokens.css;
+  // accent hue rotates the four --n-accent* OKLch vars in real time.
+  useEffect(() => {
+    const root = document.documentElement;
+    const density = preferences.density ?? DEFAULT_DENSITY;
+    if (density === 'standard') delete root.dataset.density;
+    else root.dataset.density = density;
+
+    const hue = preferences.accentHue ?? DEFAULT_ACCENT_HUE;
+    root.style.setProperty('--n-accent', `oklch(0.78 0.10 ${hue})`);
+    root.style.setProperty('--n-accent-strong', `oklch(0.84 0.12 ${hue})`);
+    root.style.setProperty('--n-accent-soft', `oklch(0.78 0.10 ${hue} / 0.14)`);
+    root.style.setProperty('--n-accent-line', `oklch(0.78 0.10 ${hue} / 0.35)`);
+  }, [preferences.density, preferences.accentHue]);
 
   // Sync opened project tabs with available projects
   useEffect(() => {
@@ -297,6 +329,24 @@ export default function App() {
           />
         </ProjectProvider>
       </PreferencesProvider>
+    );
+  }
+
+  // PR2b new shell takes over once boot is done and there's nothing
+  // full-screen to handle (loading splash, first-run scan). The legacy
+  // shell is preserved without the flag so we can A/B and roll back.
+  if (SHELL_NEW && view.name !== 'loading' && view.name !== 'scan') {
+    return (
+      <AgentRunNavigationProvider navigate={navigateToAgentRun}>
+        <NewShell
+          projects={projects}
+          preferences={preferences}
+          updatePreferences={handlePreferencesChange}
+          onRescan={handleRescan}
+          onDismissProject={handleDismissProject}
+          bootError={bootError ?? undefined}
+        />
+      </AgentRunNavigationProvider>
     );
   }
 

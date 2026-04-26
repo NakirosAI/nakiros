@@ -1,0 +1,203 @@
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { AgentRun, AppPreferences, Project } from '@nakiros/shared';
+import { useTabs, type ProjectTabView, type Tab } from '../../hooks/useTabs';
+import { PreferencesProvider } from '../../hooks/usePreferences';
+import { ProjectProvider } from '../../hooks/useProject';
+import Home from '../../views/Home';
+import ProjectOverviewScreen from '../../views/ProjectOverviewScreen';
+import NewShellTopBar from './NewShellTopBar';
+import NewShellSidebar from './NewShellSidebar';
+
+interface NewShellProps {
+  projects: Project[];
+  preferences: AppPreferences;
+  updatePreferences(next: AppPreferences): Promise<void>;
+  onRescan(): void;
+  onDismissProject(id: string): Promise<void>;
+  bootError?: string;
+}
+
+/**
+ * Shell experimentale du new-design (Phase 1 PR2b). Activée via le flag
+ * URL `?shell=new`. Pilotée par {@link useTabs}, elle ouvre les projets
+ * dans des onglets parallèles. Pour cette PR, chaque onglet projet rend
+ * le {@link Dashboard} actuel pour préserver la parité fonctionnelle —
+ * la refonte des écrans suit dans les phases ultérieures.
+ *
+ * Out of scope ici : RunDock (PR2c), Home fusionnée 3-tabs (Phase 6),
+ * persistence des onglets (post-Phase 1, si demandé).
+ */
+export default function NewShell({
+  projects,
+  preferences,
+  updatePreferences,
+  onRescan,
+  onDismissProject,
+  bootError,
+}: NewShellProps) {
+  const { t } = useTranslation('common');
+  const { tabs, activeTabId, activeTab, openTab, closeTab, setActiveTab, updateTab } = useTabs();
+
+  // If the project backing an open project tab disappears (rescan,
+  // dismissal), close that tab to avoid rendering a stale Dashboard.
+  useEffect(() => {
+    const orphans = tabs.filter(
+      (tab): tab is Extract<Tab, { kind: 'project' }> =>
+        tab.kind === 'project' && !projects.some((p) => p.id === tab.projectId),
+    );
+    for (const orphan of orphans) closeTab(orphan.id);
+  }, [projects, tabs, closeTab]);
+
+  const handleOpenProject = (projectId: string) => {
+    const project = projects.find((p) => p.id === projectId);
+    if (!project) return;
+    openTab({ kind: 'project', projectId, label: project.name, view: 'overview' });
+  };
+
+  const newTab = () => {
+    openTab({ kind: 'home', label: 'Home' });
+  };
+
+  const handleOpenRun = (run: AgentRun) => {
+    openTab({ kind: 'run', runId: run.id, label: run.title });
+  };
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-n-canvas font-n-sans text-n-fg">
+      <NewShellTopBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onSelectTab={setActiveTab}
+        onCloseTab={closeTab}
+        onNewTab={newTab}
+        onOpenRun={handleOpenRun}
+        projects={projects}
+      />
+      <main className="flex flex-1 overflow-hidden">
+        {activeTab.kind === 'home' && (
+          <Home
+            projects={projects}
+            bootError={bootError}
+            onOpenProject={handleOpenProject}
+            onRescan={onRescan}
+            onDismissProject={onDismissProject}
+            // Skill catalog screens are folded into Home in Phase 6;
+            // until then these jumps are unavailable in the new shell.
+            onOpenNakirosSkills={() => undefined}
+            onOpenGlobalSkills={() => undefined}
+            onOpenPluginSkills={() => undefined}
+          />
+        )}
+
+        {activeTab.kind === 'project' && (() => {
+          const tab = activeTab;
+          const project = projects.find((p) => p.id === tab.projectId);
+          if (!project) {
+            return (
+              <div className="grid flex-1 place-items-center text-n-muted">
+                {t('loadingWorkspace')}
+              </div>
+            );
+          }
+          const view: ProjectTabView = tab.view ?? 'overview';
+          const setView = (next: ProjectTabView) => updateTab(tab.id, { view: next });
+          return (
+            <PreferencesProvider
+              preferences={preferences}
+              updatePreferences={updatePreferences}
+            >
+              <ProjectProvider
+                project={project}
+                openProjects={openProjectsFromTabs(tabs, projects)}
+                activeProjectId={project.id}
+                allProjects={projects}
+                openProjectTab={handleOpenProject}
+                closeProjectTab={(projectId) => {
+                  const projectTab = tabs.find(
+                    (t): t is Extract<Tab, { kind: 'project' }> =>
+                      t.kind === 'project' && t.projectId === projectId,
+                  );
+                  if (projectTab) closeTab(projectTab.id);
+                }}
+              >
+                <NewShellSidebar active={view} onNavigate={setView} />
+                <section className="flex flex-1 flex-col overflow-hidden">
+                  {view === 'overview' && (
+                    <ProjectOverviewScreen key={project.id} project={project} />
+                  )}
+                  {view !== 'overview' && (
+                    <ComingSoon view={view} onBack={() => setView('overview')} />
+                  )}
+                </section>
+              </ProjectProvider>
+            </PreferencesProvider>
+          );
+        })()}
+
+        {activeTab.kind === 'run' && (
+          <div className="grid flex-1 place-items-center text-n-muted">
+            <div className="text-sm">
+              Run detail view coming in PR2c.{' '}
+              <span className="font-n-mono text-n-subtle">runId={activeTab.runId}</span>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+/**
+ * Placeholder for project sub-views not yet ported (Skills / Conversations
+ * / Recommendations). Kept inline because it carries no state and lives
+ * exclusively inside the new shell.
+ */
+function ComingSoon({
+  view,
+  onBack,
+}: {
+  view: Exclude<ProjectTabView, 'overview'>;
+  onBack(): void;
+}) {
+  const { t } = useTranslation('common');
+  return (
+    <div className="flex flex-1 items-center justify-center bg-n-canvas">
+      <div className="rounded-n-lg border border-n-border-default bg-n-surface px-8 py-7 text-center">
+        <div className="font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-subtle">
+          {view}
+        </div>
+        <div className="mt-2 text-[15px] text-n-fg">Coming soon</div>
+        <div className="mt-1 text-[12.5px] text-n-muted">
+          This screen is part of a later phase of the migration.
+        </div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="mt-4 rounded-n-sm border border-n-border-default bg-n-raised px-3 py-1.5 font-n-mono text-[11.5px] text-n-fg hover:bg-n-canvas"
+        >
+          ← {t('actions.back', { defaultValue: 'Back to overview' })}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Derive the list of unique opened `Project` instances from the project
+ * tabs currently in the strip. Order is preserved so consumers see them
+ * in tab order. Used to feed `ProjectProvider.openProjects`, which the
+ * legacy Dashboard's project-tab strip already expects.
+ */
+function openProjectsFromTabs(tabs: Tab[], projects: Project[]): Project[] {
+  const seen = new Set<string>();
+  const result: Project[] = [];
+  for (const tab of tabs) {
+    if (tab.kind !== 'project' || seen.has(tab.projectId)) continue;
+    const project = projects.find((p) => p.id === tab.projectId);
+    if (!project) continue;
+    seen.add(tab.projectId);
+    result.push(project);
+  }
+  return result;
+}

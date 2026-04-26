@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import type { SkillScope } from '@nakiros/shared';
 
 import { resolveSkillDir } from './skill-dir.js';
+import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 const DATA_URL_MIME_BY_EXT: Record<string, string> = {
@@ -34,8 +35,7 @@ interface ReadFileRequest {
  * image MIME types are returned; anything else yields `null`.
  */
 export const skillsCommonHandlers: HandlerRegistry = {
-  'skill:readFileAsDataUrl': (args) => {
-    const request = args[0] as ReadFileRequest;
+  'skill:readFileAsDataUrl': createTypedHandler((request: ReadFileRequest) => {
     const skillDir = resolveSkillDir(request);
     const abs = resolve(skillDir, request.relativePath);
     if (!abs.startsWith(skillDir + '/') && abs !== skillDir) return null;
@@ -49,5 +49,5 @@ export const skillsCommonHandlers: HandlerRegistry = {
     } catch {
       return null;
     }
-  },
+  }),
 };

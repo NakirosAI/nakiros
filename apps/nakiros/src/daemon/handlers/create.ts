@@ -13,7 +13,12 @@ import {
   readFixDiffFile,
 } from '../../services/fix-runner.js';
 import { resolveSkillDir } from './skill-dir.js';
-import { createEventBroadcaster, getRunOrThrow, resolveSkillDirForRun } from './run-helpers.js';
+import {
+  createEventBroadcaster,
+  createTypedHandler,
+  getRunOrThrow,
+  resolveSkillDirForRun,
+} from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 const broadcastCreateEvent = createEventBroadcaster<AuditRunEvent>('create:event');
@@ -30,42 +35,36 @@ const broadcastCreateEvent = createEventBroadcaster<AuditRunEvent>('create:event
  * Broadcasts `create:event` via `eventBus.broadcast`.
  */
 export const createHandlers: HandlerRegistry = {
-  'create:start': (args) => {
-    const request = args[0] as StartAuditRequest;
+  'create:start': createTypedHandler((request: StartAuditRequest) => {
     const skillDir = resolveSkillDir(request);
     return startCreate(request, { skillDir, onEvent: broadcastCreateEvent });
-  },
+  }),
 
-  'create:stopRun': (args) => {
-    stopCreate(args[0] as string);
-  },
+  'create:stopRun': createTypedHandler(stopCreate),
 
-  'create:getRun': (args) => getCreateRun(args[0] as string),
+  'create:getRun': createTypedHandler(getCreateRun),
 
-  'create:sendUserMessage': async (args) => {
-    const runId = args[0] as string;
-    const message = args[1] as string;
+  'create:sendUserMessage': createTypedHandler(async (runId: string, message: string) => {
     const run = getRunOrThrow(getCreateRun, runId, 'Create');
     const skillDir = resolveSkillDirForRun(run);
     await sendCreateUserMessage(runId, message, {
       skillDir,
       onEvent: broadcastCreateEvent,
     });
-  },
+  }),
 
-  'create:finish': (args) => {
-    const runId = args[0] as string;
+  'create:finish': createTypedHandler((runId: string) => {
     const run = getRunOrThrow(getCreateRun, runId, 'Create');
     const skillDir = resolveSkillDirForRun(run);
     finishCreate(runId, { skillDir, onEvent: broadcastCreateEvent });
-  },
+  }),
 
-  'create:listActive': () => listActiveCreateRuns(),
+  'create:listActive': createTypedHandler(listActiveCreateRuns),
 
-  'create:listAll': () => listAllCreateRuns(),
+  'create:listAll': createTypedHandler(listAllCreateRuns),
 
-  'create:getBufferedEvents': (args) => getCreateBufferedEvents(args[0] as string),
+  'create:getBufferedEvents': createTypedHandler(getCreateBufferedEvents),
 
-  'create:listDiff': (args) => listFixDiff(args[0] as string),
-  'create:readDiffFile': (args) => readFixDiffFile(args[0] as string, args[1] as string),
+  'create:listDiff': createTypedHandler(listFixDiff),
+  'create:readDiffFile': createTypedHandler(readFixDiffFile),
 };

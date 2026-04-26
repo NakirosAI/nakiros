@@ -22,11 +22,22 @@ import {
 import { startEvalRuns } from '../../services/eval-runner.js';
 import { readLatestIterationBenchmark } from '../../services/eval-benchmark.js';
 import { resolveSkillDir } from './skill-dir.js';
-import { createEventBroadcaster, getRunOrThrow, resolveSkillDirForRun } from './run-helpers.js';
+import {
+  createEventBroadcaster,
+  createTypedHandler,
+  getRunOrThrow,
+  resolveSkillDirForRun,
+} from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 const broadcastFixEvent = createEventBroadcaster<AuditRunEvent>('fix:event');
 const broadcastEvalEvent = createEventBroadcaster<EvalRunEvent>('eval:event');
+
+interface RunEvalsInTempRequest {
+  runId: string;
+  evalNames?: string[];
+  includeBaseline?: boolean;
+}
 
 /**
  * Registers the `fix:*` IPC channels — skill iteration flow that edits a temp
@@ -42,44 +53,33 @@ const broadcastEvalEvent = createEventBroadcaster<EvalRunEvent>('eval:event');
  * Broadcasts `fix:event` (fix lifecycle) and `eval:event` (evals launched from the fix temp workdir).
  */
 export const fixHandlers: HandlerRegistry = {
-  'fix:start': (args) => {
-    const request = args[0] as StartAuditRequest;
+  'fix:start': createTypedHandler((request: StartAuditRequest) => {
     const skillDir = resolveSkillDir(request);
     return startFix(request, { skillDir, onEvent: broadcastFixEvent });
-  },
+  }),
 
-  'fix:stopRun': (args) => {
-    stopFix(args[0] as string);
-  },
+  'fix:stopRun': createTypedHandler(stopFix),
 
-  'fix:getRun': (args) => getFixRun(args[0] as string),
+  'fix:getRun': createTypedHandler(getFixRun),
 
-  'fix:sendUserMessage': async (args) => {
-    const runId = args[0] as string;
-    const message = args[1] as string;
+  'fix:sendUserMessage': createTypedHandler(async (runId: string, message: string) => {
     const run = getRunOrThrow(getFixRun, runId, 'Fix');
     const skillDir = resolveSkillDirForRun(run);
     await sendFixUserMessage(runId, message, { skillDir, onEvent: broadcastFixEvent });
-  },
+  }),
 
-  'fix:finish': (args) => {
-    const runId = args[0] as string;
+  'fix:finish': createTypedHandler((runId: string) => {
     const run = getRunOrThrow(getFixRun, runId, 'Fix');
     const skillDir = resolveSkillDirForRun(run);
     finishFix(runId, { skillDir, onEvent: broadcastFixEvent });
-  },
+  }),
 
   /**
    * Kick off a full eval batch against the fix's temp workdir (in-progress copy).
    * Results are written INSIDE the temp workdir, so the real skill stays untouched
    * until the user syncs. The fix agent can read benchmark.json between turns.
    */
-  'fix:runEvalsInTemp': async (args) => {
-    const request = args[0] as {
-      runId: string;
-      evalNames?: string[];
-      includeBaseline?: boolean;
-    };
+  'fix:runEvalsInTemp': createTypedHandler(async (request: RunEvalsInTempRequest) => {
     const run = getRunOrThrow(getFixRun, request.runId, 'Fix');
     const tempDir = getFixTempWorkdir(request.runId);
     if (!tempDir) throw new Error(`No temp workdir for fix ${request.runId}`);
@@ -97,24 +97,23 @@ export const fixHandlers: HandlerRegistry = {
         onEvent: broadcastEvalEvent,
       },
     );
-  },
+  }),
 
-  'fix:listActive': () => listActiveFixRuns(),
+  'fix:listActive': createTypedHandler(listActiveFixRuns),
 
-  'fix:listAll': () => listAllFixRuns(),
+  'fix:listAll': createTypedHandler(listAllFixRuns),
 
-  'fix:getBufferedEvents': (args) => getFixBufferedEvents(args[0] as string),
+  'fix:getBufferedEvents': createTypedHandler(getFixBufferedEvents),
 
-  'fix:getBenchmarks': (args): FixBenchmarks => {
-    const runId = args[0] as string;
+  'fix:getBenchmarks': createTypedHandler((runId: string): FixBenchmarks => {
     const realDir = getFixRealSkillDir(runId);
     const tempDir = getFixTempWorkdir(runId);
     return {
       real: realDir ? readLatestIterationBenchmark(realDir) : null,
       temp: tempDir ? readLatestIterationBenchmark(tempDir) : null,
     };
-  },
+  }),
 
-  'fix:listDiff': (args) => listFixDiff(args[0] as string),
-  'fix:readDiffFile': (args) => readFixDiffFile(args[0] as string, args[1] as string),
+  'fix:listDiff': createTypedHandler(listFixDiff),
+  'fix:readDiffFile': createTypedHandler(readFixDiffFile),
 };

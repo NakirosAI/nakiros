@@ -57,3 +57,27 @@ export function resolveSkillDirForRun(run: SkillRunIdentity): string {
     marketplaceName: run.marketplaceName,
   });
 }
+
+/**
+ * Adapter that lifts a typed `(...args: TArgs) => TResult` function into the
+ * raw `IpcHandler` shape (`(args: unknown[]) => unknown`) the registry
+ * expects. Replaces the boilerplate `args[0] as T`, `args[1] as U`… casts that
+ * used to live in every handler.
+ *
+ * The cast `unknown[] → TArgs` is unsafe by construction (the IPC layer
+ * cannot prove the caller passed the right shape), but it's localised here
+ * and the handler body sees properly typed parameters. Callers that need
+ * runtime validation should keep doing it explicitly inside the handler
+ * body.
+ *
+ * @example
+ * 'audit:stopRun': createTypedHandler(stopAudit),
+ * 'audit:sendUserMessage': createTypedHandler(async (runId: string, message: string) => {
+ *   ...
+ * }),
+ */
+export function createTypedHandler<TArgs extends unknown[], TResult>(
+  fn: (...args: TArgs) => TResult | Promise<TResult>,
+): (rawArgs: unknown[]) => TResult | Promise<TResult> {
+  return (rawArgs) => fn(...(rawArgs as TArgs));
+}

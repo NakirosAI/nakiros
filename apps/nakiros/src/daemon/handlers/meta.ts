@@ -1,4 +1,5 @@
 import { getVersionInfo } from '../../services/version-service.js';
+import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 /**
@@ -8,8 +9,7 @@ import type { HandlerRegistry } from './index.js';
  * - `meta:getVersionInfo` — returns current installed version + latest npm version (optional `force` bypasses cache)
  */
 export const metaHandlers: HandlerRegistry = {
-  'meta:getVersionInfo': (args) => {
-    const force = Boolean((args[0] as { force?: boolean } | undefined)?.force);
-    return getVersionInfo({ force });
-  },
+  'meta:getVersionInfo': createTypedHandler((options?: { force?: boolean }) =>
+    getVersionInfo({ force: Boolean(options?.force) }),
+  ),
 };

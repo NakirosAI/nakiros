@@ -7,6 +7,7 @@ import {
   installAgentsGlobally,
 } from '../../services/agent-installer.js';
 import { getAgentCliStatus } from '../../services/agent-cli.js';
+import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
 /**
@@ -21,10 +22,10 @@ import type { HandlerRegistry } from './index.js';
  * - `agents:install-global` — installs into the user-global environment
  */
 export const agentsHandlers: HandlerRegistry = {
-  'agents:status': (args) => getAgentInstallStatus(args[0] as string),
-  'agents:global-status': () => getGlobalInstallStatus(),
-  'agents:installed-commands': () => getInstalledCommands(),
-  'agents:cli-status': () => getAgentCliStatus(),
-  'agents:install': (args) => installAgents(args[0] as AgentInstallRequest),
-  'agents:install-global': () => installAgentsGlobally(),
+  'agents:status': createTypedHandler(getAgentInstallStatus),
+  'agents:global-status': createTypedHandler(getGlobalInstallStatus),
+  'agents:installed-commands': createTypedHandler(getInstalledCommands),
+  'agents:cli-status': createTypedHandler(getAgentCliStatus),
+  'agents:install': createTypedHandler((request: AgentInstallRequest) => installAgents(request)),
+  'agents:install-global': createTypedHandler(installAgentsGlobally),
 };

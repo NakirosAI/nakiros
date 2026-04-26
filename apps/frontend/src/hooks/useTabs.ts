@@ -1,0 +1,188 @@
+import { useCallback, useMemo, useState } from 'react';
+
+/*
+ * Multi-tab shell state — Phase 1 PR2a of the new-design integration
+ * (`docs/refactoring/07-new-design-integration.md`). Models the tabs the
+ * user opens at the top of the new shell. Wired into the actual shell
+ * component in PR2b.
+ *
+ * Tabs are a discriminated union because each kind carries a different
+ * payload:
+ * - `home`    — the Home screen (project list / catalogs)
+ * - `project` — a project dashboard with a sub-view (overview, skills, ...)
+ * - `run`     — a single agent run detail
+ *
+ * IDs are short random strings minted at open time. Dedup is by stable
+ * domain keys (projectId for projects, runId for runs) so reopening a
+ * project that's already in the strip just focuses the existing tab.
+ *
+ * The hook is purely in-memory; persistence across reloads is deferred
+ * (cf. plan PR2b decision #2).
+ */
+
+/** Sub-view within a project tab. Mirrors the new-design sidebar items. */
+export type ProjectTabView = 'overview' | 'skills' | 'convs' | 'recs' | 'settings';
+
+interface HomeTab {
+  id: string;
+  kind: 'home';
+  label: string;
+}
+
+interface ProjectTab {
+  id: string;
+  kind: 'project';
+  projectId: string;
+  label: string;
+  view: ProjectTabView;
+  /** When `view === 'skills'`, the focused skill id (null = list view). */
+  skillId?: string | null;
+}
+
+interface RunTab {
+  id: string;
+  kind: 'run';
+  runId: string;
+  label: string;
+}
+
+export type Tab = HomeTab | ProjectTab | RunTab;
+
+/** Args accepted by {@link UseTabsApi.openTab}. The id is generated. */
+export type OpenTabInput =
+  | Omit<HomeTab, 'id'>
+  | Omit<ProjectTab, 'id'>
+  | Omit<RunTab, 'id'>;
+
+interface UseTabsApi {
+  tabs: Tab[];
+  activeTabId: string;
+  activeTab: Tab;
+  /**
+   * Opens a tab and focuses it. Dedupes:
+   * - `project` tabs by `projectId`
+   * - `run` tabs by `runId`
+   * `home` tabs are always added (a user can want multiple Home tabs).
+   * Returns the id of the focused tab (existing or newly minted).
+   */
+  openTab(input: OpenTabInput): string;
+  /**
+   * Closes a tab. If the closed tab was active, focus moves to its
+   * left neighbor (or right if it was the first). If the last tab is
+   * closed, a fresh Home tab is inserted to keep the shell renderable.
+   */
+  closeTab(id: string): void;
+  /** Focus the given tab. No-op if the id is unknown. */
+  setActiveTab(id: string): void;
+  /**
+   * Patch a tab in place. Useful for navigating sub-views inside a
+   * project tab without opening a new one. The patch is type-narrowed
+   * by the existing tab kind: passing fields that don't apply is a no-op.
+   */
+  updateTab(id: string, patch: Partial<Tab>): void;
+}
+
+function newId(): string {
+  return 't' + Math.random().toString(36).slice(2, 7);
+}
+
+function makeHomeTab(): Tab {
+  return { id: newId(), kind: 'home', label: 'Home' };
+}
+
+/**
+ * React hook owning the tab strip state for the new shell. See module
+ * doc-comment for the model and dedup behavior.
+ */
+export function useTabs(initial?: Tab[]): UseTabsApi {
+  const [tabs, setTabs] = useState<Tab[]>(() => {
+    if (initial && initial.length > 0) return initial;
+    return [makeHomeTab()];
+  });
+  const [activeTabId, setActiveTabId] = useState<string>(() => (initial?.[0]?.id ?? tabs[0]!.id));
+
+  const openTab = useCallback((input: OpenTabInput): string => {
+    let focusedId = '';
+    setTabs((prev) => {
+      // Dedup by domain key for project/run tabs.
+      if (input.kind === 'project') {
+        const existing = prev.find(
+          (t): t is ProjectTab => t.kind === 'project' && t.projectId === input.projectId,
+        );
+        if (existing) {
+          focusedId = existing.id;
+          return prev;
+        }
+      } else if (input.kind === 'run') {
+        const existing = prev.find(
+          (t): t is RunTab => t.kind === 'run' && t.runId === input.runId,
+        );
+        if (existing) {
+          focusedId = existing.id;
+          return prev;
+        }
+      }
+      const id = newId();
+      focusedId = id;
+      return [...prev, { ...input, id } as Tab];
+    });
+    if (focusedId) setActiveTabId(focusedId);
+    return focusedId;
+  }, []);
+
+  const closeTab = useCallback((id: string) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      if (idx === -1) return prev;
+
+      const next = prev.filter((t) => t.id !== id);
+      if (next.length === 0) {
+        const fresh = makeHomeTab();
+        setActiveTabId(fresh.id);
+        return [fresh];
+      }
+
+      // Refocus only if the closed tab was the active one.
+      setActiveTabId((current) => {
+        if (current !== id) return current;
+        const neighbor = next[Math.max(0, idx - 1)] ?? next[0]!;
+        return neighbor.id;
+      });
+      return next;
+    });
+  }, []);
+
+  const setActiveTab = useCallback((id: string) => {
+    setActiveTabId((current) => {
+      // Avoid spurious renders when re-clicking the active tab.
+      if (current === id) return current;
+      return id;
+    });
+  }, []);
+
+  const updateTab = useCallback((id: string, patch: Partial<Tab>) => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== id) return t;
+        // The cast is safe: callers pass partials that match the tab kind;
+        // unknown fields are a no-op at runtime and a discriminated-union
+        // narrowing problem at compile-time we accept here.
+        return { ...t, ...patch } as Tab;
+      }),
+    );
+  }, []);
+
+  const activeTab = useMemo<Tab>(() => {
+    return tabs.find((t) => t.id === activeTabId) ?? tabs[0]!;
+  }, [tabs, activeTabId]);
+
+  return {
+    tabs,
+    activeTabId: activeTab.id,
+    activeTab,
+    openTab,
+    closeTab,
+    setActiveTab,
+    updateTab,
+  };
+}

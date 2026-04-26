@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import type { AgentRunKind } from '@nakiros/shared';
 
 /*
  * Multi-tab shell state — Phase 1 PR2a of the new-design integration
@@ -43,6 +44,8 @@ interface RunTab {
   id: string;
   kind: 'run';
   runId: string;
+  /** Run discriminator — drives which IPC channels the RunScreen calls. */
+  runKind: AgentRunKind;
   label: string;
 }
 

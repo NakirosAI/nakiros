@@ -9,6 +9,7 @@ import ProjectOverviewScreen from '../../views/ProjectOverviewScreen';
 import SkillsScreen from '../../views/SkillsScreen';
 import SkillDetailScreen from '../../views/SkillDetailScreen';
 import MarketplaceScreen from '../../views/MarketplaceScreen';
+import RunScreen from '../../views/RunScreen';
 import type { MarketplaceTabView, SkillTabIdentity } from '../../hooks/useTabs';
 import NewShellTopBar from './NewShellTopBar';
 import NewShellSidebar from './NewShellSidebar';
@@ -64,7 +65,7 @@ export default function NewShell({
   };
 
   const handleOpenRun = (run: AgentRun) => {
-    openTab({ kind: 'run', runId: run.id, label: run.title });
+    openTab({ kind: 'run', runId: run.id, runKind: run.kind, label: run.title });
   };
 
   /**
@@ -173,12 +174,12 @@ export default function NewShell({
         })()}
 
         {activeTab.kind === 'run' && (
-          <div className="grid flex-1 place-items-center text-n-muted">
-            <div className="text-sm">
-              Run detail view coming in PR2c.{' '}
-              <span className="font-n-mono text-n-subtle">runId={activeTab.runId}</span>
-            </div>
-          </div>
+          <RunScreen
+            key={`runtab/${activeTab.id}`}
+            runId={activeTab.runId}
+            runKind={activeTab.runKind}
+            onClose={() => closeTab(activeTab.id)}
+          />
         )}
 
         {activeTab.kind === 'skill' && (

@@ -29,7 +29,7 @@ interface AuditMarkdownViewerProps {
  */
 export default function AuditMarkdownViewer({ content }: AuditMarkdownViewerProps) {
   return (
-    <div className="audit-md font-n-sans text-[12.5px] leading-relaxed text-n-fg">
+    <div className="audit-md min-w-0 break-words font-n-sans text-[12.5px] leading-relaxed text-n-fg">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>
@@ -108,14 +108,26 @@ const components: Components = {
   code: ({ children, className }) => (
     // Inline only — audit reports rarely carry fenced blocks, and when
     // they do (e.g. for paths) the inline style is more compact.
+    // `break-all` lets long paths/URLs wrap inside narrow containers
+    // instead of pushing the card width.
     <code
       className={
-        'rounded-n-xs border border-n-border-subtle bg-n-sunken px-1 py-0.5 font-n-mono text-[11px] text-n-fg ' +
+        'break-all rounded-n-xs border border-n-border-subtle bg-n-sunken px-1 py-0.5 font-n-mono text-[11px] text-n-fg ' +
         (className ?? '')
       }
     >
       {children}
     </code>
+  ),
+
+  pre: ({ children }) => (
+    // Fenced code blocks — keep the mono pre formatting but let the
+    // wrapper scroll horizontally when the content is wider than the
+    // card. Without this, react-markdown's default pre overflows the
+    // parent and pushes the audit card past its boundary.
+    <pre className="my-3 overflow-x-auto rounded-n-md border border-n-border-subtle bg-n-sunken px-3 py-2 font-n-mono text-[11px] leading-relaxed text-n-fg">
+      {children}
+    </pre>
   ),
 
   hr: () => <hr className="my-4 border-n-border-subtle" />,
@@ -166,7 +178,7 @@ function AuditTableCell({ children, ...props }: AuditTableCellProps) {
 
   if (text === '✅' || text === '✓') {
     return (
-      <td {...props} className="px-4 py-2.5">
+      <td {...props} className="break-words px-4 py-2.5">
         <span aria-label="passed" className="inline-flex items-center text-n-healthy">
           <Check size={13} strokeWidth={2.5} />
         </span>
@@ -175,7 +187,7 @@ function AuditTableCell({ children, ...props }: AuditTableCellProps) {
   }
   if (text === '❌' || text === '✗') {
     return (
-      <td {...props} className="px-4 py-2.5">
+      <td {...props} className="break-words px-4 py-2.5">
         <span aria-label="failed" className="inline-flex items-center text-n-critical">
           <X size={13} strokeWidth={2.5} />
         </span>
@@ -184,7 +196,7 @@ function AuditTableCell({ children, ...props }: AuditTableCellProps) {
   }
   if (/^N\s*\/\s*A$/i.test(text)) {
     return (
-      <td {...props} className="px-4 py-2.5">
+      <td {...props} className="break-words px-4 py-2.5">
         <span
           aria-label="not applicable"
           className="inline-flex items-center gap-1 font-n-mono text-[10.5px] text-n-faint"

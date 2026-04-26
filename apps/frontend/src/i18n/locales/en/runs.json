@@ -2,8 +2,22 @@
   "back": "Back",
   "stop": "Stop",
   "finish": "Finish",
+  "finishAndDeploy": "Finish & deploy",
   "discard": "Discard",
   "resume": "Reprendre",
+  "streaming": "streaming…",
+  "boot": {
+    "notFound": "Run not found or already discarded."
+  },
+  "titles": {
+    "audit": "Audit",
+    "fix": "Fix",
+    "create": "Create skill"
+  },
+  "unsupported": {
+    "title": "Coming soon",
+    "body": "This run kind is wired up in a follow-up PR."
+  },
   "interruptedBadge": "Interrompu",
   "interruptedTooltip": "Ce run a été coupé par un redémarrage du daemon. Clique sur Reprendre pour relancer la conversation.",
   "error": {

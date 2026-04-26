@@ -65,6 +65,14 @@ export function useRunState<
   initialRun: R,
   api: RunStateApi<R, Ev>,
   onInnerEvent?: (event: Ev) => void,
+  /**
+   * Polling cadence in ms. Defaults to `500` to preserve the legacy
+   * runs (AuditView/FixView) behaviour. Pass `0` to disable polling
+   * entirely — only the initial fetch + the live event subscription
+   * drive the state. The new-design `RunScreen` uses `0` to avoid the
+   * UI flicker caused by re-rendering at 2 Hz on a stable run.
+   */
+  pollIntervalMs: number = 500,
 ): UseRunStateResult<R> {
   const [run, setRun] = useState<R>(initialRun);
   const [liveEvents, setLiveEvents] = useState<LiveStreamEvent[]>([]);
@@ -80,12 +88,17 @@ export function useRunState<
       if (mounted && fresh) setRun(fresh);
     }
     void refresh();
-    const interval = setInterval(refresh, 500);
+    if (pollIntervalMs <= 0) {
+      return () => {
+        mounted = false;
+      };
+    }
+    const interval = setInterval(refresh, pollIntervalMs);
     return () => {
       mounted = false;
       clearInterval(interval);
     };
-  }, [runId, api]);
+  }, [runId, api, pollIntervalMs]);
 
   useEffect(() => {
     void api.getBufferedEvents(runId).then((buffered) => {

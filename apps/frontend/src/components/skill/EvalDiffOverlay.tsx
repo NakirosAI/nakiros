@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronRight,
   Download,
   GitCompare,
   RefreshCw,
@@ -15,13 +17,16 @@ import type {
   EvalMatrixRow,
   GetEvalMatrixRequest,
   IterationRunArtifact,
+  Skill,
 } from '@nakiros/shared';
 
 interface EvalDiffOverlayProps {
   /** Matrix the diff is computed from. */
   matrix: EvalMatrix;
-  /** The "current" iteration — what the user clicked. */
-  currentIteration: number;
+  /** Skill — used to read iteration timestamps from `skill.evals.iterations`. */
+  skill: Skill;
+  /** The iteration the user clicked. Seeds the local "current" state. */
+  initialIteration: number;
   /** Identity of the skill — forwarded to `loadIterationRun`. */
   baseRequest: GetEvalMatrixRequest;
   /** Closes the overlay (back button, Escape, X). */
@@ -43,6 +48,10 @@ interface AssertionDiff {
   prev: 'pass' | 'fail' | 'missing';
   cur: 'pass' | 'fail' | 'missing';
   isRegression: boolean;
+  /** Grader-produced evidence for the cur run, when available. */
+  evidenceCur: string | null;
+  /** Same for the prev run. */
+  evidencePrev: string | null;
 }
 
 /**
@@ -77,17 +86,65 @@ interface AssertionDiff {
  */
 export default function EvalDiffOverlay({
   matrix,
-  currentIteration,
+  skill,
+  initialIteration,
   baseRequest,
   onClose,
 }: EvalDiffOverlayProps) {
   const { t } = useTranslation('skills');
 
-  const indexInMatrix = matrix.iterations.indexOf(currentIteration);
-  const previousIteration = indexInMatrix > 0 ? matrix.iterations[indexInMatrix - 1] : null;
+  // Both runs are user-controllable via the RunPicker pills in the
+  // header. They seed from the iteration the user clicked + its
+  // immediate predecessor in the matrix.
+  const seedIndex = matrix.iterations.indexOf(initialIteration);
+  const seedPrev = seedIndex > 0 ? matrix.iterations[seedIndex - 1] ?? null : null;
+  const [curIter, setCurIter] = useState<number>(initialIteration);
+  const [prevIter, setPrevIter] = useState<number | null>(seedPrev);
+
+  // Re-anchor when the user opens the overlay from a different cell.
+  useEffect(() => {
+    setCurIter(initialIteration);
+    const idx = matrix.iterations.indexOf(initialIteration);
+    setPrevIter(idx > 0 ? matrix.iterations[idx - 1] ?? null : null);
+  }, [initialIteration, matrix.iterations]);
+
+  const indexInMatrix = matrix.iterations.indexOf(curIter);
+  const previousIteration = prevIter;
+  const previousIndex = previousIteration === null ? -1 : matrix.iterations.indexOf(previousIteration);
 
   const [selectedEval, setSelectedEval] = useState<string | null>(null);
   const [regressionsOnly, setRegressionsOnly] = useState(false);
+
+  // Pre-compute pass rates per iteration so the picker can show
+  // X/Y · % at a glance for each run row.
+  const passByIter = useMemo(() => {
+    const map = new Map<number, { passed: number; total: number; passRate: number }>();
+    matrix.iterations.forEach((iter, idx) => {
+      let passed = 0;
+      let total = 0;
+      for (const row of matrix.rows) {
+        const cell = row.withSkill[idx];
+        if (!cell) continue;
+        passed += cell.passed;
+        total += cell.total;
+      }
+      map.set(iter, {
+        passed,
+        total,
+        passRate: total > 0 ? passed / total : 0,
+      });
+    });
+    return map;
+  }, [matrix]);
+
+  // Map iteration → ISO timestamp from skill.evals.iterations.
+  const timestampByIter = useMemo(() => {
+    const map = new Map<number, string | null>();
+    for (const it of skill.evals?.iterations ?? []) {
+      map.set(it.number, it.timestamp);
+    }
+    return map;
+  }, [skill]);
 
   // Esc closes
   useEffect(() => {
@@ -103,7 +160,7 @@ export default function EvalDiffOverlay({
     if (indexInMatrix < 0) return [];
     return matrix.rows.map((row) => {
       const cur = row.withSkill[indexInMatrix] ?? null;
-      const prev = previousIteration === null ? null : row.withSkill[indexInMatrix - 1] ?? null;
+      const prev = previousIndex < 0 ? null : row.withSkill[previousIndex] ?? null;
       const curScore = cur ? cur.passed : 0;
       const prevScore = prev ? prev.passed : 0;
       const delta = curScore - prevScore;
@@ -115,7 +172,7 @@ export default function EvalDiffOverlay({
         isRegression: delta < 0 && prev !== null,
       };
     });
-  }, [matrix, indexInMatrix, previousIteration]);
+  }, [matrix, indexInMatrix, previousIndex]);
 
   // First eval that regressed becomes the default selection so the
   // drilldown surfaces useful info on open.
@@ -129,7 +186,10 @@ export default function EvalDiffOverlay({
     if (perEval[0]) setSelectedEval(perEval[0].evalName);
   }, [perEval, selectedEval]);
 
-  const aggregates = useMemo(() => aggregateIterations(matrix, indexInMatrix), [matrix, indexInMatrix]);
+  const aggregates = useMemo(
+    () => aggregateIterations(matrix, indexInMatrix, previousIndex),
+    [matrix, indexInMatrix, previousIndex],
+  );
 
   const visibleEvals = regressionsOnly ? perEval.filter((p) => p.isRegression) : perEval;
   const regressionCount = perEval.filter((p) => p.isRegression).length;
@@ -148,14 +208,30 @@ export default function EvalDiffOverlay({
         </button>
         <span className="h-3.5 w-px bg-n-border-subtle" />
         <GitCompare size={16} strokeWidth={2} className="text-n-violet" />
-        <div>
+        <div className="flex flex-col gap-1.5">
           <div className="font-n-mono text-[10.5px] uppercase tracking-[0.6px] text-n-faint">
             Eval diff
           </div>
-          <div className="text-[14px] font-semibold text-n-fg">
-            {previousIteration === null
-              ? `Run #${currentIteration}`
-              : `Run #${previousIteration} → Run #${currentIteration}`}
+          <div className="flex items-center gap-2">
+            <RunPicker
+              role="prev"
+              selected={previousIteration}
+              counterpart={curIter}
+              iterations={matrix.iterations}
+              passByIter={passByIter}
+              timestampByIter={timestampByIter}
+              onChange={setPrevIter}
+            />
+            <ArrowRight size={13} strokeWidth={2} className="text-n-faint" />
+            <RunPicker
+              role="cur"
+              selected={curIter}
+              counterpart={previousIteration}
+              iterations={matrix.iterations}
+              passByIter={passByIter}
+              timestampByIter={timestampByIter}
+              onChange={(iter) => iter !== null && setCurIter(iter)}
+            />
           </div>
         </div>
         <span className="flex-1" />
@@ -173,7 +249,7 @@ export default function EvalDiffOverlay({
           className="inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[11.5px] text-n-accent opacity-60"
         >
           <Check size={11} strokeWidth={2.5} />
-          {t('diff.promote', { defaultValue: 'Promote' })} #{currentIteration}
+          {t('diff.promote', { defaultValue: 'Promote' })} #{curIter}
         </button>
       </header>
 
@@ -182,7 +258,7 @@ export default function EvalDiffOverlay({
         <RunHistorySparkline
           iterations={matrix.iterations}
           passRates={matrix.metrics.passRateByIteration}
-          currentIteration={currentIteration}
+          currentIteration={curIter}
           previousIteration={previousIteration}
         />
 
@@ -205,7 +281,7 @@ export default function EvalDiffOverlay({
           <RunSummaryCard
             label="Current"
             accent
-            iteration={currentIteration}
+            iteration={curIter}
             agg={aggregates.cur}
           />
         </div>
@@ -295,7 +371,7 @@ export default function EvalDiffOverlay({
             <AssertionDrilldown
               evalName={selectedEval}
               baseRequest={baseRequest}
-              currentIteration={currentIteration}
+              currentIteration={curIter}
               previousIteration={previousIteration}
             />
           )}
@@ -303,6 +379,224 @@ export default function EvalDiffOverlay({
       </div>
     </div>
   );
+}
+
+// ── Run picker (header pills) ──────────────────────────────────────────────
+
+interface PassInfo {
+  passed: number;
+  total: number;
+  passRate: number;
+}
+
+interface RunPickerProps {
+  /** `prev` accepts null (no comparison); `cur` always selects something. */
+  role: 'prev' | 'cur';
+  selected: number | null;
+  /** The iteration the OTHER picker holds — flagged as "OTHER" in the dropdown. */
+  counterpart: number | null;
+  iterations: number[];
+  passByIter: Map<number, PassInfo>;
+  timestampByIter: Map<number, string | null>;
+  onChange(iteration: number | null): void;
+}
+
+/**
+ * Pill picker shown twice in the diff overlay header. Replaces the
+ * static "Run #N-1 → Run #N" text from an earlier draft (the mockup
+ * actually exposes both runs as dropdowns so the user can compare any
+ * pair of iterations, not just adjacent ones).
+ *
+ * The pill shows: status dot · Run #N · pass rate %. Clicking it opens
+ * a dropdown listing every iteration in the matrix with its
+ * timestamp/age, X/Y pass count and pass rate. The iteration the other
+ * picker is on is labelled OTHER and disabled (clicking it would put
+ * the same run on both sides).
+ */
+function RunPicker({
+  role,
+  selected,
+  counterpart,
+  iterations,
+  passByIter,
+  timestampByIter,
+  onChange,
+}: RunPickerProps) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const id = window.setTimeout(() => document.addEventListener('mousedown', onMouseDown), 0);
+    return () => {
+      window.clearTimeout(id);
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [open]);
+
+  const dotColor = role === 'cur' ? 'var(--n-accent)' : 'var(--n-fg-muted)';
+  const accentBorder = role === 'cur' ? 'var(--n-accent-line)' : 'var(--n-border-default)';
+
+  const selectedPass = selected !== null ? passByIter.get(selected) : null;
+  const selectedRatePct = selectedPass ? Math.round(selectedPass.passRate * 100) : null;
+
+  return (
+    <div ref={wrapperRef} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={
+          'inline-flex h-7 items-center gap-2 rounded-n-sm border px-2.5 font-n-mono text-[12px] text-n-fg transition-colors ' +
+          (open ? 'bg-n-raised ' : 'bg-transparent hover:bg-n-raised ')
+        }
+        style={{ borderColor: accentBorder }}
+      >
+        <span className="h-1.5 w-1.5 rounded-full" style={{ background: dotColor }} />
+        {selected === null ? (
+          <span className="text-n-faint">{role === 'prev' ? 'no previous' : '—'}</span>
+        ) : (
+          <>
+            <span className="font-semibold">Run #{selected}</span>
+            {selectedRatePct !== null && (
+              <span className="text-n-muted">{selectedRatePct}%</span>
+            )}
+          </>
+        )}
+        <ChevronDown
+          size={11}
+          strokeWidth={2.25}
+          className={'text-n-subtle transition-transform ' + (open ? 'rotate-180' : '')}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-8 z-50 w-[340px] overflow-hidden rounded-n-md border border-n-border-default bg-n-surface shadow-n-pop">
+          <div className="border-b border-n-border-subtle px-3.5 py-2 font-n-mono text-[10.5px] uppercase tracking-[1px] text-n-subtle">
+            Pick a run
+          </div>
+          <div className="max-h-[320px] overflow-y-auto">
+            {role === 'prev' && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(null);
+                  setOpen(false);
+                }}
+                className={
+                  'flex w-full items-center px-3.5 py-2 text-left transition-colors hover:bg-n-raised ' +
+                  (selected === null ? 'bg-n-accent-soft' : '')
+                }
+              >
+                <span className="font-n-mono text-[12px] text-n-faint">— no comparison</span>
+              </button>
+            )}
+            {[...iterations].reverse().map((iter) => {
+              const pass = passByIter.get(iter);
+              const ratePct = pass ? Math.round(pass.passRate * 100) : null;
+              const ts = timestampByIter.get(iter) ?? null;
+              const isSelected = selected === iter;
+              const isCounterpart = counterpart === iter;
+              return (
+                <button
+                  key={iter}
+                  type="button"
+                  disabled={isCounterpart}
+                  onClick={() => {
+                    if (isCounterpart) return;
+                    onChange(iter);
+                    setOpen(false);
+                  }}
+                  className={
+                    'grid w-full grid-cols-[64px_1fr_72px_56px_56px] items-center gap-2 px-3.5 py-2 text-left transition-colors ' +
+                    (isSelected
+                      ? 'bg-n-accent-soft'
+                      : isCounterpart
+                        ? 'cursor-not-allowed bg-transparent'
+                        : 'bg-transparent hover:bg-n-raised')
+                  }
+                >
+                  <span
+                    className={
+                      'font-n-mono text-[13px] font-semibold ' +
+                      (isCounterpart ? 'text-n-faint opacity-50' : 'text-n-fg')
+                    }
+                  >
+                    #{iter}
+                  </span>
+                  <span
+                    className={
+                      'font-n-mono text-[11px] ' +
+                      (isCounterpart ? 'text-n-faint opacity-50' : 'text-n-muted')
+                    }
+                  >
+                    {formatRunWhen(ts)}
+                  </span>
+                  <span
+                    className={
+                      'font-n-mono text-[11px] tabular-nums ' +
+                      (isCounterpart ? 'text-n-faint opacity-50' : 'text-n-fg')
+                    }
+                  >
+                    {pass ? `${pass.passed}/${pass.total}` : '—'}
+                  </span>
+                  <span
+                    className="font-n-mono text-[11px] tabular-nums"
+                    style={{
+                      color: isCounterpart ? 'var(--n-fg-faint)' : passRateTone(pass?.passRate ?? 0),
+                    }}
+                  >
+                    {ratePct !== null ? `${ratePct}%` : '—'}
+                  </span>
+                  <span className="text-right">
+                    {isCounterpart && (
+                      <span className="font-n-mono text-[9.5px] uppercase tracking-[0.6px] text-n-faint">
+                        OTHER
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Format an ISO timestamp into the compact form used by the mockup
+ * dropdown (HH:MM today / yesterday / Nd ago / explicit date).
+ */
+function formatRunWhen(iso: string | null): string {
+  if (!iso) return '—';
+  const ts = new Date(iso);
+  if (Number.isNaN(ts.getTime())) return '—';
+  const now = new Date();
+  const diffMs = now.getTime() - ts.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const sameDay =
+    ts.getFullYear() === now.getFullYear() &&
+    ts.getMonth() === now.getMonth() &&
+    ts.getDate() === now.getDate();
+  if (sameDay) {
+    return ts.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday =
+    ts.getFullYear() === yesterday.getFullYear() &&
+    ts.getMonth() === yesterday.getMonth() &&
+    ts.getDate() === yesterday.getDate();
+  if (isYesterday) return 'yesterday';
+  const days = Math.floor(diffMs / dayMs);
+  if (days < 7) return `${days}d ago`;
+  return ts.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
 }
 
 // ── Run history sparkline ──────────────────────────────────────────────────
@@ -602,6 +896,15 @@ function AssertionDrilldown({
   const [prevArtefact, setPrevArtefact] = useState<IterationRunArtifact | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const toggleExpand = (index: number) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
 
   useEffect(() => {
     let cancelled = false;
@@ -698,35 +1001,27 @@ function AssertionDrilldown({
         <div className="overflow-hidden rounded-n-md border border-n-border-subtle bg-n-surface">
           <div
             className="grid border-b border-n-border-subtle bg-n-sunken px-3.5 py-2.5 font-n-mono text-[10.5px] uppercase tracking-[0.6px] text-n-faint"
-            style={{ gridTemplateColumns: '60px 1fr 90px 90px' }}
+            style={{ gridTemplateColumns: '24px 60px 1fr 90px 90px' }}
           >
+            <span />
             <span>id</span>
             <span>assertion</span>
             <span>prev</span>
             <span>cur</span>
           </div>
-          {assertions.map((a, i) => (
-            <div
-              key={i}
-              className="grid items-center gap-2 border-b border-n-border-subtle px-3.5 py-2.5 last:border-b-0"
-              style={{
-                gridTemplateColumns: '60px 1fr 90px 90px',
-                background: a.isRegression ? 'oklch(0.74 0.16 25 / 0.06)' : 'transparent',
-              }}
-            >
-              <span className="font-n-mono text-[11px] text-n-faint">A{a.index}</span>
-              <span className="text-[12.5px] text-n-fg">
-                {a.text}
-                {a.isRegression && (
-                  <span className="ml-2 font-n-mono text-[9.5px] font-semibold tracking-[0.5px] text-n-critical">
-                    REGRESSION
-                  </span>
-                )}
-              </span>
-              <AssertionPill state={a.prev} />
-              <AssertionPill state={a.cur} />
-            </div>
-          ))}
+          {assertions.map((a) => {
+            const isOpen = expanded.has(a.index);
+            const hasEvidence = !!a.evidenceCur || !!a.evidencePrev;
+            return (
+              <AssertionRowCollapsible
+                key={a.index}
+                assertion={a}
+                open={isOpen}
+                onToggle={() => toggleExpand(a.index)}
+                hasEvidence={hasEvidence}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -734,6 +1029,109 @@ function AssertionDrilldown({
           the daemon doesn't surface fixture-level data through
           IterationRunArtifact, and a faithful port of the trace
           column would need a structured channel. To revisit. */}
+    </div>
+  );
+}
+
+function AssertionRowCollapsible({
+  assertion,
+  open,
+  onToggle,
+  hasEvidence,
+}: {
+  assertion: AssertionDiff;
+  open: boolean;
+  onToggle(): void;
+  hasEvidence: boolean;
+}) {
+  const headerBg = assertion.isRegression
+    ? 'oklch(0.74 0.16 25 / 0.06)'
+    : open
+      ? 'var(--n-bg-raised)'
+      : 'transparent';
+  return (
+    <div className="border-b border-n-border-subtle last:border-b-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={!hasEvidence}
+        className="grid w-full items-center gap-2 px-3.5 py-2.5 text-left transition-colors hover:bg-n-raised disabled:cursor-default disabled:hover:bg-transparent"
+        style={{ gridTemplateColumns: '24px 60px 1fr 90px 90px', background: headerBg }}
+      >
+        <span className="flex items-center justify-center text-n-subtle">
+          {hasEvidence ? (
+            open ? (
+              <ChevronDown size={12} strokeWidth={2.25} />
+            ) : (
+              <ChevronRight size={12} strokeWidth={2.25} />
+            )
+          ) : (
+            <span className="h-1 w-1 rounded-full bg-n-faint" />
+          )}
+        </span>
+        <span className="font-n-mono text-[11px] text-n-faint">A{assertion.index}</span>
+        <span className="text-[12.5px] text-n-fg">
+          {assertion.text}
+          {assertion.isRegression && (
+            <span className="ml-2 font-n-mono text-[9.5px] font-semibold tracking-[0.5px] text-n-critical">
+              REGRESSION
+            </span>
+          )}
+        </span>
+        <AssertionPill state={assertion.prev} />
+        <AssertionPill state={assertion.cur} />
+      </button>
+
+      {open && hasEvidence && (
+        <div className="grid border-t border-n-border-subtle bg-n-canvas px-3.5 py-3" style={{ gridTemplateColumns: '24px 60px 1fr' }}>
+          <span />
+          <TypeBadge type={assertion.type} />
+          <div className="space-y-2">
+            {assertion.evidenceCur && (
+              <EvidenceBlock label="cur" tone="accent" text={assertion.evidenceCur} />
+            )}
+            {assertion.evidencePrev && (
+              <EvidenceBlock label="prev" tone="muted" text={assertion.evidencePrev} />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TypeBadge({ type }: { type: AssertionDiff['type'] }) {
+  return (
+    <span
+      className="inline-flex h-fit w-fit items-center rounded-n-xs border border-n-border-subtle bg-n-sunken px-1.5 py-0.5 font-n-mono text-[9.5px] uppercase tracking-[0.5px] text-n-muted"
+      title={`Assertion type: ${type}`}
+    >
+      {type}
+    </span>
+  );
+}
+
+function EvidenceBlock({
+  label,
+  tone,
+  text,
+}: {
+  label: string;
+  tone: 'accent' | 'muted';
+  text: string;
+}) {
+  const labelColor = tone === 'accent' ? 'var(--n-accent)' : 'var(--n-fg-muted)';
+  return (
+    <div>
+      <div
+        className="mb-1 font-n-mono text-[9.5px] uppercase tracking-[0.6px]"
+        style={{ color: labelColor }}
+      >
+        {label}
+      </div>
+      <pre className="whitespace-pre-wrap rounded-n-sm border border-n-border-subtle bg-n-sunken px-2.5 py-2 font-n-mono text-[11px] leading-snug text-n-muted">
+        {text}
+      </pre>
     </div>
   );
 }
@@ -785,14 +1183,18 @@ interface AggregateRow {
   durationMs: number;
 }
 
-function aggregateIterations(matrix: EvalMatrix, indexInMatrix: number): {
+function aggregateIterations(
+  matrix: EvalMatrix,
+  curIndex: number,
+  prevIndex: number,
+): {
   prev: AggregateRow | null;
   cur: AggregateRow | null;
   passDelta: number;
 } {
-  if (indexInMatrix < 0) return { prev: null, cur: null, passDelta: 0 };
-  const cur = aggregateAtIndex(matrix.rows, indexInMatrix);
-  const prev = indexInMatrix > 0 ? aggregateAtIndex(matrix.rows, indexInMatrix - 1) : null;
+  if (curIndex < 0) return { prev: null, cur: null, passDelta: 0 };
+  const cur = aggregateAtIndex(matrix.rows, curIndex);
+  const prev = prevIndex >= 0 ? aggregateAtIndex(matrix.rows, prevIndex) : null;
   const passDelta = (cur?.passed ?? 0) - (prev?.passed ?? 0);
   return { prev, cur, passDelta };
 }
@@ -840,11 +1242,13 @@ function alignAssertions(
       prev: prevState,
       cur: curState,
       isRegression: prevState === 'pass' && curState === 'fail',
+      evidenceCur: c.evidence || null,
+      evidencePrev: prevHit?.evidence || null,
     });
   });
 
   // Surface assertions present in prev but missing in cur.
-  prevResults.forEach((p, i) => {
+  prevResults.forEach((p) => {
     if (used.has(p.text)) return;
     out.push({
       index: out.length + 1,
@@ -853,6 +1257,8 @@ function alignAssertions(
       prev: p.passed ? 'pass' : 'fail',
       cur: 'missing',
       isRegression: p.passed,
+      evidenceCur: null,
+      evidencePrev: p.evidence || null,
     });
   });
 

@@ -140,7 +140,10 @@ export default function EvalMatrixGrid({ skill, request }: EvalMatrixGridProps) 
       >
         {t('evalsTab.defined', { defaultValue: 'Evals définies' })}
       </SectionLabel>
-      <div className="mb-5 grid gap-1.5">
+      {/* Cap the definitions list to ~3 visible rows so a long list of
+          long prompts doesn't push the matrix off-screen. Internal
+          scroll keeps everything reachable. */}
+      <div className="mb-5 max-h-[260px] overflow-y-auto rounded-n-md">
         {definitions.length === 0 ? (
           <div className="rounded-n-md border border-dashed border-n-border-default bg-n-surface px-4 py-6 text-center font-n-mono text-[11.5px] text-n-faint">
             {t('evalsTab.noDefinitions', {
@@ -148,7 +151,11 @@ export default function EvalMatrixGrid({ skill, request }: EvalMatrixGridProps) 
             })}
           </div>
         ) : (
-          definitions.map((def) => <EvalDefinitionRow key={def.name} def={def} />)
+          <div className="grid gap-1.5">
+            {definitions.map((def) => (
+              <EvalDefinitionRow key={def.name} def={def} />
+            ))}
+          </div>
         )}
       </div>
 
@@ -219,7 +226,8 @@ export default function EvalMatrixGrid({ skill, request }: EvalMatrixGridProps) 
       {matrix && diffIteration !== null && (
         <EvalDiffOverlay
           matrix={matrix}
-          currentIteration={diffIteration}
+          skill={skill}
+          initialIteration={diffIteration}
           baseRequest={request}
           onClose={() => setDiffIteration(null)}
         />
@@ -309,10 +317,7 @@ function EvalDefinitionRow({ def }: { def: SkillEvalDefinition }) {
         <FlaskConical size={13} strokeWidth={2.25} className="flex-shrink-0 text-n-accent" />
         <span className="font-n-mono text-[12.5px] font-medium text-n-fg">{def.name}</span>
         <span className="font-n-mono text-[10.5px] text-n-faint">{assertCount} assertions</span>
-        <span className="text-n-faint">·</span>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-n-muted" title={def.prompt}>
-          {def.prompt}
-        </span>
+        <span className="flex-1" />
         <button
           type="button"
           disabled
@@ -322,6 +327,7 @@ function EvalDefinitionRow({ def }: { def: SkillEvalDefinition }) {
           <MoreHorizontal size={14} strokeWidth={2} />
         </button>
       </div>
+      <p className="mt-1.5 text-[12px] leading-snug text-n-muted">{def.prompt}</p>
     </div>
   );
 }

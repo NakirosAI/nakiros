@@ -159,28 +159,35 @@ Une seule source à conserver.
 ## Plan de chantiers (4 phases)
 
 **Phase 1 — Quick wins (~1j cumulé)**
-1. Module `services/skill-fs/` : extraire scanDirectory/countAudits/buildSkill/validatePath, brancher les 4 readers
-2. Fusionner `resolveSkillDir` (skill-dir.ts ↔ skills-common.ts)
-3. Remonter les 7 types frontend dans `@nakiros/shared` + supprimer `DetectedEditor` dupliqué dans onboarding-installer
-4. Fusionner `EDITOR_DEFS` ↔ `ENVIRONMENTS`
-5. Utiliser `Textarea` / `EmptyState` existants partout (kill `<textarea>` inline + loading divs)
-6. Remplacer `style={{height:320}}` FixView par classe Tailwind
+1. ✅ Module `services/skill-fs/` : extraire scanDirectory/countAudits/buildSkill/validatePath, brancher les 4 readers
+2. ✅ Fusionner `resolveSkillDir` (skill-dir.ts ↔ skills-common.ts)
+3. ✅ Remonter les 7 types frontend dans `@nakiros/shared` + supprimer `DetectedEditor` dupliqué dans onboarding-installer
+4. ✅ Fusionner `EDITOR_DEFS` ↔ `ENVIRONMENTS`
+5. ✅ Utiliser `Textarea` / `EmptyState` / `CodeEditorPane` partout (kill `<textarea>` inline + loading divs)
+6. ✅ Remplacer `style={{height:320}}` FixView par classe Tailwind
 
 **Phase 2 — Structurels frontend (~2j)**
-7. Hooks `usePolling`, `useEvalFeedback`, `useConversationAnalyses`
-8. Bibliothèque de composants Run (cf. doc 02) : `RunControlHeader`,
-   `RunStatusBadge`, `AgentActivityFeed`, `HumanInteractionPanel`
-9. `utils/format.ts` (formatTokens, formatDuration i18n-aware unifié)
-10. Migration `TabButton` → `components/ui/tabs`
+7. ✅ Hooks `usePolling`, `useEvalFeedback`, `useConversationAnalyses`
+8. ✅ Bibliothèque de composants Run (cf. doc 02) : `RunControlHeader`,
+   `RunStatusBadge`, `RunStatusIcon`, `AgentActivityFeed`,
+   `HumanInteractionPanel`, `RunErrorBanner`
+9. ✅ `utils/format.ts` (formatTokens, formatDuration i18n-aware unifié)
+10. ✅ Migration `TabButton` → `components/ui/` *(résolu autrement : TabButton
+    promu en `ui/TabButton.tsx` ; `ui/tabs.tsx` shadcn reste pour la
+    navigation top-level — deux primitives distinctes par design)*
 
 **Phase 3 — Structurels backend (~2-3j)**
-11. `BaseRunner<TKind, TEvent>` dans runner-core/ (cf. doc 02)
-12. Migration progressive des runners : audit → fix → create → eval
-13. `createTypedHandler<I,O>` middleware pour handlers IPC
+11. ✅ `BaseRunner` factory `createRunner` dans runner-core/ (cf. doc 03)
+12. ✅ Migration audit → fix → create *(eval gardé autonome — décision
+    actée doc 03 §3, rehydratation lazy livrée à la place)*
+13. ✅ `createTypedHandler<I,O>` middleware pour handlers IPC
+    *(broadcast d'erreur structuré reporté — cf. doc 05)*
 
 **Phase 4 — Hygiène IPC (~1j)**
-14. Refactor `nakiros-client.ts` pour passer par `IPC_CHANNELS['x']`
-15. Lint/CI : grep bloquant sur `invoke\('` littéraux dans nakiros-client
+14. ✅ Refactor `nakiros-client.ts` pour passer par `IPC_CHANNELS['x']`
+15. ✅ Lint guard `no-restricted-syntax` (eslint flat config, root) qui
+    bloque `invoke('LITERAL', ...)` et `subscribe('LITERAL', ...)` —
+    `pnpm lint` exit 1 sur literal détecté
 
 ---
 

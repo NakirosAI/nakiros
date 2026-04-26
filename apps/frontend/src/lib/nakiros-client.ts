@@ -346,5 +346,4 @@ const client = {
 // Install on window. We cast via `unknown` because the full type surface in
 // global.d.ts contains many specific types we keep as `unknown` here —
 // TypeScript will still catch usage mismatches at call sites.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).nakiros = client;
+(window as unknown as { nakiros: typeof client }).nakiros = client;

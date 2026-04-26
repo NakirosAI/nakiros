@@ -26,6 +26,12 @@
     "assertions": "assertions",
     "noDefinitions": "Aucun eval défini pour ce skill."
   },
+  "filesTab": {
+    "empty": "Aucun fichier dans ce skill.",
+    "emptyFile": "Ce fichier est vide.",
+    "pickAFile": "Sélectionne un fichier pour voir son contenu",
+    "binary": "Aperçu d'image non pris en charge ici."
+  },
   "fixTab": {
     "title": "Lance un Fix sur ce skill",
     "intro": "Le fix s'appuie sur l'audit le plus récent et les évals existantes. Il travaille sur une copie sandbox",

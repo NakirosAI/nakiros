@@ -26,6 +26,12 @@
     "assertions": "assertions",
     "noDefinitions": "No eval defined for this skill yet."
   },
+  "filesTab": {
+    "empty": "No file in this skill folder.",
+    "emptyFile": "This file is empty.",
+    "pickAFile": "Select a file to preview",
+    "binary": "Image preview not supported here."
+  },
   "fixTab": {
     "title": "Run a Fix on this skill",
     "intro": "The fix builds on the latest audit and existing evals. It works on a sandbox copy",

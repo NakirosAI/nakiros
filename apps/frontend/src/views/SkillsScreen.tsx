@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, FileText, FlaskConical, Folder, Search } from 'lucide-react';
-import type { Project, Skill } from '@nakiros/shared';
+import { FlaskConical, Play, Plus, Search, ShieldCheck, Sparkles } from 'lucide-react';
+import type { Project, Skill, SkillFileEntry } from '@nakiros/shared';
+import ScoreRing from '../components/viz/ScoreRing';
+import Sparkline from '../components/viz/Sparkline';
 
 interface Props {
   /** Project whose `.claude/skills/` directory is listed. */
@@ -63,17 +65,27 @@ export default function SkillsScreen({ project, onOpenSkill }: Props) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden font-n-sans">
-      <header className="flex items-center justify-between gap-4 border-b border-n-border-subtle px-7 pt-5 pb-4">
-        <div>
-          <h1 className="m-0 font-n-mono text-[18px] font-medium text-n-fg">
-            {t('skillsTitle', { defaultValue: 'Skills' })}
-          </h1>
-          <div className="mt-1 font-n-mono text-[11.5px] text-n-faint">
-            {skills
-              ? t('skillsCount', { count: skills.length, defaultValue: '{{count}} skill(s)' })
-              : t('common:loading', { defaultValue: 'Loading…' })}
-          </div>
+      {/* Top bar: title + count + bulk actions */}
+      <header className="flex items-center justify-between gap-4 border-b border-n-border-subtle px-7 py-3.5">
+        <h2 className="m-0 text-[15px] font-semibold text-n-fg">
+          {t('skillsTitle', { defaultValue: 'Skills' })}{' '}
+          {skills && (
+            <span className="font-n-mono text-[12px] font-normal text-n-faint">· {skills.length}</span>
+          )}
+        </h2>
+        <div className="flex flex-wrap gap-1.5">
+          <ToolbarButton icon={<ShieldCheck size={11} strokeWidth={2} />} label="Audit all" />
+          <ToolbarButton icon={<FlaskConical size={11} strokeWidth={2} />} label="Run evals" />
+          <ToolbarButton
+            icon={<Plus size={11} strokeWidth={2.25} />}
+            label={t('newSkill', { defaultValue: 'Nouveau skill' })}
+            primary
+          />
         </div>
+      </header>
+
+      {/* Search row */}
+      <div className="flex items-center gap-3 border-b border-n-border-subtle px-7 py-2.5">
         <div className="relative">
           <Search
             size={13}
@@ -88,9 +100,9 @@ export default function SkillsScreen({ project, onOpenSkill }: Props) {
             className="h-7 w-64 rounded-n-sm border border-n-border-subtle bg-n-sunken pl-7 pr-2.5 font-n-mono text-[12px] text-n-fg placeholder:text-n-faint focus:border-n-accent-line focus:outline-none"
           />
         </div>
-      </header>
+      </div>
 
-      <div className="flex-1 overflow-y-auto px-7 py-6">
+      <div className="flex-1 overflow-y-auto px-7 py-5">
         {error && (
           <div className="rounded-n-md border border-n-critical bg-n-critical-soft px-4 py-3 font-n-mono text-[12px] text-n-critical">
             {error}
@@ -110,7 +122,7 @@ export default function SkillsScreen({ project, onOpenSkill }: Props) {
         )}
 
         {filtered && filtered.length > 0 && (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(440px, 1fr))' }}>
             {filtered.map((skill) => (
               <SkillCard key={skill.name} skill={skill} onOpen={() => onOpenSkill(skill.name)} />
             ))}
@@ -121,56 +133,145 @@ export default function SkillsScreen({ project, onOpenSkill }: Props) {
   );
 }
 
+function ToolbarButton({
+  icon,
+  label,
+  primary = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled
+      className={
+        'inline-flex h-7 items-center gap-1.5 rounded-n-sm border px-2.5 font-n-mono text-[11.5px] opacity-60 ' +
+        (primary
+          ? 'border-n-accent-line bg-n-accent-soft text-n-accent'
+          : 'border-n-border-subtle bg-transparent text-n-muted')
+      }
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────
 
 function SkillCard({ skill, onOpen }: { skill: Skill; onOpen(): void }) {
   const description = useMemo(() => extractDescription(skill.content), [skill.content]);
   const iterationCount = skill.evals?.iterations.length ?? 0;
-  const refsCount = skill.files.length;
+  const evalCount = skill.evals?.definitions.length ?? 0;
+  const refsCount = useMemo(() => countRefsFiles(skill.files), [skill.files]);
+
+  // Score = latest pass rate × 100 (0–100). Null when no eval has run yet.
+  const latest = skill.evals?.latestPassRate;
+  const score = typeof latest === 'number' ? Math.round(latest * 100) : null;
+
+  // Trend = pass rate per iteration (oldest → newest left to right).
+  const trend = useMemo(
+    () => (skill.evals?.iterations ?? []).map((it) => Math.round(it.withSkill.passRate * 100)),
+    [skill],
+  );
+
+  const sparkColor =
+    score === null
+      ? 'var(--n-fg-faint)'
+      : score >= 80
+        ? 'var(--n-healthy)'
+        : score >= 60
+          ? 'var(--n-accent)'
+          : 'var(--n-watch)';
+  const sparkFill =
+    score === null
+      ? 'oklch(0.96 0.005 240 / 0.04)'
+      : score >= 80
+        ? 'var(--n-healthy-soft)'
+        : score >= 60
+          ? 'var(--n-accent-soft)'
+          : 'var(--n-watch-soft)';
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group flex flex-col gap-3 rounded-n-lg border border-n-border-subtle bg-n-surface p-4 text-left transition-colors hover:border-n-accent-line hover:bg-n-raised"
+      className="group relative flex flex-col gap-0 rounded-n-lg border border-n-border-subtle bg-n-surface p-4 text-left transition-colors hover:border-n-border-strong"
     >
-      <div className="flex items-start justify-between gap-3">
+      {/* Top row: name + description / ScoreRing */}
+      <div className="flex items-start justify-between gap-3.5">
         <div className="min-w-0 flex-1">
-          <div className="truncate font-n-mono text-[14px] font-medium text-n-fg">
-            {skill.name}
+          <div className="mb-1.5 flex items-center gap-2">
+            <Sparkles size={13} strokeWidth={2.25} className="flex-shrink-0 text-n-accent" />
+            <strong className="truncate font-n-mono text-[13.5px] font-medium text-n-fg">
+              {skill.name}
+            </strong>
           </div>
-          <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-snug text-n-muted">
-            {description || <span className="text-n-faint italic">no description</span>}
+          <p className="m-0 line-clamp-2 text-[12px] leading-relaxed text-n-muted">
+            {description || <span className="italic text-n-faint">no description</span>}
           </p>
         </div>
-        <ChevronRight
-          size={14}
-          strokeWidth={2}
-          className="mt-0.5 flex-shrink-0 text-n-faint transition-colors group-hover:text-n-accent"
-        />
+        {score !== null ? (
+          <ScoreRing value={score} max={100} size={52} />
+        ) : (
+          <div className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-full border border-dashed border-n-border-default text-center font-n-mono text-[10px] leading-tight text-n-faint">
+            no
+            <br />
+            eval
+          </div>
+        )}
       </div>
-      <div className="flex flex-wrap items-center gap-2.5 font-n-mono text-[10.5px] text-n-subtle">
-        <Badge icon={<FlaskConical size={10} strokeWidth={2.25} />}>
-          {skill.evals?.definitions.length ?? 0} evals
-        </Badge>
-        <Badge icon={<Folder size={10} strokeWidth={2.25} />}>{skill.auditCount} audits</Badge>
-        <Badge icon={<FileText size={10} strokeWidth={2.25} />}>{refsCount} files</Badge>
-        {iterationCount > 0 && <Badge>iter {iterationCount}</Badge>}
+
+      {/* Footer: stats + sparkline */}
+      <div className="mt-3.5 flex items-center gap-2.5 border-t border-n-border-subtle pt-3 font-n-mono text-[11px] tabular-nums text-n-muted">
+        <span>
+          <span className="text-n-faint">iter</span> {iterationCount}
+        </span>
+        <span className="text-n-faint">·</span>
+        <span>{evalCount} evals</span>
+        <span className="text-n-faint">·</span>
+        <span>{skill.auditCount} audits</span>
+        <span className="text-n-faint">·</span>
+        <span>{refsCount} refs</span>
+        <span className="flex-1" />
+        {trend.length > 0 ? (
+          <Sparkline
+            data={trend}
+            width={72}
+            height={20}
+            stroke={sparkColor}
+            fill={sparkFill}
+          />
+        ) : (
+          <span className="text-[10.5px] text-n-faint">no trend</span>
+        )}
       </div>
     </button>
   );
 }
 
-function Badge({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-n-xs border border-n-border-subtle bg-n-sunken px-1.5 py-0.5 text-n-muted">
-      {icon}
-      {children}
-    </span>
-  );
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Count files inside the skill's `references/` folder. Returns 0 when
+ * the folder doesn't exist. Mirrors the mockup's `skill.refs` field
+ * (the mockup uses a static count; we derive it from the file tree).
+ */
+function countRefsFiles(entries: SkillFileEntry[]): number {
+  const refs = entries.find((e) => e.isDirectory && /^references$/i.test(e.name));
+  if (!refs?.children) return 0;
+  let count = 0;
+  const walk = (list: SkillFileEntry[]) => {
+    for (const item of list) {
+      if (item.isDirectory && item.children) walk(item.children);
+      else if (!item.isDirectory) count++;
+    }
+  };
+  walk(refs.children);
+  return count;
+}
 
 /**
  * Extract a description string from a skill's SKILL.md content. Looks

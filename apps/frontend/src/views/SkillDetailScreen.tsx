@@ -16,6 +16,7 @@ import ScoreRing from '../components/viz/ScoreRing';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
 import EvalMatrixGrid from '../components/skill/EvalMatrixGrid';
+import SkillFilesTab from '../components/skill/SkillFilesTab';
 
 interface Props {
   /** Project owning the skill. */
@@ -125,7 +126,7 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
         <Tab id="audit" label="Audit" icon={<ShieldCheck size={13} strokeWidth={2} />} count={skill?.auditCount} active={tab} setTab={setTab} />
         <Tab id="evals" label="Evals" icon={<FlaskConical size={13} strokeWidth={2} />} count={skill?.evals?.definitions.length} active={tab} setTab={setTab} />
         <Tab id="fix" label="Fix" icon={<Wrench size={13} strokeWidth={2} />} active={tab} setTab={setTab} />
-        <Tab id="files" label="Files" icon={<FileText size={13} strokeWidth={2} />} count={skill?.files.length} active={tab} setTab={setTab} disabled />
+        <Tab id="files" label="Files" icon={<FileText size={13} strokeWidth={2} />} count={skill?.files.length} active={tab} setTab={setTab} />
         <Tab id="iters" label="Iterations" icon={<Layers size={13} strokeWidth={2} />} count={skill?.evals?.iterations.length} active={tab} setTab={setTab} disabled />
       </div>
 
@@ -146,7 +147,10 @@ export default function SkillDetailScreen({ project, skillName, onBack }: Props)
           />
         )}
         {!skillError && skill && tab === 'fix' && <FixTab />}
-        {!skillError && skill && tab !== 'audit' && tab !== 'evals' && tab !== 'fix' && (
+        {!skillError && skill && tab === 'files' && (
+          <SkillFilesTab projectId={project.id} skill={skill} />
+        )}
+        {!skillError && skill && tab !== 'audit' && tab !== 'evals' && tab !== 'fix' && tab !== 'files' && (
           <ComingSoon tab={tab} />
         )}
       </div>

@@ -66,14 +66,28 @@ interface SkillTab {
   label: string;
 }
 
-export type Tab = HomeTab | ProjectTab | RunTab | SkillTab;
+/** Sub-view within a marketplace tab — kept in sync with what
+ *  `MarketplaceScreen` renders. */
+export type MarketplaceTabView = 'overview' | 'skills';
+
+interface MarketplaceTab {
+  id: string;
+  kind: 'marketplace';
+  /** Marketplace folder name (matches `Skill.marketplaceName`). */
+  marketplaceName: string;
+  label: string;
+  view: MarketplaceTabView;
+}
+
+export type Tab = HomeTab | ProjectTab | RunTab | SkillTab | MarketplaceTab;
 
 /** Args accepted by {@link UseTabsApi.openTab}. The id is generated. */
 export type OpenTabInput =
   | Omit<HomeTab, 'id'>
   | Omit<ProjectTab, 'id'>
   | Omit<RunTab, 'id'>
-  | Omit<SkillTab, 'id'>;
+  | Omit<SkillTab, 'id'>
+  | Omit<MarketplaceTab, 'id'>;
 
 interface UseTabsApi {
   tabs: Tab[];
@@ -160,6 +174,15 @@ export function useTabs(initial?: Tab[]): UseTabsApi {
       } else if (input.kind === 'skill') {
         const existing = prev.find(
           (t): t is SkillTab => t.kind === 'skill' && sameSkillIdentity(t.identity, input.identity),
+        );
+        if (existing) {
+          focusedId = existing.id;
+          return prev;
+        }
+      } else if (input.kind === 'marketplace') {
+        const existing = prev.find(
+          (t): t is MarketplaceTab =>
+            t.kind === 'marketplace' && t.marketplaceName === input.marketplaceName,
         );
         if (existing) {
           focusedId = existing.id;

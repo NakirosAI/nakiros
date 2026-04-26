@@ -8,7 +8,8 @@ import HomeScreen from '../../views/HomeScreen';
 import ProjectOverviewScreen from '../../views/ProjectOverviewScreen';
 import SkillsScreen from '../../views/SkillsScreen';
 import SkillDetailScreen from '../../views/SkillDetailScreen';
-import type { SkillTabIdentity } from '../../hooks/useTabs';
+import MarketplaceScreen from '../../views/MarketplaceScreen';
+import type { MarketplaceTabView, SkillTabIdentity } from '../../hooks/useTabs';
 import NewShellTopBar from './NewShellTopBar';
 import NewShellSidebar from './NewShellSidebar';
 
@@ -76,6 +77,10 @@ export default function NewShell({
     openTab({ kind: 'skill', identity, label });
   };
 
+  const handleOpenMarketplaceTab = (marketplaceName: string, label: string) => {
+    openTab({ kind: 'marketplace', marketplaceName, label, view: 'overview' });
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-n-canvas font-n-sans text-n-fg">
       <NewShellTopBar
@@ -96,6 +101,7 @@ export default function NewShell({
             onRescan={onRescan}
             onDismissProject={onDismissProject}
             onOpenSkillTab={handleOpenSkillTab}
+            onOpenMarketplaceTab={handleOpenMarketplaceTab}
           />
         )}
 
@@ -181,6 +187,20 @@ export default function NewShell({
             identity={activeTab.identity}
           />
         )}
+
+        {activeTab.kind === 'marketplace' && (() => {
+          const tab = activeTab;
+          const setView = (next: MarketplaceTabView) => updateTab(tab.id, { view: next });
+          return (
+            <MarketplaceScreen
+              key={`marketplace/${tab.marketplaceName}`}
+              marketplaceName={tab.marketplaceName}
+              view={tab.view ?? 'overview'}
+              onNavigate={setView}
+              onOpenSkillTab={handleOpenSkillTab}
+            />
+          );
+        })()}
       </main>
     </div>
   );

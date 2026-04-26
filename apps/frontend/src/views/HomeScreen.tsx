@@ -27,6 +27,8 @@ interface HomeScreenProps {
   onDismissProject(projectId: string): Promise<void>;
   /** Opens a non-project skill in a dedicated `kind: 'skill'` tab. */
   onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
+  /** Opens a marketplace in a dedicated `kind: 'marketplace'` tab. */
+  onOpenMarketplaceTab(marketplaceName: string, label: string): void;
 }
 
 type HomeTabKey = 'projects' | 'plugins' | 'globals' | 'nakiros';
@@ -55,6 +57,7 @@ export default function HomeScreen({
   onOpenProject,
   onRescan,
   onOpenSkillTab,
+  onOpenMarketplaceTab,
 }: HomeScreenProps) {
   const { t } = useTranslation('home');
   const [tab, setTab] = useState<HomeTabKey>('projects');
@@ -235,7 +238,7 @@ export default function HomeScreen({
           skills={pluginSkills}
           error={pluginsError}
           search={search}
-          onOpenSkillTab={onOpenSkillTab}
+          onOpenMarketplaceTab={onOpenMarketplaceTab}
         />
       )}
       {tab === 'globals' && (
@@ -525,53 +528,66 @@ function HealthMicroBar({
   );
 }
 
-// ── Plugins tab ────────────────────────────────────────────────────────────
+// ── Plugins tab — grouped by marketplace ───────────────────────────────────
 
-interface PluginGroup {
-  marketplaceName: string | null;
-  pluginName: string;
-  skills: Skill[];
+interface MarketplaceSummary {
+  marketplaceName: string;
+  pluginCount: number;
+  skillCount: number;
+  totalEvals: number;
+  totalAudits: number;
+  averageScore: number | null;
 }
 
 function PluginsTab({
   skills,
   error,
   search,
-  onOpenSkillTab,
+  onOpenMarketplaceTab,
 }: {
   skills: Skill[] | null;
   error: string | null;
   search: string;
-  onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
+  onOpenMarketplaceTab(marketplaceName: string, label: string): void;
 }) {
   const { t } = useTranslation('home');
 
-  const grouped = useMemo<PluginGroup[]>(() => {
+  const marketplaces = useMemo<MarketplaceSummary[]>(() => {
     if (!skills) return [];
-    const map = new Map<string, PluginGroup>();
+    const byMarketplace = new Map<string, Skill[]>();
     for (const skill of skills) {
-      const pluginName = skill.pluginName ?? 'unknown';
-      const key = `${skill.marketplaceName ?? ''}::${pluginName}`;
-      let group = map.get(key);
-      if (!group) {
-        group = { marketplaceName: skill.marketplaceName ?? null, pluginName, skills: [] };
-        map.set(key, group);
-      }
-      group.skills.push(skill);
+      const key = skill.marketplaceName ?? '';
+      const list = byMarketplace.get(key) ?? [];
+      list.push(skill);
+      byMarketplace.set(key, list);
     }
-    return Array.from(map.values()).sort((a, b) => a.pluginName.localeCompare(b.pluginName));
+    const out: MarketplaceSummary[] = [];
+    for (const [marketplaceName, group] of byMarketplace) {
+      const distinctPlugins = new Set(group.map((s) => s.pluginName ?? '__unknown'));
+      const scores = group
+        .map((s) => s.evals?.latestPassRate)
+        .filter((v): v is number => typeof v === 'number');
+      const averageScore =
+        scores.length > 0
+          ? Math.round((scores.reduce((acc, v) => acc + v, 0) / scores.length) * 100)
+          : null;
+      out.push({
+        marketplaceName,
+        pluginCount: distinctPlugins.size,
+        skillCount: group.length,
+        totalEvals: group.reduce((acc, s) => acc + (s.evals?.definitions.length ?? 0), 0),
+        totalAudits: group.reduce((acc, s) => acc + s.auditCount, 0),
+        averageScore,
+      });
+    }
+    return out.sort((a, b) => a.marketplaceName.localeCompare(b.marketplaceName));
   }, [skills]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return grouped;
+    if (!search.trim()) return marketplaces;
     const q = search.toLowerCase();
-    return grouped.filter(
-      (g) =>
-        g.pluginName.toLowerCase().includes(q) ||
-        (g.marketplaceName?.toLowerCase().includes(q) ?? false) ||
-        g.skills.some((s) => s.name.toLowerCase().includes(q)),
-    );
-  }, [grouped, search]);
+    return marketplaces.filter((m) => m.marketplaceName.toLowerCase().includes(q));
+  }, [marketplaces, search]);
 
   if (error) {
     return (
@@ -585,94 +601,98 @@ function PluginsTab({
     return <LoadingState text={t('common:loading', { defaultValue: 'Loading…' })} />;
   }
 
-  if (grouped.length === 0) {
-    return <EmptyCard text={t('pluginsTab.empty', { defaultValue: 'No plugin skill detected.' })} />;
+  if (marketplaces.length === 0) {
+    return (
+      <EmptyCard text={t('pluginsTab.empty', { defaultValue: 'No plugin skill detected.' })} />
+    );
   }
 
   if (filtered.length === 0) {
     return (
-      <EmptyCard text={t('pluginsTab.noMatch', { defaultValue: 'No plugin matches your search.' })} />
+      <EmptyCard
+        text={t('pluginsTab.noMatch', { defaultValue: 'No marketplace matches your search.' })}
+      />
     );
   }
 
   return (
-    <div className="grid gap-2">
-      {filtered.map((group) => (
-        <PluginRow
-          key={`${group.marketplaceName}::${group.pluginName}`}
-          group={group}
-          onOpenSkillTab={onOpenSkillTab}
-        />
-      ))}
+    <div>
+      <SectionLabel>
+        {t('pluginsTab.heading', { defaultValue: 'Marketplaces' })}
+      </SectionLabel>
+      <div className="grid gap-2">
+        {filtered.map((m) => (
+          <MarketplaceRow
+            key={m.marketplaceName || '__unnamed'}
+            summary={m}
+            onOpen={() =>
+              onOpenMarketplaceTab(
+                m.marketplaceName,
+                m.marketplaceName || t('marketplace.unnamed', { defaultValue: 'unnamed' }),
+              )
+            }
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-function PluginRow({
-  group,
-  onOpenSkillTab,
+function MarketplaceRow({
+  summary,
+  onOpen,
 }: {
-  group: PluginGroup;
-  onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
+  summary: MarketplaceSummary;
+  onOpen(): void;
 }) {
-  const totalAudits = group.skills.reduce((acc, s) => acc + s.auditCount, 0);
-  const totalEvals = group.skills.reduce((acc, s) => acc + (s.evals?.definitions.length ?? 0), 0);
+  const { t } = useTranslation('home');
+  const tone =
+    summary.averageScore === null
+      ? 'var(--n-fg-faint)'
+      : summary.averageScore >= 85
+        ? 'var(--n-healthy)'
+        : summary.averageScore >= 70
+          ? 'var(--n-accent)'
+          : 'var(--n-watch)';
   return (
-    <div className="overflow-hidden rounded-n-md border border-n-border-subtle bg-n-surface">
-      {/* Plugin header */}
-      <div className="flex items-center gap-3.5 border-b border-n-border-subtle px-4 py-2.5">
-        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-n-sm bg-n-sunken">
-          <Plug size={13} strokeWidth={2} className="text-n-accent" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate font-n-mono text-[13px] text-n-fg">{group.pluginName}</span>
-            {group.marketplaceName && (
-              <span className="font-n-mono text-[10.5px] text-n-faint">
-                · {group.marketplaceName}
-              </span>
-            )}
-          </div>
-          <div className="mt-0.5 font-n-mono text-[11px] text-n-subtle">
-            {group.skills.length} skill{group.skills.length > 1 ? 's' : ''}
-            {totalEvals > 0 && <> · {totalEvals} evals</>}
-            {totalAudits > 0 && <> · {totalAudits} audits</>}
-          </div>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex items-center gap-3.5 rounded-n-md border border-n-border-subtle bg-n-surface px-4 py-3 text-left transition-colors hover:border-n-border-strong hover:bg-n-raised"
+    >
+      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-n-sm bg-n-accent-soft text-n-accent">
+        <Plug size={14} strokeWidth={2} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="font-n-mono text-[13.5px] font-medium text-n-fg">
+          {summary.marketplaceName ||
+            t('marketplace.unnamed', { defaultValue: 'unnamed' })}
         </div>
-        <span className="inline-flex items-center gap-1.5 font-n-mono text-[10.5px] text-n-healthy">
-          <span className="h-1.5 w-1.5 rounded-full bg-n-healthy" />
-          enabled
+        <div className="mt-0.5 font-n-mono text-[11px] text-n-subtle">
+          {summary.pluginCount} plugin{summary.pluginCount > 1 ? 's' : ''} · {summary.skillCount}{' '}
+          skill{summary.skillCount > 1 ? 's' : ''}
+          {summary.totalEvals > 0 && <> · {summary.totalEvals} evals</>}
+          {summary.totalAudits > 0 && <> · {summary.totalAudits} audits</>}
+        </div>
+      </div>
+      {summary.averageScore !== null && (
+        <span
+          className="inline-flex items-center rounded-n-xs border px-2 py-0.5 font-n-mono text-[11px] tabular-nums"
+          style={{
+            background: `${tone}14`,
+            color: tone,
+            borderColor: `${tone}33`,
+          }}
+        >
+          {summary.averageScore}
         </span>
-      </div>
-
-      {/* Skills list (clickable) */}
-      <div className="divide-y divide-n-border-subtle">
-        {group.skills.map((skill) => (
-          <button
-            key={skill.name}
-            type="button"
-            onClick={() =>
-              onOpenSkillTab(
-                {
-                  scope: 'plugin',
-                  marketplaceName: group.marketplaceName ?? '',
-                  pluginName: group.pluginName,
-                  skillName: skill.name,
-                },
-                skill.name,
-              )
-            }
-            className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-n-raised"
-          >
-            <Sparkles size={11} strokeWidth={2} className="flex-shrink-0 text-n-accent" />
-            <span className="truncate font-n-mono text-[12px] text-n-fg">{skill.name}</span>
-            <span className="flex-1" />
-            <SkillScoreBadge skill={skill} />
-            <ChevronRight size={12} strokeWidth={2} className="text-n-faint" />
-          </button>
-        ))}
-      </div>
-    </div>
+      )}
+      <ChevronRight
+        size={14}
+        strokeWidth={2}
+        className="text-n-faint transition-colors group-hover:text-n-accent"
+      />
+    </button>
   );
 }
 

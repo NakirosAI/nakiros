@@ -43,8 +43,23 @@
     "empty": "Aucun projet scanné."
   },
   "pluginsTab": {
+    "heading": "Marketplaces",
     "empty": "Aucun skill plugin détecté.",
-    "noMatch": "Aucun plugin ne correspond à ta recherche."
+    "noMatch": "Aucune marketplace ne correspond à ta recherche."
+  },
+  "marketplace": {
+    "label": "Marketplace",
+    "unnamed": "sans nom",
+    "kpiPlugins": "Plugins",
+    "kpiSkills": "Skills",
+    "kpiEvals": "Evals",
+    "kpiAudits": "Audits",
+    "pluginsHeading": "Plugins",
+    "noPlugins": "Aucun plugin trouvé dans cette marketplace.",
+    "noSkills": "Aucun skill dans cette marketplace pour l'instant.",
+    "noMatch": "Aucun skill ne correspond à ta recherche.",
+    "allSkills": "Tous les skills · {{count}}",
+    "searchPlaceholder": "Rechercher un skill…"
   },
   "globalsTab": {
     "heading": "Skills installés à ~/.claude/skills",

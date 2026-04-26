@@ -26,6 +26,21 @@
     "assertions": "assertions",
     "noDefinitions": "No eval defined for this skill yet."
   },
+  "diff": {
+    "back": "Back to matrix",
+    "export": "Export diff",
+    "promote": "Promote",
+    "noPrevious": "No previous iteration to compare with.",
+    "kpiPassRate": "Pass rate",
+    "kpiRegressions": "Regressions",
+    "kpiTokens": "Tokens",
+    "kpiDuration": "Duration",
+    "perEval": "Per-eval comparison",
+    "regressionsOnly": "Regressions only",
+    "noRegression": "No regression on this run.",
+    "assertions": "assertion-by-assertion",
+    "noAssertion": "No grading.json available for this eval at these iterations."
+  },
   "loading": "Loading skills…",
   "heading": "Skills ({{count}})",
   "newSkill": "New skill",

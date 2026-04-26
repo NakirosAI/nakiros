@@ -11,6 +11,7 @@ import type {
   SkillEvalDefinition,
 } from '@nakiros/shared';
 import Sparkline from '../viz/Sparkline';
+import EvalDiffOverlay from './EvalDiffOverlay';
 
 interface EvalMatrixGridProps {
   /** The full skill, used for the eval definitions list (prompt, assertions). */
@@ -46,6 +47,12 @@ export default function EvalMatrixGrid({ skill, request }: EvalMatrixGridProps) 
   const [error, setError] = useState<string | null>(null);
   const [includeBaseline, setIncludeBaseline] = useState(true);
   const [view, setView] = useState<ViewMode>('evolution');
+  /**
+   * Iteration the user wants to compare with its predecessor in the
+   * diff overlay. Stored as the iteration number itself; the overlay
+   * computes prev = iterations[idx - 1] from the matrix.
+   */
+  const [diffIteration, setDiffIteration] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -200,9 +207,22 @@ export default function EvalMatrixGrid({ skill, request }: EvalMatrixGridProps) 
 
       {!error && matrix && view === 'evolution' && matrix.iterations.length > 0 && (
         <>
-          <MatrixTable matrix={matrix} includeBaseline={includeBaseline && baselinePresent} />
+          <MatrixTable
+            matrix={matrix}
+            includeBaseline={includeBaseline && baselinePresent}
+            onSelectIteration={setDiffIteration}
+          />
           <Legend hasBaseline={baselinePresent} />
         </>
+      )}
+
+      {matrix && diffIteration !== null && (
+        <EvalDiffOverlay
+          matrix={matrix}
+          currentIteration={diffIteration}
+          baseRequest={request}
+          onClose={() => setDiffIteration(null)}
+        />
       )}
 
       {!error && matrix && view === 'models' && (
@@ -379,9 +399,13 @@ function TagCountBadges({
 function MatrixTable({
   matrix,
   includeBaseline,
+  onSelectIteration,
 }: {
   matrix: EvalMatrix;
   includeBaseline: boolean;
+  /** Activated when the user clicks any cell — opens the diff overlay
+   *  comparing that iteration with its predecessor. */
+  onSelectIteration(iteration: number): void;
 }) {
   return (
     <div className="overflow-x-auto rounded-n-lg border border-n-border-subtle bg-n-surface">
@@ -412,7 +436,12 @@ function MatrixTable({
         </thead>
         <tbody>
           {matrix.rows.map((row) => (
-            <RowGroup key={row.evalName} row={row} includeBaseline={includeBaseline} />
+            <RowGroup
+              key={row.evalName}
+              row={row}
+              includeBaseline={includeBaseline}
+              onSelectIteration={onSelectIteration}
+            />
           ))}
         </tbody>
       </table>
@@ -423,9 +452,11 @@ function MatrixTable({
 function RowGroup({
   row,
   includeBaseline,
+  onSelectIteration,
 }: {
   row: EvalMatrixRow;
   includeBaseline: boolean;
+  onSelectIteration(iteration: number): void;
 }) {
   return (
     <>
@@ -453,7 +484,10 @@ function RowGroup({
               (includeBaseline ? 'pt-1 pb-px px-1' : 'border-b border-n-border-subtle px-1 py-1')
             }
           >
-            <EvalCell cell={cell} />
+            <EvalCell
+              cell={cell}
+              onClick={cell ? () => onSelectIteration(cell.iteration) : undefined}
+            />
           </td>
         ))}
       </tr>
@@ -465,7 +499,11 @@ function RowGroup({
               key={i}
               className="min-w-[56px] border-b border-n-border-subtle px-1 pt-px pb-1.5 text-center"
             >
-              <EvalCell cell={cell} baseline />
+              <EvalCell
+                cell={cell}
+                baseline
+                onClick={cell ? () => onSelectIteration(cell.iteration) : undefined}
+              />
             </td>
           ))}
         </tr>
@@ -477,9 +515,11 @@ function RowGroup({
 function EvalCell({
   cell,
   baseline = false,
+  onClick,
 }: {
   cell: EvalMatrixCell | null;
   baseline?: boolean;
+  onClick?: () => void;
 }) {
   if (cell === null) {
     return (
@@ -493,19 +533,25 @@ function EvalCell({
 
   if (baseline) {
     return (
-      <span
-        className="inline-flex h-7 w-12 items-center justify-center rounded-n-xs border bg-n-raised font-n-mono text-[11px] font-medium text-n-muted"
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!onClick}
+        className="inline-flex h-7 w-12 items-center justify-center rounded-n-xs border bg-n-raised font-n-mono text-[11px] font-medium text-n-muted transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-n-accent"
         style={{ borderColor: 'var(--n-border-default)' }}
         title={cellTooltip(cell)}
       >
         {cell.passed}/{cell.total}
-      </span>
+      </button>
     );
   }
 
   return (
-    <span
-      className="inline-flex h-7 w-12 items-center justify-center rounded-n-xs border font-n-mono text-[11px] font-medium"
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className="inline-flex h-7 w-12 items-center justify-center rounded-n-xs border font-n-mono text-[11px] font-medium transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-n-accent"
       style={{
         background: tone.bg,
         color: tone.fg,
@@ -514,7 +560,7 @@ function EvalCell({
       title={cellTooltip(cell)}
     >
       {cell.passed}/{cell.total}
-    </span>
+    </button>
   );
 }
 

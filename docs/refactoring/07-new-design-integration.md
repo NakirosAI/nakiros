@@ -236,6 +236,80 @@ Phase 3.
 - Validation : un run audit, eval, fix, analyze ouvert depuis le RunDock
   affiche correctement live + completed.
 
+#### État au 2026-04-27 (session stoppée pour drift)
+
+**Mergé** :
+- ✅ PR9a (commit `a5db628`) — RunScreen pour audit/fix/create avec side
+  panels, header OKLch, RunStream chat.
+
+**Sur la branche `feat/new-design-integration` (non commité)** :
+
+- ✅ `EvalRunScreen` séparé du `AuditLikeRunScreen` (rules-of-hooks,
+  evite les écrans noirs vus en dev).
+- ✅ Side panel eval refondu : 3 sections (Progression / Eval queue /
+  Delta vs baseline) + uplift body, calé sur le mockup.
+- ✅ Header eval : `step X/Y` câblé sur runs terminés / total, bouton
+  Stop avec spinner + état `Stopping…`.
+- ✅ Events bucketisés par `runId` (`Record<runId, LiveStreamEvent[]>`)
+  — fini la conv multiplexée illisible.
+- ✅ Sélection de run dans la queue : `EvalQueueRow` cliquable +
+  `selectedRunId` state + auto-select prioritaire (`waiting_for_input`
+  > `running` > premier).
+- ✅ Toggle `ChatRunSwitcher` au-dessus du chat pour switcher
+  with-skill ↔ baseline du même eval, visible seulement si les deux
+  configs existent.
+- ✅ `HumanInteractionPanel` câblé sur le run sélectionné en
+  `waiting_for_input` via `sendEvalUserMessage`.
+- ✅ Conversation persistée : `RunStream.turns={selectedRun.turns}`
+  rejoue la conv après reload (le buffer in-memory était vide après
+  un restart daemon).
+- ✅ Refresh tick sur events `status` → `listEvalRuns()` rappelé pour
+  que le side panel reflète les runners qui finissent un par un, sans
+  attendre le batch complet.
+- ✅ Boutons `Audit` / `Fix` du `SkillDetailScreen` et `Run evals` du
+  `EvalMatrixGrid` : feedback `isLaunching` + spinner + disable pour
+  éviter les double-clics.
+- ✅ i18n : nouvelles clés `panels.eval.{progression,queue,uplift,
+  upliftBody,runningWithBaseline,runningWithSkill,noBaseline,withSkill,
+  baseline}` (EN + FR).
+- ✅ Fix débordement texte audit : `min-w-0 break-words` sur le
+  container, `break-all` sur `<code>`, `overflow-x-auto` sur `<pre>`.
+- ✅ `useRunState` accepte `pollIntervalMs` (2000 ms par défaut sur
+  audit) — compromis flicker/stale.
+
+**À finaliser (next session)** :
+
+1. **Écran summary "EVAL RUN COMPLETED"** quand `agentRun.status === 'done'`.
+   Mockup fourni par Thomas — voir capture / message du 2026-04-27.
+   Composants attendus : hero +22% + body line, 4 KPI tiles
+   (PASS RATE / VS BASELINE / REGRESSIONS / TOKENS), per-eval
+   breakdown (evalName · pass/total · Δ · tokens), section
+   "Prochaines étapes" avec 4 cards (Marquer comme baseline /
+   Fix la régression / Voir le diff vs run précédent / Re-run avec
+   model X).
+   - Pass/total réels : nécessite lecture de `grading.json` par run
+     (IPC matrix existe déjà, ou ajouter `readEvalGrading(runId)`).
+   - Δ vs iter précédente : sortir l'util de calcul de
+     `EvalDiffOverlay` dans un helper partagé.
+   - Action `Marquer comme baseline` : pas d'IPC `setBaseline`
+     aujourd'hui, à designer (lié à la mémoire
+     `project_nakiros_baseline_per_model_2026_04_26.md`).
+   - Action `Fix la régression` : peut câbler sur `launchFix` en
+     passant l'eval échoué en contexte.
+   - Cadrage proposé non validé : rendre layout + KPIs + breakdown
+     dans cette session, **stub les 4 cards d'action** (toast
+     "coming soon"), câblage actions en PR séparée.
+
+2. **Event types riches** dans le chat (finding / diff / assertion /
+   thinking) — bloqué sur le daemon qui ne les émet pas encore. À
+   débloquer en PR9c une fois les events ajoutés côté runner.
+
+3. **Commit + PR** : tout ce qui est ✅ ci-dessus n'est pas commité.
+   Quand le summary screen sera fini, commit en deux temps :
+   - PR9b : eval RunScreen complet (events buckets + sélection +
+     toggle + side panel + HumanInteractionPanel + summary screen)
+   - PR9c : event types riches (post-daemon)
+
 ### Phase 5 — Conversations & Recommandations *(PR10, PR11)*
 
 - PR10 : `ConversationsScreen` + `ConversationTabs` (drawer riche)

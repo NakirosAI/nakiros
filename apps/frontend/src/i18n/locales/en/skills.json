@@ -9,6 +9,8 @@
   "notFound": "Skill not found",
   "runAudit": "Audit",
   "runFix": "Fix",
+  "runEvalsStarting": "Starting…",
+  "starting": "Starting…",
   "auditTab": {
     "empty": "No audit has been recorded for this skill yet.",
     "emptyReport": "This audit report is empty.",

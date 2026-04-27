@@ -7,6 +7,7 @@ import {
   GitCompare,
   Layers,
   Play,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   Wrench,
@@ -24,6 +25,7 @@ import {
   evalMatrixRequestForIdentity,
   loadSkillByIdentity,
 } from '../lib/skill-identity';
+import { launchAudit, launchFix, type OpenRunTabCallback } from '../lib/run-launcher';
 
 interface Props {
   /** Cross-scope identity of the skill — drives every IPC call. */
@@ -31,6 +33,8 @@ interface Props {
   /** Optional Back action — when omitted (e.g. when the screen is
    *  hosted in its own tab) the breadcrumb hides the button. */
   onBack?(): void;
+  /** Wired by NewShell — opens a new run tab once a start IPC resolves. */
+  onOpenRunTab?: OpenRunTabCallback;
 }
 
 type SkillTab = 'audit' | 'evals' | 'fix' | 'files' | 'iters';
@@ -58,7 +62,7 @@ interface AuditScore {
  * fragile. We surface the score via a best-effort regex on the
  * Markdown so the ScoreRing has something to display when present.
  */
-export default function SkillDetailScreen({ identity, onBack }: Props) {
+export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Props) {
   const { t } = useTranslation('skills');
   const [skill, setSkill] = useState<Skill | null>(null);
   const [skillError, setSkillError] = useState<string | null>(null);
@@ -94,6 +98,33 @@ export default function SkillDetailScreen({ identity, onBack }: Props) {
   const evalRequest = useMemo(() => evalMatrixRequestForIdentity(identity), [identityKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const breadcrumbPath = skill?.skillPath ?? '';
 
+  const [isLaunchingAudit, setIsLaunchingAudit] = useState(false);
+  const [isLaunchingFix, setIsLaunchingFix] = useState(false);
+
+  const handleLaunchAudit = async () => {
+    if (!onOpenRunTab || isLaunchingAudit) return;
+    setIsLaunchingAudit(true);
+    try {
+      await launchAudit(identity, onOpenRunTab);
+    } catch (err) {
+      console.error('[skill] launchAudit failed', err);
+    } finally {
+      setIsLaunchingAudit(false);
+    }
+  };
+
+  const handleLaunchFix = async () => {
+    if (!onOpenRunTab || isLaunchingFix) return;
+    setIsLaunchingFix(true);
+    try {
+      await launchFix(identity, onOpenRunTab);
+    } catch (err) {
+      console.error('[skill] launchFix failed', err);
+    } finally {
+      setIsLaunchingFix(false);
+    }
+  };
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden font-n-sans">
       {/* Breadcrumb header */}
@@ -120,22 +151,41 @@ export default function SkillDetailScreen({ identity, onBack }: Props) {
         </span>
         <span className="flex-1" />
         <div className="flex gap-1.5">
-          {/* Audit + Fix actions are wired up in PR5 / PR6 — placeholders here so the layout matches the mockup. */}
           <button
             type="button"
-            disabled
-            className="inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted opacity-60"
+            disabled={!onOpenRunTab || isLaunchingAudit}
+            onClick={handleLaunchAudit}
+            className={
+              'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
+              (onOpenRunTab && !isLaunchingAudit ? 'hover:bg-n-raised hover:text-n-fg' : 'opacity-60')
+            }
           >
-            <ShieldCheck size={12} strokeWidth={2} />
-            {t('runAudit', { defaultValue: 'Audit' })}
+            {isLaunchingAudit ? (
+              <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
+            ) : (
+              <ShieldCheck size={12} strokeWidth={2} />
+            )}
+            {isLaunchingAudit
+              ? t('starting', { defaultValue: 'Starting…' })
+              : t('runAudit', { defaultValue: 'Audit' })}
           </button>
           <button
             type="button"
-            disabled
-            className="inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-2.5 font-n-mono text-[11.5px] text-n-accent opacity-60"
+            disabled={!onOpenRunTab || isLaunchingFix}
+            onClick={handleLaunchFix}
+            className={
+              'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-2.5 font-n-mono text-[11.5px] text-n-accent ' +
+              (onOpenRunTab && !isLaunchingFix ? 'hover:bg-n-accent-soft' : 'opacity-60')
+            }
           >
-            <Wrench size={12} strokeWidth={2} />
-            {t('runFix', { defaultValue: 'Fix' })}
+            {isLaunchingFix ? (
+              <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
+            ) : (
+              <Wrench size={12} strokeWidth={2} />
+            )}
+            {isLaunchingFix
+              ? t('starting', { defaultValue: 'Starting…' })
+              : t('runFix', { defaultValue: 'Fix' })}
           </button>
         </div>
       </div>
@@ -160,9 +210,16 @@ export default function SkillDetailScreen({ identity, onBack }: Props) {
           <AuditTab identity={identity} skill={skill} />
         )}
         {!skillError && skill && tab === 'evals' && (
-          <EvalMatrixGrid skill={skill} request={evalRequest} />
+          <EvalMatrixGrid
+            skill={skill}
+            request={evalRequest}
+            identity={identity}
+            onOpenRunTab={onOpenRunTab}
+          />
         )}
-        {!skillError && skill && tab === 'fix' && <FixTab />}
+        {!skillError && skill && tab === 'fix' && (
+          <FixTab identity={identity} onOpenRunTab={onOpenRunTab} />
+        )}
         {!skillError && skill && tab === 'files' && (
           <SkillFilesTab identity={identity} skill={skill} />
         )}
@@ -368,13 +425,34 @@ function AuditTab({ identity, skill }: { identity: SkillTabIdentity; skill: Skil
 
 /**
  * Fix tab landing — port of `FixTab` from
- * `apps/Nakiros-new-design/screens-skills.jsx:413-436`. The actual fix
- * run streams in the global `RunScreen` (Phase 4 of the migration
- * plan); this tab is just the entry point with two CTAs that wire up
- * later (PR6 keeps them disabled until the run shell is ready).
+ * `apps/Nakiros-new-design/screens-skills.jsx:413-436`. The "Lancer le
+ * fix" CTA spawns a fix run via {@link launchFix} and the shell pushes
+ * the resulting `kind: 'run'` tab in front of the user. The "Voir le
+ * dernier diff" button is still disabled — it will land alongside the
+ * fix benchmarks UI.
  */
-function FixTab() {
+function FixTab({
+  identity,
+  onOpenRunTab,
+}: {
+  identity: SkillTabIdentity;
+  onOpenRunTab?: OpenRunTabCallback;
+}) {
   const { t } = useTranslation('skills');
+  const [isLaunching, setIsLaunching] = useState(false);
+
+  const handleLaunch = async () => {
+    if (!onOpenRunTab || isLaunching) return;
+    setIsLaunching(true);
+    try {
+      await launchFix(identity, onOpenRunTab);
+    } catch (err) {
+      console.error('[fix] launchFix failed', err);
+    } finally {
+      setIsLaunching(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-[760px] px-7 py-10 font-n-sans">
       <div className="rounded-n-lg border border-n-border-subtle bg-n-surface p-5">
@@ -399,11 +477,21 @@ function FixTab() {
             <div className="mt-3.5 flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled
-                className="inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[12px] text-n-accent opacity-60"
+                disabled={!onOpenRunTab || isLaunching}
+                onClick={handleLaunch}
+                className={
+                  'inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[12px] text-n-accent ' +
+                  (onOpenRunTab && !isLaunching ? 'hover:bg-n-accent-soft' : 'opacity-60')
+                }
               >
-                <Play size={12} strokeWidth={2.25} />
-                {t('fixTab.run', { defaultValue: 'Lancer le fix' })}
+                {isLaunching ? (
+                  <RefreshCw size={12} strokeWidth={2.25} className="animate-spin" />
+                ) : (
+                  <Play size={12} strokeWidth={2.25} />
+                )}
+                {isLaunching
+                  ? t('starting', { defaultValue: 'Starting…' })
+                  : t('fixTab.run', { defaultValue: 'Lancer le fix' })}
               </button>
               <button
                 type="button"
@@ -413,9 +501,6 @@ function FixTab() {
                 <GitCompare size={12} strokeWidth={2} />
                 {t('fixTab.viewLastDiff', { defaultValue: 'Voir le dernier diff' })}
               </button>
-            </div>
-            <div className="mt-3 font-n-mono text-[10.5px] uppercase tracking-[0.6px] text-n-faint">
-              {t('fixTab.comingHint', { defaultValue: 'Wired up in Phase 4 (RunScreen)' })}
             </div>
           </div>
         </div>

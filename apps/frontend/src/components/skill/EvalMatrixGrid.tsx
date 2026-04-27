@@ -12,12 +12,18 @@ import type {
 } from '@nakiros/shared';
 import Sparkline from '../viz/Sparkline';
 import EvalDiffOverlay from './EvalDiffOverlay';
+import { launchEvalBatch, type OpenRunTabCallback } from '../../lib/run-launcher';
+import type { SkillTabIdentity } from '../../hooks/useTabs';
 
 interface EvalMatrixGridProps {
   /** The full skill, used for the eval definitions list (prompt, assertions). */
   skill: Skill;
   /** Forwarded as-is to `window.nakiros.getEvalMatrix`. */
   request: GetEvalMatrixRequest;
+  /** Identity used by the "Run evals" button to launch a new batch. */
+  identity?: SkillTabIdentity;
+  /** Wired by NewShell — opens the resulting eval run in a new tab. */
+  onOpenRunTab?: OpenRunTabCallback;
 }
 
 type ViewMode = 'evolution' | 'models';
@@ -40,7 +46,7 @@ type ViewMode = 'evolution' | 'models';
  * - Functional `Run evals` button (PR6)
  * - "Modèles" sub-nav view (toggle exists, content placeholdered)
  */
-export default function EvalMatrixGrid({ skill, request }: EvalMatrixGridProps) {
+export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab }: EvalMatrixGridProps) {
   const { t } = useTranslation('skills');
   const [matrix, setMatrix] = useState<EvalMatrix | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,6 +59,7 @@ export default function EvalMatrixGrid({ skill, request }: EvalMatrixGridProps) 
    * computes prev = iterations[idx - 1] from the matrix.
    */
   const [diffIteration, setDiffIteration] = useState<number | null>(null);
+  const [isLaunching, setIsLaunching] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,11 +127,37 @@ export default function EvalMatrixGrid({ skill, request }: EvalMatrixGridProps) 
           <span className="flex-1" />
           <button
             type="button"
-            disabled
-            className="inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[11.5px] text-n-accent opacity-60"
+            disabled={!identity || !onOpenRunTab || isLaunching}
+            onClick={async () => {
+              if (!identity || !onOpenRunTab || isLaunching) return;
+              setIsLaunching(true);
+              try {
+                await launchEvalBatch(
+                  identity,
+                  { includeBaseline: includeBaseline && baselinePresent },
+                  onOpenRunTab,
+                );
+              } catch (err) {
+                console.error('[evals] launchEvalBatch failed', err);
+              } finally {
+                setIsLaunching(false);
+              }
+            }}
+            className={
+              'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[11.5px] text-n-accent ' +
+              (identity && onOpenRunTab && !isLaunching
+                ? 'hover:bg-n-accent-soft'
+                : 'opacity-60')
+            }
           >
-            <Play size={12} strokeWidth={2.25} />
-            {t('runEvals', { defaultValue: 'Run evals' })}
+            {isLaunching ? (
+              <RefreshCw size={12} strokeWidth={2.25} className="animate-spin" />
+            ) : (
+              <Play size={12} strokeWidth={2.25} />
+            )}
+            {isLaunching
+              ? t('runEvalsStarting', { defaultValue: 'Starting…' })
+              : t('runEvals', { defaultValue: 'Run evals' })}
           </button>
         </div>
       </div>

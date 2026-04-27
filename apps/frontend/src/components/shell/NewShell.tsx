@@ -78,6 +78,19 @@ export default function NewShell({
     openTab({ kind: 'skill', identity, label });
   };
 
+  /**
+   * Lower-level callback used by `launch*` helpers in `run-launcher.ts`.
+   * Receives `{runId, runKind, label}` once the start IPC has resolved
+   * and just pushes the matching `kind: 'run'` tab in front of the user.
+   */
+  const handleOpenRunByIds = (params: {
+    runId: string;
+    runKind: 'audit' | 'fix' | 'create' | 'eval';
+    label: string;
+  }) => {
+    openTab({ kind: 'run', runId: params.runId, runKind: params.runKind, label: params.label });
+  };
+
   const handleOpenMarketplaceTab = (marketplaceName: string, label: string) => {
     openTab({ kind: 'marketplace', marketplaceName, label, view: 'overview' });
   };
@@ -162,6 +175,7 @@ export default function NewShell({
                         skillName: tab.skillId,
                       }}
                       onBack={() => updateTab(tab.id, { skillId: null })}
+                      onOpenRunTab={handleOpenRunByIds}
                     />
                   )}
                   {view !== 'overview' && view !== 'skills' && (
@@ -186,6 +200,7 @@ export default function NewShell({
           <SkillDetailScreen
             key={`skilltab/${activeTab.id}`}
             identity={activeTab.identity}
+            onOpenRunTab={handleOpenRunByIds}
           />
         )}
 

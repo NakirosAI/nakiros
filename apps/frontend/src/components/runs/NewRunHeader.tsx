@@ -6,6 +6,7 @@ import {
   FlaskConical,
   GitCompare,
   Plus,
+  RefreshCw,
   RotateCw,
   ShieldCheck,
   Square,
@@ -29,10 +30,16 @@ interface NewRunHeaderProps {
   onFinish?: () => void;
   /** Resume button shown when waiting / interrupted (sends a `--resume` continuation). */
   onResume?: () => void;
+  /** When true, the Stop button shows a spinner + "Stopping…" copy and
+   *  disables itself to block double-clicks. */
+  isStopping?: boolean;
   /** Optional progress percentage [0, 100] — if defined, drives the bottom progress bar. */
   progressPct?: number | null;
   /** Optional total step count for the "step N/M" caption. */
   stepTotal?: number;
+  /** Optional explicit "done" step count — overrides the percentage-based
+   *  computation. Used by eval batches where steps are runs done. */
+  stepDone?: number;
 }
 
 /**
@@ -55,8 +62,10 @@ export default function NewRunHeader({
   onStop,
   onFinish,
   onResume,
+  isStopping = false,
   progressPct,
   stepTotal,
+  stepDone: stepDoneProp,
 }: NewRunHeaderProps) {
   const { t } = useTranslation('runs');
   const kindMeta = kindVisual(kind);
@@ -64,12 +73,14 @@ export default function NewRunHeader({
   const Icon = kindMeta.Icon;
 
   const showProgress =
-    (status === 'running' || status === 'pending') && typeof progressPct === 'number';
+    (status === 'running' || status === 'pending') &&
+    (typeof progressPct === 'number' || typeof stepDoneProp === 'number');
 
   const stepDone =
-    showProgress && stepTotal != null
+    stepDoneProp ??
+    (showProgress && stepTotal != null
       ? Math.round(((progressPct ?? 0) / 100) * stepTotal)
-      : null;
+      : null);
 
   return (
     <div className="border-b border-n-border-subtle bg-n-canvas">
@@ -144,10 +155,21 @@ export default function NewRunHeader({
               )}
               {onStop && (status === 'running' || status === 'pending') && (
                 <ActionButton
-                  icon={<Square size={12} strokeWidth={2.25} />}
-                  label={t('stop', { defaultValue: 'Stop' })}
+                  icon={
+                    isStopping ? (
+                      <RefreshCw size={12} strokeWidth={2.25} className="animate-spin" />
+                    ) : (
+                      <Square size={12} strokeWidth={2.25} />
+                    )
+                  }
+                  label={
+                    isStopping
+                      ? t('stopping', { defaultValue: 'Stopping…' })
+                      : t('stop', { defaultValue: 'Stop' })
+                  }
                   tone="danger"
                   onClick={onStop}
+                  disabled={isStopping}
                 />
               )}
               {onFinish && status === 'done' && (
@@ -171,11 +193,28 @@ export default function NewRunHeader({
         <div className="relative h-[2px] overflow-hidden bg-n-sunken">
           <div
             className="absolute left-0 top-0 h-full transition-[width] duration-500"
-            style={{ width: `${progressPct}%`, background: statusTone.color }}
+            style={{
+              width: `${
+                typeof progressPct === 'number'
+                  ? progressPct
+                  : stepDone != null && stepTotal
+                    ? (stepDone / stepTotal) * 100
+                    : 0
+              }%`,
+              background: statusTone.color,
+            }}
           />
           <div
             className="n-shimmer-bg absolute top-0 h-full w-20 mix-blend-overlay opacity-60"
-            style={{ left: `calc(${progressPct}% - 80px)` }}
+            style={{
+              left: `calc(${
+                typeof progressPct === 'number'
+                  ? progressPct
+                  : stepDone != null && stepTotal
+                    ? (stepDone / stepTotal) * 100
+                    : 0
+              }% - 80px)`,
+            }}
           />
         </div>
       )}
@@ -201,11 +240,13 @@ function ActionButton({
   label,
   tone,
   onClick,
+  disabled = false,
 }: {
   icon: React.ReactNode;
   label: string;
   tone: 'primary' | 'danger';
   onClick(): void;
+  disabled?: boolean;
 }) {
   const cls =
     tone === 'primary'
@@ -215,9 +256,11 @@ function ActionButton({
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={
         'inline-flex h-7 items-center gap-1.5 rounded-n-sm border px-2.5 font-n-mono text-[11.5px] transition-colors ' +
-        cls
+        cls +
+        (disabled ? ' cursor-not-allowed opacity-60' : '')
       }
     >
       {icon}

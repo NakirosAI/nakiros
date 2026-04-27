@@ -4,10 +4,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  Check,
   ChevronDown,
   ChevronRight,
-  Download,
   GitCompare,
   RefreshCw,
 } from 'lucide-react';
@@ -249,22 +247,6 @@ export default function EvalDiffOverlay({
           </div>
         </div>
         <span className="flex-1" />
-        <button
-          type="button"
-          disabled
-          className="inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-subtle px-3 font-n-mono text-[11.5px] text-n-muted opacity-60"
-        >
-          <Download size={11} strokeWidth={2} />
-          {t('diff.export', { defaultValue: 'Export diff' })}
-        </button>
-        <button
-          type="button"
-          disabled
-          className="inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[11.5px] text-n-accent opacity-60"
-        >
-          <Check size={11} strokeWidth={2.5} />
-          {t('diff.promote', { defaultValue: 'Promote' })} #{curIter}
-        </button>
       </header>
 
       {/* Top: history + side-by-side cards + KPIs */}

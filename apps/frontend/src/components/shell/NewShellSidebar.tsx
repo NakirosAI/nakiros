@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Home, Sparkles, MessageSquare, Lightbulb } from 'lucide-react';
+import nakirosLogo from '../../assets/icon.svg';
 import type { ProjectTabView } from '../../hooks/useTabs';
 
 interface SidebarItem {
@@ -40,7 +41,10 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
 
   return (
     <aside className="flex w-14 flex-shrink-0 flex-col items-center border-r border-n-border-subtle bg-n-sunken pt-3.5 pb-3">
-      <nav className="flex flex-1 flex-col items-center gap-1 pt-3">
+      <div className="mb-[18px]">
+        <img src={nakirosLogo} alt="Nakiros" width={22} height={22} />
+      </div>
+      <nav className="flex flex-1 flex-col items-center gap-1">
         {items.map((item) => (
           <SidebarBtn
             key={item.id}

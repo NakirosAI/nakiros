@@ -6,12 +6,16 @@ import { useVersionInfo } from '../hooks/useVersionInfo';
 
 interface Props {
   /**
-   * `compact` — rounded pill for the Dashboard topbar.
-   * `inline` — bare text, no border/background. Meant as a discreet informational
-   *            marker (e.g. top-right of the Home screen). Still clickable when
-   *            an update is available so the user can open the upgrade modal.
+   * `compact` — rounded pill for the legacy Dashboard topbar.
+   * `inline`  — bare text, no border/background. Meant as a discreet informational
+   *             marker (e.g. top-right of the Home screen). Still clickable when
+   *             an update is available so the user can open the upgrade modal.
+   * `topbar`  — new-design shell topbar variant. Mirrors the mockup
+   *             (`apps/Nakiros-new-design/shell.jsx`): a tiny `font-n-mono`
+   *             label in `n-faint`, sitting right of the RunDock pill. Promotes
+   *             to an amber upgrade affordance when a newer npm release exists.
    */
-  variant?: 'compact' | 'inline';
+  variant?: 'compact' | 'inline' | 'topbar';
 }
 
 /**
@@ -36,6 +40,32 @@ export default function VersionIndicator({ variant = 'compact' }: Props) {
   const label = info.updateAvailable
     ? `v${info.current} → v${info.latest}`
     : t('currentVersion', { version: info.current });
+
+  if (variant === 'topbar') {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => info.updateAvailable && setModalOpen(true)}
+          disabled={!info.updateAvailable}
+          title={tooltip}
+          className={clsx(
+            'inline-flex items-center gap-1 border-0 bg-transparent p-0 font-n-mono text-[11px] leading-none transition-colors',
+            info.updateAvailable
+              ? 'cursor-pointer text-amber-400 hover:text-amber-300'
+              : 'cursor-default text-n-faint',
+          )}
+        >
+          {info.updateAvailable && <ArrowUpCircle size={10} />}
+          {label}
+        </button>
+
+        {modalOpen && info.updateAvailable && (
+          <UpdateModal current={info.current} latest={info.latest!} onClose={() => setModalOpen(false)} />
+        )}
+      </>
+    );
+  }
 
   if (variant === 'inline') {
     return (

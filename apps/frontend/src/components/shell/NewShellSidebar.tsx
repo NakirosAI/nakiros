@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Home, Sparkles, MessageSquare, Lightbulb } from 'lucide-react';
+import { Home, Sparkles, MessageSquare, Lightbulb, Settings as SettingsIcon } from 'lucide-react';
 import nakirosLogo from '../../assets/icon.svg';
 import type { ProjectTabView } from '../../hooks/useTabs';
 
@@ -39,6 +39,13 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
     { id: 'recs', label: 'Recommendations', icon: <Lightbulb size={18} strokeWidth={2} />, disabled: true, comingIn: 'Phase 5' },
   ];
 
+  const settingsItem: SidebarItem = {
+    id: 'settings',
+    label: 'Settings',
+    icon: <SettingsIcon size={18} strokeWidth={2} />,
+    disabled: false,
+  };
+
   return (
     <aside className="flex w-14 flex-shrink-0 flex-col items-center border-r border-n-border-subtle bg-n-sunken pt-3.5 pb-3">
       <div className="mb-[18px]">
@@ -54,6 +61,11 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
           />
         ))}
       </nav>
+      <SidebarBtn
+        item={settingsItem}
+        active={active === 'settings'}
+        onClick={() => onNavigate('settings')}
+      />
     </aside>
   );
 }

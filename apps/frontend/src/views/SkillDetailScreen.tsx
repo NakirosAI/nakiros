@@ -5,7 +5,6 @@ import {
   FileText,
   FlaskConical,
   GitCompare,
-  Layers,
   Play,
   RefreshCw,
   ShieldCheck,
@@ -18,7 +17,6 @@ import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
 import EvalMatrixGrid from '../components/skill/EvalMatrixGrid';
 import SkillFilesTab from '../components/skill/SkillFilesTab';
-import SkillIterationsTab from '../components/skill/SkillIterationsTab';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import {
   auditHistoryRequestForIdentity,
@@ -37,7 +35,7 @@ interface Props {
   onOpenRunTab?: OpenRunTabCallback;
 }
 
-type SkillTab = 'audit' | 'evals' | 'fix' | 'files' | 'iters';
+type SkillTab = 'audit' | 'evals' | 'fix' | 'files';
 
 interface AuditScore {
   value: number;
@@ -196,7 +194,6 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
         <Tab id="evals" label="Evals" icon={<FlaskConical size={13} strokeWidth={2} />} count={skill?.evals?.definitions.length} active={tab} setTab={setTab} />
         <Tab id="fix" label="Fix" icon={<Wrench size={13} strokeWidth={2} />} active={tab} setTab={setTab} />
         <Tab id="files" label="Files" icon={<FileText size={13} strokeWidth={2} />} count={skill?.files.length} active={tab} setTab={setTab} />
-        <Tab id="iters" label="Iterations" icon={<Layers size={13} strokeWidth={2} />} count={skill?.evals?.iterations.length} active={tab} setTab={setTab} />
       </div>
 
       {/* Tab body */}
@@ -223,7 +220,6 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
         {!skillError && skill && tab === 'files' && (
           <SkillFilesTab identity={identity} skill={skill} />
         )}
-        {!skillError && skill && tab === 'iters' && <SkillIterationsTab skill={skill} />}
       </div>
     </div>
   );

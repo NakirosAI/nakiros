@@ -10,6 +10,7 @@ import SkillsScreen from '../../views/SkillsScreen';
 import SkillDetailScreen from '../../views/SkillDetailScreen';
 import MarketplaceScreen from '../../views/MarketplaceScreen';
 import RunScreen from '../../views/RunScreen';
+import SettingsScreen from '../../views/SettingsScreen';
 import ConversationsScreen from '../conversations/ConversationsScreen';
 import type { MarketplaceTabView, SkillTabIdentity } from '../../hooks/useTabs';
 import NewShellTopBar from './NewShellTopBar';
@@ -185,9 +186,13 @@ export default function NewShell({
                   {view === 'convs' && (
                     <ConversationsScreen key={project.id} project={project} />
                   )}
-                  {view !== 'overview' && view !== 'skills' && view !== 'convs' && (
-                    <ComingSoon view={view} onBack={() => setView('overview')} />
-                  )}
+                  {view === 'settings' && <SettingsScreen />}
+                  {view !== 'overview' &&
+                    view !== 'skills' &&
+                    view !== 'convs' &&
+                    view !== 'settings' && (
+                      <ComingSoon view={view} onBack={() => setView('overview')} />
+                    )}
                 </section>
               </ProjectProvider>
             </PreferencesProvider>

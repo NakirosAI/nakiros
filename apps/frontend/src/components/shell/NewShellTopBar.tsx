@@ -2,6 +2,7 @@ import { Home as HomeIcon, Folder, Activity, X, Plus } from 'lucide-react';
 import type { AgentRun, Project } from '@nakiros/shared';
 import type { Tab } from '../../hooks/useTabs';
 import RunDock from './RunDock';
+import VersionIndicator from '../VersionIndicator';
 
 interface NewShellTopBarProps {
   tabs: Tab[];
@@ -55,6 +56,7 @@ export default function NewShellTopBar({
       </div>
       <div className="flex items-center gap-2.5 pl-2">
         <RunDock onOpenRun={onOpenRun} projects={projects} />
+        <VersionIndicator variant="topbar" />
       </div>
     </header>
   );

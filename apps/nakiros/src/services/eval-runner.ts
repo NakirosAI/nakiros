@@ -773,18 +773,13 @@ export async function startEvalRuns(
       }
     }
 
-    // Clean up the baseline-only tmp dir once the cache has been populated.
-    // The canonical baseline data lives in `~/.nakiros/baselines/...` now; the
-    // tmp artefacts (run.json, grading.json, outputs/) are not retained.
-    if (baselineOnlyTmpDir) {
-      try {
-        rmSync(baselineOnlyTmpDir, { recursive: true, force: true });
-      } catch (err) {
-        console.warn(
-          `[eval-runner] Could not remove baseline-only tmp dir: ${(err as Error).message}`,
-        );
-      }
-    }
+    // Note: we intentionally do NOT delete `baselineOnlyTmpDir` here. The
+    // canonical baseline stats live in `~/.nakiros/baselines/...`, but the
+    // tmp dir still holds run.json + grading.json + outputs/ — useful for
+    // drill-down on the most recent baseline run, and indispensable when
+    // debugging why a baseline came out the way it did. A separate sweep
+    // (the `nakiros baseline:cleanup` subcommand, or a future TTL-based
+    // sweep) handles disk-space hygiene.
 
     cleanupEvalArtifacts();
   })();
@@ -795,14 +790,54 @@ export async function startEvalRuns(
   };
 }
 
+/**
+ * Build the user prompt for the first turn of a run, accounting for the two
+ * eval-prompt styles (question form vs. slash-prefixed reproduction).
+ *
+ * - `with_skill`: ensure the prompt invokes `/<skillName>` exactly once.
+ * - `without_skill`: ensure the prompt does NOT start with `/<skillName>`,
+ *   so claude doesn't try to execute a slash command that's been denied
+ *   in the sandbox (which makes claude no-op without calling the model).
+ */
+function renderFirstTurnPrompt(
+  config: 'with_skill' | 'without_skill',
+  skillName: string,
+  promptFromDefinition: string,
+): string {
+  const prefix = `/${skillName}`;
+  const startsWithSkillCmd =
+    promptFromDefinition === prefix ||
+    promptFromDefinition.startsWith(`${prefix} `) ||
+    promptFromDefinition.startsWith(`${prefix}\n`);
+  if (config === 'with_skill') {
+    return startsWithSkillCmd ? promptFromDefinition : `${prefix} ${promptFromDefinition}`;
+  }
+  // without_skill
+  if (!startsWithSkillCmd) return promptFromDefinition;
+  // Strip the leading `/<skillName>` (and one separator if any).
+  const remainder = promptFromDefinition.slice(prefix.length);
+  return remainder.replace(/^[\s]+/, '');
+}
+
 async function executeRun(entry: RunEntry, definition: SkillEvalDefinition, skillDir: string): Promise<void> {
   const { run } = entry;
 
-  // For with_skill runs, invoke the skill explicitly on the first turn via the /skill-name pattern.
-  const firstTurnPrompt =
-    run.config === 'with_skill'
-      ? `/${run.skillName} ${definition.prompt}`
-      : definition.prompt;
+  // Eval prompts can be written two ways:
+  //   (a) as a question (e.g. "audit this skill: …") — the runner is
+  //       expected to invoke the skill via `/<skillName>` for `with_skill`,
+  //       and just send the question as-is for `without_skill`.
+  //   (b) as a "real-world reproduction" already starting with the slash
+  //       command (e.g. "/coucou j'ai une fonction qui renvoie undefined…")
+  //       — the runner must NOT double-prefix for `with_skill`, and must
+  //       STRIP the `/<skillName>` prefix for `without_skill` so claude
+  //       sees a regular question instead of trying to execute a slash
+  //       command that doesn't exist in this sandbox (which silently
+  //       no-ops the model call: tokensUsed=0, empty assistant turn).
+  const firstTurnPrompt = renderFirstTurnPrompt(
+    run.config,
+    run.skillName,
+    definition.prompt,
+  );
 
   await executeTurn(entry, skillDir, firstTurnPrompt, /* isFirstTurn */ true);
 

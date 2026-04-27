@@ -88,20 +88,34 @@ function buildItems(turns: AuditRunTurn[], liveEvents: LiveStreamEvent[]): Rende
       return;
     }
     // Assistant turn: text body + tool calls (if any).
-    if (turn.content && turn.content.trim() !== '') {
+    const hasText = !!turn.content && turn.content.trim() !== '';
+    const hasTools = !!turn.tools && turn.tools.length > 0;
+    if (hasText) {
       out.push({
         key: `t${ti}-assistant`,
         timestamp: ts,
-        body: <AssistantText text={turn.content} />,
+        body: <AssistantText text={turn.content!} />,
       });
     }
-    if (turn.tools && turn.tools.length > 0) {
-      turn.tools.forEach((tool, toolIdx) => {
+    if (hasTools) {
+      turn.tools!.forEach((tool, toolIdx) => {
         out.push({
           key: `t${ti}-tool-${toolIdx}`,
           timestamp: ts,
           body: <ToolBox name={tool.name} display={tool.display} />,
         });
+      });
+    }
+    // Surface a placeholder for assistant turns that produced neither
+    // text nor tool calls. Without this the chat looks like only the
+    // user message exists, even though the run did complete a turn —
+    // exactly the "no AI reply visible" bug Thomas hit on a baseline
+    // run where claude had nothing to say.
+    if (!hasText && !hasTools && turn.role === 'assistant') {
+      out.push({
+        key: `t${ti}-empty`,
+        timestamp: ts,
+        body: <EmptyAssistantPlaceholder />,
       });
     }
   });
@@ -136,6 +150,19 @@ function AssistantText({ text }: { text: string }) {
       </span>
       <div className="min-w-0 flex-1 whitespace-pre-wrap text-[13px] leading-relaxed text-n-fg">
         {text}
+      </div>
+    </div>
+  );
+}
+
+function EmptyAssistantPlaceholder() {
+  return (
+    <div className="flex items-start gap-2.5">
+      <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-n-xs bg-n-sunken text-n-faint">
+        <Sparkles size={13} strokeWidth={2.25} />
+      </span>
+      <div className="min-w-0 flex-1 text-[12.5px] italic text-n-faint">
+        (no assistant reply — the run completed without producing text or tool calls)
       </div>
     </div>
   );

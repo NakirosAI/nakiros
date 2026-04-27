@@ -167,6 +167,21 @@ export interface EvalMatrixMetrics {
   };
 }
 
+/**
+ * What kind of run produced an iteration — drives UI affordances (sparkline
+ * marker color, matrix column styling, diff selector tags).
+ *
+ * - `skill`: classic eval iteration that ran `with_skill` (and possibly
+ *   `without_skill` on cache miss for the per-model baseline). The bulk of
+ *   what shows up in the Evolution view.
+ * - `baseline`: a baseline-only run triggered via "Recalculer la baseline".
+ *   Only `without_skill` data, no `with_skill` to display. Persisted as a
+ *   real iteration so the user can audit baseline history, compare it
+ *   against skill iterations in the diff overlay, and see it on the
+ *   sparkline as a distinct marker.
+ */
+export type EvalIterationKind = 'skill' | 'baseline';
+
 /** Complete eval matrix consumed by the Evolution view — iterations × evals grid + metrics. */
 export interface EvalMatrix {
   skillName: string;
@@ -183,6 +198,12 @@ export interface EvalMatrix {
    * was used). Aligned to `iterations`.
    */
   models: Array<string | null>;
+  /**
+   * Run kind for each iteration — `'skill'` or `'baseline'`. Aligned to
+   * `iterations`. Defaults to `'skill'` for benchmarks written before the
+   * field landed (backward-compat).
+   */
+  kinds: EvalIterationKind[];
   rows: EvalMatrixRow[];
   metrics: EvalMatrixMetrics;
 }

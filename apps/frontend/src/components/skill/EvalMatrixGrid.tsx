@@ -248,6 +248,7 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
         {matrix && matrix.metrics.passRateByIteration.length > 0 && (
           <Sparkline
             data={matrix.metrics.passRateByIteration.map((r) => Math.round(r * 100))}
+            markers={matrix.kinds}
             width={120}
             height={22}
             stroke="var(--n-accent)"
@@ -549,23 +550,42 @@ function MatrixTable({
             <th className="sticky left-0 z-10 min-w-[220px] border-b border-n-border-subtle bg-n-surface px-3.5 py-3 text-left font-n-mono text-[10.5px] font-medium uppercase tracking-[1px] text-n-subtle">
               EVAL
             </th>
-            {matrix.iterations.map((iteration, idx) => (
-              <th
-                key={iteration}
-                className="min-w-[56px] border-b border-n-border-subtle px-1.5 py-3 text-center font-n-mono text-[10px] font-medium text-n-subtle"
-                title={matrix.models[idx] ?? undefined}
-              >
-                <div>iter {iteration}</div>
-                {matrix.models[idx] && (
-                  <div
-                    className="mt-0.5 text-[9px]"
-                    style={{ color: modelColor(matrix.models[idx]!) }}
-                  >
-                    {shortenModelLabel(matrix.models[idx]!)}
+            {matrix.iterations.map((iteration, idx) => {
+              const isBaseline = matrix.kinds[idx] === 'baseline';
+              return (
+                <th
+                  key={iteration}
+                  className={
+                    'min-w-[56px] border-b border-n-border-subtle px-1.5 py-3 text-center font-n-mono text-[10px] font-medium text-n-subtle ' +
+                    (isBaseline ? 'bg-n-sunken/60' : '')
+                  }
+                  title={
+                    (isBaseline ? 'baseline · ' : '') +
+                    (matrix.models[idx] ?? '')
+                  }
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    {isBaseline && (
+                      <span
+                        className="rounded-n-xs bg-n-accent-soft px-1 py-px text-[8px] font-semibold uppercase tracking-[0.6px] text-n-accent"
+                        title="baseline run"
+                      >
+                        B
+                      </span>
+                    )}
+                    <span>iter {iteration}</span>
                   </div>
-                )}
-              </th>
-            ))}
+                  {matrix.models[idx] && (
+                    <div
+                      className="mt-0.5 text-[9px]"
+                      style={{ color: modelColor(matrix.models[idx]!) }}
+                    >
+                      {shortenModelLabel(matrix.models[idx]!)}
+                    </div>
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -573,6 +593,7 @@ function MatrixTable({
             <RowGroup
               key={row.evalName}
               row={row}
+              kinds={matrix.kinds}
               onSelectIteration={onSelectIteration}
             />
           ))}
@@ -584,9 +605,11 @@ function MatrixTable({
 
 function RowGroup({
   row,
+  kinds,
   onSelectIteration,
 }: {
   row: EvalMatrixRow;
+  kinds: ReadonlyArray<'skill' | 'baseline'>;
   onSelectIteration(iteration: number): void;
 }) {
   return (
@@ -605,29 +628,51 @@ function RowGroup({
             <span className="text-[9.5px] text-n-faint">with-skill ▲ / baseline ▽</span>
           </div>
         </td>
-        {row.withSkill.map((cell, i) => (
-          <td key={i} className="min-w-[56px] text-center pt-1 pb-px px-1">
-            <EvalCell
-              cell={cell}
-              onClick={cell ? () => onSelectIteration(cell.iteration) : undefined}
-            />
-          </td>
-        ))}
+        {row.withSkill.map((cell, i) => {
+          const isBaselineCol = kinds[i] === 'baseline';
+          return (
+            <td
+              key={i}
+              className={
+                'min-w-[56px] text-center pt-1 pb-px px-1 ' +
+                (isBaselineCol ? 'bg-n-sunken/60' : '')
+              }
+            >
+              {isBaselineCol ? (
+                // The with_skill row is meaningless on a baseline iter — no
+                // skill ran. Hide the cell so the column reads as "this is
+                // a baseline column, only the bottom value matters".
+                <span className="font-n-mono text-[10px] text-n-faint/60">·</span>
+              ) : (
+                <EvalCell
+                  cell={cell}
+                  onClick={cell ? () => onSelectIteration(cell.iteration) : undefined}
+                />
+              )}
+            </td>
+          );
+        })}
       </tr>
       <tr>
         {/* The eval-name cell spans both rows, so no leading <td> */}
-        {row.withoutSkill.map((cell, i) => (
-          <td
-            key={i}
-            className="min-w-[56px] border-b border-n-border-subtle px-1 pt-px pb-1.5 text-center"
-          >
-            <EvalCell
-              cell={cell}
-              baseline
-              onClick={cell ? () => onSelectIteration(cell.iteration) : undefined}
-            />
-          </td>
-        ))}
+        {row.withoutSkill.map((cell, i) => {
+          const isBaselineCol = kinds[i] === 'baseline';
+          return (
+            <td
+              key={i}
+              className={
+                'min-w-[56px] border-b border-n-border-subtle px-1 pt-px pb-1.5 text-center ' +
+                (isBaselineCol ? 'bg-n-sunken/60' : '')
+              }
+            >
+              <EvalCell
+                cell={cell}
+                baseline
+                onClick={cell ? () => onSelectIteration(cell.iteration) : undefined}
+              />
+            </td>
+          );
+        })}
       </tr>
     </>
   );

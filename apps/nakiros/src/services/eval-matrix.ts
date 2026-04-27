@@ -3,6 +3,7 @@ import { join, relative } from 'path';
 
 import type {
   BaselineMeta,
+  EvalIterationKind,
   EvalMatrix,
   EvalMatrixCell,
   EvalMatrixMetrics,
@@ -54,6 +55,12 @@ interface BenchmarkFile {
   skill_fingerprint?: string | null;
   /** Claude model id used for the iteration — null on pre-selector runs. */
   model?: string | null;
+  /**
+   * `'skill'` for a normal eval iteration, `'baseline'` for a baseline-only
+   * refresh. Older benchmarks that pre-date the field are treated as
+   * `'skill'` (the bulk of historical data).
+   */
+  kind?: 'skill' | 'baseline';
   per_eval: Record<string, BenchmarkPerEval>;
 }
 
@@ -79,6 +86,7 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
       iterations: [],
       fingerprints: [],
       models: [],
+      kinds: [],
       rows: [],
       metrics: emptyMetrics(),
     };
@@ -87,6 +95,7 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
   const iterations = benchmarks.map((b) => b.iteration);
   const fingerprints = benchmarks.map((b) => b.skill_fingerprint ?? null);
   const models = benchmarks.map((b) => b.model ?? null);
+  const kinds: EvalIterationKind[] = benchmarks.map((b) => (b.kind === 'baseline' ? 'baseline' : 'skill'));
 
   // Pre-compute the current eval-fingerprints once. If evals.json is missing
   // or unparseable, the map stays empty — every baseline lookup will miss
@@ -133,8 +142,8 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
     rows.push({ evalName, withSkill, withoutSkill, tag });
   }
 
-  const metrics = computeMetrics(iterations, rows);
-  return { skillName, iterations, fingerprints, models, rows, metrics };
+  const metrics = computeMetrics(iterations, rows, kinds);
+  return { skillName, iterations, fingerprints, models, kinds, rows, metrics };
 }
 
 // ─── Baseline cache lookup helpers ──────────────────────────────────────────
@@ -385,7 +394,11 @@ function variance(values: number[]): number {
 
 // ─── Metrics computation ────────────────────────────────────────────────────
 
-function computeMetrics(iterations: number[], rows: EvalMatrixRow[]): EvalMatrixMetrics {
+function computeMetrics(
+  iterations: number[],
+  rows: EvalMatrixRow[],
+  kinds: EvalIterationKind[],
+): EvalMatrixMetrics {
   const passRateByIteration: number[] = [];
   const tokensByIteration: EvalMatrixMetrics['tokensByIteration'] = [];
 
@@ -393,8 +406,14 @@ function computeMetrics(iterations: number[], rows: EvalMatrixRow[]): EvalMatrix
     const withCells = rows.map((r) => r.withSkill[i]).filter((c): c is EvalMatrixCell => Boolean(c));
     const withoutCells = rows.map((r) => r.withoutSkill[i]).filter((c): c is EvalMatrixCell => Boolean(c));
 
-    const totalAssertions = withCells.reduce((s, c) => s + c.total, 0);
-    const passedAssertions = withCells.reduce((s, c) => s + c.passed, 0);
+    // Baseline iterations have no `with_skill` data — fall back to the
+    // `without_skill` (= baseline) cells so the sparkline shows a single
+    // continuous pass-rate timeline regardless of kind. The frontend uses
+    // `kinds[i]` to render baseline points with a distinct marker.
+    const cellsForRate =
+      kinds[i] === 'baseline' && withCells.length === 0 ? withoutCells : withCells;
+    const totalAssertions = cellsForRate.reduce((s, c) => s + c.total, 0);
+    const passedAssertions = cellsForRate.reduce((s, c) => s + c.passed, 0);
     passRateByIteration.push(totalAssertions > 0 ? passedAssertions / totalAssertions : 0);
 
     const tokensWith = withCells.reduce((s, c) => s + c.tokens, 0);

@@ -3,8 +3,6 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { dirname, join, relative, sep } from 'path';
 import { promisify } from 'util';
 
-import { getNakirosDir } from '../utils/nakiros-dir.js';
-
 import { gradeLlmAssertionsBatch, JUDGE_MODEL } from './eval-llm-grader.js';
 import { collectConfigStats, writeIterationBenchmark, type EvalConfigStats } from './eval-benchmark.js';
 import { cleanupEvalArtifacts } from './eval-artifact-cleanup.js';
@@ -487,35 +485,13 @@ export async function startEvalRuns(
 
   const baselineOnly = request.baselineOnly === true;
 
-  // Baseline-only runs go into a temp dir under ~/.nakiros/baselines-tmp/
-  // instead of the skill's iteration workspace. The matrix never sees them
-  // (no benchmark.json, no `iteration-N/` directory ever created) — the
-  // only persistent artefact is the upserted entry in the per-model
-  // baseline cache.
-  //
-  // The `iteration` field on the run is still set: it acts as the in-memory
-  // batch key (see `useAgentRunsSync.batchKey` on the frontend). We use
-  // `Date.now()` so each baseline-only batch gets a unique key — two
-  // back-to-back baseline runs would otherwise collapse into the same
-  // agent-run in the store, breaking the run tab.
-  let effectiveOptions: StartRunsOptions = options;
-  let baselineOnlyTmpDir: string | null = null;
-  if (baselineOnly) {
-    baselineOnlyTmpDir = join(
-      getNakirosDir(),
-      'baselines-tmp',
-      `batch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    );
-    mkdirSync(baselineOnlyTmpDir, { recursive: true });
-    effectiveOptions = {
-      ...options,
-      artifactRootOverride: baselineOnlyTmpDir,
-      skipBenchmarkWrite: true,
-      fixedIteration: Date.now(),
-    };
-  }
-
-  const iteration = effectiveOptions.fixedIteration ?? computeNextIteration(skillDir);
+  // Baseline-only runs are persisted as real iterations under the skill's
+  // workspace (just like skill iterations) — they bump the iteration
+  // counter, get their own benchmark.json (with `kind: 'baseline'`), and
+  // surface in the matrix / sparkline / diff selector. The per-model
+  // cache is still upserted at the end so skill iterations can reuse the
+  // value without recomputing.
+  const iteration = options.fixedIteration ?? computeNextIteration(skillDir);
   // baselineOnly implies "always run baseline" — refreshBaseline is then
   // moot, but we keep the explicit flag for the non-baseline-only path.
   const refreshBaseline = baselineOnly || request.refreshBaseline === true;
@@ -581,8 +557,8 @@ export async function startEvalRuns(
         ? ['with_skill', 'without_skill']
         : ['with_skill'];
     for (const config of configs) {
-      const artifactDir = effectiveOptions.artifactRootOverride
-        ? prepareArtifactDirAt(effectiveOptions.artifactRootOverride, def.name, config)
+      const artifactDir = options.artifactRootOverride
+        ? prepareArtifactDirAt(options.artifactRootOverride, def.name, config)
         : prepareArtifactDir(skillDir, iteration, def.name, config);
 
       const runId = generateRunId('run');
@@ -755,7 +731,7 @@ export async function startEvalRuns(
       }
     }
 
-    if (!effectiveOptions.skipBenchmarkWrite) {
+    if (!options.skipBenchmarkWrite) {
       // Pass cache-hit baselines so the benchmark.json gets a `without_skill`
       // section even when no fresh baseline run produced on-disk artefacts
       // for this iteration. Cache miss evals already wrote their baseline
@@ -767,19 +743,12 @@ export async function startEvalRuns(
       try {
         writeIterationBenchmark(skillDir, request.skillName, iteration, {
           baselinesByEval: cachedBaselinesByEval,
+          kind: baselineOnly ? 'baseline' : 'skill',
         });
       } catch (err) {
         console.error('[eval-runner] Failed to write benchmark.json:', err);
       }
     }
-
-    // Note: we intentionally do NOT delete `baselineOnlyTmpDir` here. The
-    // canonical baseline stats live in `~/.nakiros/baselines/...`, but the
-    // tmp dir still holds run.json + grading.json + outputs/ — useful for
-    // drill-down on the most recent baseline run, and indispensable when
-    // debugging why a baseline came out the way it did. A separate sweep
-    // (the `nakiros baseline:cleanup` subcommand, or a future TTL-based
-    // sweep) handles disk-space hygiene.
 
     cleanupEvalArtifacts();
   })();

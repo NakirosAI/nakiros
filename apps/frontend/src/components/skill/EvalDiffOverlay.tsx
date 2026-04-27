@@ -116,14 +116,17 @@ export default function EvalDiffOverlay({
   const [regressionsOnly, setRegressionsOnly] = useState(false);
 
   // Pre-compute pass rates per iteration so the picker can show
-  // X/Y · % at a glance for each run row.
+  // X/Y · % at a glance for each run row. Baseline iterations have no
+  // `withSkill` cells — fall back to `withoutSkill` so the picker
+  // surfaces a useful number for them too.
   const passByIter = useMemo(() => {
     const map = new Map<number, { passed: number; total: number; passRate: number }>();
     matrix.iterations.forEach((iter, idx) => {
+      const isBaseline = matrix.kinds[idx] === 'baseline';
       let passed = 0;
       let total = 0;
       for (const row of matrix.rows) {
-        const cell = row.withSkill[idx];
+        const cell = isBaseline ? row.withoutSkill[idx] : row.withSkill[idx];
         if (!cell) continue;
         passed += cell.passed;
         total += cell.total;
@@ -133,6 +136,15 @@ export default function EvalDiffOverlay({
         total,
         passRate: total > 0 ? passed / total : 0,
       });
+    });
+    return map;
+  }, [matrix]);
+
+  // Per-iteration kind, pre-indexed for the picker dropdown.
+  const kindByIter = useMemo(() => {
+    const map = new Map<number, 'skill' | 'baseline'>();
+    matrix.iterations.forEach((iter, idx) => {
+      map.set(iter, matrix.kinds[idx] ?? 'skill');
     });
     return map;
   }, [matrix]);
@@ -220,6 +232,7 @@ export default function EvalDiffOverlay({
               iterations={matrix.iterations}
               passByIter={passByIter}
               timestampByIter={timestampByIter}
+              kindByIter={kindByIter}
               onChange={setPrevIter}
             />
             <ArrowRight size={13} strokeWidth={2} className="text-n-faint" />
@@ -230,6 +243,7 @@ export default function EvalDiffOverlay({
               iterations={matrix.iterations}
               passByIter={passByIter}
               timestampByIter={timestampByIter}
+              kindByIter={kindByIter}
               onChange={(iter) => iter !== null && setCurIter(iter)}
             />
           </div>
@@ -258,6 +272,7 @@ export default function EvalDiffOverlay({
         <RunHistorySparkline
           iterations={matrix.iterations}
           passRates={matrix.metrics.passRateByIteration}
+          kinds={matrix.kinds}
           currentIteration={curIter}
           previousIteration={previousIteration}
         />
@@ -398,6 +413,12 @@ interface RunPickerProps {
   iterations: number[];
   passByIter: Map<number, PassInfo>;
   timestampByIter: Map<number, string | null>;
+  /**
+   * Per-iteration kind. Baseline iterations show a small "BASELINE" tag
+   * in the dropdown so the user can intentionally compare a skill run
+   * against a baseline run.
+   */
+  kindByIter: Map<number, 'skill' | 'baseline'>;
   onChange(iteration: number | null): void;
 }
 
@@ -420,6 +441,7 @@ function RunPicker({
   iterations,
   passByIter,
   timestampByIter,
+  kindByIter,
   onChange,
 }: RunPickerProps) {
   const [open, setOpen] = useState(false);
@@ -443,6 +465,7 @@ function RunPicker({
 
   const selectedPass = selected !== null ? passByIter.get(selected) : null;
   const selectedRatePct = selectedPass ? Math.round(selectedPass.passRate * 100) : null;
+  const selectedKind = selected !== null ? kindByIter.get(selected) : undefined;
 
   return (
     <div ref={wrapperRef} className="relative inline-block">
@@ -462,6 +485,7 @@ function RunPicker({
         ) : (
           <>
             <span className="font-semibold">Run #{selected}</span>
+            {selectedKind === 'baseline' && <BaselineTag />}
             {selectedRatePct !== null && (
               <span className="text-n-muted">{selectedRatePct}%</span>
             )}
@@ -522,11 +546,12 @@ function RunPicker({
                 >
                   <span
                     className={
-                      'font-n-mono text-[13px] font-semibold ' +
+                      'flex items-center gap-1.5 font-n-mono text-[13px] font-semibold ' +
                       (isCounterpart ? 'text-n-faint opacity-50' : 'text-n-fg')
                     }
                   >
                     #{iter}
+                    {kindByIter.get(iter) === 'baseline' && <BaselineTag />}
                   </span>
                   <span
                     className={
@@ -604,11 +629,14 @@ function formatRunWhen(iso: string | null): string {
 function RunHistorySparkline({
   iterations,
   passRates,
+  kinds,
   currentIteration,
   previousIteration,
 }: {
   iterations: number[];
   passRates: number[];
+  /** Aligned to `iterations` — baseline iters get a violet dot. */
+  kinds: ReadonlyArray<'skill' | 'baseline'>;
   currentIteration: number;
   previousIteration: number | null;
 }) {
@@ -660,14 +688,29 @@ function RunHistorySparkline({
         {iterations.map((iter, i) => {
           const isCur = iter === currentIteration;
           const isPrev = previousIteration !== null && iter === previousIteration;
+          const isBaseline = kinds[i] === 'baseline';
           const radius = isCur || isPrev ? 5 : 3;
-          const fill = isCur ? 'var(--n-accent)' : isPrev ? 'var(--n-fg-muted)' : 'var(--n-fg-faint)';
+          // Baseline runs always render in the violet marker colour to
+          // match the inline matrix sparkline. Selection state still
+          // wins for size + ring (so the user can see the selected run
+          // clearly even when it's a baseline).
+          const fill = isBaseline
+            ? 'oklch(0.62 0.21 295)'
+            : isCur
+              ? 'var(--n-accent)'
+              : isPrev
+                ? 'var(--n-fg-muted)'
+                : 'var(--n-fg-faint)';
           return (
             <span
               key={iter}
               className="absolute inline-flex items-center justify-center"
               style={{ left: xs[i]! - 8, top: ys[i]! - 8, width: 16, height: 16 }}
-              title={`Run #${iter} · ${Math.round(passRates[i]! * 100)}%`}
+              title={
+                `Run #${iter}` +
+                (isBaseline ? ' · baseline' : '') +
+                ` · ${Math.round(passRates[i]! * 100)}%`
+              }
             >
               <span
                 className="rounded-full"
@@ -687,6 +730,7 @@ function RunHistorySparkline({
       <div className="flex flex-shrink-0 gap-3 font-n-mono text-[10px] text-n-faint">
         <LegendDot color="var(--n-fg-muted)" label="prev" />
         <LegendDot color="var(--n-accent)" label="current" />
+        <LegendDot color="oklch(0.62 0.21 295)" label="baseline" />
       </div>
     </div>
   );
@@ -697,6 +741,25 @@ function LegendDot({ color, label }: { color: string; label: string }) {
     <span className="inline-flex items-center gap-1">
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
       {label}
+    </span>
+  );
+}
+
+/**
+ * Pill flagging an iteration as a baseline-only refresh in the diff
+ * picker. Kept neutral (violet to match the sparkline marker colour) so
+ * it reads as "this run was the baseline" rather than as a status badge.
+ */
+function BaselineTag() {
+  return (
+    <span
+      className="rounded-n-xs px-1 py-px font-n-mono text-[8.5px] font-semibold uppercase tracking-[0.6px]"
+      style={{
+        background: 'oklch(0.62 0.21 295 / 0.18)',
+        color: 'oklch(0.78 0.16 295)',
+      }}
+    >
+      baseline
     </span>
   );
 }

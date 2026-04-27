@@ -121,6 +121,14 @@ export interface WriteBenchmarkOptions {
    * the on-disk scan — they don't appear in this map.
    */
   baselinesByEval?: Record<string, EvalConfigStats | undefined>;
+  /**
+   * What kind of run produced this iteration: `'skill'` for a normal eval
+   * batch (with_skill runs) or `'baseline'` for a baseline-only refresh.
+   * Surfaced by the matrix so the frontend can distinguish them visually
+   * (muted column bg, sparkline marker color, diff selector tag). Defaults
+   * to `'skill'` when omitted, matching pre-refactor benchmarks.
+   */
+  kind?: 'skill' | 'baseline';
 }
 
 /**
@@ -205,6 +213,12 @@ export function writeIterationBenchmark(
     skill_name: skillName,
     iteration,
     timestamp: new Date().toISOString(),
+    // `'baseline'` for baseline-only refreshes triggered from the kebab
+    // menu; `'skill'` for normal eval batches. The matrix uses this to
+    // tag iterations in the UI without re-deriving the kind from cell
+    // contents (which is brittle: a skill iter with a cache-hit baseline
+    // looks structurally like a baseline iter on disk).
+    kind: opts.kind ?? 'skill',
     skill_fingerprint: skillFingerprint,
     model: iterationModel,
     run_summary: {

@@ -22,6 +22,14 @@ interface SparklineProps {
   strokeWidth?: number;
   /** Optional accessible label — set when the sparkline isn't purely decorative. */
   ariaLabel?: string;
+  /**
+   * Marker hint per data point. When a position is `'baseline'`, the
+   * sparkline overlays a small violet dot at that x to flag it as a
+   * baseline iteration (vs. a regular skill iteration). Length should
+   * match `data`; missing entries render as plain skill points. Used by
+   * the eval matrix to make baseline runs visible on the trend line.
+   */
+  markers?: ReadonlyArray<'skill' | 'baseline'>;
 }
 
 /**
@@ -37,6 +45,9 @@ interface SparklineProps {
  * Use it purely decorative (no `ariaLabel`) — when wired to real KPIs
  * pass an `ariaLabel` describing the trend ("score moyen sur 30 jours").
  */
+/** Violet baseline marker — distinct from the accent line color. */
+const BASELINE_MARKER_COLOR = 'oklch(0.62 0.21 295)';
+
 export default function Sparkline({
   data,
   width = 96,
@@ -47,6 +58,7 @@ export default function Sparkline({
   dot = false,
   strokeWidth = 1.4,
   ariaLabel,
+  markers,
 }: SparklineProps) {
   const geometry = useMemo(() => {
     if (data.length === 0) return null;
@@ -63,7 +75,7 @@ export default function Sparkline({
       const y = height / 2;
       const path = `M 0,${y} L ${width},${y}`;
       const areaPath = `${path} L ${width},${height} L 0,${height} Z`;
-      return { path, areaPath, last: [width, y] as const };
+      return { path, areaPath, points: [[width / 2, y] as const], last: [width, y] as const };
     }
 
     const step = width / (data.length - 1);
@@ -75,7 +87,7 @@ export default function Sparkline({
 
     const path = 'M ' + points.map((p) => `${p[0]},${p[1]}`).join(' L ');
     const areaPath = `${path} L ${width},${height} L 0,${height} Z`;
-    return { path, areaPath, last: points[points.length - 1]! };
+    return { path, areaPath, points, last: points[points.length - 1]! };
   }, [data, width, height]);
 
   if (!geometry) return null;
@@ -98,6 +110,23 @@ export default function Sparkline({
         strokeLinejoin="round"
         strokeLinecap="round"
       />
+      {/* Baseline markers — small violet dots overlaid at each baseline
+          iteration's x. The line still passes through the point, the dot
+          just flags it visually. */}
+      {markers &&
+        markers.map((kind, i) =>
+          kind === 'baseline' && geometry.points[i] ? (
+            <circle
+              key={`baseline-${i}`}
+              cx={geometry.points[i]![0]}
+              cy={geometry.points[i]![1]}
+              r="2.6"
+              fill={BASELINE_MARKER_COLOR}
+              stroke="var(--n-bg-canvas)"
+              strokeWidth={1}
+            />
+          ) : null,
+        )}
       {dot && (
         <circle cx={geometry.last[0]} cy={geometry.last[1]} r="2.5" fill={stroke} />
       )}

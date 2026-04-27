@@ -321,8 +321,15 @@ Phase 3.
   par une extension backend de `ConversationAnalysis` (ajouter
   `billedSamples`, `cacheSamples`, `toolBuckets`, `pausePoints`). Cadrage
   noté en mémoire projet `project_nakiros_sismograph_5tracks_backend_2026_04_27`.
-- **PR11** : `RecommendationsScreen` + `RecDrawer` (cadrage à venir, IPC
-  proposals à exposer côté daemon — cf. mémoire `friction_to_skill_shipped`).
+- **PR11** *(bloquée par dépendance branche)* : `RecommendationsScreen` +
+  `RecDrawer` (port du mockup `apps/Nakiros-new-design/rec-drawer.jsx`). La
+  pipeline backend `proposal-engine/` (clustering frictions → skill drafts)
+  vit sur la branche `feat/friction-to-skill-proposals` non mergée — sur
+  `main` et `feat/new-design-integration`, le handler `project:getRecommendations`
+  retourne `[]` et `RecommendationsView` est un placeholder. Avant PR11,
+  trancher : (a) merger `feat/friction-to-skill-proposals` sur `main` puis
+  rebaser cette branche, (b) cherry-pick sélectif backend uniquement, (c)
+  reprendre le port du frontend par-dessus (a). Cadrage à figer.
 
 ### Phase 6 — Home fusionnée *(PR12)*
 

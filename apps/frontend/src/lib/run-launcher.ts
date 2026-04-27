@@ -26,7 +26,20 @@ export type OpenRunTabCallback = (params: {
 /** Eval-specific options exposed to the toolbar. */
 export interface LaunchEvalOptions {
   evalNames?: string[];
+  /**
+   * @deprecated since the per-model baseline cache landed (PR2 of the
+   * baseline-per-model refactor). The daemon ignores this flag — baselines
+   * are now always available (cache hit or fresh compute on miss). Use
+   * {@link refreshBaseline} to force a recompute. Field kept for one PR's
+   * worth of compat with legacy callers.
+   */
   includeBaseline?: boolean;
+  /**
+   * Force a fresh baseline compute even when one is already cached for
+   * `(skill, eval, modelFullId, evalFingerprint)`. Used by the matrix
+   * toolbar's "Recalculer la baseline" action.
+   */
+  refreshBaseline?: boolean;
   maxConcurrent?: number;
   model?: string;
   skillDirOverride?: string;

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, FlaskConical, MoreHorizontal, Play, RefreshCw } from 'lucide-react';
+import { FlaskConical, MoreHorizontal, MoreVertical, Play, RefreshCw } from 'lucide-react';
 import type {
   EvalMatrix,
   EvalMatrixCell,
@@ -51,7 +51,6 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
   const [matrix, setMatrix] = useState<EvalMatrix | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [includeBaseline, setIncludeBaseline] = useState(true);
   const [view, setView] = useState<ViewMode>('evolution');
   /**
    * Iteration the user wants to compare with its predecessor in the
@@ -89,11 +88,16 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
     [definitions],
   );
 
-  const baselinePresent = useMemo(
-    () =>
-      !!matrix?.rows.some((row) => row.withoutSkill.some((cell) => cell !== null)),
-    [matrix],
-  );
+  const obsoleteBaselineCount = useMemo(() => {
+    if (!matrix) return 0;
+    let n = 0;
+    for (const row of matrix.rows) {
+      for (const cell of row.withoutSkill) {
+        if (cell?.baseline?.isObsolete) n++;
+      }
+    }
+    return n;
+  }, [matrix]);
 
   const headlinePassRate = useMemo(() => {
     if (!matrix) return null;
@@ -116,15 +120,23 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
             <ModelChip name="Haiku" />
           </div>
           <Divider />
-          <CustomCheckbox
-            checked={includeBaseline && baselinePresent}
-            disabled={!baselinePresent}
-            onChange={setIncludeBaseline}
-            label={t('evalsTab.includeBaseline', {
-              defaultValue: 'Inclure baseline (without-skill)',
-            })}
-          />
           <span className="flex-1" />
+          {obsoleteBaselineCount > 0 && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-n-sm border border-orange-400/30 bg-orange-400/10 px-2 py-0.5 font-n-mono text-[11px] text-orange-300"
+              title={t('evalsTab.obsoleteBaselines.tooltip', {
+                count: obsoleteBaselineCount,
+                defaultValue:
+                  '{{count}} baseline(s) computed on a model version that is no longer current. Use the kebab menu to recompute.',
+              })}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+              {t('evalsTab.obsoleteBaselines.badge', {
+                count: obsoleteBaselineCount,
+                defaultValue: '{{count}} obsolete baseline(s)',
+              })}
+            </span>
+          )}
           <button
             type="button"
             disabled={!identity || !onOpenRunTab || isLaunching}
@@ -132,11 +144,7 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
               if (!identity || !onOpenRunTab || isLaunching) return;
               setIsLaunching(true);
               try {
-                await launchEvalBatch(
-                  identity,
-                  { includeBaseline: includeBaseline && baselinePresent },
-                  onOpenRunTab,
-                );
+                await launchEvalBatch(identity, {}, onOpenRunTab);
               } catch (err) {
                 console.error('[evals] launchEvalBatch failed', err);
               } finally {
@@ -159,6 +167,24 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
               ? t('runEvalsStarting', { defaultValue: 'Starting…' })
               : t('runEvals', { defaultValue: 'Run evals' })}
           </button>
+          <BaselineMenu
+            disabled={!identity || !onOpenRunTab || isLaunching}
+            onRefreshBaseline={async () => {
+              if (!identity || !onOpenRunTab || isLaunching) return;
+              setIsLaunching(true);
+              try {
+                await launchEvalBatch(
+                  identity,
+                  { refreshBaseline: true },
+                  onOpenRunTab,
+                );
+              } catch (err) {
+                console.error('[evals] refreshBaseline launch failed', err);
+              } finally {
+                setIsLaunching(false);
+              }
+            }}
+          />
         </div>
       </div>
 
@@ -249,10 +275,9 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
         <>
           <MatrixTable
             matrix={matrix}
-            includeBaseline={includeBaseline && baselinePresent}
             onSelectIteration={setDiffIteration}
           />
-          <Legend hasBaseline={baselinePresent} />
+          <Legend />
         </>
       )}
 
@@ -300,43 +325,89 @@ function Divider() {
   return <span className="h-3.5 w-px bg-n-border-subtle" />;
 }
 
-function CustomCheckbox({
-  checked,
+/**
+ * Kebab menu next to the "Run evals" button. Hosts baseline-cache actions
+ * that don't need to live as primary buttons (rare paths). Currently exposes:
+ * - Recalculer la baseline (refresh): re-runs the eval batch with
+ *   `refreshBaseline: true`, forcing the daemon to ignore the cache and
+ *   recompute the without_skill score for the resolved model.
+ *
+ * Additional entries (e.g. delete a single obsolete baseline, manage
+ * baselines panel) belong here when their flows ship.
+ */
+function BaselineMenu({
   disabled,
-  onChange,
-  label,
+  onRefreshBaseline,
 }: {
-  checked: boolean;
   disabled: boolean;
-  onChange(next: boolean): void;
-  label: string;
+  onRefreshBaseline(): void;
 }) {
-  return (
-    <label
-      className={
-        'inline-flex items-center gap-1.5 text-[12px] ' +
-        (disabled ? 'cursor-not-allowed text-n-faint' : 'cursor-pointer text-n-muted hover:text-n-fg')
+  const { t } = useTranslation('skills');
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
       }
-    >
-      <input
-        type="checkbox"
-        className="sr-only"
-        checked={checked}
+    };
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <button
+        type="button"
         disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <span
+        onClick={() => setOpen((v) => !v)}
+        aria-label={t('evalsTab.baselineMenu.aria', { defaultValue: 'Baseline actions' })}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className={
-          'inline-flex h-[14px] w-[14px] items-center justify-center rounded-n-xs border transition-colors ' +
-          (checked
-            ? 'border-n-accent-line bg-n-accent-soft'
-            : 'border-n-border-subtle bg-n-sunken')
+          'inline-flex h-7 w-7 items-center justify-center rounded-n-sm border border-n-border-subtle bg-n-surface text-n-subtle ' +
+          (disabled ? 'opacity-60' : 'hover:bg-n-raised hover:text-n-fg')
         }
       >
-        {checked && <Check size={10} strokeWidth={3} className="text-n-accent" />}
-      </span>
-      {label}
-    </label>
+        <MoreVertical size={14} strokeWidth={2} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+4px)] z-20 min-w-[220px] rounded-n-md border border-n-border-default bg-n-raised py-1 shadow-n-pop"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            disabled={disabled}
+            onClick={() => {
+              setOpen(false);
+              onRefreshBaseline();
+            }}
+            className={
+              'flex w-full items-center gap-2 px-3 py-1.5 text-left font-n-mono text-[11.5px] ' +
+              (disabled
+                ? 'cursor-not-allowed text-n-faint'
+                : 'text-n-fg hover:bg-n-surface')
+            }
+          >
+            <RefreshCw size={12} strokeWidth={2} className="text-n-accent" />
+            {t('evalsTab.baselineMenu.refresh', {
+              defaultValue: 'Recalculer la baseline',
+            })}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -437,11 +508,9 @@ function TagCountBadges({
 
 function MatrixTable({
   matrix,
-  includeBaseline,
   onSelectIteration,
 }: {
   matrix: EvalMatrix;
-  includeBaseline: boolean;
   /** Activated when the user clicks any cell — opens the diff overlay
    *  comparing that iteration with its predecessor. */
   onSelectIteration(iteration: number): void;
@@ -478,7 +547,6 @@ function MatrixTable({
             <RowGroup
               key={row.evalName}
               row={row}
-              includeBaseline={includeBaseline}
               onSelectIteration={onSelectIteration}
             />
           ))}
@@ -490,11 +558,9 @@ function MatrixTable({
 
 function RowGroup({
   row,
-  includeBaseline,
   onSelectIteration,
 }: {
   row: EvalMatrixRow;
-  includeBaseline: boolean;
   onSelectIteration(iteration: number): void;
 }) {
   return (
@@ -502,7 +568,7 @@ function RowGroup({
       {/* with-skill row — no border-bottom so the cell visually pairs with the baseline below */}
       <tr>
         <td
-          rowSpan={includeBaseline ? 2 : 1}
+          rowSpan={2}
           className="sticky left-0 z-10 border-b border-n-border-subtle bg-n-surface px-3.5 py-1.5 align-top font-n-mono text-[12px]"
         >
           <div className="flex flex-col gap-0.5">
@@ -510,19 +576,11 @@ function RowGroup({
               <span className="text-n-fg">{row.evalName}</span>
               <TagBadge tag={row.tag} />
             </div>
-            {includeBaseline && (
-              <span className="text-[9.5px] text-n-faint">with-skill ▲ / baseline ▽</span>
-            )}
+            <span className="text-[9.5px] text-n-faint">with-skill ▲ / baseline ▽</span>
           </div>
         </td>
         {row.withSkill.map((cell, i) => (
-          <td
-            key={i}
-            className={
-              'min-w-[56px] text-center ' +
-              (includeBaseline ? 'pt-1 pb-px px-1' : 'border-b border-n-border-subtle px-1 py-1')
-            }
-          >
+          <td key={i} className="min-w-[56px] text-center pt-1 pb-px px-1">
             <EvalCell
               cell={cell}
               onClick={cell ? () => onSelectIteration(cell.iteration) : undefined}
@@ -530,23 +588,21 @@ function RowGroup({
           </td>
         ))}
       </tr>
-      {includeBaseline && (
-        <tr>
-          {/* The eval-name cell spans both rows, so no leading <td> */}
-          {row.withoutSkill.map((cell, i) => (
-            <td
-              key={i}
-              className="min-w-[56px] border-b border-n-border-subtle px-1 pt-px pb-1.5 text-center"
-            >
-              <EvalCell
-                cell={cell}
-                baseline
-                onClick={cell ? () => onSelectIteration(cell.iteration) : undefined}
-              />
-            </td>
-          ))}
-        </tr>
-      )}
+      <tr>
+        {/* The eval-name cell spans both rows, so no leading <td> */}
+        {row.withoutSkill.map((cell, i) => (
+          <td
+            key={i}
+            className="min-w-[56px] border-b border-n-border-subtle px-1 pt-px pb-1.5 text-center"
+          >
+            <EvalCell
+              cell={cell}
+              baseline
+              onClick={cell ? () => onSelectIteration(cell.iteration) : undefined}
+            />
+          </td>
+        ))}
+      </tr>
     </>
   );
 }
@@ -571,16 +627,23 @@ function EvalCell({
   const tone = passRateTone(cell.passRate);
 
   if (baseline) {
+    const obsolete = cell.baseline?.isObsolete === true;
     return (
       <button
         type="button"
         onClick={onClick}
         disabled={!onClick}
-        className="inline-flex h-7 w-12 items-center justify-center rounded-n-xs border bg-n-raised font-n-mono text-[11px] font-medium text-n-muted transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-n-accent"
+        className="relative inline-flex h-7 w-12 items-center justify-center rounded-n-xs border bg-n-raised font-n-mono text-[11px] font-medium text-n-muted transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-n-accent"
         style={{ borderColor: 'var(--n-border-default)' }}
-        title={cellTooltip(cell)}
+        title={cellTooltip(cell, true)}
       >
         {cell.passed}/{cell.total}
+        {obsolete && (
+          <span
+            className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-orange-400 ring-1 ring-orange-200/40"
+            aria-label="Baseline obsolete"
+          />
+        )}
       </button>
     );
   }
@@ -603,9 +666,17 @@ function EvalCell({
   );
 }
 
-function cellTooltip(cell: EvalMatrixCell): string {
+function cellTooltip(cell: EvalMatrixCell, isBaseline = false): string {
   const pct = Math.round(cell.passRate * 100);
-  return `${cell.passed}/${cell.total} · ${pct}% · ${cell.tokens.toLocaleString()} tokens`;
+  const base = `${cell.passed}/${cell.total} · ${pct}% · ${cell.tokens.toLocaleString()} tokens`;
+  if (!isBaseline || !cell.baseline) return base;
+  const dateStr = new Date(cell.baseline.computedAt).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const obsoleteSuffix = cell.baseline.isObsolete ? ' · obsolete' : '';
+  return `${base}\nBaseline computed ${dateStr} on ${cell.baseline.modelFullId}${obsoleteSuffix}`;
 }
 
 function passRateTone(rate: number): { bg: string; fg: string } {
@@ -687,7 +758,7 @@ function SectionLabel({
 
 // ── Legend ────────────────────────────────────────────────────────────────
 
-function Legend({ hasBaseline }: { hasBaseline: boolean }) {
+function Legend() {
   return (
     <div className="mt-3 flex flex-wrap items-center gap-3.5 font-n-mono text-[11px] text-n-subtle">
       <LegendSwatch
@@ -705,13 +776,15 @@ function Legend({ hasBaseline }: { hasBaseline: boolean }) {
         border="oklch(0.74 0.16 25 / 0.4)"
         label="< 50%"
       />
-      {hasBaseline && (
-        <LegendSwatch
-          bg="var(--n-bg-raised)"
-          border="var(--n-border-default)"
-          label="baseline"
-        />
-      )}
+      <LegendSwatch
+        bg="var(--n-bg-raised)"
+        border="var(--n-border-default)"
+        label="baseline"
+      />
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-orange-400 ring-1 ring-orange-200/40" />
+        baseline obsolete (recompute via menu)
+      </span>
     </div>
   );
 }

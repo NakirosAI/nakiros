@@ -26,7 +26,16 @@
     "includeBaseline": "Inclure baseline (without-skill)",
     "defined": "Evals définies",
     "assertions": "assertions",
-    "noDefinitions": "Aucun eval défini pour ce skill."
+    "noDefinitions": "Aucun eval défini pour ce skill.",
+    "obsoleteBaselines": {
+      "badge_one": "{{count}} baseline obsolète",
+      "badge_other": "{{count}} baselines obsolètes",
+      "tooltip": "{{count}} baseline(s) calculée(s) sur une version de modèle qui n'est plus la version courante. Utilise le menu kebab pour recalculer."
+    },
+    "baselineMenu": {
+      "aria": "Actions baseline",
+      "refresh": "Recalculer la baseline"
+    }
   },
   "iterationsTab": {
     "heading": "Itérations · historique",

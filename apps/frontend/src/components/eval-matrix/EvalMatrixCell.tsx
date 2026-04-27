@@ -60,12 +60,18 @@ export function EvalMatrixCellView({
           onClick={onClickWithout}
           title={tooltipFor(withoutCell, 'baseline')}
           className={clsx(
-            'flex h-4 items-center justify-center text-[9px] font-medium transition-transform hover:scale-[1.03] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]',
+            'relative flex h-4 items-center justify-center text-[9px] font-medium transition-transform hover:scale-[1.03] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]',
             mutedBg(withoutCell.passRate),
             selected && selectedConfig === 'without_skill' && 'ring-2 ring-[var(--primary)]',
           )}
         >
           {withoutCell.passed}/{withoutCell.total}
+          {withoutCell.baseline?.isObsolete && (
+            <span
+              className="absolute right-0.5 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-orange-400 ring-1 ring-orange-200/60"
+              aria-label="Baseline obsolete"
+            />
+          )}
         </button>
       ) : (
         <div className="flex h-4 items-center justify-center text-[9px] text-[var(--text-muted)]/60">
@@ -77,7 +83,18 @@ export function EvalMatrixCellView({
 }
 
 function tooltipFor(cell: Cell, label: string): string {
-  return `${label}: ${cell.passed}/${cell.total} · ${formatTokens(cell.tokens)} tokens · ${formatComputeDuration(cell.durationMs)}`;
+  const base = `${label}: ${cell.passed}/${cell.total} · ${formatTokens(cell.tokens)} tokens · ${formatComputeDuration(cell.durationMs)}`;
+  if (label !== 'baseline' || !cell.baseline) return base;
+  // Append cache provenance — non-localised on purpose (native HTML title;
+  // matches the existing tooltip style of the cell).
+  const date = new Date(cell.baseline.computedAt);
+  const dateStr = date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const obsoleteSuffix = cell.baseline.isObsolete ? ' · obsolete' : '';
+  return `${base}\nBaseline computed ${dateStr} on ${cell.baseline.modelFullId}${obsoleteSuffix}`;
 }
 
 /** Red (0%) → orange → yellow → lime → green (100%). */

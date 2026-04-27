@@ -101,6 +101,7 @@ export const IPC_CHANNELS = {
   'eval:readDiffPatch': 'eval:readDiffPatch',
   'eval:getMatrix': 'eval:getMatrix',
   'eval:loadIterationRun': 'eval:loadIterationRun',
+  'eval:listBaselines': 'eval:listBaselines',
 
   // Eval model comparison (A/B/C across Haiku/Sonnet/Opus)
   'comparison:run': 'comparison:run',

@@ -42,6 +42,8 @@ import type {
   EvalMatrix,
   GetEvalMatrixRequest,
   IterationRunArtifact,
+  ListBaselinesRequest,
+  ListBaselinesResponse,
   LoadIterationRunRequest,
   ComparisonFingerprintStatus,
   ComparisonMatrix,
@@ -195,6 +197,7 @@ declare global {
       readEvalRunDiffPatch(runId: string): Promise<string | null>;
       getEvalMatrix(request: GetEvalMatrixRequest): Promise<EvalMatrix>;
       loadIterationRun(request: LoadIterationRunRequest): Promise<IterationRunArtifact>;
+      listEvalBaselines(request: ListBaselinesRequest): Promise<ListBaselinesResponse>;
       runModelComparison(request: RunComparisonRequest): Promise<RunComparisonResponse>;
       listModelComparisons(request: ListComparisonsRequest): Promise<ComparisonSummary[]>;
       getModelComparison(request: GetComparisonMatrixRequest): Promise<ComparisonMatrix | null>;

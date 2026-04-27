@@ -295,6 +295,7 @@ const client = {
   readEvalRunDiffPatch: (runId: string) => invoke(C['eval:readDiffPatch'], runId),
   getEvalMatrix: (request: unknown) => invoke(C['eval:getMatrix'], request),
   loadIterationRun: (request: unknown) => invoke(C['eval:loadIterationRun'], request),
+  listEvalBaselines: (request: unknown) => invoke(C['eval:listBaselines'], request),
 
   // Eval model comparison
   runModelComparison: (request: unknown) => invoke(C['comparison:run'], request),

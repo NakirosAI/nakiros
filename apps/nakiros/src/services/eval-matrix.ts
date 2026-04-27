@@ -2,12 +2,17 @@ import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, relative } from 'path';
 
 import type {
+  BaselineMeta,
   EvalMatrix,
   EvalMatrixCell,
   EvalMatrixMetrics,
   EvalMatrixRow,
   EvalMatrixTag,
 } from '@nakiros/shared';
+import { resolveModelFullId } from '@nakiros/shared';
+
+import { computeEvalFingerprint, type EvalInputForFingerprint } from './eval-fingerprint.js';
+import { getBaseline, type BaselineKey } from './baseline-store.js';
 
 // ─── Tuning constants (validated by user) ───────────────────────────────────
 
@@ -57,6 +62,12 @@ interface BenchmarkFile {
 /**
  * Build the eval matrix for a skill by walking every `iteration-N/benchmark.json`
  * under its workspace. Returns an empty matrix shape if the skill has no history.
+ *
+ * `without_skill` cells are decorated with `baseline` metadata when the
+ * cached baseline (`~/.nakiros/baselines/...`) matches the current eval
+ * inputs. Cache miss (legacy iterations, edited prompts/fixtures, or a
+ * different model) leaves `baseline: null` — the cell still renders, just
+ * without the date tooltip + obsolescence dot.
  */
 export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix {
   const workspaceDir = join(skillDir, 'evals', 'workspace');
@@ -77,6 +88,11 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
   const fingerprints = benchmarks.map((b) => b.skill_fingerprint ?? null);
   const models = benchmarks.map((b) => b.model ?? null);
 
+  // Pre-compute the current eval-fingerprints once. If evals.json is missing
+  // or unparseable, the map stays empty — every baseline lookup will miss
+  // and cells render without metadata (degrades gracefully).
+  const evalFingerprints = computeCurrentEvalFingerprints(skillDir);
+
   // Collect every eval name that ever appeared so the matrix can show
   // "introduced at iter N" via null cells before that point.
   const evalNames = new Set<string>();
@@ -89,10 +105,23 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
     const withSkill: Array<EvalMatrixCell | null> = [];
     const withoutSkill: Array<EvalMatrixCell | null> = [];
 
+    const evalFingerprint = evalFingerprints.get(evalName) ?? null;
+
     for (const b of benchmarks) {
       const stats = b.per_eval?.[evalName];
       withSkill.push(stats?.with_skill ? toCell(stats.with_skill, b.iteration, 'with_skill', workspaceDir, evalName) : null);
-      withoutSkill.push(stats?.without_skill ? toCell(stats.without_skill, b.iteration, 'without_skill', workspaceDir, evalName) : null);
+      const baselineCell = stats?.without_skill
+        ? toCell(stats.without_skill, b.iteration, 'without_skill', workspaceDir, evalName)
+        : null;
+      if (baselineCell) {
+        baselineCell.baseline = lookupBaselineMeta({
+          skillName,
+          evalName,
+          model: b.model ?? null,
+          evalFingerprint,
+        });
+      }
+      withoutSkill.push(baselineCell);
     }
 
     const tag = computeTag({
@@ -106,6 +135,73 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
 
   const metrics = computeMetrics(iterations, rows);
   return { skillName, iterations, fingerprints, models, rows, metrics };
+}
+
+// ─── Baseline cache lookup helpers ──────────────────────────────────────────
+
+/**
+ * Read the skill's evals.json and compute the *current* fingerprint for each
+ * eval definition. The matrix uses these to lookup baseline cache entries
+ * — mismatches (e.g. user edited a prompt since the baseline was computed)
+ * produce a miss, which is the desired behaviour.
+ */
+function computeCurrentEvalFingerprints(skillDir: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const evalsJsonPath = join(skillDir, 'evals', 'evals.json');
+  if (!existsSync(evalsJsonPath)) return out;
+
+  let parsed: { evals?: Array<Record<string, unknown>> };
+  try {
+    parsed = JSON.parse(readFileSync(evalsJsonPath, 'utf8')) as typeof parsed;
+  } catch {
+    return out;
+  }
+  for (const e of parsed.evals ?? []) {
+    const name = typeof e['name'] === 'string' ? e['name'] : null;
+    if (!name) continue;
+    const record: EvalInputForFingerprint = {
+      name,
+      prompt: typeof e['prompt'] === 'string' ? e['prompt'] : '',
+      expected_output: typeof e['expected_output'] === 'string' ? e['expected_output'] : undefined,
+      mode: e['mode'] === 'interactive' ? 'interactive' : 'autonomous',
+      files: Array.isArray(e['files']) ? (e['files'] as string[]) : [],
+      output_files: Array.isArray(e['output_files']) ? (e['output_files'] as string[]) : [],
+      assertions: e['assertions'] ?? [],
+    };
+    try {
+      out.set(name, computeEvalFingerprint(skillDir, record));
+    } catch {
+      // best-effort
+    }
+  }
+  return out;
+}
+
+/**
+ * Lookup the cached baseline for an iteration's `without_skill` cell. Returns
+ * `null` on any miss (no model recorded, no cached entry, fingerprint
+ * mismatch). The cell still renders — it just won't carry tooltip metadata.
+ */
+function lookupBaselineMeta(args: {
+  skillName: string;
+  evalName: string;
+  model: string | null;
+  evalFingerprint: string | null;
+}): BaselineMeta | null {
+  if (!args.model || !args.evalFingerprint) return null;
+  const key: BaselineKey = {
+    skillName: args.skillName,
+    evalName: args.evalName,
+    modelFullId: resolveModelFullId(args.model),
+    evalFingerprint: args.evalFingerprint,
+  };
+  const cached = getBaseline(key);
+  if (!cached) return null;
+  return {
+    computedAt: cached.computedAt,
+    isObsolete: cached.isObsolete,
+    modelFullId: cached.modelFullId,
+  };
 }
 
 // ─── Benchmark loading ──────────────────────────────────────────────────────

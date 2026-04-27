@@ -12,6 +12,26 @@
 // identical across iterations, judge graded differently).
 // ---------------------------------------------------------------------------
 
+/**
+ * Metadata about the cached baseline backing a `without_skill` cell. Populated
+ * when the cell's `(skillName, evalName, modelFullId, evalFingerprint)` matches
+ * an entry in the per-model baseline cache (`~/.nakiros/baselines/...`). Used
+ * by the UI tooltip + the obsolescence toast — the actual stats live in the
+ * cell itself, this carries the lookup-derived flags.
+ */
+export interface BaselineMeta {
+  /** Epoch ms — when the baseline was originally computed. */
+  computedAt: number;
+  /**
+   * True when the baseline's `modelFullId` is no longer in
+   * `CURRENT_MODEL_FULL_IDS` (i.e. a newer minor of that model line shipped
+   * since this baseline was computed). Drives the obsolescence toast.
+   */
+  isObsolete: boolean;
+  /** Full Claude model id the baseline was computed on, e.g. `claude-opus-4-7`. */
+  modelFullId: string;
+}
+
 /** Single cell in the matrix — one eval at one iteration for one config. */
 export interface EvalMatrixCell {
   iteration: number;
@@ -30,6 +50,35 @@ export interface EvalMatrixCell {
    * detail drawer.
    */
   runDir: string;
+  /**
+   * Set on `without_skill` cells when the underlying baseline is in the cache.
+   * `null` for `with_skill` cells, for legacy iterations whose baseline never
+   * made it to the cache, or when the eval's inputs changed (fingerprint
+   * mismatch) so the cached baseline no longer applies.
+   */
+  baseline?: BaselineMeta | null;
+}
+
+/**
+ * One cached baseline as exposed by `eval:listBaselines`. Used by management UI
+ * (kebab menu actions, future "Manage baselines" panel).
+ */
+export interface BaselineEntry {
+  skillName: string;
+  evalName: string;
+  modelFullId: string;
+  evalFingerprint: string;
+  /** Aggregate stats — same shape as a matrix cell's pass/total/passRate fields. */
+  stats: {
+    passed: number;
+    failed: number;
+    total: number;
+    passRate: number;
+    tokens: number;
+    durationMs: number;
+  };
+  computedAt: number;
+  isObsolete: boolean;
 }
 
 /**
@@ -151,6 +200,20 @@ export interface GetEvalMatrixRequest {
    * than the real persisted skill.
    */
   skillDirOverride?: string;
+}
+
+/** Request payload for the `eval:listBaselines` IPC channel. */
+export interface ListBaselinesRequest {
+  scope: import('./project.js').SkillScope;
+  projectId?: string;
+  pluginName?: string;
+  marketplaceName?: string;
+  skillName: string;
+}
+
+/** Response payload for the `eval:listBaselines` IPC channel. */
+export interface ListBaselinesResponse {
+  baselines: BaselineEntry[];
 }
 
 /** Request payload for the `eval:loadIterationRun` IPC channel. */

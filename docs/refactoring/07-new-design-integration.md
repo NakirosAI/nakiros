@@ -312,8 +312,17 @@ Phase 3.
 
 ### Phase 5 — Conversations & Recommandations *(PR10, PR11)*
 
-- PR10 : `ConversationsScreen` + `ConversationTabs` (drawer riche)
-- PR11 : `RecommendationsScreen` + `RecDrawer`
+- **PR10a** : `ConversationsScreen` (liste + filtres + sparkline réelle) +
+  `ConvDrawer` avec tab Diagnostic (sismograph **ctx-only enrichi**, KPIs,
+  cache, tools, hot files). No-mock : tout vient de `ConversationAnalysis`.
+- **PR10b** : tabs Timeline + Transcript du drawer (branche sur
+  `getProjectConversationMessages`).
+- **PR10c** : sismograph **5-tracks** fidèle au mockup `viz.jsx`. Bloqué
+  par une extension backend de `ConversationAnalysis` (ajouter
+  `billedSamples`, `cacheSamples`, `toolBuckets`, `pausePoints`). Cadrage
+  noté en mémoire projet `project_nakiros_sismograph_5tracks_backend_2026_04_27`.
+- **PR11** : `RecommendationsScreen` + `RecDrawer` (cadrage à venir, IPC
+  proposals à exposer côté daemon — cf. mémoire `friction_to_skill_shipped`).
 
 ### Phase 6 — Home fusionnée *(PR12)*
 

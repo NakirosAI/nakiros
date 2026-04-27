@@ -1,7 +1,9 @@
 {
   "loading": "Analyzing conversations…",
   "empty": "No conversations found for this project.",
+  "emptyForFilter": "No conversations match this filter.",
   "headingAnalysis": "Conversations — {{count}} analyzed",
+  "subheadingByHealth": "Sorted by health (critical first)",
   "sort": {
     "label": "Sort",
     "score": "By health (critical first)",
@@ -41,6 +43,14 @@
   "drawer": {
     "title": "Diagnostic",
     "close": "Close",
+    "tabs": {
+      "diagnostic": "Diagnostic",
+      "timeline": "Timeline",
+      "transcript": "Transcript"
+    },
+    "markers": "Markers",
+    "readingGuide": "How to read",
+    "readingGuideBody": "The coloured band tracks per-turn context against the {{window}} window — green is healthy, amber watch, red degraded. Vertical purple bars mark compactions. Red triangles below the axis mark detected user friction.",
     "timeline": "Context timeline",
     "timelineLegend": "tokens per turn · compactions · frictions · tool errors",
     "overview": "Overview",

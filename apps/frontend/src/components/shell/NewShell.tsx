@@ -10,6 +10,7 @@ import SkillsScreen from '../../views/SkillsScreen';
 import SkillDetailScreen from '../../views/SkillDetailScreen';
 import MarketplaceScreen from '../../views/MarketplaceScreen';
 import RunScreen from '../../views/RunScreen';
+import ConversationsScreen from '../conversations/ConversationsScreen';
 import type { MarketplaceTabView, SkillTabIdentity } from '../../hooks/useTabs';
 import NewShellTopBar from './NewShellTopBar';
 import NewShellSidebar from './NewShellSidebar';
@@ -178,7 +179,10 @@ export default function NewShell({
                       onOpenRunTab={handleOpenRunByIds}
                     />
                   )}
-                  {view !== 'overview' && view !== 'skills' && (
+                  {view === 'convs' && (
+                    <ConversationsScreen key={project.id} project={project} />
+                  )}
+                  {view !== 'overview' && view !== 'skills' && view !== 'convs' && (
                     <ComingSoon view={view} onBack={() => setView('overview')} />
                   )}
                 </section>

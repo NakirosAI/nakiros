@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ConversationAnalysis } from '@nakiros/shared';
 import { X } from 'lucide-react';
 import { DiagnosticTab } from './DiagnosticTab';
+import { TimelineTab } from './TimelineTab';
+import { TranscriptTab } from './TranscriptTab';
 
 interface Props {
   analysis: ConversationAnalysis;
@@ -14,27 +16,26 @@ type DrawerTab = 'diagnostic' | 'timeline' | 'transcript';
 interface TabDef {
   id: DrawerTab;
   labelKey: string;
-  /** True when the tab is shipped in this PR. Others render a "soon" hint. */
-  enabled: boolean;
-  comingIn?: string;
 }
 
 const TABS: TabDef[] = [
-  { id: 'diagnostic', labelKey: 'drawer.tabs.diagnostic', enabled: true },
-  { id: 'timeline', labelKey: 'drawer.tabs.timeline', enabled: false, comingIn: 'PR10b' },
-  { id: 'transcript', labelKey: 'drawer.tabs.transcript', enabled: false, comingIn: 'PR10b' },
+  { id: 'diagnostic', labelKey: 'drawer.tabs.diagnostic' },
+  { id: 'timeline', labelKey: 'drawer.tabs.timeline' },
+  { id: 'transcript', labelKey: 'drawer.tabs.transcript' },
 ];
 
 /**
  * Slide-in drawer over the {@link ConversationsScreen} list. Mirrors the
  * mockup `ConvDrawer` (`apps/Nakiros-new-design/screens-conversations.jsx`):
- * a compact header with a score chip + zone badge + session metadata + title,
- * then a tab nav. PR10a only ships the {@link DiagnosticTab}; Timeline and
- * Transcript tabs are visible but inert until PR10b.
+ * compact header with score chip + zone badge + session metadata + title,
+ * tab nav, then the active tab body. Diagnostic + Timeline + Transcript
+ * are wired; the Export tab from the mockup is deferred (no MD/PDF/Slack
+ * export endpoint exists yet).
  */
 export function ConvDrawer({ analysis, onClose }: Props) {
   const { t } = useTranslation('conversations');
   const tone = toneFor(analysis.healthZone);
+  const [tab, setTab] = useState<DrawerTab>('diagnostic');
 
   // Esc closes the drawer.
   useEffect(() => {
@@ -105,36 +106,31 @@ export function ConvDrawer({ analysis, onClose }: Props) {
 
         {/* Tab nav */}
         <nav className="flex gap-5 border-b border-n-border-subtle px-5 pt-3" aria-label="Drawer tabs">
-          {TABS.map((tab) => {
-            const active = tab.id === 'diagnostic';
+          {TABS.map((def) => {
+            const active = def.id === tab;
             return (
               <button
-                key={tab.id}
+                key={def.id}
                 type="button"
-                disabled={!tab.enabled}
+                onClick={() => setTab(def.id)}
                 aria-current={active ? 'page' : undefined}
-                title={
-                  tab.enabled
-                    ? undefined
-                    : `${t(tab.labelKey, { defaultValue: tab.id })} · ${tab.comingIn}`
-                }
                 className={
                   '-mb-px border-b-2 pb-2 text-[12.5px] font-medium capitalize transition-colors ' +
                   (active
                     ? 'border-n-accent text-n-fg'
-                    : tab.enabled
-                      ? 'border-transparent text-n-muted hover:text-n-fg'
-                      : 'cursor-not-allowed border-transparent text-n-faint opacity-60')
+                    : 'border-transparent text-n-muted hover:text-n-fg')
                 }
               >
-                {t(tab.labelKey, { defaultValue: tab.id })}
+                {t(def.labelKey, { defaultValue: def.id })}
               </button>
             );
           })}
         </nav>
 
         <div className="flex-1 overflow-y-auto">
-          <DiagnosticTab analysis={analysis} />
+          {tab === 'diagnostic' && <DiagnosticTab analysis={analysis} />}
+          {tab === 'timeline' && <TimelineTab analysis={analysis} />}
+          {tab === 'transcript' && <TranscriptTab analysis={analysis} />}
         </div>
       </aside>
     </div>

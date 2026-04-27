@@ -51,6 +51,23 @@
     "markers": "Markers",
     "readingGuide": "How to read",
     "readingGuideBody": "The coloured band tracks per-turn context against the {{window}} window — green is healthy, amber watch, red degraded. Vertical purple bars mark compactions. Red triangles below the axis mark detected user friction.",
+    "timeline": {
+      "filter": {
+        "all": "All",
+        "user": "User",
+        "assistant": "Assistant",
+        "tools": "Tool calls",
+        "system": "System",
+        "friction": "Friction"
+      },
+      "empty": "No messages match this filter."
+    },
+    "transcript": {
+      "searchPlaceholder": "Search the transcript…",
+      "clearSearch": "Clear search",
+      "records": "records",
+      "empty": "No records match this filter."
+    },
     "timeline": "Context timeline",
     "timelineLegend": "tokens per turn · compactions · frictions · tool errors",
     "overview": "Overview",

@@ -175,7 +175,7 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
               try {
                 await launchEvalBatch(
                   identity,
-                  { refreshBaseline: true },
+                  { baselineOnly: true, refreshBaseline: true },
                   onOpenRunTab,
                 );
               } catch (err) {

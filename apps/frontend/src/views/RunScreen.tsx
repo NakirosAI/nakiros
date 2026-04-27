@@ -499,15 +499,6 @@ function EvalRunScreen({ runId, onClose }: { runId: string; onClose(): void }) {
     (evalRuns ?? []).find((r) => r.runId === selectedRunId) ?? (evalRuns ?? [])[0] ?? null;
   const selectedEvents = selectedRun ? eventsByRun[selectedRun.runId] ?? [] : [];
 
-  // Sibling run with the *other* config (with-skill ↔ baseline) for
-  // the toggle button. When the eval was launched without baseline
-  // there's nothing to switch to and the toggle stays hidden.
-  const sibling = selectedRun
-    ? (evalRuns ?? []).find(
-        (r) => r.evalName === selectedRun.evalName && r.config !== selectedRun.config,
-      ) ?? null
-    : null;
-
   const handleEvalStop = async () => {
     if (isStopping) return;
     setIsStopping(true);
@@ -552,13 +543,7 @@ function EvalRunScreen({ runId, onClose }: { runId: string; onClose(): void }) {
               {loadError}
             </div>
           )}
-          {selectedRun && (
-            <ChatRunSwitcher
-              selected={selectedRun}
-              sibling={sibling}
-              onSwitch={(runId) => setSelectedRunId(runId)}
-            />
-          )}
+          {selectedRun && <EvalRunHeader selected={selectedRun} />}
           <RunStream
             // Persisted turns from `run.json` survive a daemon reboot,
             // so re-opening a completed eval (or rehydrating an
@@ -595,30 +580,17 @@ function EvalRunScreen({ runId, onClose }: { runId: string; onClose(): void }) {
 }
 
 /**
- * Strip above the chat that surfaces the currently focused run and lets
- * the user toggle between the with-skill and baseline siblings of the
- * same eval — without it, switching configs required clicking back to
- * the side panel and re-selecting, which is exactly the friction Thomas
- * called out (impossible to flip mid-conversation when input was
- * needed).
+ * Strip above the chat that surfaces the currently focused run. Since
+ * iterations are now mono-config (a normal eval iteration runs only
+ * with_skill — the baseline lives in the per-model cache; a baseline-only
+ * run runs only without_skill), there's no sibling to toggle to: the
+ * header just labels the run.
  */
-function ChatRunSwitcher({
-  selected,
-  sibling,
-  onSwitch,
-}: {
-  selected: SkillEvalRun;
-  sibling: SkillEvalRun | null;
-  onSwitch(runId: string): void;
-}) {
+function EvalRunHeader({ selected }: { selected: SkillEvalRun }) {
   const { t } = useTranslation('runs');
   const tone = evalStatusTone(selected.status);
   const selectedLabel =
     selected.config === 'with_skill'
-      ? t('panels.eval.withSkill', { defaultValue: 'With skill' })
-      : t('panels.eval.baseline', { defaultValue: 'Baseline' });
-  const siblingLabel =
-    sibling?.config === 'with_skill'
       ? t('panels.eval.withSkill', { defaultValue: 'With skill' })
       : t('panels.eval.baseline', { defaultValue: 'Baseline' });
   return (
@@ -635,24 +607,6 @@ function ChatRunSwitcher({
           · {selectedLabel}
         </span>
       </div>
-      {sibling && (
-        <div className="inline-flex flex-shrink-0 overflow-hidden rounded-n-sm border border-n-border-subtle bg-n-canvas">
-          <button
-            type="button"
-            disabled
-            className="bg-n-accent-soft px-2.5 py-1 font-n-mono text-[11px] text-n-accent"
-          >
-            {selectedLabel}
-          </button>
-          <button
-            type="button"
-            onClick={() => onSwitch(sibling.runId)}
-            className="bg-transparent px-2.5 py-1 font-n-mono text-[11px] text-n-muted transition-colors hover:text-n-fg"
-          >
-            {siblingLabel}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

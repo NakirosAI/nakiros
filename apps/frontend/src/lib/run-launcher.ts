@@ -40,6 +40,14 @@ export interface LaunchEvalOptions {
    * toolbar's "Recalculer la baseline" action.
    */
   refreshBaseline?: boolean;
+  /**
+   * Run ONLY the without_skill config (no with_skill). Pairs with
+   * `refreshBaseline` for the kebab "Recalculer la baseline" action: this
+   * way the user pays only for the baseline run, not a full iteration.
+   * Baseline-only runs don't appear in the matrix (no iteration bump,
+   * no benchmark.json) — they just refresh the per-model cache.
+   */
+  baselineOnly?: boolean;
   maxConcurrent?: number;
   model?: string;
   skillDirOverride?: string;
@@ -90,6 +98,22 @@ export async function launchEvalBatch(
     ...identityToRequest(identity),
     ...options,
   });
+
+  // Baseline-only runs don't bump the iteration counter and don't
+  // appear in the matrix. We still open a tab so the user can watch
+  // progress, but with a distinct label + a unique runId derived from
+  // the actual claude run (no batchKey, no iteration).
+  if (options.baselineOnly) {
+    const runId = response.runIds[0];
+    if (!runId) return;
+    openRunTab({
+      runId: `eval:${runId}`,
+      runKind: 'eval',
+      label: `Baseline · ${identity.skillName}`,
+    });
+    return;
+  }
+
   // Mirror `useAgentRunsSync.batchKey` so the unified store and the
   // tab agree on the same id.
   const projectId = identity.scope === 'project' ? identity.projectId : '';

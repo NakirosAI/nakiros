@@ -3,6 +3,8 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { dirname, join, relative, sep } from 'path';
 import { promisify } from 'util';
 
+import { getNakirosDir } from '../utils/nakiros-dir.js';
+
 import { gradeLlmAssertionsBatch, JUDGE_MODEL } from './eval-llm-grader.js';
 import { collectConfigStats, writeIterationBenchmark, type EvalConfigStats } from './eval-benchmark.js';
 import { cleanupEvalArtifacts } from './eval-artifact-cleanup.js';
@@ -483,8 +485,33 @@ export async function startEvalRuns(
     throw new Error('No matching evals to run');
   }
 
-  const iteration = options.fixedIteration ?? computeNextIteration(skillDir);
-  const refreshBaseline = request.refreshBaseline === true;
+  const baselineOnly = request.baselineOnly === true;
+
+  // Baseline-only runs go into a temp dir under ~/.nakiros/baselines-tmp/
+  // instead of the skill's iteration workspace. The matrix never sees them
+  // (no benchmark.json, no iteration counter bump) — the only persistent
+  // artefact is the upserted entry in the per-model baseline cache.
+  let effectiveOptions: StartRunsOptions = options;
+  let baselineOnlyTmpDir: string | null = null;
+  if (baselineOnly) {
+    baselineOnlyTmpDir = join(
+      getNakirosDir(),
+      'baselines-tmp',
+      `batch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    );
+    mkdirSync(baselineOnlyTmpDir, { recursive: true });
+    effectiveOptions = {
+      ...options,
+      artifactRootOverride: baselineOnlyTmpDir,
+      skipBenchmarkWrite: true,
+      fixedIteration: 0, // sentinel — never persisted to disk
+    };
+  }
+
+  const iteration = effectiveOptions.fixedIteration ?? computeNextIteration(skillDir);
+  // baselineOnly implies "always run baseline" — refreshBaseline is then
+  // moot, but we keep the explicit flag for the non-baseline-only path.
+  const refreshBaseline = baselineOnly || request.refreshBaseline === true;
 
   // Resolve the alias once. Used for both:
   //  - The cache key, so opus-resolved-to-4-7 today doesn't get reused when
@@ -541,12 +568,14 @@ export async function startEvalRuns(
       // Defensive: every selectedDef has a decision built above.
       continue;
     }
-    const configs: EvalRunConfig[] = decision.needsRun
-      ? ['with_skill', 'without_skill']
-      : ['with_skill'];
+    const configs: EvalRunConfig[] = baselineOnly
+      ? ['without_skill']
+      : decision.needsRun
+        ? ['with_skill', 'without_skill']
+        : ['with_skill'];
     for (const config of configs) {
-      const artifactDir = options.artifactRootOverride
-        ? prepareArtifactDirAt(options.artifactRootOverride, def.name, config)
+      const artifactDir = effectiveOptions.artifactRootOverride
+        ? prepareArtifactDirAt(effectiveOptions.artifactRootOverride, def.name, config)
         : prepareArtifactDir(skillDir, iteration, def.name, config);
 
       const runId = generateRunId('run');
@@ -719,7 +748,7 @@ export async function startEvalRuns(
       }
     }
 
-    if (!options.skipBenchmarkWrite) {
+    if (!effectiveOptions.skipBenchmarkWrite) {
       // Pass cache-hit baselines so the benchmark.json gets a `without_skill`
       // section even when no fresh baseline run produced on-disk artefacts
       // for this iteration. Cache miss evals already wrote their baseline
@@ -734,6 +763,19 @@ export async function startEvalRuns(
         });
       } catch (err) {
         console.error('[eval-runner] Failed to write benchmark.json:', err);
+      }
+    }
+
+    // Clean up the baseline-only tmp dir once the cache has been populated.
+    // The canonical baseline data lives in `~/.nakiros/baselines/...` now; the
+    // tmp artefacts (run.json, grading.json, outputs/) are not retained.
+    if (baselineOnlyTmpDir) {
+      try {
+        rmSync(baselineOnlyTmpDir, { recursive: true, force: true });
+      } catch (err) {
+        console.warn(
+          `[eval-runner] Could not remove baseline-only tmp dir: ${(err as Error).message}`,
+        );
       }
     }
 

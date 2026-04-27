@@ -562,6 +562,25 @@ export interface StartEvalRunRequest {
    * `false` — cache is reused on hit.
    */
   refreshBaseline?: boolean;
+  /**
+   * Run only the baseline (`without_skill`) configuration. Used by the
+   * "Recalculer la baseline" kebab action so it doesn't waste tokens on a
+   * `with_skill` run the user did not ask for.
+   *
+   * When `true`:
+   *  - `with_skill` is skipped for every selected eval.
+   *  - Artefacts go into a temp dir under `~/.nakiros/baselines-tmp/`,
+   *    NOT into the iteration workspace — the iteration counter is not
+   *    bumped and the matrix doesn't gain a phantom column.
+   *  - `benchmark.json` is not written.
+   *  - The freshly-computed baselines are upserted to the per-model cache,
+   *    then the temp dir is removed.
+   *
+   * Implies `refreshBaseline: true` semantically — the cache for the
+   * selected `(skill, eval, modelFullId, evalFingerprint)` keys is always
+   * overwritten when the run succeeds.
+   */
+  baselineOnly?: boolean;
   /** Max number of runs executing in parallel. Defaults to 4 if omitted. */
   maxConcurrent?: number;
   /**

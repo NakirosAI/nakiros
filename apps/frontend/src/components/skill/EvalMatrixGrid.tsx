@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlaskConical, MoreHorizontal, MoreVertical, Play, RefreshCw } from 'lucide-react';
 import type {
+  ClaudeModelId,
   EvalMatrix,
   EvalMatrixCell,
   EvalMatrixRow,
@@ -9,6 +10,11 @@ import type {
   GetEvalMatrixRequest,
   Skill,
   SkillEvalDefinition,
+} from '@nakiros/shared';
+import {
+  CLAUDE_MODEL_IDS,
+  CLAUDE_MODEL_LABELS,
+  DEFAULT_EVAL_MODEL,
 } from '@nakiros/shared';
 import Sparkline from '../viz/Sparkline';
 import EvalDiffOverlay from './EvalDiffOverlay';
@@ -52,6 +58,10 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('evolution');
+  // Model selected for the next run (drives the `--model` flag on Run +
+  // baseline-recompute). Defaults to DEFAULT_EVAL_MODEL; the user can
+  // pick any of the three short aliases via the chips.
+  const [selectedModel, setSelectedModel] = useState<ClaudeModelId>(DEFAULT_EVAL_MODEL);
   /**
    * Iteration the user wants to compare with its predecessor in the
    * diff overlay. Stored as the iteration number itself; the overlay
@@ -115,9 +125,14 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
         <div className="flex flex-wrap items-center gap-3.5">
           <div className="flex items-center gap-2">
             <span className="font-n-mono text-[11px] text-n-subtle">Modèle</span>
-            <ModelChip name="Sonnet" active />
-            <ModelChip name="Opus" />
-            <ModelChip name="Haiku" />
+            {CLAUDE_MODEL_IDS.map((id) => (
+              <ModelChip
+                key={id}
+                name={CLAUDE_MODEL_LABELS[id]}
+                active={selectedModel === id}
+                onClick={() => setSelectedModel(id)}
+              />
+            ))}
           </div>
           <Divider />
           <span className="flex-1" />
@@ -144,7 +159,7 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
               if (!identity || !onOpenRunTab || isLaunching) return;
               setIsLaunching(true);
               try {
-                await launchEvalBatch(identity, {}, onOpenRunTab);
+                await launchEvalBatch(identity, { model: selectedModel }, onOpenRunTab);
               } catch (err) {
                 console.error('[evals] launchEvalBatch failed', err);
               } finally {
@@ -175,7 +190,7 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
               try {
                 await launchEvalBatch(
                   identity,
-                  { baselineOnly: true, refreshBaseline: true },
+                  { baselineOnly: true, refreshBaseline: true, model: selectedModel },
                   onOpenRunTab,
                 );
               } catch (err) {
@@ -306,18 +321,29 @@ export default function EvalMatrixGrid({ skill, request, identity, onOpenRunTab 
 
 // ── Toolbar bits ───────────────────────────────────────────────────────────
 
-function ModelChip({ name, active }: { name: string; active?: boolean }) {
+function ModelChip({
+  name,
+  active,
+  onClick,
+}: {
+  name: string;
+  active?: boolean;
+  onClick?: () => void;
+}) {
   return (
-    <span
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
       className={
-        'rounded-n-xs border px-2 py-0.5 font-n-mono text-[11px] ' +
+        'rounded-n-xs border px-2 py-0.5 font-n-mono text-[11px] transition-colors ' +
         (active
           ? 'border-n-accent-line bg-n-accent-soft text-n-accent-strong'
-          : 'border-n-border-subtle bg-n-sunken text-n-muted')
+          : 'border-n-border-subtle bg-n-sunken text-n-muted hover:bg-n-raised hover:text-n-fg')
       }
     >
       {name}
-    </span>
+    </button>
   );
 }
 

@@ -108,10 +108,35 @@ function aggregateRunSummary(evals: Record<string, EvalStats>, key: 'with_skill'
 }
 
 /**
+ * Optional inputs for {@link writeIterationBenchmark}. Used by the eval runner
+ * to inject baseline stats sourced from the cache (`~/.nakiros/baselines/...`)
+ * when a given eval was a cache hit and therefore did not produce on-disk
+ * `without_skill/` artefacts for this iteration.
+ */
+export interface WriteBenchmarkOptions {
+  /**
+   * Per-eval baseline stats to use as fallback when the iteration workspace
+   * has no `without_skill/` directory for that eval. Cache misses in the same
+   * iteration still write their fresh baseline to disk and are picked up via
+   * the on-disk scan — they don't appear in this map.
+   */
+  baselinesByEval?: Record<string, EvalConfigStats | undefined>;
+}
+
+/**
  * Compute `benchmark.json` for a completed iteration by scanning each eval-XXX subdirectory.
  * Writes the file at `{skillDir}/evals/workspace/iteration-N/benchmark.json`.
+ *
+ * When `opts.baselinesByEval` is provided, evals without an on-disk
+ * `without_skill/` dir fall back to the supplied stats (typically reused from
+ * the per-model baseline cache populated by the eval runner).
  */
-export function writeIterationBenchmark(skillDir: string, skillName: string, iteration: number): void {
+export function writeIterationBenchmark(
+  skillDir: string,
+  skillName: string,
+  iteration: number,
+  opts: WriteBenchmarkOptions = {},
+): void {
   const iterDir = join(skillDir, 'evals', 'workspace', `iteration-${iteration}`);
   if (!existsSync(iterDir)) return;
 
@@ -133,7 +158,8 @@ export function writeIterationBenchmark(skillDir: string, skillName: string, ite
     const evalName = evalDirName.replace(/^eval-/, '');
     const evalDir = join(iterDir, evalDirName);
     const withSkill = collectConfigStats(evalDir, 'with_skill');
-    const withoutSkill = collectConfigStats(evalDir, 'without_skill');
+    const onDiskBaseline = collectConfigStats(evalDir, 'without_skill');
+    const withoutSkill = onDiskBaseline ?? opts.baselinesByEval?.[evalName];
 
     if (!iterationModel) {
       const timing = readJson<TimingFile>(join(evalDir, 'with_skill', 'timing.json'));

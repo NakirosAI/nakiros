@@ -1,11 +1,17 @@
 import { type ChildProcess, execFile } from 'child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join, relative, sep } from 'path';
+import { dirname, join, relative, sep } from 'path';
 import { promisify } from 'util';
 
 import { gradeLlmAssertionsBatch, JUDGE_MODEL } from './eval-llm-grader.js';
-import { writeIterationBenchmark } from './eval-benchmark.js';
+import { collectConfigStats, writeIterationBenchmark, type EvalConfigStats } from './eval-benchmark.js';
 import { cleanupEvalArtifacts } from './eval-artifact-cleanup.js';
+import { computeEvalFingerprint } from './eval-fingerprint.js';
+import {
+  getBaseline,
+  upsertBaseline,
+  type BaselineKey,
+} from './baseline-store.js';
 
 import { homedir } from 'os';
 
@@ -37,6 +43,7 @@ import type {
   StartEvalRunRequest,
   StartEvalRunResponse,
 } from '@nakiros/shared';
+import { DEFAULT_EVAL_MODEL, resolveModelFullId } from '@nakiros/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -477,8 +484,50 @@ export async function startEvalRuns(
   }
 
   const iteration = options.fixedIteration ?? computeNextIteration(skillDir);
-  const includeBaseline = request.includeBaseline === true;
-  const configs: EvalRunConfig[] = includeBaseline ? ['with_skill', 'without_skill'] : ['with_skill'];
+  const refreshBaseline = request.refreshBaseline === true;
+
+  // Resolve the alias once. Used for both:
+  //  - The cache key, so opus-resolved-to-4-7 today doesn't get reused when
+  //    opus resolves to 4-8 tomorrow.
+  //  - The `--model` flag passed to claude, so the actual run model matches
+  //    the cache key (we don't trust claude's CLI to resolve the alias the
+  //    same way we do).
+  const modelFullId = resolveModelFullId(request.model ?? DEFAULT_EVAL_MODEL);
+
+  // Per-eval baseline plan: lookup cache, decide whether to schedule a
+  // without_skill run for this iteration. Cache hits skip the run entirely
+  // (~50% token saving when iterating on the same skill+model).
+  interface BaselineDecision {
+    key: BaselineKey;
+    /** Stats reused from the cache when present (cache hit, no run). */
+    cachedStats: EvalConfigStats | null;
+    /** True when a fresh `without_skill` run is scheduled for this iteration. */
+    needsRun: boolean;
+  }
+  const baselineByEval = new Map<string, BaselineDecision>();
+  for (const def of selectedDefs) {
+    const evalFingerprint = computeEvalFingerprint(skillDir, {
+      name: def.name,
+      prompt: def.prompt,
+      expected_output: def.expectedOutput,
+      mode: def.mode,
+      files: def.files,
+      output_files: def.outputFiles,
+      assertions: def.assertions,
+    });
+    const key: BaselineKey = {
+      skillName: request.skillName,
+      evalName: def.name,
+      modelFullId,
+      evalFingerprint,
+    };
+    const cached = refreshBaseline ? null : getBaseline(key);
+    baselineByEval.set(def.name, {
+      key,
+      cachedStats: cached?.stats ?? null,
+      needsRun: cached === null,
+    });
+  }
 
   // Detect the skill's enclosing git repo once — all runs in this batch share
   // the same source. `null` when the skill lives outside a git repo (bundled,
@@ -487,6 +536,14 @@ export async function startEvalRuns(
 
   const createdRuns: SkillEvalRun[] = [];
   for (const def of selectedDefs) {
+    const decision = baselineByEval.get(def.name);
+    if (!decision) {
+      // Defensive: every selectedDef has a decision built above.
+      continue;
+    }
+    const configs: EvalRunConfig[] = decision.needsRun
+      ? ['with_skill', 'without_skill']
+      : ['with_skill'];
     for (const config of configs) {
       const artifactDir = options.artifactRootOverride
         ? prepareArtifactDirAt(options.artifactRootOverride, def.name, config)
@@ -579,7 +636,9 @@ export async function startEvalRuns(
         mode: def.mode ?? 'autonomous',
         outputFiles: def.outputFiles,
         isolatedHome: null,
-        model: request.model ?? null,
+        // Always store the resolved full id so it matches the baseline cache
+        // key. Skipping resolution would let claude's CLI alias us silently.
+        model: modelFullId,
         turns: [],
         tokensUsed: 0,
         durationMs: 0,
@@ -638,9 +697,41 @@ export async function startEvalRuns(
 
     await Promise.all(workers);
 
+    // ── Persist freshly-computed baselines into the per-model cache ────────
+    // For each eval where we scheduled a `without_skill` run (cache miss
+    // or `refreshBaseline: true`), read its grading/timing artefacts and
+    // upsert into `~/.nakiros/baselines/...`. Failed runs (no grading.json)
+    // are skipped — the next iteration retries naturally on cache miss.
+    for (const decision of baselineByEval.values()) {
+      if (!decision.needsRun) continue;
+      const baselineRun = createdRuns.find(
+        (r) => r.evalName === decision.key.evalName && r.config === 'without_skill',
+      );
+      if (!baselineRun) continue;
+      const evalDir = dirname(baselineRun.workdir);
+      const stats = collectConfigStats(evalDir, 'without_skill');
+      if (stats) {
+        try {
+          upsertBaseline(decision.key, stats);
+        } catch (err) {
+          console.error('[eval-runner] Failed to persist baseline cache:', err);
+        }
+      }
+    }
+
     if (!options.skipBenchmarkWrite) {
+      // Pass cache-hit baselines so the benchmark.json gets a `without_skill`
+      // section even when no fresh baseline run produced on-disk artefacts
+      // for this iteration. Cache miss evals already wrote their baseline
+      // artefacts to disk, so they're picked up by the on-disk scan.
+      const cachedBaselinesByEval: Record<string, EvalConfigStats | undefined> = {};
+      for (const [evalName, decision] of baselineByEval) {
+        if (decision.cachedStats) cachedBaselinesByEval[evalName] = decision.cachedStats;
+      }
       try {
-        writeIterationBenchmark(skillDir, request.skillName, iteration);
+        writeIterationBenchmark(skillDir, request.skillName, iteration, {
+          baselinesByEval: cachedBaselinesByEval,
+        });
       } catch (err) {
         console.error('[eval-runner] Failed to write benchmark.json:', err);
       }

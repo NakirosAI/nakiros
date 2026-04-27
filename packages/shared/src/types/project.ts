@@ -547,7 +547,21 @@ export interface StartEvalRunRequest {
   projectId?: string;
   skillName: string;
   evalNames?: string[];
+  /**
+   * @deprecated since baseline-per-model refactor (PR2). The daemon now always
+   * provides a baseline (cache hit when available, fresh compute on miss), so
+   * this flag is ignored. The field is kept temporarily to avoid breaking
+   * pre-PR3 callers — to be removed when the frontend migrates.
+   * Prefer {@link refreshBaseline} when you need to force a recompute.
+   */
   includeBaseline?: boolean;
+  /**
+   * Force a fresh baseline compute even when one is already cached for
+   * `(skillName, evalName, modelFullId, evalFingerprint)`. Used by the
+   * "Recalculer la baseline" action in the matrix toolbar. Defaults to
+   * `false` — cache is reused on hit.
+   */
+  refreshBaseline?: boolean;
   /** Max number of runs executing in parallel. Defaults to 4 if omitted. */
   maxConcurrent?: number;
   /**

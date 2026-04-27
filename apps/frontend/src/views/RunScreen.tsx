@@ -487,6 +487,46 @@ function EvalRunScreen({
     setSelectedRunId((running ?? evalRuns[0]).runId);
   }, [evalRuns, selectedRunId]);
 
+  // ── Diff overlay plumbing ─────────────────────────────────────────────
+  // Reuses `EvalDiffOverlay` (matrix view's compare screen) so the recap's
+  // "Voir le diff vs run précédent" lands on the same UI as the matrix's.
+  // These hooks MUST live before any early-return so React sees the same
+  // hook order on every render (rules-of-hooks; otherwise we hit error
+  // #310 the first time `agentRun` lands and the component switches from
+  // the loading branch to the body branch).
+  const diffIdentity = useMemo<RunScreenIdentity | null>(() => {
+    if (!agentRun) return null;
+    return identityFromAgentRun(agentRun, evalRuns);
+  }, [agentRun, evalRuns]);
+
+  // Lazy-fetch the matrix the first time the user opens the diff overlay.
+  useEffect(() => {
+    if (diffIteration === null) return;
+    if (diffMatrix) return;
+    if (!diffIdentity) return;
+    let cancelled = false;
+    void window.nakiros
+      .getEvalMatrix(matrixRequestFromIdentity(diffIdentity))
+      .then((m) => {
+        if (!cancelled) setDiffMatrix(m as EvalMatrix);
+      })
+      .catch(() => {
+        // swallow — overlay just won't open if the matrix can't be fetched
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [diffIteration, diffMatrix, diffIdentity]);
+
+  // EvalDiffOverlay reads `skill.evals.iterations` for timestamps. We don't
+  // have the full Skill record on this screen — pass an empty stub so the
+  // overlay renders without timestamps. Acceptable for the recap entry
+  // point; users get the same diff via the matrix view with full data.
+  const diffSkillStub: Skill = useMemo(
+    () => stubSkillFor(diffIdentity),
+    [diffIdentity],
+  );
+
   if (!agentRun) {
     return (
       <div className="flex h-full flex-1 flex-col overflow-hidden font-n-sans">
@@ -541,42 +581,6 @@ function EvalRunScreen({
       setIsStopping(false);
     }
   };
-
-  // ── Diff overlay plumbing ─────────────────────────────────────────────
-  // Reuses `EvalDiffOverlay` (matrix view's compare screen) so the recap's
-  // "Voir le diff vs run précédent" lands on the same UI as the matrix's.
-  const diffIdentity = useMemo<RunScreenIdentity | null>(() => {
-    if (!agentRun) return null;
-    return identityFromAgentRun(agentRun, evalRuns);
-  }, [agentRun, evalRuns]);
-
-  // Lazy-fetch the matrix the first time the user opens the diff overlay.
-  useEffect(() => {
-    if (diffIteration === null) return;
-    if (diffMatrix) return;
-    if (!diffIdentity) return;
-    let cancelled = false;
-    void window.nakiros
-      .getEvalMatrix(matrixRequestFromIdentity(diffIdentity))
-      .then((m) => {
-        if (!cancelled) setDiffMatrix(m as EvalMatrix);
-      })
-      .catch(() => {
-        // swallow — overlay just won't open if the matrix can't be fetched
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [diffIteration, diffMatrix, diffIdentity]);
-
-  // EvalDiffOverlay reads `skill.evals.iterations` for timestamps. We don't
-  // have the full Skill record on this screen — pass an empty stub so the
-  // overlay renders without timestamps. Acceptable for the recap entry
-  // point; users get the same diff via the matrix view with full data.
-  const diffSkillStub: Skill = useMemo(
-    () => stubSkillFor(diffIdentity),
-    [diffIdentity],
-  );
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden font-n-sans">

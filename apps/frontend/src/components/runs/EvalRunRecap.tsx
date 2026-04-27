@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   Check,
   X,
+  XCircle,
   GitCompare,
   Wrench,
   Play,
@@ -241,6 +243,13 @@ export default function EvalRunRecap({
             pct: heroPct,
           });
 
+  // Tone is driven by the absolute pass rate so red / orange / green is
+  // readable at a glance regardless of variant. Skill iterations get
+  // bumped DOWN to orange when there's any regression vs prev iter, even
+  // if pass rate is high — the recap is also a "any problem to fix?"
+  // signal, not just an absolute score.
+  const heroTone = pickHeroTone(overallPassRate, regressionsList.length, variant);
+
   return (
     <div className="flex-1 overflow-y-auto bg-n-canvas px-7 py-6 font-n-sans">
       <div className="mx-auto flex max-w-[920px] flex-col gap-5">
@@ -248,20 +257,22 @@ export default function EvalRunRecap({
         <div
           className={
             'flex items-start gap-3.5 rounded-n-lg border px-4 py-3.5 ' +
-            (variant === 'baseline-only' || (vsBaselineMean ?? 0) >= 0
-              ? 'border-n-healthy/30 bg-n-healthy-soft/40'
-              : 'border-n-critical/30 bg-n-critical-soft/40')
+            HERO_TONE_CLASS[heroTone].surface
           }
         >
           <div
             className={
               'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-n-md ' +
-              (variant === 'baseline-only' || (vsBaselineMean ?? 0) >= 0
-                ? 'bg-n-healthy/20 text-n-healthy'
-                : 'bg-n-critical/20 text-n-critical')
+              HERO_TONE_CLASS[heroTone].badge
             }
           >
-            <Check size={18} strokeWidth={2.5} />
+            {heroTone === 'good' ? (
+              <Check size={18} strokeWidth={2.5} />
+            ) : heroTone === 'warn' ? (
+              <AlertTriangle size={18} strokeWidth={2.5} />
+            ) : (
+              <XCircle size={18} strokeWidth={2.5} />
+            )}
           </div>
           <div className="flex flex-col gap-1">
             <span className="font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-subtle">
@@ -421,6 +432,47 @@ export default function EvalRunRecap({
     </div>
   );
 }
+
+// ── Hero tone ─────────────────────────────────────────────────────────────
+
+type HeroTone = 'good' | 'warn' | 'bad';
+
+/**
+ * Pick the hero tone from the absolute pass rate, with a downgrade rule:
+ * a skill iteration that has any regression vs the previous run never
+ * stays "good" — the recap is meant to surface things to investigate,
+ * and a clean 90% pass rate that just dropped from 100% should still
+ * read as "warn".
+ */
+function pickHeroTone(
+  passRate: number,
+  regressionsCount: number,
+  variant: RecapVariant,
+): HeroTone {
+  let tone: HeroTone;
+  if (passRate >= 0.85) tone = 'good';
+  else if (passRate >= 0.5) tone = 'warn';
+  else tone = 'bad';
+  if (variant === 'skill-iteration' && regressionsCount > 0 && tone === 'good') {
+    tone = 'warn';
+  }
+  return tone;
+}
+
+const HERO_TONE_CLASS: Record<HeroTone, { surface: string; badge: string }> = {
+  good: {
+    surface: 'border-n-healthy/30 bg-n-healthy-soft/40',
+    badge: 'bg-n-healthy/20 text-n-healthy',
+  },
+  warn: {
+    surface: 'border-n-watch/30 bg-n-watch-soft/40',
+    badge: 'bg-n-watch/20 text-n-watch',
+  },
+  bad: {
+    surface: 'border-n-critical/30 bg-n-critical-soft/40',
+    badge: 'bg-n-critical/20 text-n-critical',
+  },
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 

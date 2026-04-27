@@ -98,6 +98,11 @@ export function sweepOrphanNakirosProjectEntries(keep?: ReadonlySet<string>): Sw
       name.includes('-nakiros-tmp-skills-') ||
       name.includes('-nakiros-sandboxes-') ||
       name.includes('-evals-workspace-iteration-') ||
+      // Comparison evals (A/B/C across models) — same shape as iteration
+      // workspaces but rooted under `evals/comparisons/<ts>/<model>/eval-*`.
+      // Without this marker the boot sweep leaves stale Claude project
+      // entries every time the user runs a comparison.
+      name.includes('-evals-comparisons-') ||
       // Legacy roots from earlier versions that used `mkdtempSync` under the
       // system tmpdir (`/tmp` → `/private/tmp` on macOS) with `nakiros-audit-*`
       // / `nakiros-fix-*` prefixes.

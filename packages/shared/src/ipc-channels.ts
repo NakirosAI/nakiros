@@ -54,6 +54,11 @@ export const IPC_CHANNELS = {
   'project:readSkillFile': 'project:readSkillFile',
   'project:saveSkillFile': 'project:saveSkillFile',
   'project:getRecommendations': 'project:getRecommendations',
+  'project:getAggregate': 'project:getAggregate',
+  'project:refreshAggregate': 'project:refreshAggregate',
+  'project:aggregateUpdated': 'project:aggregateUpdated',
+  'project:listDismissed': 'project:listDismissed',
+  'project:undismiss': 'project:undismiss',
 
   // Nakiros bundled skills
   'nakiros:listBundledSkills': 'nakiros:listBundledSkills',

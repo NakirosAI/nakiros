@@ -203,6 +203,27 @@ export interface ConversationAnalysis {
 }
 
 // ---------------------------------------------------------------------------
+// Project aggregate — cheap rollup of all conversation analyses for a
+// project, used by the Home screen to paint cards instantly. Persisted under
+// `~/.nakiros/cache/aggregates/{projectId}.json` and refreshed in background
+// via `project:refreshAggregate`.
+// ---------------------------------------------------------------------------
+
+/** Per-project rollup of conversation health metrics. */
+export interface ProjectAggregate {
+  projectId: string;
+  /** Average score across analyses, 0-100. `null` when the project has no conversations yet. */
+  score: number | null;
+  healthy: number;
+  watch: number;
+  critical: number;
+  totalConvs: number;
+  totalTokens: number;
+  /** ISO timestamp of the last successful recompute. */
+  computedAt: string;
+}
+
+// ---------------------------------------------------------------------------
 // Deep (LLM-powered) conversation analysis — stage 2 narrative report.
 // Runs on demand via the nakiros-conversation-analyst skill, routed to Haiku
 // for small sessions and Sonnet (1M context) for big ones.

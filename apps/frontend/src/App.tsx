@@ -192,7 +192,19 @@ export default function App() {
   }
 
   async function handleRescan() {
-    setView({ name: 'scan' });
+    // Inline rescan: keep the user on the new-shell home, refresh the project
+    // list silently. The banner stays visible until both phases finish:
+    //  1. Disk scan (fast — fires `project:scanProgress` events)
+    //  2. Aggregate recompute for every (post-scan) project (slow — JSONL +
+    //     scoring per conversation), so the cards land with fresh metrics
+    //     before the banner disappears.
+    const next = await window.nakiros.scanProjects();
+    setProjects(next);
+    await Promise.all(
+      next.map((p) =>
+        window.nakiros.refreshProjectAggregate(p.id).catch(() => undefined),
+      ),
+    );
   }
 
   async function handleDismissProject(id: string) {
@@ -202,6 +214,16 @@ export default function App() {
     if (activeProjectId === id) {
       setActiveProjectId(null);
     }
+  }
+
+  /**
+   * Re-pull the active project list from the daemon. Used by HomeScreen after
+   * the user restores a previously-dismissed project so the new card lands in
+   * the active grid without forcing a full rescan.
+   */
+  async function handleProjectsChanged() {
+    const fresh = await window.nakiros.listProjects();
+    setProjects(fresh);
   }
 
   /**
@@ -344,6 +366,7 @@ export default function App() {
           updatePreferences={handlePreferencesChange}
           onRescan={handleRescan}
           onDismissProject={handleDismissProject}
+          onProjectsChanged={handleProjectsChanged}
           bootError={bootError ?? undefined}
         />
       </AgentRunNavigationProvider>

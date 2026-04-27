@@ -7,11 +7,13 @@ import {
   Layers,
   Plug,
   RefreshCw,
+  RotateCcw,
   Search,
   Sparkles,
 } from 'lucide-react';
-import type { ConversationAnalysis, Project, Skill } from '@nakiros/shared';
+import type { ProjectAggregate, Project, ScanProgress, Skill } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
+import appIcon from '../assets/icon.svg';
 
 interface HomeScreenProps {
   /** Projects loaded by App.tsx at boot — cheap pre-render data. */
@@ -20,11 +22,18 @@ interface HomeScreenProps {
   bootError?: string;
   /** Activated when the user clicks a project card. */
   onOpenProject(projectId: string): void;
-  /** Triggered by the "Rescan" hero action. */
-  onRescan(): void;
+  /** Triggered by the "Rescan" hero action — must rescan & refresh the
+   *  project list it received via {@link projects}. Resolves once the scan
+   *  finishes; the home tracks its own banner state in the meantime. */
+  onRescan(): Promise<void> | void;
   /** Triggered by per-project dismiss action — currently unused but kept
    *  for parity with the legacy `Home` API. */
   onDismissProject(projectId: string): Promise<void>;
+  /** Called after the user restores a previously-dismissed project so the
+   *  parent can refresh its `projects` state. Defaults to a no-op when omitted
+   *  (the dismissed panel still works locally but new cards won't appear in
+   *  the active grid until the next mount). */
+  onProjectsChanged?(): Promise<void> | void;
   /** Opens a non-project skill in a dedicated `kind: 'skill'` tab. */
   onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
   /** Opens a marketplace in a dedicated `kind: 'marketplace'` tab. */
@@ -58,10 +67,19 @@ export default function HomeScreen({
   onRescan,
   onOpenSkillTab,
   onOpenMarketplaceTab,
+  onProjectsChanged,
 }: HomeScreenProps) {
   const { t } = useTranslation('home');
   const [tab, setTab] = useState<HomeTabKey>('projects');
   const [search, setSearch] = useState('');
+
+  const [rescanning, setRescanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+
+  const [showDismissed, setShowDismissed] = useState(false);
+  const [dismissedProjects, setDismissedProjects] = useState<Project[] | null>(null);
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const [pluginSkills, setPluginSkills] = useState<Skill[] | null>(null);
   const [pluginsError, setPluginsError] = useState<string | null>(null);
@@ -126,6 +144,48 @@ export default function HomeScreen({
     };
   }, [tab, bundledSkills]);
 
+  // Lazy-load the dismissed list when the user opens the panel for the first
+  // time. Refetched after a rescan because the active list may change.
+  useEffect(() => {
+    if (!showDismissed || dismissedProjects !== null) return;
+    let cancelled = false;
+    window.nakiros
+      .listDismissedProjects()
+      .then((list) => {
+        if (cancelled) return;
+        setDismissedProjects(list);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setDismissedError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showDismissed, dismissedProjects]);
+
+  // After a rescan, drop the cached dismissed list so it re-fetches when the
+  // panel is opened again — `scan()` doesn't dismiss anything new on its own
+  // but a user may have called `dismissProject` in between.
+  useEffect(() => {
+    setDismissedProjects(null);
+  }, [projects]);
+
+  async function handleRestore(id: string) {
+    setRestoringId(id);
+    try {
+      const restored = await window.nakiros.undismissProject(id);
+      if (restored) {
+        setDismissedProjects((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
+        if (onProjectsChanged) {
+          await onProjectsChanged();
+        }
+      }
+    } finally {
+      setRestoringId(null);
+    }
+  }
+
   const tabs: Array<{ id: HomeTabKey; label: string; icon: React.ReactNode; count: number | null }> = [
     {
       id: 'projects',
@@ -175,19 +235,32 @@ export default function HomeScreen({
         <div className="flex flex-shrink-0 gap-2">
           <button
             type="button"
-            onClick={() => setTab('nakiros')}
-            className="inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-3 font-n-mono text-[12px] text-n-muted hover:bg-n-raised hover:text-n-fg"
+            onClick={async () => {
+              if (rescanning) return;
+              setRescanning(true);
+              setScanProgress(null);
+              const unsubscribe = window.nakiros.onScanProgress((p) =>
+                setScanProgress(p as ScanProgress),
+              );
+              try {
+                await onRescan();
+              } finally {
+                unsubscribe();
+                setRescanning(false);
+                setScanProgress(null);
+              }
+            }}
+            disabled={rescanning}
+            className="inline-flex h-8 items-center gap-1.5 rounded-n-sm bg-transparent px-3 font-n-mono text-[12px] text-n-muted hover:bg-n-raised hover:text-n-fg disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Layers size={13} strokeWidth={2} />
-            {t('hero.nakirosSkills', { defaultValue: 'Nakiros Skills' })}
-          </button>
-          <button
-            type="button"
-            onClick={onRescan}
-            className="inline-flex h-8 items-center gap-1.5 rounded-n-sm bg-transparent px-3 font-n-mono text-[12px] text-n-muted hover:bg-n-raised hover:text-n-fg"
-          >
-            <RefreshCw size={13} strokeWidth={2} />
-            {t('hero.rescan', { defaultValue: 'Rescan' })}
+            <RefreshCw
+              size={13}
+              strokeWidth={2}
+              className={rescanning ? 'animate-spin' : undefined}
+            />
+            {rescanning
+              ? t('hero.rescanning', { defaultValue: 'Scanning…' })
+              : t('hero.rescan', { defaultValue: 'Rescan' })}
           </button>
         </div>
       </div>
@@ -196,6 +269,10 @@ export default function HomeScreen({
         <div className="mb-4 rounded-n-md border border-n-critical bg-n-critical-soft px-3 py-2 font-n-mono text-[12px] text-n-critical">
           {bootError}
         </div>
+      )}
+
+      {rescanning && (
+        <RescanBanner progress={scanProgress} />
       )}
 
       {/* Sub-nav + search */}
@@ -231,7 +308,23 @@ export default function HomeScreen({
 
       {/* Body */}
       {tab === 'projects' && (
-        <ProjectsTab projects={projects} search={search} onOpen={onOpenProject} />
+        <>
+          <ProjectsTab projects={projects} search={search} onOpen={onOpenProject} />
+          <DismissedToggle
+            open={showDismissed}
+            count={dismissedProjects?.length ?? null}
+            onToggle={() => setShowDismissed((v) => !v)}
+          />
+          {showDismissed && (
+            <DismissedSection
+              projects={dismissedProjects}
+              error={dismissedError}
+              search={search}
+              restoringId={restoringId}
+              onRestore={handleRestore}
+            />
+          )}
+        </>
       )}
       {tab === 'plugins' && (
         <PluginsTab
@@ -265,18 +358,15 @@ export default function HomeScreen({
 // ── Hero mark ──────────────────────────────────────────────────────────────
 
 function NakirosMark() {
-  // Simple OKLch geometric mark — kept inline to avoid pulling an asset.
   return (
-    <span
-      aria-hidden
-      className="inline-flex h-[28px] w-[28px] items-center justify-center rounded-n-md"
-      style={{
-        background: 'var(--n-accent-soft)',
-        border: '1px solid var(--n-accent-line)',
-      }}
-    >
-      <Sparkles size={15} strokeWidth={2.25} className="text-n-accent" />
-    </span>
+    <img
+      src={appIcon}
+      alt="Nakiros"
+      width={32}
+      height={32}
+      className="block h-8 w-8 select-none"
+      draggable={false}
+    />
   );
 }
 
@@ -296,23 +386,11 @@ function SearchInput({ value, onChange }: { value: string; onChange(v: string): 
         })}
         className="h-full flex-1 bg-transparent text-[12.5px] text-n-fg placeholder:text-n-faint focus:outline-none"
       />
-      <span className="rounded-n-xs border border-n-border-default bg-n-raised px-1.5 py-0.5 font-n-mono text-[10.5px] text-n-muted">
-        ⌘K
-      </span>
     </div>
   );
 }
 
 // ── Projects tab ───────────────────────────────────────────────────────────
-
-interface ProjectAggregate {
-  score: number | null;
-  healthy: number;
-  watch: number;
-  critical: number;
-  totalConvs: number;
-  totalTokens: number;
-}
 
 function ProjectsTab({
   projects,
@@ -326,37 +404,57 @@ function ProjectsTab({
   const { t } = useTranslation('home');
   const [aggregates, setAggregates] = useState<Map<string, ProjectAggregate>>(new Map());
 
-  // Fetch every project's conversation analyses in parallel on mount
-  // so the cards can render score / health / tokens. Each card shows
-  // a placeholder until its aggregate lands. Errors per project are
-  // swallowed silently — the card just stays in skeleton state.
+  // Stale-while-revalidate: read every project's persisted aggregate so the
+  // cards paint instantly, then trigger a background refresh on the daemon.
+  // The daemon broadcasts `project:aggregateUpdated` per project, which we
+  // subscribe to via `onProjectAggregateUpdated` to swap each card's data
+  // in as it lands. Errors per project are swallowed silently.
   useEffect(() => {
     let cancelled = false;
-    setAggregates(new Map());
-    if (projects.length === 0) return;
+    if (projects.length === 0) {
+      setAggregates(new Map());
+      return;
+    }
 
-    const tasks = projects.map(async (project) => {
-      try {
-        const analyses = await window.nakiros.listProjectConversationsWithAnalysis(project.id);
-        return { id: project.id, agg: aggregateAnalyses(analyses) };
-      } catch {
-        return { id: project.id, agg: null as ProjectAggregate | null };
-      }
+    // Phase 1 — instant paint from cache.
+    Promise.all(
+      projects.map(async (p) => {
+        try {
+          const agg = await window.nakiros.getProjectAggregate(p.id);
+          return agg;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      setAggregates((prev) => {
+        const next = new Map(prev);
+        for (const agg of results) {
+          if (agg) next.set(agg.projectId, agg);
+        }
+        return next;
+      });
     });
 
-    Promise.all(tasks).then((results) => {
+    // Phase 2 — kick off background revalidation. Results land via the
+    // `aggregateUpdated` broadcast subscription below.
+    for (const p of projects) {
+      window.nakiros.refreshProjectAggregate(p.id).catch(() => undefined);
+    }
+
+    const unsubscribe = window.nakiros.onProjectAggregateUpdated((agg) => {
       if (cancelled) return;
-      setAggregates(() => {
-        const next = new Map<string, ProjectAggregate>();
-        for (const { id, agg } of results) {
-          if (agg) next.set(id, agg);
-        }
+      setAggregates((prev) => {
+        const next = new Map(prev);
+        next.set(agg.projectId, agg);
         return next;
       });
     });
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [projects]);
 
@@ -934,33 +1032,189 @@ function LoadingState({ text }: { text: string }) {
   );
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function aggregateAnalyses(analyses: ConversationAnalysis[]): ProjectAggregate {
-  if (analyses.length === 0) {
-    return { score: null, healthy: 0, watch: 0, critical: 0, totalConvs: 0, totalTokens: 0 };
-  }
-  let healthy = 0;
-  let watch = 0;
-  let critical = 0;
-  let scoreSum = 0;
-  let tokenSum = 0;
-  for (const a of analyses) {
-    if (a.healthZone === 'healthy') healthy++;
-    else if (a.healthZone === 'watch') watch++;
-    else if (a.healthZone === 'degraded') critical++;
-    scoreSum += a.score;
-    tokenSum += a.totalTokens;
-  }
-  return {
-    score: Math.round(scoreSum / analyses.length),
-    healthy,
-    watch,
-    critical,
-    totalConvs: analyses.length,
-    totalTokens: tokenSum,
-  };
+function DismissedToggle({
+  open,
+  count,
+  onToggle,
+}: {
+  open: boolean;
+  count: number | null;
+  onToggle(): void;
+}) {
+  const { t } = useTranslation('home');
+  return (
+    <div className="mt-6 flex items-center justify-end">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="inline-flex items-center gap-1.5 rounded-n-xs px-2 py-1 font-n-mono text-[11px] text-n-faint transition-colors hover:bg-n-raised hover:text-n-muted"
+      >
+        <ChevronRight
+          size={11}
+          strokeWidth={2}
+          className={'transition-transform ' + (open ? 'rotate-90' : '')}
+        />
+        {open
+          ? t('dismissed.hide', { defaultValue: 'Hide dismissed' })
+          : t('dismissed.show', { defaultValue: 'Show dismissed' })}
+        {count !== null && count > 0 && (
+          <span className="tabular-nums text-n-subtle">· {count}</span>
+        )}
+      </button>
+    </div>
+  );
 }
+
+function DismissedSection({
+  projects,
+  error,
+  search,
+  restoringId,
+  onRestore,
+}: {
+  projects: Project[] | null;
+  error: string | null;
+  search: string;
+  restoringId: string | null;
+  onRestore(id: string): void;
+}) {
+  const { t } = useTranslation('home');
+
+  const filtered = useMemo(() => {
+    if (!projects) return null;
+    if (!search.trim()) return projects;
+    const q = search.toLowerCase();
+    return projects.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.projectPath.toLowerCase().includes(q),
+    );
+  }, [projects, search]);
+
+  if (error) {
+    return (
+      <div className="mt-2 rounded-n-md border border-n-critical bg-n-critical-soft px-3 py-2 font-n-mono text-[12px] text-n-critical">
+        {error}
+      </div>
+    );
+  }
+
+  if (!projects || !filtered) {
+    return (
+      <div className="mt-2">
+        <LoadingState text={t('common:loading', { defaultValue: 'Loading…' })} />
+      </div>
+    );
+  }
+
+  if (projects.length === 0) {
+    return (
+      <div className="mt-2 rounded-n-md border border-dashed border-n-border-default bg-n-surface px-3 py-3 text-center font-n-mono text-[11.5px] text-n-faint">
+        {t('dismissed.empty', { defaultValue: 'No dismissed project.' })}
+      </div>
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <div className="mt-2 rounded-n-md border border-dashed border-n-border-default bg-n-surface px-3 py-3 text-center font-n-mono text-[11.5px] text-n-faint">
+        {t('dismissed.noMatch', { defaultValue: 'No dismissed project matches your search.' })}
+      </div>
+    );
+  }
+
+  // Use the EXACT same grid template as the active project cards so each
+  // dismissed row inherits the cards' bounding box. `col-span-full` makes a
+  // single row span every column the cards grid would have, guaranteeing
+  // identical right/left edges regardless of viewport width.
+  return (
+    <div className="mt-2">
+      <div className="mb-2 font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-subtle">
+        {t('dismissed.heading', { defaultValue: 'Dismissed projects' })}
+      </div>
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))' }}
+      >
+        {filtered.map((p) => (
+          <div
+            key={p.id}
+            className="col-span-full flex min-w-0 items-center gap-3 rounded-n-md border border-n-border-subtle bg-n-surface/40 px-3.5 py-2"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-n-mono text-[12.5px] font-medium text-n-muted">
+                {p.name}
+              </div>
+              <div
+                className="truncate font-n-mono text-[10.5px] text-n-faint"
+                title={p.projectPath}
+              >
+                {p.projectPath}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onRestore(p.id)}
+              disabled={restoringId === p.id}
+              className="inline-flex h-7 flex-shrink-0 items-center gap-1.5 rounded-n-xs border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11px] text-n-muted hover:bg-n-raised hover:text-n-fg disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RotateCcw
+                size={11}
+                strokeWidth={2}
+                className={restoringId === p.id ? 'animate-spin' : undefined}
+              />
+              {t('dismissed.restore', { defaultValue: 'Restore' })}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RescanBanner({ progress }: { progress: ScanProgress | null }) {
+  const { t } = useTranslation('home');
+  const ratio =
+    progress && progress.total > 0
+      ? Math.min(100, Math.round((progress.current / progress.total) * 100))
+      : 0;
+  // The disk scan is fast and finishes before aggregate recompute. Detect that
+  // boundary by `current >= total` so we can swap the label without needing a
+  // second progress channel from the daemon.
+  const scanFinished =
+    progress != null && progress.total > 0 && progress.current >= progress.total;
+  const label = !progress
+    ? t('rescanBanner.starting', { defaultValue: 'Starting scan…' })
+    : scanFinished
+      ? t('rescanBanner.refreshing', {
+          defaultValue: 'Refreshing project metrics…',
+        })
+      : t('rescanBanner.scanning', {
+          current: progress.current,
+          total: progress.total,
+          defaultValue: 'Scanning · {{current}}/{{total}}',
+        });
+  return (
+    <div className="mb-4 overflow-hidden rounded-n-md border border-n-border-subtle bg-n-surface">
+      <div className="flex items-center gap-2.5 px-3 py-2 font-n-mono text-[12px] text-n-muted">
+        <RefreshCw size={12} className="animate-spin text-n-accent" />
+        <span>{label}</span>
+        {!scanFinished && progress?.projectName && (
+          <span className="truncate text-n-faint">· {progress.projectName}</span>
+        )}
+      </div>
+      <div className="h-0.5 w-full bg-n-sunken">
+        <div
+          className={
+            'h-full bg-n-accent transition-[width] duration-200' +
+            (scanFinished ? ' animate-pulse' : '')
+          }
+          style={{ width: scanFinished ? '100%' : `${ratio}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function countDistinctPlugins(skills: Skill[]): number {
   const set = new Set<string>();

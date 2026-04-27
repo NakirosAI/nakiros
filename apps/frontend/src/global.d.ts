@@ -17,6 +17,7 @@ import type {
   VersionInfo,
   ResolvedLanguage,
   Project,
+  ProjectAggregate,
   ProjectConversation,
   ConversationMessage,
   ConversationAnalysis,
@@ -118,11 +119,16 @@ declare global {
       listProjects(): Promise<Project[]>;
       getProject(id: string): Promise<Project | null>;
       dismissProject(id: string): Promise<void>;
+      listDismissedProjects(): Promise<Project[]>;
+      undismissProject(id: string): Promise<Project | null>;
 
       listProjectConversations(projectId: string): Promise<ProjectConversation[]>;
       getProjectConversationMessages(projectId: string, sessionId: string): Promise<ConversationMessage[]>;
       analyzeProjectConversation(projectId: string, sessionId: string): Promise<ConversationAnalysis | null>;
       listProjectConversationsWithAnalysis(projectId: string): Promise<ConversationAnalysis[]>;
+      getProjectAggregate(projectId: string): Promise<ProjectAggregate | null>;
+      refreshProjectAggregate(projectId: string): Promise<ProjectAggregate | null>;
+      onProjectAggregateUpdated(cb: (aggregate: ProjectAggregate) => void): () => void;
       loadConversationDeepAnalysis(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis | null>;
       /** @deprecated kept for backward compat — prefer the streaming analyzeConvo:* family. */
       deepAnalyzeConversation(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis>;

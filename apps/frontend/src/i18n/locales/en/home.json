@@ -26,7 +26,22 @@
   "hero": {
     "tagline": "Analyze, audit, and improve the skills powering your Claude Code agents — entirely on your machine.",
     "nakirosSkills": "Nakiros Skills",
-    "rescan": "Rescan"
+    "rescan": "Rescan",
+    "rescanning": "Scanning…"
+  },
+  "rescanBanner": {
+    "scanning": "Scanning · {{current}}/{{total}}",
+    "scanningProject": "{{name}}",
+    "starting": "Starting scan…",
+    "refreshing": "Refreshing project metrics…"
+  },
+  "dismissed": {
+    "show": "Show dismissed",
+    "hide": "Hide dismissed",
+    "heading": "Dismissed projects",
+    "empty": "No dismissed project.",
+    "noMatch": "No dismissed project matches your search.",
+    "restore": "Restore"
   },
   "tabs": {
     "projects": "Projects",

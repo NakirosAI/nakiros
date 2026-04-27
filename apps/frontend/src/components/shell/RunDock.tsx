@@ -70,7 +70,7 @@ export default function RunDock({ onOpenRun, projects }: RunDockProps) {
         aria-expanded={open}
         aria-label="Runs"
         className={
-          'inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-[9px] font-n-mono text-[11px] text-n-muted transition-colors ' +
+          'inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-[9px] font-n-mono text-[11px] leading-none text-n-muted transition-colors ' +
           (open ? 'bg-n-raised ' : 'bg-transparent ') +
           (runningCount > 0 ? 'border-n-accent-line' : 'border-n-border-subtle')
         }
@@ -78,12 +78,17 @@ export default function RunDock({ onOpenRun, projects }: RunDockProps) {
         {runningCount > 0 && (
           <span className="n-pulse h-1.5 w-1.5 rounded-full bg-n-accent" />
         )}
-        <span className="text-n-fg">{runningCount}</span>
+        <span className="text-[10px] tabular-nums text-n-fg">{runningCount}</span>
         <span>running</span>
         {totalAlerts > 0 && (
           <>
             <span className="text-n-faint">·</span>
-            <span className={doneCount > 0 ? 'text-n-healthy' : 'text-n-watch'}>
+            <span
+              className={
+                'text-[10px] tabular-nums ' +
+                (doneCount > 0 ? 'text-n-healthy' : 'text-n-watch')
+              }
+            >
               {doneCount > 0 ? doneCount : waitingCount}
             </span>
             <span>{doneCount > 0 ? 'done' : 'wait'}</span>

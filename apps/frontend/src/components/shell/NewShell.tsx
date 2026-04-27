@@ -21,6 +21,7 @@ interface NewShellProps {
   updatePreferences(next: AppPreferences): Promise<void>;
   onRescan(): void;
   onDismissProject(id: string): Promise<void>;
+  onProjectsChanged(): Promise<void>;
   bootError?: string;
 }
 
@@ -40,6 +41,7 @@ export default function NewShell({
   updatePreferences,
   onRescan,
   onDismissProject,
+  onProjectsChanged,
   bootError,
 }: NewShellProps) {
   const { t } = useTranslation('common');
@@ -115,6 +117,7 @@ export default function NewShell({
             onOpenProject={handleOpenProject}
             onRescan={onRescan}
             onDismissProject={onDismissProject}
+            onProjectsChanged={onProjectsChanged}
             onOpenSkillTab={handleOpenSkillTab}
             onOpenMarketplaceTab={handleOpenMarketplaceTab}
           />

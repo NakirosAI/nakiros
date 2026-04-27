@@ -200,6 +200,8 @@ const client = {
   listProjects: () => invoke(C['project:list']),
   getProject: (id: string) => invoke(C['project:get'], id),
   dismissProject: (id: string) => invoke(C['project:dismiss'], id),
+  listDismissedProjects: () => invoke(C['project:listDismissed']),
+  undismissProject: (id: string) => invoke(C['project:undismiss'], id),
   listProjectConversations: (projectId: string) => invoke(C['project:listConversations'], projectId),
   getProjectConversationMessages: (projectId: string, sessionId: string) =>
     invoke(C['project:getConversationMessages'], projectId, sessionId),
@@ -207,6 +209,12 @@ const client = {
     invoke(C['project:analyzeConversation'], projectId, sessionId),
   listProjectConversationsWithAnalysis: (projectId: string) =>
     invoke(C['project:listConversationsWithAnalysis'], projectId),
+  getProjectAggregate: (projectId: string) =>
+    invoke(C['project:getAggregate'], projectId),
+  refreshProjectAggregate: (projectId: string) =>
+    invoke(C['project:refreshAggregate'], projectId),
+  onProjectAggregateUpdated: (cb: (aggregate: unknown) => void) =>
+    subscribe(C['project:aggregateUpdated'], cb),
   loadConversationDeepAnalysis: (projectId: string, sessionId: string) =>
     invoke(C['project:loadDeepAnalysis'], projectId, sessionId),
   deepAnalyzeConversation: (projectId: string, sessionId: string) =>

@@ -99,23 +99,10 @@ export async function launchEvalBatch(
     ...options,
   });
 
-  // Baseline-only runs don't bump the iteration counter and don't
-  // appear in the matrix. We still open a tab so the user can watch
-  // progress, but with a distinct label + a unique runId derived from
-  // the actual claude run (no batchKey, no iteration).
-  if (options.baselineOnly) {
-    const runId = response.runIds[0];
-    if (!runId) return;
-    openRunTab({
-      runId: `eval:${runId}`,
-      runKind: 'eval',
-      label: `Baseline · ${identity.skillName}`,
-    });
-    return;
-  }
-
   // Mirror `useAgentRunsSync.batchKey` so the unified store and the
-  // tab agree on the same id.
+  // tab agree on the same id. Baseline-only runs use a Date.now()-based
+  // iteration server-side (see eval-runner.ts) to stay unique per batch
+  // — the same key formula works for both flavours.
   const projectId = identity.scope === 'project' ? identity.projectId : '';
   const pluginName = identity.scope === 'plugin' ? identity.pluginName : '';
   const marketplaceName = identity.scope === 'plugin' ? identity.marketplaceName : '';
@@ -131,7 +118,9 @@ export async function launchEvalBatch(
   openRunTab({
     runId,
     runKind: 'eval',
-    label: `Eval · ${identity.skillName} · iter ${response.iteration}`,
+    label: options.baselineOnly
+      ? `Baseline · ${identity.skillName}`
+      : `Eval · ${identity.skillName} · iter ${response.iteration}`,
   });
 }
 

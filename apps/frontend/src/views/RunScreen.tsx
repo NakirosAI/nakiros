@@ -688,14 +688,22 @@ function EvalSidePanel({
               </div>
               {iteration !== null && (
                 <div className="mt-2 font-n-mono text-[10.5px] text-n-faint">
-                  iter {iteration} ·{' '}
-                  {baseline.length > 0
-                    ? t('panels.eval.runningWithBaseline', {
-                        defaultValue: 'evals running · with-skill ▲ vs baseline ▽',
+                  {withSkill.length === 0
+                    ? t('panels.eval.runningBaselineOnly', {
+                        defaultValue: 'baseline recompute · without-skill ▽',
                       })
-                    : t('panels.eval.runningWithSkill', {
-                        defaultValue: 'evals running · with-skill ▲',
-                      })}
+                    : (
+                      <>
+                        iter {iteration} ·{' '}
+                        {baseline.length > 0
+                          ? t('panels.eval.runningWithBaseline', {
+                              defaultValue: 'evals running · with-skill ▲ vs baseline ▽',
+                            })
+                          : t('panels.eval.runningWithSkill', {
+                              defaultValue: 'evals running · with-skill ▲',
+                            })}
+                      </>
+                    )}
                 </div>
               )}
             </div>

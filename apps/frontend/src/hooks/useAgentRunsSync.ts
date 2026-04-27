@@ -97,10 +97,18 @@ function evalBatchToAgentRun(runs: SkillEvalRun[]): AgentRun {
     : undefined;
   const totalTokens = runs.reduce((acc, r) => acc + (r.tokensUsed ?? 0), 0);
 
+  // Baseline-only batches (only `without_skill` runs) use a Date.now()-based
+  // iteration server-side as a unique batch key. We don't want to surface
+  // that giant timestamp to users — show "Baseline" instead of "iter X".
+  const isBaselineOnly = runs.every((r) => r.config === 'without_skill');
+  const title = isBaselineOnly
+    ? `Baseline · ${head.skillName} (${runs.length})`
+    : `Eval · ${head.skillName} · iter ${head.iteration} (${runs.length})`;
+
   return {
     id: `eval:${batchKey(head)}`,
     kind: 'eval',
-    title: `Eval · ${head.skillName} · iter ${head.iteration} (${runs.length})`,
+    title,
     target: {
       type: 'skill',
       scope: head.scope,

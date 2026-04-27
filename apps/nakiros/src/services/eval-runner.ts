@@ -489,8 +489,15 @@ export async function startEvalRuns(
 
   // Baseline-only runs go into a temp dir under ~/.nakiros/baselines-tmp/
   // instead of the skill's iteration workspace. The matrix never sees them
-  // (no benchmark.json, no iteration counter bump) — the only persistent
-  // artefact is the upserted entry in the per-model baseline cache.
+  // (no benchmark.json, no `iteration-N/` directory ever created) — the
+  // only persistent artefact is the upserted entry in the per-model
+  // baseline cache.
+  //
+  // The `iteration` field on the run is still set: it acts as the in-memory
+  // batch key (see `useAgentRunsSync.batchKey` on the frontend). We use
+  // `Date.now()` so each baseline-only batch gets a unique key — two
+  // back-to-back baseline runs would otherwise collapse into the same
+  // agent-run in the store, breaking the run tab.
   let effectiveOptions: StartRunsOptions = options;
   let baselineOnlyTmpDir: string | null = null;
   if (baselineOnly) {
@@ -504,7 +511,7 @@ export async function startEvalRuns(
       ...options,
       artifactRootOverride: baselineOnlyTmpDir,
       skipBenchmarkWrite: true,
-      fixedIteration: 0, // sentinel — never persisted to disk
+      fixedIteration: Date.now(),
     };
   }
 

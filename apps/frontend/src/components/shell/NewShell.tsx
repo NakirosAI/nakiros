@@ -200,6 +200,7 @@ export default function NewShell({
             runId={activeTab.runId}
             runKind={activeTab.runKind}
             onClose={() => closeTab(activeTab.id)}
+            onOpenRunTab={handleOpenRunByIds}
           />
         )}
 

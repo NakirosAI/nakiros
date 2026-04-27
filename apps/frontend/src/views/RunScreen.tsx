@@ -5,7 +5,11 @@ import type {
   AgentRunKind,
   AuditRun,
   AuditRunEvent,
+  EvalMatrix,
+  GetEvalMatrixRequest,
+  Skill,
   SkillEvalRun,
+  SkillScope,
 } from '@nakiros/shared';
 import { useRunState } from '../hooks/useRunState';
 import { useElapsedTimer } from '../hooks/useElapsedTimer';
@@ -19,6 +23,8 @@ import {
 import NewRunHeader from '../components/runs/NewRunHeader';
 import RunStream from '../components/runs/RunStream';
 import RunSidePanel from '../components/runs/RunSidePanel';
+import EvalRunRecap from '../components/runs/EvalRunRecap';
+import EvalDiffOverlay from '../components/skill/EvalDiffOverlay';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
 import type { LiveStreamEvent } from '../components/ConversationTurn';
 
@@ -29,6 +35,13 @@ interface RunScreenProps {
   runKind: AgentRunKind;
   /** Closes the tab — typically passed by `NewShell.closeTab`. */
   onClose(): void;
+  /**
+   * Optional callback used by completed-eval recaps to open follow-up
+   * runs (Re-run on a different model, Fix the regression). Wired by
+   * the shell to its tab manager. When omitted, the recap actions stay
+   * disabled rather than crashing.
+   */
+  onOpenRunTab?: import('../lib/run-launcher').OpenRunTabCallback;
 }
 
 /**
@@ -55,7 +68,13 @@ export default function RunScreen(props: RunScreenProps) {
   // a separate top-level component keeps the hooks order stable in
   // each branch (rules-of-hooks compliance).
   if (props.runKind === 'eval') {
-    return <EvalRunScreen runId={props.runId} onClose={props.onClose} />;
+    return (
+      <EvalRunScreen
+        runId={props.runId}
+        onClose={props.onClose}
+        onOpenRunTab={props.onOpenRunTab}
+      />
+    );
   }
   return <AuditLikeRunScreen {...props} />;
 }
@@ -316,7 +335,15 @@ function RunScreenBody({
  * single batch the linear stream pattern doesn't make sense here —
  * we surface a status dashboard instead.
  */
-function EvalRunScreen({ runId, onClose }: { runId: string; onClose(): void }) {
+function EvalRunScreen({
+  runId,
+  onClose,
+  onOpenRunTab,
+}: {
+  runId: string;
+  onClose(): void;
+  onOpenRunTab?: import('../lib/run-launcher').OpenRunTabCallback;
+}) {
   const { t } = useTranslation('runs');
   const agentRun = useAgentRunFromStore(runId);
   // All hooks must be declared up-front to satisfy rules-of-hooks —
@@ -338,6 +365,10 @@ function EvalRunScreen({ runId, onClose }: { runId: string; onClose(): void }) {
   // the *batch-level* AgentRun status flipped (i.e. once at the very
   // end), and the queue stayed visually stuck while runs completed.
   const [refreshTick, setRefreshTick] = useState(0);
+  // Diff overlay state — set when the user clicks "Voir le diff" from
+  // the recap. We lazy-fetch the matrix the first time it's needed.
+  const [diffIteration, setDiffIteration] = useState<number | null>(null);
+  const [diffMatrix, setDiffMatrix] = useState<EvalMatrix | null>(null);
 
   const runIds = useMemo(() => {
     if (agentRun?.meta?.kind === 'eval') return agentRun.meta.runIds;
@@ -511,6 +542,42 @@ function EvalRunScreen({ runId, onClose }: { runId: string; onClose(): void }) {
     }
   };
 
+  // ── Diff overlay plumbing ─────────────────────────────────────────────
+  // Reuses `EvalDiffOverlay` (matrix view's compare screen) so the recap's
+  // "Voir le diff vs run précédent" lands on the same UI as the matrix's.
+  const diffIdentity = useMemo<RunScreenIdentity | null>(() => {
+    if (!agentRun) return null;
+    return identityFromAgentRun(agentRun, evalRuns);
+  }, [agentRun, evalRuns]);
+
+  // Lazy-fetch the matrix the first time the user opens the diff overlay.
+  useEffect(() => {
+    if (diffIteration === null) return;
+    if (diffMatrix) return;
+    if (!diffIdentity) return;
+    let cancelled = false;
+    void window.nakiros
+      .getEvalMatrix(matrixRequestFromIdentity(diffIdentity))
+      .then((m) => {
+        if (!cancelled) setDiffMatrix(m as EvalMatrix);
+      })
+      .catch(() => {
+        // swallow — overlay just won't open if the matrix can't be fetched
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [diffIteration, diffMatrix, diffIdentity]);
+
+  // EvalDiffOverlay reads `skill.evals.iterations` for timestamps. We don't
+  // have the full Skill record on this screen — pass an empty stub so the
+  // overlay renders without timestamps. Acceptable for the recap entry
+  // point; users get the same diff via the matrix view with full data.
+  const diffSkillStub: Skill = useMemo(
+    () => stubSkillFor(diffIdentity),
+    [diffIdentity],
+  );
+
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden font-n-sans">
       <NewRunHeader
@@ -537,44 +604,69 @@ function EvalRunScreen({ runId, onClose }: { runId: string; onClose(): void }) {
       />
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex flex-1 flex-col overflow-hidden bg-n-canvas">
-          {loadError && (
-            <div className="m-4 rounded-n-md border border-n-critical bg-n-critical-soft px-3 py-2 font-n-mono text-[12px] text-n-critical">
-              {loadError}
-            </div>
-          )}
-          {selectedRun && <EvalRunHeader selected={selectedRun} />}
-          <RunStream
-            // Persisted turns from `run.json` survive a daemon reboot,
-            // so re-opening a completed eval (or rehydrating an
-            // interrupted one) replays the full conversation. The
-            // in-memory `eventsByRun` buffer only captures the live
-            // tail since this screen mounted.
-            turns={selectedRun?.turns ?? []}
-            liveEvents={selectedEvents}
-            isStreaming={
-              isRunning &&
-              !!selectedRun &&
-              (selectedRun.status === 'running' || selectedRun.status === 'starting')
-            }
+        {agentRun.status === 'done' ? (
+          // Recap takes over the full viewport once every run in the batch
+          // has reached a terminal state. It pulls its own data (matrix +
+          // baselines + assertions per row) and exposes the next-step
+          // actions (View diff, Fix regression, Re-run on untested model).
+          <EvalRunRecap
+            agentRun={agentRun}
+            runs={evalRuns ?? []}
+            onOpenDiff={(iter) => setDiffIteration(iter)}
+            onOpenRunTab={onOpenRunTab}
           />
+        ) : (
+          <>
+            <div className="flex flex-1 flex-col overflow-hidden bg-n-canvas">
+              {loadError && (
+                <div className="m-4 rounded-n-md border border-n-critical bg-n-critical-soft px-3 py-2 font-n-mono text-[12px] text-n-critical">
+                  {loadError}
+                </div>
+              )}
+              {selectedRun && <EvalRunHeader selected={selectedRun} />}
+              <RunStream
+                // Persisted turns from `run.json` survive a daemon reboot,
+                // so re-opening a completed eval (or rehydrating an
+                // interrupted one) replays the full conversation. The
+                // in-memory `eventsByRun` buffer only captures the live
+                // tail since this screen mounted.
+                turns={selectedRun?.turns ?? []}
+                liveEvents={selectedEvents}
+                isStreaming={
+                  isRunning &&
+                  !!selectedRun &&
+                  (selectedRun.status === 'running' || selectedRun.status === 'starting')
+                }
+              />
 
-          {selectedRun?.status === 'waiting_for_input' && (
-            <HumanInteractionPanel
-              isWaiting
-              onSend={(message) =>
-                window.nakiros.sendEvalUserMessage(selectedRun.runId, message)
-              }
+              {selectedRun?.status === 'waiting_for_input' && (
+                <HumanInteractionPanel
+                  isWaiting
+                  onSend={(message) =>
+                    window.nakiros.sendEvalUserMessage(selectedRun.runId, message)
+                  }
+                />
+              )}
+            </div>
+            <EvalSidePanel
+              agentRun={agentRun}
+              runs={evalRuns ?? []}
+              selectedRunId={selectedRun?.runId ?? null}
+              onSelect={(runId) => setSelectedRunId(runId)}
             />
-          )}
-        </div>
-        <EvalSidePanel
-          agentRun={agentRun}
-          runs={evalRuns ?? []}
-          selectedRunId={selectedRun?.runId ?? null}
-          onSelect={(runId) => setSelectedRunId(runId)}
-        />
+          </>
+        )}
       </div>
+
+      {diffIteration !== null && diffIdentity && diffMatrix && (
+        <EvalDiffOverlay
+          matrix={diffMatrix}
+          skill={diffSkillStub}
+          initialIteration={diffIteration}
+          baseRequest={matrixRequestFromIdentity(diffIdentity)}
+          onClose={() => setDiffIteration(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1033,3 +1125,65 @@ function formatDuration(ms: number): string {
   const mins = Math.floor(seconds / 60);
   return `${mins}m ${seconds % 60}s`;
 }
+
+// ── Recap / diff plumbing helpers ─────────────────────────────────────────
+
+interface RunScreenIdentity {
+  scope: SkillScope;
+  skillName: string;
+  projectId?: string;
+  pluginName?: string;
+  marketplaceName?: string;
+}
+
+function identityFromAgentRun(
+  agentRun: AgentRun,
+  evalRuns: SkillEvalRun[] | null,
+): RunScreenIdentity | null {
+  if (agentRun.target?.type !== 'skill') {
+    const head = evalRuns?.[0];
+    if (!head) return null;
+    return {
+      scope: head.scope,
+      skillName: head.skillName,
+      projectId: head.projectId,
+      pluginName: head.pluginName,
+      marketplaceName: head.marketplaceName,
+    };
+  }
+  const head = evalRuns?.[0];
+  return {
+    scope: agentRun.target.scope,
+    skillName: agentRun.target.skillName,
+    projectId: head?.projectId ?? agentRun.target.projectId,
+    pluginName: head?.pluginName ?? agentRun.target.pluginName,
+    marketplaceName: head?.marketplaceName ?? agentRun.target.marketplaceName,
+  };
+}
+
+function matrixRequestFromIdentity(identity: RunScreenIdentity): GetEvalMatrixRequest {
+  return {
+    scope: identity.scope,
+    skillName: identity.skillName,
+    ...(identity.projectId !== undefined ? { projectId: identity.projectId } : {}),
+    ...(identity.pluginName !== undefined ? { pluginName: identity.pluginName } : {}),
+    ...(identity.marketplaceName !== undefined
+      ? { marketplaceName: identity.marketplaceName }
+      : {}),
+  };
+}
+
+function stubSkillFor(identity: RunScreenIdentity | null): Skill {
+  // Minimal Skill shape: empty evals.iterations means no timestamps in the
+  // diff overlay (acceptable for the recap entry point — users get full
+  // timestamps via the matrix view).
+  return {
+    name: identity?.skillName ?? '',
+    description: '',
+    location: '',
+    files: [],
+    audits: { history: [] },
+    evals: { definitions: [], iterations: [] },
+  } as unknown as Skill;
+}
+

@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FlaskConical, MoreHorizontal, MoreVertical, Play, RefreshCw } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  FlaskConical,
+  MoreVertical,
+  Play,
+  RefreshCw,
+} from 'lucide-react';
 import type {
   ClaudeModelId,
   EvalMatrix,
@@ -441,25 +448,93 @@ function BaselineMenu({
 // ── Evals définies row ─────────────────────────────────────────────────────
 
 function EvalDefinitionRow({ def }: { def: SkillEvalDefinition }) {
+  const [expanded, setExpanded] = useState(false);
   const assertCount = def.assertions.length;
   return (
-    <div className="rounded-n-md border border-n-border-subtle bg-n-surface px-3.5 py-2.5">
-      <div className="flex items-center gap-3">
+    <div className="rounded-n-md border border-n-border-subtle bg-n-surface">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-n-raised/40"
+      >
+        <span className="flex-shrink-0 text-n-faint">
+          {expanded ? (
+            <ChevronDown size={13} strokeWidth={2.25} />
+          ) : (
+            <ChevronRight size={13} strokeWidth={2.25} />
+          )}
+        </span>
         <FlaskConical size={13} strokeWidth={2.25} className="flex-shrink-0 text-n-accent" />
         <span className="font-n-mono text-[12.5px] font-medium text-n-fg">{def.name}</span>
         <span className="font-n-mono text-[10.5px] text-n-faint">{assertCount} assertions</span>
-        <span className="flex-1" />
-        <button
-          type="button"
-          disabled
-          aria-label="More"
-          className="flex-shrink-0 rounded-n-xs p-1 text-n-faint opacity-60"
-        >
-          <MoreHorizontal size={14} strokeWidth={2} />
-        </button>
-      </div>
-      <p className="mt-1.5 text-[12px] leading-snug text-n-muted">{def.prompt}</p>
+      </button>
+      <p className="px-3.5 pb-2.5 text-[12px] leading-snug text-n-muted">{def.prompt}</p>
+      {expanded && (
+        <div className="border-t border-n-border-subtle/60 bg-n-sunken/40 px-3.5 py-2.5">
+          {assertCount === 0 ? (
+            <div className="font-n-mono text-[11px] text-n-faint">No assertions defined.</div>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {def.assertions.map((a, i) => (
+                <AssertionLine key={i} assertion={a} index={i} />
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * Single assertion entry shown in the expanded eval row. Eval JSON
+ * accepts both a structured object (`{ type, text, script? }`) and a
+ * raw string (legacy / shorthand for an LLM assertion). Render both.
+ */
+function AssertionLine({
+  assertion,
+  index,
+}: {
+  assertion: { type?: string; text?: string; script?: string } | string;
+  index: number;
+}) {
+  if (typeof assertion === 'string') {
+    return (
+      <li className="flex items-start gap-2 text-[12px]">
+        <span className="mt-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-n-xs bg-n-raised font-n-mono text-[9.5px] text-n-faint">
+          {index + 1}
+        </span>
+        <span className="text-n-muted">{assertion}</span>
+        <span className="ml-auto font-n-mono text-[9.5px] uppercase tracking-[0.6px] text-n-faint">
+          llm
+        </span>
+      </li>
+    );
+  }
+  const tone =
+    assertion.type === 'script'
+      ? 'text-n-accent'
+      : assertion.type === 'manual'
+        ? 'text-n-watch'
+        : 'text-n-fg-muted';
+  return (
+    <li className="flex flex-col gap-1 text-[12px]">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-n-xs bg-n-raised font-n-mono text-[9.5px] text-n-faint">
+          {index + 1}
+        </span>
+        <span className="flex-1 text-n-muted">{assertion.text ?? '—'}</span>
+        <span className={'font-n-mono text-[9.5px] uppercase tracking-[0.6px] ' + tone}>
+          {assertion.type ?? 'llm'}
+        </span>
+      </div>
+      {assertion.script && (
+        <pre className="ml-6 overflow-x-auto rounded-n-xs border border-n-border-subtle/60 bg-n-canvas px-2 py-1 font-n-mono text-[10.5px] text-n-muted">
+          {assertion.script}
+        </pre>
+      )}
+    </li>
   );
 }
 

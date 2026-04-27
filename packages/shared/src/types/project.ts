@@ -2,6 +2,8 @@
 // Nakiros Agent Team — Project types
 // ---------------------------------------------------------------------------
 
+import type { AuditCheckOutcome, AuditManifest } from './audit-checks.js';
+
 /** Supported AI coding agents that Nakiros can scan for projects and skills. */
 export type ProviderType = 'claude' | 'gemini' | 'cursor' | 'codex';
 
@@ -664,6 +666,27 @@ export interface AuditRun {
    * distinguish an interrupted run from a run genuinely awaiting them.
    */
   interruptedByReboot?: boolean;
+  /**
+   * Static taxonomy emitted by the skill-factory at the start of the run
+   * (`outputs/audit-manifest.json`). Drives the live sidebar — sections, check
+   * labels, severities, finding codes. `null` until the agent runs the static
+   * check script. Persisted so boot rehydration restores the sidebar shape.
+   *
+   * Optional because `AuditRun` is also reused as the shape for `fix-runner`,
+   * which never produces an audit manifest. Audit runs always initialise the
+   * field (to `null` initially, then assigned).
+   */
+  manifest?: AuditManifest | null;
+  /**
+   * Per-check outcomes appended live to `outputs/audit-progress.jsonl`. Order
+   * is the order the runner observed them — the script emits the deterministic
+   * checks first, the agent appends the judgement-based ones. Persisted so the
+   * sidebar resumes where it left off after a daemon restart.
+   *
+   * Optional for the same reason as {@link manifest}. Audit runs always
+   * initialise to an empty array.
+   */
+  checkResults?: AuditCheckOutcome[];
 }
 
 /**
@@ -734,6 +757,18 @@ export interface AuditRunEvent {
     | { type: 'tokens'; tokensUsed: number }
     | { type: 'waiting_for_input'; lastAssistantText: string }
     | { type: 'done'; exitCode: number; error?: string; reportPath?: string }
+    /**
+     * Static check taxonomy. Emitted once, the first time the runner observes
+     * `outputs/audit-manifest.json`. Drives the sidebar skeleton (sections,
+     * check labels, severities). Frontend caches it on the run state.
+     */
+    | { type: 'manifest'; manifest: AuditManifest }
+    /**
+     * One check decided. Emitted per new line observed in
+     * `outputs/audit-progress.jsonl`. Frontend appends to `run.checkResults`
+     * and updates the per-section progress + findings live panel.
+     */
+    | { type: 'check_result'; outcome: AuditCheckOutcome }
     /**
      * Handler-level failure broadcast by `withBroadcastOnError`. See
      * `EvalRunEvent`'s `error` variant for the contract — same semantics

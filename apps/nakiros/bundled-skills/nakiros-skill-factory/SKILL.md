@@ -155,15 +155,39 @@ Do NOT chain into `eval create` automatically. The user decides when — evals w
 
 ## Auditing skills
 
-**The report MUST be written as a file. Chat-only output is a bug.**
+**Every audit MUST produce three artefacts:**
 
-1. Read the ENTIRE skill directory (SKILL.md + all subdirectories)
-2. Run 23-check checklist. For conditional checks (#18, #20, #23), evaluate whether the condition applies FIRST. If it doesn't → N/A (pass). If it does but the skill doesn't meet it → ❌.
-3. Build the report content following **exactly** the format in `assets/outputs/audit-report.md` (table structure, not prose)
-4. **Use the `Write` tool** to save the report to `outputs/audit-report.md` in the current working directory. Do this BEFORE writing any chat summary.
-5. In chat, give a short summary only: `"Score X/23 — full report saved to outputs/audit-report.md"`. Do NOT paste the full report in chat — the user reads it from the file.
+- `outputs/audit-manifest.json` — the static taxonomy of the 23 checks (sections, severities, finding codes). Always identical for a given skill-factory version. Written for you by the helper script in step 1.
+- `outputs/audit-progress.jsonl` — one JSON line per check, in eval order. The helper script seeds this with ~10 deterministic checks; you append the rest as you evaluate them.
+- `outputs/audit-report.md` — the human-readable summary, written **last**. Chat-only output is a bug.
 
-When Nakiros invokes the audit, it archives the file into `{skill}/audits/audit-{ISO}.md` automatically. When invoked directly via Claude Code, the file stays in `outputs/` for the user to inspect.
+The `.json` + `.jsonl` files are what Nakiros streams to the UI to drive the live "X/23 checks done" sidebar — DO NOT skip them, and DO NOT change their schema. The markdown report is for the human.
+
+### Audit procedure (5 steps)
+
+1. **Run the static check script** — it writes the manifest + the deterministic checks for you:
+   ```
+   node "$(realpath ~/.claude/skills/nakiros-skill-factory)/scripts/run-static-checks.mjs" \
+     --skill-dir <absolute-path-to-the-skill-being-audited> \
+     --output-dir outputs
+   ```
+   Read `outputs/audit-progress.jsonl` after this — every line tells you a check that's already done. Do not re-evaluate those checks; only the ones not yet present in the file.
+
+2. **Read the skill being audited** — `SKILL.md` + every subdirectory. You need the full content for the judgement-based checks below.
+
+3. **Append one JSONL line per remaining check.** Use the `Write` tool to append (read the file first, append your lines, write back) — do NOT shell `>>` redirect, it's not part of your tool surface. Each line is exactly:
+   ```json
+   { "checkId": "<slug from the manifest>", "result": "pass" | "fail" | "na", "detail": "<one short sentence>" }
+   ```
+   Use `na` only for conditional checks (#18 no-mocks if skill doesn't touch infra, #20 auth/security if no auth surface, #23 LLM docs if no framework). `na` counts as a pass.
+
+   Check ids are slugs declared in `outputs/audit-manifest.json` (e.g. `content.gotchas_section`, `safety.no_mocks`). Do NOT invent ids — only use what the manifest declares. If you're unsure which slug to use, re-read the manifest.
+
+4. **Write the markdown report** to `outputs/audit-report.md` following the format in `assets/outputs/audit-report.md` (table structure, not prose). Use the JSONL outcomes as your source of truth — they're authoritative.
+
+5. **Chat summary** — one line only: `"Score X/23 — full report saved to outputs/audit-report.md"`. Do NOT paste the full report in chat.
+
+When Nakiros invokes the audit, it archives `audit-report.md` into `{skill}/audits/audit-{ISO}.md` automatically. When invoked directly via Claude Code, the files stay in `outputs/` for the user to inspect.
 
 ## Fixing skills
 

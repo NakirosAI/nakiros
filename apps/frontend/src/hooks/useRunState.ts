@@ -111,6 +111,12 @@ export function useRunState<
           const t = ev as { name: string; display: string };
           replay.push({ type: 'tool', name: t.name, display: t.display, ts: now });
         }
+        // Forward every buffered event to the consumer so kind-specific
+        // state (audit manifest / check results, eval per-iteration counts,
+        // …) can be rebuilt on remount even if the live WebSocket dropped
+        // an event mid-run. text/tool above feed liveEvents; everything
+        // else is delivered exclusively through the inner-event hook.
+        onInnerEventRef.current?.(ev);
       }
       if (replay.length > 0) setLiveEvents(replay);
     });

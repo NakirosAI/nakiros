@@ -919,6 +919,12 @@ async function executeTurn(
   });
   entry.child = null;
 
+  // If the user called stopRun() while the turn was in flight, the SIGTERM'd
+  // child returns a non-zero exit — but the run is `stopped`, not `failed`.
+  // stopRun() has already torn down the sandbox and broadcast the terminal
+  // state; bail out before we overwrite it with `failed`.
+  if (entry.killed) return;
+
   if (result.exitCode !== 0 || result.error) {
     run.status = 'failed';
     run.error = result.error;

@@ -35,7 +35,11 @@ const EVENTS_FILE = 'events.jsonl';
 
 function defaultShouldBuffer(event: unknown): boolean {
   const type = (event as { type?: unknown })?.type;
-  return type === 'text' || type === 'tool';
+  // Audit `manifest` + `check_result` are bufferisable too — without them, a
+  // WebSocket reconnect mid-run would drop the structured audit progress and
+  // the sidebar would only refill via the next `getRun` poll. The shape stays
+  // small (one taxonomy + ≤ 23 outcomes), so the cap is irrelevant in practice.
+  return type === 'text' || type === 'tool' || type === 'manifest' || type === 'check_result';
 }
 
 export class EventLog<TEvent> {

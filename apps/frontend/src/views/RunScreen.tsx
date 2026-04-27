@@ -26,6 +26,7 @@ import RunSidePanel from '../components/runs/RunSidePanel';
 import EvalRunRecap from '../components/runs/EvalRunRecap';
 import EvalDiffOverlay from '../components/skill/EvalDiffOverlay';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
+import AuditCompletedReport from '../components/runs/AuditCompletedReport';
 import type { LiveStreamEvent } from '../components/ConversationTurn';
 
 interface RunScreenProps {
@@ -79,7 +80,7 @@ export default function RunScreen(props: RunScreenProps) {
   return <AuditLikeRunScreen {...props} />;
 }
 
-function AuditLikeRunScreen({ runId, runKind, onClose }: RunScreenProps) {
+function AuditLikeRunScreen({ runId, runKind, onClose, onOpenRunTab }: RunScreenProps) {
   const { t } = useTranslation('runs');
 
   // `getRunAPI` returns a fresh object on every call — without
@@ -166,6 +167,7 @@ function AuditLikeRunScreen({ runId, runKind, onClose }: RunScreenProps) {
       bootedRun={bootedRun}
       api={api}
       onClose={onClose}
+      onOpenRunTab={onOpenRunTab}
     />
   );
 }
@@ -177,11 +179,13 @@ function RunScreenBody({
   bootedRun,
   api,
   onClose,
+  onOpenRunTab,
 }: {
   runKind: AgentRunKind;
   bootedRun: AuditRun;
   api: NonNullable<ReturnType<typeof getRunAPI>>;
   onClose(): void;
+  onOpenRunTab?: import('../lib/run-launcher').OpenRunTabCallback;
 }) {
   const { t } = useTranslation('runs');
   const [reportContent, setReportContent] = useState<string | null>(null);
@@ -194,13 +198,34 @@ function RunScreenBody({
       // The daemon emits a `done` event with `reportPath` on audit completion.
       // We narrow on the discriminator to keep TS happy without leaking the
       // audit type into the eval/fix branches (they don't ship in PR9a).
-      if (api.readReport && (inner as { type: string }).type === 'done') {
+      const innerType = (inner as { type: string }).type;
+      if (api.readReport && innerType === 'done') {
         const reportPath = (inner as { reportPath?: string }).reportPath;
         if (reportPath) {
           void api.readReport(reportPath).then((content) => {
             if (content !== null) setReportContent(content);
           });
         }
+        return;
+      }
+      // Audit-only — drive the live sidebar from typed events. fix/create
+      // never emit these so the branch is a no-op for them.
+      if (innerType === 'manifest') {
+        const manifest = (inner as { manifest: AuditRun['manifest'] }).manifest;
+        if (manifest) setRun((r) => ({ ...r, manifest }));
+        return;
+      }
+      if (innerType === 'check_result') {
+        const outcome = (inner as { outcome: NonNullable<AuditRun['checkResults']>[number] }).outcome;
+        if (!outcome) return;
+        setRun((r) => {
+          const existing = r.checkResults ?? [];
+          // Daemon already dedupes by checkId, but a remount + replay could
+          // surface the same line twice — defend at the boundary.
+          if (existing.some((o) => o.checkId === outcome.checkId)) return r;
+          return { ...r, checkResults: [...existing, outcome] };
+        });
+        return;
       }
     },
     // Light polling at 2s keeps the screen in sync when the daemon
@@ -284,6 +309,18 @@ function RunScreenBody({
     value: formatDuration(isTerminal ? run.durationMs ?? 0 : elapsed),
   });
 
+  // Audit progress — drives the "step X/Y" caption in the header. We only
+  // know the total once the manifest has been emitted; until then the bar
+  // stays hidden (no fake percentage).
+  const auditStepTotal =
+    runKind === 'audit' && run.manifest ? run.manifest.totalChecks : undefined;
+  const auditStepDone =
+    runKind === 'audit' && run.manifest ? run.checkResults?.length ?? 0 : undefined;
+
+  // Audit gets a dedicated completion screen (hero card + KPIs + findings +
+  // next steps). Fix / create keep the markdown viewer fallback.
+  const showAuditCompleted = runKind === 'audit' && isCompleted;
+
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden font-n-sans">
       <NewRunHeader
@@ -296,11 +333,24 @@ function RunScreenBody({
         onFinish={isCompleted ? handleFinish : undefined}
         onResume={isWaiting ? handleResume : undefined}
         isStopping={isStopping}
+        stepTotal={auditStepTotal}
+        stepDone={auditStepDone}
       />
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden bg-n-canvas">
-          {isCompleted && reportContent ? (
+          {showAuditCompleted ? (
+            <AuditCompletedReport
+              run={run}
+              reportContent={reportContent}
+              onOpenReport={
+                run.reportPath
+                  ? () => void window.nakiros.openPath(run.reportPath as string)
+                  : undefined
+              }
+              onOpenRunTab={onOpenRunTab}
+            />
+          ) : isCompleted && reportContent ? (
             <div className="flex-1 overflow-y-auto px-6 py-6">
               <div className="mx-auto max-w-[920px] rounded-n-lg border border-n-border-subtle bg-n-surface px-6 py-5">
                 <AuditMarkdownViewer content={reportContent} />

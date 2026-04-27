@@ -3,7 +3,9 @@ import { join, basename } from 'path';
 import { homedir } from 'os';
 
 import type {
+  AuditCheckOutcome,
   AuditHistoryEntry,
+  AuditManifest,
   AuditRun,
   AuditRunEvent,
   StartAuditRequest,
@@ -14,6 +16,7 @@ import {
   createRunner,
   encodeProjectPath,
   isActiveRunStatus,
+  persistRunJson,
   type RehydrateResult,
   type RunEntry,
   type RunnerSpec,
@@ -26,6 +29,104 @@ const KIND = 'audit';
 interface AuditEntryExtras {
   /** Absolute path to the real skill directory — used to archive the audit report. */
   skillDir: string;
+  /**
+   * Polling timer that re-reads `outputs/audit-manifest.json` +
+   * `outputs/audit-progress.jsonl` while the run is in flight. Started in
+   * `afterStart`, self-arrests on terminal status, also cleared by
+   * `cleanupOnTerminal`. NOT persisted to `run.json` (rebuilt at boot).
+   */
+  syncTimer: NodeJS.Timeout | null;
+}
+
+const PROGRESS_POLL_MS = 1000;
+
+/**
+ * Re-read the two artefacts the skill writes during an audit and emit the
+ * diff:
+ *
+ *   - `outputs/audit-manifest.json` — once, on first sight.
+ *   - `outputs/audit-progress.jsonl` — append-only; emit each new line.
+ *
+ * Tolerates a partially-written file (truncated last line, malformed JSON):
+ * skip the bad line, retry next tick. The full markdown report is still the
+ * source of truth at the end — these events drive the live sidebar only.
+ */
+function syncAuditProgress(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>): void {
+  const { run } = entry;
+  // The fields are typed optional because `AuditRun` is also the shape for
+  // fix-runner, which doesn't audit anything. Audit runs always initialise
+  // them in `createInitialRun` / `rehydrate` — but narrow here to be safe.
+  if (!run.checkResults) run.checkResults = [];
+  const outputsDir = join(run.workdir, 'outputs');
+
+  let mutated = false;
+
+  if (!run.manifest) {
+    const manifestPath = join(outputsDir, 'audit-manifest.json');
+    if (existsSync(manifestPath)) {
+      try {
+        const raw = readFileSync(manifestPath, 'utf8');
+        const manifest = JSON.parse(raw) as AuditManifest;
+        if (manifest && Array.isArray(manifest.checks) && Array.isArray(manifest.sections)) {
+          run.manifest = manifest;
+          mutated = true;
+          entry.eventLog.emit({ type: 'manifest', manifest });
+        }
+      } catch (err) {
+        console.warn(`[audit-runner] Could not parse audit-manifest.json (run ${run.runId}): ${(err as Error).message}`);
+      }
+    }
+  }
+
+  const progressPath = join(outputsDir, 'audit-progress.jsonl');
+  if (existsSync(progressPath)) {
+    let raw: string;
+    try {
+      raw = readFileSync(progressPath, 'utf8');
+    } catch {
+      raw = '';
+    }
+    const known = new Set(run.checkResults.map((o) => o.checkId));
+    const lines = raw.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        continue; // partial write, retry on next poll
+      }
+      const o = parsed as Partial<AuditCheckOutcome>;
+      if (!o || typeof o.checkId !== 'string' || known.has(o.checkId)) continue;
+      if (o.result !== 'pass' && o.result !== 'fail' && o.result !== 'na') continue;
+      const outcome: AuditCheckOutcome = {
+        checkId: o.checkId,
+        result: o.result,
+        detail: typeof o.detail === 'string' ? o.detail : '',
+      };
+      run.checkResults.push(outcome);
+      known.add(outcome.checkId);
+      mutated = true;
+      entry.eventLog.emit({ type: 'check_result', outcome });
+    }
+  }
+
+  // Persist whenever we mutated the run — without this, a daemon restart
+  // would lose every check captured live and the rehydrated `run.json` would
+  // show `manifest: null, checkResults: []` even on a completed audit. The
+  // generic runner-core `persist()` is private; we duplicate the call shape
+  // (`{ ...run, _extras }`) it uses so the rehydrate path keeps working.
+  if (mutated) {
+    persistRunJson(run.workdir, { ...run, _extras: entry.extras });
+  }
+}
+
+function stopProgressPolling(extras: AuditEntryExtras): void {
+  if (extras.syncTimer) {
+    clearInterval(extras.syncTimer);
+    extras.syncTimer = null;
+  }
 }
 
 /** Internal start request — `StartAuditRequest` + the resolved skill directory. */
@@ -120,7 +221,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
 
   prepareWorkdir(req, runId) {
     const workdir = prepareWorkdir(req.skillDir, req.skillName, runId);
-    return { workdir, extras: { skillDir: req.skillDir } };
+    return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
   },
 
   buildFirstPrompt(req) {
@@ -145,13 +246,33 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       startedAt: new Date().toISOString(),
       finishedAt: null,
       error: null,
+      manifest: null,
+      checkResults: [],
     };
   },
 
+  afterStart(entry) {
+    entry.extras.syncTimer = setInterval(() => {
+      // Self-arrest as soon as the run reaches a terminal state, even if
+      // cleanupOnTerminal hasn't fired yet (e.g. helpers.fail mid-turn).
+      const status = entry.run.status;
+      if (entry.killed || status === 'completed' || status === 'failed' || status === 'stopped') {
+        stopProgressPolling(entry.extras);
+        return;
+      }
+      syncAuditProgress(entry);
+    }, PROGRESS_POLL_MS);
+  },
+
   onTurnComplete(entry, helpers) {
+    // One last sync before deciding what to do with the run — captures any
+    // line the agent appended in the very last tool call before it returned.
+    syncAuditProgress(entry);
+
     const result = archiveReport(entry);
     if (result.ok) {
       entry.run.reportPath = result.reportPath;
+      stopProgressPolling(entry.extras);
       helpers.complete(entry);
       entry.eventLog.emit({ type: 'done', exitCode: 0, reportPath: result.reportPath });
       return;
@@ -160,7 +281,12 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     helpers.wait(entry);
   },
 
+  onTurnFailed(entry) {
+    stopProgressPolling(entry.extras);
+  },
+
   cleanupOnTerminal(entry) {
+    stopProgressPolling(entry.extras);
     cleanupRunWorkdir(entry.run.workdir);
   },
 
@@ -226,10 +352,14 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         restoredStatus === 'waiting_for_input' && wasActive
           ? true
           : blob.interruptedByReboot,
+      // Restore live audit state — sidebar resumes where it left off without
+      // re-reading the workdir until the next turn (which re-syncs anyway).
+      manifest: blob.manifest ?? null,
+      checkResults: Array.isArray(blob.checkResults) ? blob.checkResults : [],
     };
 
-    console.log(`[audit-runner] Restored audit ${restoredRun.runId} for "${restoredRun.skillName}" (status=${restoredStatus})`);
-    return { kind: 'rehydrate', run: restoredRun, extras: { skillDir } };
+    console.log(`[audit-runner] Restored audit ${restoredRun.runId} for "${restoredRun.skillName}" (status=${restoredStatus}, ${restoredRun.checkResults?.length ?? 0}/${restoredRun.manifest?.totalChecks ?? '?'} checks)`);
+    return { kind: 'rehydrate', run: restoredRun, extras: { skillDir, syncTimer: null } };
   },
 };
 

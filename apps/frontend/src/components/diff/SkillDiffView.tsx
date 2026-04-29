@@ -257,6 +257,20 @@ function FileListItem({
 
 // ─── Diff panel ──────────────────────────────────────────────────────────────
 
+/**
+ * Side-by-side diff body for a single file. Exposed standalone so callers
+ * that already have their own file picker (e.g. the new-design fix sandbox
+ * panel) can reuse the rendering without the bundled file sidebar.
+ */
+export function FileDiffPanel(props: {
+  relativePath: string;
+  fetchDiff(path: string): Promise<SkillDiffFileContent>;
+  labels: SkillDiffLabels;
+  cacheScope: string;
+}) {
+  return <DiffPanel {...props} />;
+}
+
 function DiffPanel({
   relativePath,
   fetchDiff,

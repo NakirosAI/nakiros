@@ -684,7 +684,7 @@ function RowGroup({
   onSelectIteration,
 }: {
   row: EvalMatrixRow;
-  kinds: ReadonlyArray<'skill' | 'baseline'>;
+  kinds: ReadonlyArray<'skill' | 'baseline' | 'fix-temp'>;
   onSelectIteration(iteration: number): void;
 }) {
   return (

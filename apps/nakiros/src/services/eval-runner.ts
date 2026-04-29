@@ -4,7 +4,12 @@ import { dirname, join, relative, sep } from 'path';
 import { promisify } from 'util';
 
 import { gradeLlmAssertionsBatch, JUDGE_MODEL } from './eval-llm-grader.js';
-import { collectConfigStats, writeIterationBenchmark, type EvalConfigStats } from './eval-benchmark.js';
+import {
+  collectConfigStats,
+  resolveEvalWorkspaceDir,
+  writeIterationBenchmark,
+  type EvalConfigStats,
+} from './eval-benchmark.js';
 import { cleanupEvalArtifacts } from './eval-artifact-cleanup.js';
 import { computeEvalFingerprint } from './eval-fingerprint.js';
 import {
@@ -82,8 +87,8 @@ function getSkillDir(request: StartEvalRunRequest, resolveSkillDir: (req: StartE
   return resolveSkillDir(request);
 }
 
-function computeNextIteration(skillDir: string): number {
-  const workspaceDir = join(skillDir, 'evals', 'workspace');
+function computeNextIteration(skillDir: string, fixRunId?: string): number {
+  const workspaceDir = resolveEvalWorkspaceDir(skillDir, fixRunId);
   if (!existsSync(workspaceDir)) return 1;
   try {
     const dirs = readdirSync(workspaceDir, { withFileTypes: true })
@@ -106,8 +111,10 @@ function prepareArtifactDir(
   iteration: number,
   evalName: string,
   config: EvalRunConfig,
+  fixRunId?: string,
 ): string {
-  const dir = join(skillDir, 'evals', 'workspace', `iteration-${iteration}`, `eval-${evalName}`, config);
+  const workspaceDir = resolveEvalWorkspaceDir(skillDir, fixRunId);
+  const dir = join(workspaceDir, `iteration-${iteration}`, `eval-${evalName}`, config);
   mkdirSync(join(dir, 'outputs'), { recursive: true });
   return dir;
 }
@@ -440,9 +447,25 @@ export async function startEvalRuns(
   request: StartEvalRunRequest,
   options: StartRunsOptions,
 ): Promise<StartEvalRunResponse> {
+  // Two roles of "skill dir":
+  //  - `skillDir` (= override when present) is the execution context: where
+  //    `evals.json`, fixtures, the SKILL.md to copy into the with_skill
+  //    sandbox come from. For fix-evals this is the temp workdir so the
+  //    agent sees the in-progress edits.
+  //  - `skillRealDir` is the persisted workspace: where iteration-N/ goes
+  //    on disk. Always the resolved real skill dir, even when an override
+  //    is set, so the matrix surfaces a unified history (skill + baseline
+  //    + fix-temp iterations live side by side).
   const skillDir = getSkillDir(request, options.resolveSkillDir);
+  const skillRealDir = options.resolveSkillDir({
+    ...request,
+    skillDirOverride: undefined,
+  });
   if (!existsSync(skillDir)) {
     throw new Error(`Skill directory not found: ${skillDir}`);
+  }
+  if (!existsSync(skillRealDir)) {
+    throw new Error(`Real skill directory not found: ${skillRealDir}`);
   }
 
   const evalsJsonPath = join(skillDir, 'evals', 'evals.json');
@@ -491,7 +514,15 @@ export async function startEvalRuns(
   // surface in the matrix / sparkline / diff selector. The per-model
   // cache is still upserted at the end so skill iterations can reuse the
   // value without recomputing.
-  const iteration = options.fixedIteration ?? computeNextIteration(skillDir);
+  // Fix-temp evals get their own counter under
+  // `evals/.fix-temp/<fixRunId>/` so they start at 1 per fix session and
+  // don't bump the skill's main iteration counter.
+  const iteration = options.fixedIteration ?? computeNextIteration(skillRealDir, request.fixRunId);
+  if (request.fixRunId) {
+    console.log(
+      `[eval-runner] startEvalRuns fixRunId=${request.fixRunId} iteration=${iteration} skillRealDir=${skillRealDir}`,
+    );
+  }
   // baselineOnly implies "always run baseline" — refreshBaseline is then
   // moot, but we keep the explicit flag for the non-baseline-only path.
   const refreshBaseline = baselineOnly || request.refreshBaseline === true;
@@ -559,7 +590,7 @@ export async function startEvalRuns(
     for (const config of configs) {
       const artifactDir = options.artifactRootOverride
         ? prepareArtifactDirAt(options.artifactRootOverride, def.name, config)
-        : prepareArtifactDir(skillDir, iteration, def.name, config);
+        : prepareArtifactDir(skillRealDir, iteration, def.name, config, request.fixRunId);
 
       const runId = generateRunId('run');
 
@@ -657,6 +688,14 @@ export async function startEvalRuns(
         startedAt: new Date().toISOString(),
         finishedAt: null,
         error: null,
+        skillDirOverride: request.skillDirOverride ?? null,
+        // Persisted on every run of this batch when launched from a fix
+        // session — the frontend's `useAgentRunsSync.batchKey` uses it to
+        // disambiguate fix-temp batches (per-session iter counter
+        // starting at 1) from prod batches that happen to share an iter
+        // number, otherwise dismissed prod batches would shadow live
+        // fix-temp batches via `dismissedIds`.
+        ...(request.fixRunId ? { fixRunId: request.fixRunId } : {}),
       };
 
       const eventLog = new EventLog<EvalRunEvent['event']>({
@@ -740,10 +779,22 @@ export async function startEvalRuns(
       for (const [evalName, decision] of baselineByEval) {
         if (decision.cachedStats) cachedBaselinesByEval[evalName] = decision.cachedStats;
       }
+      // The iteration kind is tagged based on the request shape:
+      //  - `fixRunId` set → eval was launched from `fix:runEvalsInTemp` →
+      //    `'fix-temp'` so the matrix UI can mark it (and the fix
+      //    finish/reject lifecycle can target the batch via `fix_run_id`)
+      //  - `baselineOnly` → `'baseline'` (kebab "Recalculer la baseline")
+      //  - otherwise normal skill iteration
+      const kind: 'fix-temp' | 'baseline' | 'skill' = request.fixRunId
+        ? 'fix-temp'
+        : baselineOnly
+          ? 'baseline'
+          : 'skill';
       try {
-        writeIterationBenchmark(skillDir, request.skillName, iteration, {
+        writeIterationBenchmark(skillRealDir, request.skillName, iteration, {
           baselinesByEval: cachedBaselinesByEval,
-          kind: baselineOnly ? 'baseline' : 'skill',
+          kind,
+          ...(request.fixRunId ? { fixRunId: request.fixRunId } : {}),
         });
       } catch (err) {
         console.error('[eval-runner] Failed to write benchmark.json:', err);
@@ -989,8 +1040,12 @@ async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Pr
   deleteClaudeProjectEntry(executionDirBeforeTeardown);
 
   try {
-    const iterDir = deriveIterDir(run);
-    if (iterDir) writeIterationBenchmark(iterDir.skillDir, run.skillName, run.iteration);
+    const derived = deriveIterDir(run);
+    if (derived) {
+      writeIterationBenchmark(derived.skillDir, run.skillName, run.iteration, {
+        ...(derived.fixRunId ? { fixRunId: derived.fixRunId, kind: 'fix-temp' } : {}),
+      });
+    }
   } catch (err) {
     console.error('[eval-runner] Failed to refresh benchmark.json:', err);
   }
@@ -1026,9 +1081,21 @@ function teardownSandbox(entry: RunEntry): void {
   }
 }
 
-function deriveIterDir(run: SkillEvalRun): { skillDir: string; iterDir: string } | null {
-  const marker = '/evals/workspace/';
-  const idx = run.workdir.indexOf(marker);
+function deriveIterDir(
+  run: SkillEvalRun,
+): { skillDir: string; iterDir: string; fixRunId?: string } | null {
+  const fixMarker = '/evals/.fix-temp/';
+  let idx = run.workdir.indexOf(fixMarker);
+  if (idx !== -1) {
+    const skillDir = run.workdir.slice(0, idx);
+    const after = run.workdir.slice(idx + fixMarker.length);
+    const fixRunId = after.split('/')[0];
+    if (!fixRunId) return null;
+    const iterDir = join(skillDir, 'evals', '.fix-temp', fixRunId, `iteration-${run.iteration}`);
+    return { skillDir, iterDir, fixRunId };
+  }
+  const wsMarker = '/evals/workspace/';
+  idx = run.workdir.indexOf(wsMarker);
   if (idx === -1) return null;
   const skillDir = run.workdir.slice(0, idx);
   const iterDir = join(skillDir, 'evals', 'workspace', `iteration-${run.iteration}`);

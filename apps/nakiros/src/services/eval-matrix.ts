@@ -57,10 +57,12 @@ interface BenchmarkFile {
   model?: string | null;
   /**
    * `'skill'` for a normal eval iteration, `'baseline'` for a baseline-only
-   * refresh. Older benchmarks that pre-date the field are treated as
-   * `'skill'` (the bulk of historical data).
+   * refresh, `'fix-temp'` for an iteration produced by `fix:runEvalsInTemp`.
+   * Older benchmarks that pre-date the field are treated as `'skill'`.
    */
-  kind?: 'skill' | 'baseline';
+  kind?: 'skill' | 'baseline' | 'fix-temp';
+  /** Set on `'fix-temp'` iterations — owning fix runId. */
+  fix_run_id?: string;
   per_eval: Record<string, BenchmarkPerEval>;
 }
 
@@ -70,14 +72,25 @@ interface BenchmarkFile {
  * Build the eval matrix for a skill by walking every `iteration-N/benchmark.json`
  * under its workspace. Returns an empty matrix shape if the skill has no history.
  *
+ * When `fixRunId` is set, the matrix is built from
+ * `<skillDir>/evals/.fix-temp/<fixRunId>/` instead of the main workspace —
+ * used by the diff overlay opened from a fix chat to surface fix-temp
+ * iterations side-by-side with the prod history.
+ *
  * `without_skill` cells are decorated with `baseline` metadata when the
  * cached baseline (`~/.nakiros/baselines/...`) matches the current eval
  * inputs. Cache miss (legacy iterations, edited prompts/fixtures, or a
  * different model) leaves `baseline: null` — the cell still renders, just
  * without the date tooltip + obsolescence dot.
  */
-export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix {
-  const workspaceDir = join(skillDir, 'evals', 'workspace');
+export function buildEvalMatrix(
+  skillDir: string,
+  skillName: string,
+  fixRunId?: string,
+): EvalMatrix {
+  const workspaceDir = fixRunId
+    ? join(skillDir, 'evals', '.fix-temp', fixRunId)
+    : join(skillDir, 'evals', 'workspace');
   const benchmarks = loadBenchmarks(workspaceDir);
 
   if (benchmarks.length === 0) {
@@ -95,7 +108,9 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
   const iterations = benchmarks.map((b) => b.iteration);
   const fingerprints = benchmarks.map((b) => b.skill_fingerprint ?? null);
   const models = benchmarks.map((b) => b.model ?? null);
-  const kinds: EvalIterationKind[] = benchmarks.map((b) => (b.kind === 'baseline' ? 'baseline' : 'skill'));
+  const kinds: EvalIterationKind[] = benchmarks.map((b) =>
+    b.kind === 'baseline' ? 'baseline' : b.kind === 'fix-temp' ? 'fix-temp' : 'skill',
+  );
 
   // Pre-compute the current eval-fingerprints once. If evals.json is missing
   // or unparseable, the map stays empty — every baseline lookup will miss
@@ -118,9 +133,9 @@ export function buildEvalMatrix(skillDir: string, skillName: string): EvalMatrix
 
     for (const b of benchmarks) {
       const stats = b.per_eval?.[evalName];
-      withSkill.push(stats?.with_skill ? toCell(stats.with_skill, b.iteration, 'with_skill', workspaceDir, evalName) : null);
+      withSkill.push(stats?.with_skill ? toCell(stats.with_skill, b.iteration, 'with_skill', workspaceDir, evalName, skillDir) : null);
       const baselineCell = stats?.without_skill
-        ? toCell(stats.without_skill, b.iteration, 'without_skill', workspaceDir, evalName)
+        ? toCell(stats.without_skill, b.iteration, 'without_skill', workspaceDir, evalName, skillDir)
         : null;
       if (baselineCell) {
         baselineCell.baseline = lookupBaselineMeta({
@@ -248,11 +263,14 @@ function toCell(
   config: 'with_skill' | 'without_skill',
   workspaceDir: string,
   evalName: string,
+  skillDir: string,
 ): EvalMatrixCell {
   const runDirAbs = join(workspaceDir, `iteration-${iteration}`, `eval-${evalName}`, config);
   // Return path relative to the skill root so the frontend can build URLs
-  // without leaking absolute filesystem paths.
-  const skillRoot = relative(join(workspaceDir, '..', '..'), runDirAbs).replace(/\\/g, '/');
+  // without leaking absolute filesystem paths. Computed against `skillDir`
+  // explicitly because `workspaceDir` lives at a different depth depending
+  // on context (`evals/workspace/` vs `evals/.fix-temp/<id>/`).
+  const skillRoot = relative(skillDir, runDirAbs).replace(/\\/g, '/');
   return {
     iteration,
     config,

@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  AlertCircle,
+  Check,
   CheckCircle,
-  FileCode2,
+  Columns2,
   FlaskConical,
   Folder,
+  Loader2,
+  Play,
   Plus,
   ShieldCheck,
+  Trash2,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
@@ -17,6 +20,7 @@ import type {
   AuditCheckSeverity,
   AuditManifest,
   AuditRun,
+  FixTarget,
   SkillDiffEntry,
 } from '@nakiros/shared';
 
@@ -25,6 +29,41 @@ interface RunSidePanelProps {
   run: AuditRun;
   /** Audit-only — markdown content of the final report when available. */
   reportContent: string | null;
+  /**
+   * Fix/create-only — discard the sandbox without deploying. The host
+   * (`RunScreen`) handles the confirm dialog, the daemon stop, store
+   * dismissal and tab close. Omitted on audit (no sandbox to discard).
+   */
+  onReject?: () => void;
+  /** True while a reject is in flight — disables the button. */
+  isRejecting?: boolean;
+  /**
+   * Fix/create-only — sync the sandbox back to the real skill, promote
+   * the last fix-temp iteration to `kind: skill`, then tear down the
+   * tmp workdir + the matching `~/.claude/projects/` entry. Surfaced
+   * when the run is in `waiting_for_input` or `completed` (the natural
+   * checkpoints where the user has reviewed the agent's work).
+   */
+  onFinish?: () => void;
+  /** True while finish is in flight — disables both Apply and Reject to
+   *  avoid racing the cleanup. */
+  isFinishing?: boolean;
+  /**
+   * Fix-only — currently active file in the diff viewer (replaces the chat
+   * in the main panel). When non-null, the matching row in the sandbox
+   * card is highlighted.
+   */
+  selectedDiffFile?: string | null;
+  /** Click handler for a sandbox file row — toggles the diff viewer. */
+  onSelectDiffFile?(relativePath: string | null): void;
+  /**
+   * Fix-only — kick off `runFixEvalsInTemp` and open the resulting eval
+   * batch as a new tab. Host handles the IPC + tab opening; the panel just
+   * surfaces the button.
+   */
+  onLaunchEval?: () => void;
+  /** True while the eval launch is in flight. */
+  isLaunchingEval?: boolean;
 }
 
 /**
@@ -44,9 +83,34 @@ interface RunSidePanelProps {
  * they get their own dedicated panels (eval queue, conversation
  * timeline insights, etc.).
  */
-export default function RunSidePanel({ kind, run, reportContent }: RunSidePanelProps) {
+export default function RunSidePanel({
+  kind,
+  run,
+  reportContent,
+  onReject,
+  isRejecting,
+  onFinish,
+  isFinishing,
+  selectedDiffFile,
+  onSelectDiffFile,
+  onLaunchEval,
+  isLaunchingEval,
+}: RunSidePanelProps) {
   if (kind === 'audit') return <AuditPanel run={run} reportContent={reportContent} />;
-  if (kind === 'fix') return <FixPanel run={run} />;
+  if (kind === 'fix')
+    return (
+      <FixPanel
+        run={run}
+        onReject={onReject}
+        isRejecting={isRejecting}
+        onFinish={onFinish}
+        isFinishing={isFinishing}
+        selectedDiffFile={selectedDiffFile ?? null}
+        onSelectDiffFile={onSelectDiffFile}
+        onLaunchEval={onLaunchEval}
+        isLaunchingEval={isLaunchingEval}
+      />
+    );
   if (kind === 'create') return <CreatePanel run={run} />;
   return <FallbackPanel kind={kind} />;
 }
@@ -268,56 +332,133 @@ function ScoreRing({ value, max, size }: { value: number; max: number; size: num
 
 // ── Fix ────────────────────────────────────────────────────────────────────
 
-function FixPanel({ run }: { run: AuditRun }) {
+function FixPanel({
+  run,
+  onReject,
+  isRejecting,
+  onFinish,
+  isFinishing,
+  selectedDiffFile,
+  onSelectDiffFile,
+  onLaunchEval,
+  isLaunchingEval,
+}: {
+  run: AuditRun;
+  onReject?: () => void;
+  isRejecting?: boolean;
+  onFinish?: () => void;
+  isFinishing?: boolean;
+  selectedDiffFile: string | null;
+  onSelectDiffFile?(relativePath: string | null): void;
+  onLaunchEval?: () => void;
+  isLaunchingEval?: boolean;
+}) {
   const { t } = useTranslation('runs');
   const [diff, setDiff] = useState<SkillDiffEntry[] | null>(null);
 
+  // Event-driven refresh: refetch on mount, and again every time a
+  // Write/Edit tool_use lands on the fix stream. The daemon already
+  // emits `tool` events with the tool name — we just listen and ask
+  // for the new sandbox snapshot. The `run.status` dep covers the
+  // terminal flip (last write may bubble after the final tool event).
   useEffect(() => {
     let cancelled = false;
-    setDiff(null);
-    void window.nakiros
-      .listFixDiff(run.runId)
-      .then((entries) => {
-        if (cancelled) return;
-        setDiff(entries);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setDiff([]);
-      });
+    const fetchDiff = () =>
+      window.nakiros
+        .listFixDiff(run.runId)
+        .then((entries) => {
+          if (!cancelled) setDiff(entries);
+        })
+        .catch(() => {
+          if (!cancelled) setDiff([]);
+        });
+
+    void fetchDiff();
+
+    const unsubscribe = window.nakiros.onFixEvent((envelope) => {
+      const e = envelope as { runId: string; event: { type: string; name?: string } };
+      if (e.runId !== run.runId) return;
+      if (e.event.type === 'tool' && isWriteTool(e.event.name)) {
+        void fetchDiff();
+      }
+    });
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [run.runId, run.status]);
 
+  // Targets the agent registered in `outputs/fix-targets.jsonl` — the runner
+  // tails the file and reduces it into `run.targets` (last-line-wins per id).
+  const targets = run.targets ?? [];
+  const targetsDone = targets.filter((t) => t.status === 'done').length;
+
   return (
     <SidePanel icon={Wrench} title={t('panels.fix.title', { defaultValue: 'Fix sandbox' })} tone="violet">
-      <PanelSection label={t('panels.fix.sandbox', { defaultValue: 'Sandbox' })}>
-        <PathRow value={run.workdir} />
+      <PanelSection
+        label={t('panels.fix.sandboxTmpSkill', { defaultValue: 'Sandbox · tmp_skill' })}
+      >
+        <div className="rounded-n-lg border border-n-border-subtle bg-n-canvas px-3 py-2.5">
+          <div
+            className="truncate font-n-mono text-[11.5px] text-n-muted"
+            title={run.workdir}
+          >
+            {prettifyHomePath(run.workdir)}
+          </div>
+          <div className="mt-2.5 flex flex-col gap-1">
+            {diff === null ? (
+              <span className="font-n-mono text-[11px] text-n-faint">
+                {t('common:loading', { defaultValue: 'Loading…' })}
+              </span>
+            ) : diff.length === 0 ? (
+              <span className="font-n-mono text-[11px] text-n-faint">
+                {t('panels.fix.empty', { defaultValue: 'No file modified yet.' })}
+              </span>
+            ) : (
+              diff.map((entry) => (
+                <DiffEntryRow
+                  key={entry.relativePath}
+                  entry={entry}
+                  active={entry.relativePath === selectedDiffFile}
+                  onSelect={
+                    onSelectDiffFile
+                      ? () =>
+                          onSelectDiffFile(
+                            entry.relativePath === selectedDiffFile
+                              ? null
+                              : entry.relativePath,
+                          )
+                      : undefined
+                  }
+                />
+              ))
+            )}
+          </div>
+        </div>
       </PanelSection>
 
       <PanelSection
-        label={t('panels.fix.changes', { defaultValue: 'Changes' })}
+        label={t('panels.fix.targets', { defaultValue: 'Targets from audit' })}
         right={
-          diff !== null ? (
+          targets.length > 0 ? (
             <span className="font-n-mono text-[10.5px] text-n-faint">
-              {diff.length} file{diff.length === 1 ? '' : 's'}
+              {targetsDone}/{targets.length}
             </span>
           ) : null
         }
       >
-        {diff === null ? (
-          <span className="font-n-mono text-[11px] text-n-faint">
-            {t('common:loading', { defaultValue: 'Loading…' })}
-          </span>
-        ) : diff.length === 0 ? (
-          <span className="font-n-mono text-[11px] text-n-faint">
-            {t('panels.fix.empty', { defaultValue: 'No file modified yet.' })}
+        {targets.length === 0 ? (
+          <span className="font-n-mono text-[11px] leading-snug text-n-faint">
+            {t('panels.fix.targetsEmpty', {
+              defaultValue:
+                'The agent has not registered targets yet — they appear once the audit signals are read.',
+            })}
           </span>
         ) : (
-          <ul className="space-y-1">
-            {diff.map((entry) => (
-              <DiffEntryRow key={entry.relativePath} entry={entry} />
+          <ul className="grid gap-1.5">
+            {targets.map((target) => (
+              <TargetRow key={target.id} target={target} />
             ))}
           </ul>
         )}
@@ -336,33 +477,194 @@ function FixPanel({ run }: { run: AuditRun }) {
           </div>
         </PanelSection>
       )}
+
+      {onLaunchEval &&
+        (run.status === 'completed' || run.status === 'waiting_for_input') && (
+          <PanelSection
+            label={t('panels.fix.evalLabel', { defaultValue: 'Test the sandbox' })}
+          >
+            <button
+              type="button"
+              onClick={onLaunchEval}
+              disabled={isLaunchingEval}
+              className="flex w-full items-center justify-center gap-2 rounded-n-md border border-n-accent/40 bg-n-accent-soft px-3 py-2 text-[12px] font-medium text-n-accent transition-colors hover:bg-n-accent-soft/80 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isLaunchingEval ? (
+                <Loader2 size={13} strokeWidth={2.25} className="animate-spin" />
+              ) : (
+                <Play size={13} strokeWidth={2.25} />
+              )}
+              {isLaunchingEval
+                ? t('panels.fix.evalLaunching', { defaultValue: 'Launching evals…' })
+                : t('panels.fix.evalRun', { defaultValue: 'Run evals on sandbox' })}
+            </button>
+          </PanelSection>
+        )}
+
+      {onFinish &&
+        (run.status === 'completed' || run.status === 'waiting_for_input') && (
+          <PanelSection
+            label={t('panels.fix.applyLabel', { defaultValue: 'Apply to skill' })}
+          >
+            <button
+              type="button"
+              onClick={onFinish}
+              disabled={isFinishing || isRejecting}
+              className="flex w-full items-center justify-center gap-2 rounded-n-md border border-n-healthy/40 bg-n-healthy-soft px-3 py-2 text-[12px] font-medium text-n-healthy transition-colors hover:bg-n-healthy-soft/80 disabled:cursor-not-allowed disabled:opacity-60"
+              title={t('panels.fix.applyTooltip', {
+                defaultValue:
+                  'Sync the sandbox to the real skill, promote the latest fix-temp eval iteration, and clean up the sandbox.',
+              })}
+            >
+              {isFinishing ? (
+                <Loader2 size={13} strokeWidth={2.25} className="animate-spin" />
+              ) : (
+                <Check size={13} strokeWidth={2.25} />
+              )}
+              {isFinishing
+                ? t('panels.fix.applying', { defaultValue: 'Applying…' })
+                : t('panels.fix.apply', { defaultValue: 'Apply & deploy' })}
+            </button>
+          </PanelSection>
+        )}
+
+      {onReject &&
+        (run.status === 'completed' || run.status === 'waiting_for_input') && (
+          <PanelSection
+            label={t('panels.fix.discardLabel', { defaultValue: 'Discard sandbox' })}
+          >
+            <button
+              type="button"
+              onClick={onReject}
+              disabled={isRejecting || isFinishing}
+              className="flex w-full items-center justify-center gap-2 rounded-n-md border border-n-critical/40 bg-n-critical-soft px-3 py-2 text-[12px] font-medium text-n-critical transition-colors hover:bg-n-critical-soft/80 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isRejecting ? (
+                <Loader2 size={13} strokeWidth={2.25} className="animate-spin" />
+              ) : (
+                <Trash2 size={13} strokeWidth={2.25} />
+              )}
+              {isRejecting
+                ? t('panels.fix.discarding', { defaultValue: 'Discarding…' })
+                : t('panels.fix.discard', { defaultValue: 'Reject changes' })}
+            </button>
+          </PanelSection>
+        )}
     </SidePanel>
   );
 }
 
-function DiffEntryRow({ entry }: { entry: SkillDiffEntry }) {
-  // Derive the change kind from the inOriginal/inModified booleans
-  // — the daemon doesn't expose a normalised `changeType` for these
-  // snapshot entries (it sits on the per-file payload only).
-  const isAdded = !entry.inOriginal && entry.inModified;
-  const isDeleted = entry.inOriginal && !entry.inModified;
-  const tone = isAdded
-    ? 'var(--n-healthy)'
-    : isDeleted
-      ? 'var(--n-critical)'
-      : 'var(--n-accent)';
-  const symbol = isAdded ? '+' : isDeleted ? '−' : '~';
+function TargetRow({ target }: { target: FixTarget }) {
+  const done = target.status === 'done';
   return (
-    <li className="flex items-center gap-2 rounded-n-sm border border-n-border-subtle bg-n-canvas px-2 py-1.5 font-n-mono text-[11px]">
-      <span className="w-3 flex-shrink-0 text-center" style={{ color: tone }}>
-        {symbol}
-      </span>
-      <FileCode2 size={11} strokeWidth={2} className="flex-shrink-0 text-n-subtle" />
-      <span className="min-w-0 flex-1 truncate text-n-fg" title={entry.relativePath}>
-        {entry.relativePath}
+    <li
+      className="flex items-start gap-2.5 rounded-n-sm border border-n-border-subtle bg-n-canvas px-2.5 py-2 text-[12px]"
+      title={target.source}
+    >
+      {done ? (
+        <Check size={13} strokeWidth={2.25} className="mt-0.5 flex-shrink-0 text-n-healthy" />
+      ) : (
+        <span className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded-full border border-n-faint" />
+      )}
+      <span
+        className={
+          'min-w-0 flex-1 whitespace-normal break-words leading-snug ' +
+          (done ? 'text-n-muted line-through' : 'text-n-fg')
+        }
+      >
+        {target.title}
       </span>
     </li>
   );
+}
+
+function DiffEntryRow({
+  entry,
+  active,
+  onSelect,
+}: {
+  entry: SkillDiffEntry;
+  active: boolean;
+  onSelect?: () => void;
+}) {
+  const { t } = useTranslation('runs');
+  const isAdded = !entry.inOriginal && entry.inModified;
+  const isDeleted = entry.inOriginal && !entry.inModified;
+
+  // Right-side stat — mirrors the mockup: `+12 −3` for modified files,
+  // `new` (green) for additions, `deleted` (red) for removals.
+  let rightContent: React.ReactNode;
+  if (isAdded) {
+    rightContent = (
+      <span className="flex-shrink-0 text-[11px] text-n-healthy">
+        {t('panels.fix.diff.new', { defaultValue: 'new' })}
+      </span>
+    );
+  } else if (isDeleted) {
+    rightContent = (
+      <span className="flex-shrink-0 text-[11px] text-n-critical">
+        {t('panels.fix.diff.deleted', { defaultValue: 'deleted' })}
+      </span>
+    );
+  } else {
+    rightContent = (
+      <span className="flex-shrink-0 font-n-mono text-[11px] tabular-nums text-n-muted">
+        +{entry.addedLines} −{entry.removedLines}
+      </span>
+    );
+  }
+
+  const inner = (
+    <>
+      <Columns2 size={12} strokeWidth={2} className="flex-shrink-0 text-n-violet" />
+      <span className="min-w-0 flex-1 truncate text-n-fg" title={entry.relativePath}>
+        {entry.relativePath}
+      </span>
+      {rightContent}
+    </>
+  );
+
+  if (!onSelect) {
+    return <div className="flex items-center gap-2 font-n-mono text-[12px]">{inner}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={
+        'flex w-full items-center gap-2 rounded-n-xs px-1.5 py-0.5 text-left font-n-mono text-[12px] transition-colors ' +
+        (active
+          ? 'bg-n-violet-soft'
+          : 'hover:bg-n-sunken')
+      }
+    >
+      {inner}
+    </button>
+  );
+}
+
+/**
+ * Tool names whose execution mutates the sandbox tree — the only events we
+ * care about for refreshing the file listing. Stays in sync with the SDK's
+ * built-in editor tools.
+ */
+const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+function isWriteTool(name: string | undefined): boolean {
+  return name !== undefined && WRITE_TOOLS.has(name);
+}
+
+/**
+ * Render `~/path/...` when the absolute path lives under the user's home.
+ * Mirrors the mockup which shows `~/.nakiros/tmp/skill-1729/`. We can't
+ * read `os.homedir()` in the browser, so we infer it from the prefix
+ * heuristically (everything up to `/.nakiros/` is the home).
+ */
+function prettifyHomePath(absPath: string): string {
+  const marker = '/.nakiros/';
+  const idx = absPath.indexOf(marker);
+  if (idx >= 0) return '~' + absPath.slice(idx);
+  return absPath;
 }
 
 // ── Create ─────────────────────────────────────────────────────────────────

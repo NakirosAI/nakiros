@@ -257,10 +257,11 @@ export const evalHandlers: HandlerRegistry = {
 
   'eval:loadIterationRun': createTypedHandler((request: LoadIterationRunRequest): IterationRunArtifact => {
     const skillDir = resolveSkillDir(request);
+    const workspaceDir = request.fixRunId
+      ? join(skillDir, 'evals', '.fix-temp', request.fixRunId)
+      : join(skillDir, 'evals', 'workspace');
     const runDir = join(
-      skillDir,
-      'evals',
-      'workspace',
+      workspaceDir,
       `iteration-${request.iteration}`,
       `eval-${request.evalName}`,
       request.config,

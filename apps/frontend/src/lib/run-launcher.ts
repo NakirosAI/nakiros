@@ -1,3 +1,4 @@
+import type { AuditRun } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 
 /**
@@ -121,6 +122,44 @@ export async function launchEvalBatch(
     label: options.baselineOnly
       ? `Baseline · ${identity.skillName}`
       : `Eval · ${identity.skillName} · iter ${response.iteration}`,
+  });
+}
+
+/**
+ * Kick off an eval batch against a fix run's temp sandbox copy and open the
+ * resulting eval tab. Same flow as {@link launchEvalBatch} but routed through
+ * `runFixEvalsInTemp` so the runs target the in-progress skill copy. Always
+ * runs `with_skill` only — baselines are out of scope for the fix→eval loop.
+ */
+export async function launchFixEval(
+  fixRun: AuditRun,
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const response = await window.nakiros.runFixEvalsInTemp({
+    runId: fixRun.runId,
+    includeBaseline: false,
+  });
+  const projectId = fixRun.scope === 'project' ? fixRun.projectId ?? '' : '';
+  const pluginName = fixRun.scope === 'plugin' ? fixRun.pluginName ?? '' : '';
+  const marketplaceName = fixRun.scope === 'plugin' ? fixRun.marketplaceName ?? '' : '';
+  // Must match `useAgentRunsSync.batchKey` exactly (same fields, same
+  // order) — including the `fixRunId` discriminator, otherwise the tab's
+  // `runId` won't match the AgentRun the store registers and the screen
+  // stays on loading forever (or worse, picks up a dismissed prod batch
+  // with the same iter number).
+  const batchKey = [
+    fixRun.scope,
+    projectId,
+    pluginName,
+    marketplaceName,
+    fixRun.skillName,
+    response.iteration,
+    fixRun.runId,
+  ].join('|');
+  openRunTab({
+    runId: `eval:${batchKey}`,
+    runKind: 'eval',
+    label: `Eval · ${fixRun.skillName} · iter ${response.iteration}`,
   });
 }
 

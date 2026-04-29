@@ -7,11 +7,16 @@ import { formatTool } from './tool-format.js';
  * consuming the `claude --output-format stream-json` stream. Each runner
  * (eval / audit / fix / create) wires its own implementation to route events
  * into its run state.
+ *
+ * `onTool` receives the raw `input` object of the `tool_use` block in
+ * addition to the formatted display string. Most runners ignore `input`
+ * (they only care about the display); the fix-runner uses it to extract
+ * Write/Edit args and emit `fix_edit` events for the inline diff cards.
  */
 export interface ClaudeStreamHandlers {
   onSession(id: string): void;
   onText(text: string): void;
-  onTool(name: string, display: string): void;
+  onTool(name: string, display: string, input: Record<string, unknown>): void;
   onUsage(totalTokens: number): void;
 }
 
@@ -37,7 +42,10 @@ export function handleClaudeStreamEvent(
     for (const block of message!.content) {
       const b = block as { type?: string; text?: string; name?: string; input?: Record<string, unknown> };
       if (b.type === 'text' && b.text) h.onText(b.text);
-      else if (b.type === 'tool_use' && b.name) h.onTool(b.name, formatTool(b.name, b.input ?? {}));
+      else if (b.type === 'tool_use' && b.name) {
+        const input = b.input ?? {};
+        h.onTool(b.name, formatTool(b.name, input), input);
+      }
     }
     return;
   }

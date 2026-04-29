@@ -105,17 +105,24 @@ export function useRunState<
       const now = Date.now();
       const replay: LiveStreamEvent[] = [];
       for (const ev of buffered) {
+        // Prefer the daemon-stamped `ts` (ISO) embedded on text/tool events
+        // since the runner-core upgrade. Falls back to `now` for legacy
+        // entries written before that change so an in-flight run started
+        // on an older daemon still replays without a crash.
+        const evTs = (ev as { ts?: string }).ts;
+        const ts = evTs ? new Date(evTs).getTime() : now;
         if (ev.type === 'text') {
-          replay.push({ type: 'text', text: (ev as { text: string }).text, ts: now });
+          replay.push({ type: 'text', text: (ev as { text: string }).text, ts });
         } else if (ev.type === 'tool') {
           const t = ev as { name: string; display: string };
-          replay.push({ type: 'tool', name: t.name, display: t.display, ts: now });
+          replay.push({ type: 'tool', name: t.name, display: t.display, ts });
         }
         // Forward every buffered event to the consumer so kind-specific
         // state (audit manifest / check results, eval per-iteration counts,
-        // …) can be rebuilt on remount even if the live WebSocket dropped
-        // an event mid-run. text/tool above feed liveEvents; everything
-        // else is delivered exclusively through the inner-event hook.
+        // fix targets / findings, …) can be rebuilt on remount even if the
+        // live WebSocket dropped an event mid-run. text/tool above feed
+        // liveEvents; everything else is delivered exclusively through the
+        // inner-event hook.
         onInnerEventRef.current?.(ev);
       }
       if (replay.length > 0) setLiveEvents(replay);
@@ -127,10 +134,14 @@ export function useRunState<
       if (id !== runId) return;
       if (event.type === 'text') {
         const text = (event as { text: string }).text;
-        setLiveEvents((prev) => [...prev, { type: 'text', text, ts: Date.now() }]);
+        const evTs = (event as { ts?: string }).ts;
+        const ts = evTs ? new Date(evTs).getTime() : Date.now();
+        setLiveEvents((prev) => [...prev, { type: 'text', text, ts }]);
       } else if (event.type === 'tool') {
         const t = event as { name: string; display: string };
-        setLiveEvents((prev) => [...prev, { type: 'tool', name: t.name, display: t.display, ts: Date.now() }]);
+        const evTs = (event as { ts?: string }).ts;
+        const ts = evTs ? new Date(evTs).getTime() : Date.now();
+        setLiveEvents((prev) => [...prev, { type: 'tool', name: t.name, display: t.display, ts }]);
       } else if (event.type === 'status') {
         const status = (event as { status: string }).status;
         if (status === 'starting') {

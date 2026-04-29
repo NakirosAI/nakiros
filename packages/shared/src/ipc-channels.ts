@@ -136,6 +136,10 @@ export const IPC_CHANNELS = {
   'fix:getBufferedEvents': 'fix:getBufferedEvents',
   'fix:listDiff': 'fix:listDiff',
   'fix:readDiffFile': 'fix:readDiffFile',
+  'fix:getEditsHistory': 'fix:getEditsHistory',
+  'fix:getTimeline': 'fix:getTimeline',
+  'fix:getFixTempMatrix': 'fix:getFixTempMatrix',
+  'fix:getUsage': 'fix:getUsage',
 
   // Create runner — thin mirror of fix:* with different temp-workdir seeding and sync-back policy.
   'create:start': 'create:start',

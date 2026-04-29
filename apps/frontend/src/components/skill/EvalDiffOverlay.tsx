@@ -27,6 +27,16 @@ interface EvalDiffOverlayProps {
   initialIteration: number;
   /** Identity of the skill — forwarded to `loadIterationRun`. */
   baseRequest: GetEvalMatrixRequest;
+  /**
+   * When the host merged a `.fix-temp/<fixRunId>/` matrix into `matrix`,
+   * fix-temp iters are stored at indices `raw + fixTempOffset` in
+   * `matrix.iterations` to avoid colliding with prod iter numbers. Pass
+   * the same offset here so the picker can render the natural "fix N"
+   * label and the drilldown can route `loadIterationRun` to the
+   * `.fix-temp/` workspace via `fixRunId`.
+   */
+  fixRunId?: string;
+  fixTempOffset?: number;
   /** Closes the overlay (back button, Escape, X). */
   onClose(): void;
 }
@@ -87,6 +97,8 @@ export default function EvalDiffOverlay({
   skill,
   initialIteration,
   baseRequest,
+  fixRunId,
+  fixTempOffset,
   onClose,
 }: EvalDiffOverlayProps) {
   const { t } = useTranslation('skills');
@@ -140,7 +152,7 @@ export default function EvalDiffOverlay({
 
   // Per-iteration kind, pre-indexed for the picker dropdown.
   const kindByIter = useMemo(() => {
-    const map = new Map<number, 'skill' | 'baseline'>();
+    const map = new Map<number, 'skill' | 'baseline' | 'fix-temp'>();
     matrix.iterations.forEach((iter, idx) => {
       map.set(iter, matrix.kinds[idx] ?? 'skill');
     });
@@ -231,6 +243,7 @@ export default function EvalDiffOverlay({
               passByIter={passByIter}
               timestampByIter={timestampByIter}
               kindByIter={kindByIter}
+              fixTempOffset={fixTempOffset}
               onChange={setPrevIter}
             />
             <ArrowRight size={13} strokeWidth={2} className="text-n-faint" />
@@ -242,6 +255,7 @@ export default function EvalDiffOverlay({
               passByIter={passByIter}
               timestampByIter={timestampByIter}
               kindByIter={kindByIter}
+              fixTempOffset={fixTempOffset}
               onChange={(iter) => iter !== null && setCurIter(iter)}
             />
           </div>
@@ -370,6 +384,8 @@ export default function EvalDiffOverlay({
               baseRequest={baseRequest}
               currentIteration={curIter}
               previousIteration={previousIteration}
+              fixRunId={fixRunId}
+              fixTempOffset={fixTempOffset}
             />
           )}
         </main>
@@ -400,7 +416,13 @@ interface RunPickerProps {
    * in the dropdown so the user can intentionally compare a skill run
    * against a baseline run.
    */
-  kindByIter: Map<number, 'skill' | 'baseline'>;
+  kindByIter: Map<number, 'skill' | 'baseline' | 'fix-temp'>;
+  /**
+   * When set, fix-temp iters in `iterations` are stored at index
+   * `raw + fixTempOffset` (host-side merge collision avoidance). The
+   * picker subtracts the offset to render the natural "fix N" label.
+   */
+  fixTempOffset?: number;
   onChange(iteration: number | null): void;
 }
 
@@ -424,8 +446,19 @@ function RunPicker({
   passByIter,
   timestampByIter,
   kindByIter,
+  fixTempOffset,
   onChange,
 }: RunPickerProps) {
+  const labelForIter = (iter: number) => {
+    if (
+      fixTempOffset !== undefined &&
+      kindByIter.get(iter) === 'fix-temp' &&
+      iter > fixTempOffset
+    ) {
+      return `Fix #${iter - fixTempOffset}`;
+    }
+    return `Run #${iter}`;
+  };
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -466,8 +499,9 @@ function RunPicker({
           <span className="text-n-faint">{role === 'prev' ? 'no previous' : '—'}</span>
         ) : (
           <>
-            <span className="font-semibold">Run #{selected}</span>
+            <span className="font-semibold">{labelForIter(selected)}</span>
             {selectedKind === 'baseline' && <BaselineTag />}
+            {selectedKind === 'fix-temp' && <FixTempTag />}
             {selectedRatePct !== null && (
               <span className="text-n-muted">{selectedRatePct}%</span>
             )}
@@ -532,8 +566,11 @@ function RunPicker({
                       (isCounterpart ? 'text-n-faint opacity-50' : 'text-n-fg')
                     }
                   >
-                    #{iter}
+                    {kindByIter.get(iter) === 'fix-temp' && fixTempOffset !== undefined
+                      ? `fix #${iter - fixTempOffset}`
+                      : `#${iter}`}
                     {kindByIter.get(iter) === 'baseline' && <BaselineTag />}
+                    {kindByIter.get(iter) === 'fix-temp' && <FixTempTag />}
                   </span>
                   <span
                     className={
@@ -618,7 +655,7 @@ function RunHistorySparkline({
   iterations: number[];
   passRates: number[];
   /** Aligned to `iterations` — baseline iters get a violet dot. */
-  kinds: ReadonlyArray<'skill' | 'baseline'>;
+  kinds: ReadonlyArray<'skill' | 'baseline' | 'fix-temp'>;
   currentIteration: number;
   previousIteration: number | null;
 }) {
@@ -671,26 +708,29 @@ function RunHistorySparkline({
           const isCur = iter === currentIteration;
           const isPrev = previousIteration !== null && iter === previousIteration;
           const isBaseline = kinds[i] === 'baseline';
+          const isFixTemp = kinds[i] === 'fix-temp';
           const radius = isCur || isPrev ? 5 : 3;
-          // Baseline runs always render in the violet marker colour to
-          // match the inline matrix sparkline. Selection state still
-          // wins for size + ring (so the user can see the selected run
-          // clearly even when it's a baseline).
+          // Baseline runs render violet, fix-temp runs render amber/orange,
+          // skill runs render in the standard accent or muted/faint depending
+          // on selection state. Selection state still wins for size + ring.
           const fill = isBaseline
             ? 'oklch(0.62 0.21 295)'
-            : isCur
-              ? 'var(--n-accent)'
-              : isPrev
-                ? 'var(--n-fg-muted)'
-                : 'var(--n-fg-faint)';
+            : isFixTemp
+              ? 'var(--n-watch)'
+              : isCur
+                ? 'var(--n-accent)'
+                : isPrev
+                  ? 'var(--n-fg-muted)'
+                  : 'var(--n-fg-faint)';
           return (
             <span
               key={iter}
               className="absolute inline-flex items-center justify-center"
               style={{ left: xs[i]! - 8, top: ys[i]! - 8, width: 16, height: 16 }}
               title={
-                `Run #${iter}` +
+                (isFixTemp ? `Fix run` : `Run #${iter}`) +
                 (isBaseline ? ' · baseline' : '') +
+                (isFixTemp ? ' · fix-temp' : '') +
                 ` · ${Math.round(passRates[i]! * 100)}%`
               }
             >
@@ -713,6 +753,7 @@ function RunHistorySparkline({
         <LegendDot color="var(--n-fg-muted)" label="prev" />
         <LegendDot color="var(--n-accent)" label="current" />
         <LegendDot color="oklch(0.62 0.21 295)" label="baseline" />
+        <LegendDot color="var(--n-watch)" label="fix" />
       </div>
     </div>
   );
@@ -723,6 +764,25 @@ function LegendDot({ color, label }: { color: string; label: string }) {
     <span className="inline-flex items-center gap-1">
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
       {label}
+    </span>
+  );
+}
+
+/**
+ * Pill flagging an iteration as a fix-temp run in the diff picker.
+ * Orange/amber so it reads as "this is in-progress, not yet promoted to
+ * the prod history" — visually distinct from the violet baseline tag.
+ */
+function FixTempTag() {
+  return (
+    <span
+      className="rounded-n-xs px-1 py-px font-n-mono text-[8.5px] font-semibold uppercase tracking-[0.6px]"
+      style={{
+        background: 'var(--n-watch-soft)',
+        color: 'var(--n-watch)',
+      }}
+    >
+      fix
     </span>
   );
 }
@@ -930,11 +990,21 @@ function AssertionDrilldown({
   baseRequest,
   currentIteration,
   previousIteration,
+  fixRunId,
+  fixTempOffset,
 }: {
   evalName: string;
   baseRequest: GetEvalMatrixRequest;
   currentIteration: number;
   previousIteration: number | null;
+  /**
+   * When set together with `fixTempOffset`, iters above the offset are
+   * fix-temp runs of `fixRunId` and the request is routed to
+   * `<skillDir>/evals/.fix-temp/<fixRunId>/iteration-N/` via the
+   * `fixRunId` payload field.
+   */
+  fixRunId?: string;
+  fixTempOffset?: number;
 }) {
   const { t } = useTranslation('skills');
   const [curArtefact, setCurArtefact] = useState<IterationRunArtifact | null>(null);
@@ -958,17 +1028,23 @@ function AssertionDrilldown({
     setCurArtefact(null);
     setPrevArtefact(null);
 
-    const reqFor = (iter: number) => ({
-      scope: baseRequest.scope,
-      projectId: baseRequest.projectId,
-      pluginName: baseRequest.pluginName,
-      marketplaceName: baseRequest.marketplaceName,
-      skillName: baseRequest.skillName,
-      iteration: iter,
-      evalName,
-      config: 'with_skill' as const,
-      skillDirOverride: baseRequest.skillDirOverride,
-    });
+    const reqFor = (iter: number) => {
+      const isFixTemp =
+        fixRunId !== undefined && fixTempOffset !== undefined && iter > fixTempOffset;
+      const realIter = isFixTemp ? iter - (fixTempOffset as number) : iter;
+      return {
+        scope: baseRequest.scope,
+        projectId: baseRequest.projectId,
+        pluginName: baseRequest.pluginName,
+        marketplaceName: baseRequest.marketplaceName,
+        skillName: baseRequest.skillName,
+        iteration: realIter,
+        evalName,
+        config: 'with_skill' as const,
+        skillDirOverride: baseRequest.skillDirOverride,
+        ...(isFixTemp ? { fixRunId } : {}),
+      };
+    };
 
     Promise.all([
       window.nakiros.loadIterationRun(reqFor(currentIteration)),
@@ -1004,6 +1080,8 @@ function AssertionDrilldown({
     baseRequest.marketplaceName,
     baseRequest.skillName,
     baseRequest.skillDirOverride,
+    fixRunId,
+    fixTempOffset,
   ]);
 
   const assertions = useMemo<AssertionDiff[]>(

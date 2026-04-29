@@ -6,6 +6,9 @@ import type {
   AuditRun,
   AuditRunEvent,
   EvalMatrix,
+  FixEvalResult,
+  FixTimelineEntry,
+  FixUsage,
   GetEvalMatrixRequest,
   Skill,
   SkillEvalRun,
@@ -17,9 +20,9 @@ import { agentRunStore } from '../lib/agent-run-store';
 import { getRunAPI } from '../lib/run-api';
 import {
   HumanInteractionPanel,
-  RESUME_PROMPTS,
   RunErrorBanner,
 } from '../components/runs';
+import { launchFixEval } from '../lib/run-launcher';
 import NewRunHeader from '../components/runs/NewRunHeader';
 import RunStream from '../components/runs/RunStream';
 import RunSidePanel from '../components/runs/RunSidePanel';
@@ -27,6 +30,14 @@ import EvalRunRecap from '../components/runs/EvalRunRecap';
 import EvalDiffOverlay from '../components/skill/EvalDiffOverlay';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
 import AuditCompletedReport from '../components/runs/AuditCompletedReport';
+import {
+  FileDiffPanel,
+  invalidateSkillDiffCache,
+  type SkillDiffFileContent,
+  type SkillDiffLabels,
+} from '../components/diff/SkillDiffView';
+import { ArrowLeft } from 'lucide-react';
+import type { SkillDiffFilePayload } from '@nakiros/shared';
 import type { LiveStreamEvent } from '../components/ConversationTurn';
 
 interface RunScreenProps {
@@ -189,6 +200,24 @@ function RunScreenBody({
 }) {
   const { t } = useTranslation('runs');
   const [reportContent, setReportContent] = useState<string | null>(null);
+  // Unified timeline derived from Claude Code's session jsonl — sole
+  // source of truth for the fix conversation view. Replaces the prior
+  // patchwork of `run.turns[*]` + live `text`/`tool` events + past edits.
+  // Audit / create still use the legacy live-event pipeline (their
+  // session jsonl story isn't ported yet).
+  const [fixTimeline, setFixTimeline] = useState<FixTimelineEntry[]>([]);
+  // Bumped when an event lands that should force a fix-timeline refetch
+  // outside the regular polling cadence (e.g. `fix_eval_result` arriving
+  // while the fix run is paused on `waiting_for_input` and the timer is
+  // off). Wired to the timeline-fetch effect via deps.
+  const [fixTimelineTick, setFixTimelineTick] = useState(0);
+  // When non-null, the chat is replaced by a side-by-side diff for that
+  // file. Driven by the user clicking a row in the sandbox panel.
+  const [selectedDiffFile, setSelectedDiffFile] = useState<string | null>(null);
+  // Cache scope for `SkillDiffView` — bumped each time the agent writes
+  // again so the diff view re-fetches the new sandbox state. Includes
+  // the runId so two parallel fix tabs never share the cache.
+  const diffCacheScope = `fix:${bootedRun.runId}`;
 
   const { run, setRun, liveEvents, liveScrollRef, handlerError } = useRunState<AuditRun, AuditRunEvent['event']>(
     bootedRun.runId,
@@ -227,6 +256,35 @@ function RunScreenBody({
         });
         return;
       }
+      // Fix-only — drive the live targets sidebar. Audit / create never
+      // emit `fix_targets` so the branch is a no-op for them. Findings
+      // come from the timeline (parsed from the session jsonl), not the
+      // event stream.
+      if (innerType === 'fix_targets') {
+        const targets = (inner as { targets: NonNullable<AuditRun['targets']> }).targets;
+        if (!Array.isArray(targets)) return;
+        // The daemon emits the FULL reduced list each time — replace,
+        // don't merge.
+        setRun((r) => ({ ...r, targets }));
+        return;
+      }
+      // Fix-only — invalidate the diff cache when the agent edits a
+      // sandbox file so the open diff viewer re-fetches the new state.
+      // The sandbox panel's listFixDiff subscription already refreshes
+      // its file list on the same trigger.
+      if (innerType === 'tool' && runKind === 'fix') {
+        const name = (inner as { name?: string }).name;
+        if (name && DIFF_INVALIDATING_TOOLS.has(name)) {
+          invalidateSkillDiffCache(`fix:${bootedRun.runId}`);
+        }
+      }
+      // Fix-only — an in-temp eval batch finished. Bump the timeline
+      // tick so the fetch effect refetches even when the fix run is
+      // paused on `waiting_for_input` / completed (the regular poll
+      // is off in those states).
+      if (innerType === 'fix_eval_result' && runKind === 'fix') {
+        setFixTimelineTick((n) => n + 1);
+      }
     },
     // Light polling at 2s keeps the screen in sync when the daemon
     // doesn't broadcast a status event (or when the IPC stop returns
@@ -245,14 +303,136 @@ function RunScreenBody({
     });
   }, [api, run.status, run.reportPath, reportContent]);
 
+  // Fetch the unified fix timeline from Claude Code's session jsonl. Sole
+  // source of truth for the chat view of a fix run — every entry carries
+  // its real ISO timestamp so the timeline survives a refresh hours later
+  // without artificial `Date.now()` stamping.
+  //
+  // Polls every 1.5s while the run is RUNNING so new agent activity
+  // appears within roughly the same delay as the daemon's live events
+  // would have. On `waiting_for_input` / terminal we stop the timer —
+  // the on-mount fetch + the status/turns effect cover the rest.
+  useEffect(() => {
+    if (runKind !== 'fix' && runKind !== 'create') {
+      setFixTimeline([]);
+      return;
+    }
+    if (!run.sessionId) {
+      setFixTimeline([]);
+      return;
+    }
+    let cancelled = false;
+    const fetchOnce = () =>
+      window.nakiros
+        .getFixTimeline(run.runId)
+        .then((timeline) => {
+          if (!cancelled) setFixTimeline(timeline);
+        })
+        .catch(() => {
+          if (!cancelled) setFixTimeline([]);
+        });
+
+    void fetchOnce();
+    const isLive = run.status === 'running' || run.status === 'starting';
+    const timer = isLive ? setInterval(fetchOnce, 1500) : null;
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [runKind, run.runId, run.sessionId, run.status, run.turns.length, fixTimelineTick]);
+
   const elapsed = useElapsedTimer(run.startedAt);
   const isRunning = run.status === 'running' || run.status === 'starting';
   const isWaiting = run.status === 'waiting_for_input';
   const isCompleted = run.status === 'completed';
   const isTerminal = isCompleted || run.status === 'failed' || run.status === 'stopped';
 
+  // Fix-only: pull the billed-equivalent token total + agent-active timer
+  // from the Claude Code session JSONL. Bypasses the runner's own token
+  // tally (which drops cache_read / cache_creation today). See
+  // `docs/decisions/token-accounting.md` for the policy.
+  const [fixUsage, setFixUsage] = useState<FixUsage | null>(null);
+  useEffect(() => {
+    if (runKind !== 'fix') return;
+    if (!run.sessionId) return;
+    let cancelled = false;
+    const fetchOnce = () =>
+      window.nakiros
+        .getFixUsage(run.runId)
+        .then((u) => {
+          if (!cancelled) setFixUsage(u);
+        })
+        .catch(() => {
+          // best-effort — header just falls back to the legacy `run.tokensUsed`
+        });
+    void fetchOnce();
+    // Poll while the agent could still emit turns. When the run is
+    // waiting_for_input or terminal, one fetch on mount is enough — the
+    // session JSONL is closed for new assistant turns until the user
+    // sends a message (which flips status back to running, restarting
+    // the poll via the dependency on `run.status`).
+    const isLive = run.status === 'running' || run.status === 'starting';
+    const timer = isLive ? setInterval(fetchOnce, 1500) : null;
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [runKind, run.runId, run.sessionId, run.status]);
+
   const [isStopping, setIsStopping] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [isLaunchingEval, setIsLaunchingEval] = useState(false);
+
+  // Eval-diff overlay state — opened when the user clicks `[diff >]` on an
+  // eval_result card in the fix timeline. The matrix is lazy-loaded.
+  const [evalDiffResult, setEvalDiffResult] = useState<FixEvalResult | null>(null);
+  const [evalDiffMatrix, setEvalDiffMatrix] = useState<EvalMatrix | null>(null);
+  const [evalDiffFixTempOffset, setEvalDiffFixTempOffset] = useState<number | null>(null);
+
+  const fixDiffIdentity = useMemo<RunScreenIdentity | null>(() => {
+    if (runKind !== 'fix') return null;
+    return {
+      scope: run.scope,
+      skillName: run.skillName,
+      projectId: run.projectId,
+      pluginName: run.pluginName,
+      marketplaceName: run.marketplaceName,
+    };
+  }, [runKind, run.scope, run.skillName, run.projectId, run.pluginName, run.marketplaceName]);
+
+  // Lazy-fetch the matrix the first time the diff overlay is opened.
+  // Fetches BOTH the prod matrix and this fix session's `.fix-temp/`
+  // matrix in parallel, then merges them so the picker can offer prod
+  // and fix-temp iterations side-by-side. Fix-temp iter numbers are
+  // re-mapped (raw + offset) to avoid collisions with prod iter numbers,
+  // since each fix session restarts the counter at 1.
+  useEffect(() => {
+    if (!evalDiffResult || !fixDiffIdentity) return;
+    if (evalDiffMatrix) return;
+    let cancelled = false;
+    void Promise.all([
+      window.nakiros.getEvalMatrix(matrixRequestFromIdentity(fixDiffIdentity)),
+      window.nakiros.getFixTempMatrix(run.runId).catch(() => null),
+    ])
+      .then(([prod, fixTemp]) => {
+        if (cancelled) return;
+        const merged = mergeFixTempIntoProdMatrix(prod as EvalMatrix, fixTemp);
+        setEvalDiffMatrix(merged.matrix);
+        setEvalDiffFixTempOffset(merged.fixTempOffset);
+      })
+      .catch(() => {
+        // swallow — overlay just won't open if the matrix can't be fetched
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [evalDiffResult, fixDiffIdentity, evalDiffMatrix, run.runId]);
+
+  const fixDiffSkillStub: Skill = useMemo(
+    () => stubSkillFor(fixDiffIdentity),
+    [fixDiffIdentity],
+  );
 
   // Map the daemon's kind-specific status enum onto AgentRunStatus
   // (`pending` / `running` / `awaiting_input` / `done` / `failed` /
@@ -280,11 +460,6 @@ function RunScreenBody({
     await api.actions.sendUserMessage(run.runId, message);
   }
 
-  async function handleResume() {
-    const prompt = RESUME_PROMPTS[runKind === 'fix' ? 'fix' : runKind === 'create' ? 'create' : 'audit'];
-    await api.actions.sendUserMessage(run.runId, prompt);
-  }
-
   async function handleFinish() {
     if (isFinishing) return;
     setIsFinishing(true);
@@ -298,16 +473,74 @@ function RunScreenBody({
     }
   }
 
-  // Header stats — kept lightweight for PR9a; eval / fix sub-PRs will
-  // surface kind-specific KPIs through their own side panels.
-  const stats: Array<{ label: string; value: string }> = [];
-  if (run.tokensUsed != null) {
-    stats.push({ label: 'Tokens', value: formatTokens(run.tokensUsed) });
+  async function handleLaunchEval() {
+    if (isLaunchingEval || !onOpenRunTab) return;
+    setIsLaunchingEval(true);
+    try {
+      await launchFixEval(run, onOpenRunTab);
+    } catch (err) {
+      console.error('[run] launchFixEval failed', err);
+      window.alert(
+        t('errors.evalsStartFailed', {
+          defaultValue: 'Could not launch evals: {{message}}',
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    } finally {
+      setIsLaunchingEval(false);
+    }
   }
-  stats.push({
-    label: 'Elapsed',
-    value: formatDuration(isTerminal ? run.durationMs ?? 0 : elapsed),
-  });
+
+  async function handleReject() {
+    if (isRejecting) return;
+    const message =
+      runKind === 'create'
+        ? t('prompts.rejectCreate', {
+            defaultValue:
+              'Discard the sandbox? The skill draft will be thrown away.',
+          })
+        : t('prompts.rejectFix', {
+            defaultValue:
+              'Discard the sandbox? The pending changes will be thrown away.',
+          });
+    if (!window.confirm(message)) return;
+    setIsRejecting(true);
+    try {
+      await api.actions.stop(run.runId);
+      agentRunStore.dismiss(run.runId);
+      onClose();
+    } catch (err) {
+      console.error('[run] reject failed', err);
+      setIsRejecting(false);
+    }
+  }
+
+  // Header stats. For fix runs we surface the **billed-equivalent**
+  // tokens + agent-active elapsed parsed from the session JSONL (see
+  // `docs/decisions/token-accounting.md`). Other run kinds keep the
+  // legacy `run.tokensUsed` + wall-clock elapsed until they migrate.
+  const stats: Array<{ label: string; value: string }> = [];
+  if (runKind === 'fix' && fixUsage) {
+    stats.push({ label: 'Tokens', value: formatTokens(fixUsage.billedEquivalent) });
+    // While the agent is generating, tick from the run's startedAt-anchored
+    // base by adding (now − last_user_ts) on top of the already-frozen
+    // intervals from prior turns. When waiting / terminal, the JSONL
+    // already closed the last interval — display the frozen sum.
+    let displayMs = fixUsage.agentActiveMs;
+    if (isRunning && fixUsage.lastUserMessageAt) {
+      const delta = Date.now() - new Date(fixUsage.lastUserMessageAt).getTime();
+      if (Number.isFinite(delta) && delta > 0) displayMs += delta;
+    }
+    stats.push({ label: 'Elapsed', value: formatDuration(displayMs) });
+  } else {
+    if (run.tokensUsed != null) {
+      stats.push({ label: 'Tokens', value: formatTokens(run.tokensUsed) });
+    }
+    stats.push({
+      label: 'Elapsed',
+      value: formatDuration(isTerminal ? run.durationMs ?? 0 : elapsed),
+    });
+  }
 
   // Audit progress — drives the "step X/Y" caption in the header. We only
   // know the total once the manifest has been emitted; until then the bar
@@ -331,7 +564,6 @@ function RunScreenBody({
         onBack={onClose}
         onStop={isRunning ? handleStop : undefined}
         onFinish={isCompleted ? handleFinish : undefined}
-        onResume={isWaiting ? handleResume : undefined}
         isStopping={isStopping}
         stepTotal={auditStepTotal}
         stepDone={auditStepDone}
@@ -356,15 +588,245 @@ function RunScreenBody({
                 <AuditMarkdownViewer content={reportContent} />
               </div>
             </div>
+          ) : runKind === 'fix' && selectedDiffFile ? (
+            <FixFileDiffView
+              runId={run.runId}
+              relativePath={selectedDiffFile}
+              cacheScope={diffCacheScope}
+              onBack={() => setSelectedDiffFile(null)}
+            />
           ) : (
-            <RunStream turns={run.turns} liveEvents={liveEvents} isStreaming={isRunning} />
+            <RunStream
+              turns={run.turns}
+              liveEvents={liveEvents}
+              isStreaming={isRunning}
+              fixTimeline={runKind === 'fix' ? fixTimeline : undefined}
+              onOpenEvalDiff={runKind === 'fix' ? setEvalDiffResult : undefined}
+              skillName={runKind === 'fix' ? run.skillName : undefined}
+            />
           )}
 
           <RunErrorBanner message={run.error ?? handlerError} />
           {isWaiting && <HumanInteractionPanel isWaiting onSend={handleSend} />}
         </div>
 
-        <RunSidePanel kind={runKind} run={run} reportContent={reportContent} />
+        <RunSidePanel
+          kind={runKind}
+          run={run}
+          reportContent={reportContent}
+          onReject={runKind === 'fix' ? handleReject : undefined}
+          isRejecting={isRejecting}
+          // Apply/Finish: surfaces the green "Apply & deploy" button in the
+          // FixPanel. The handler chain (`handleFinish` → `api.actions.finish`
+          // → `fix:finish` → `runner.finish` → `spec.cleanupOnTerminal` →
+          // `cleanupRunWorkdir`) takes care of the sync-back, the
+          // fix-temp-iteration promotion, the tmp workdir teardown AND the
+          // matching `~/.claude/projects/<encoded>/` entry deletion.
+          onFinish={runKind === 'fix' ? handleFinish : undefined}
+          isFinishing={isFinishing}
+          selectedDiffFile={runKind === 'fix' ? selectedDiffFile : null}
+          onSelectDiffFile={runKind === 'fix' ? setSelectedDiffFile : undefined}
+          onLaunchEval={runKind === 'fix' && onOpenRunTab ? handleLaunchEval : undefined}
+          isLaunchingEval={isLaunchingEval}
+        />
+      </div>
+
+      {evalDiffResult && fixDiffIdentity && evalDiffMatrix && (
+        <EvalDiffOverlay
+          matrix={evalDiffMatrix}
+          skill={fixDiffSkillStub}
+          // Fix-temp iters are stored in the merged matrix at their
+          // re-mapped index (`raw + offset`). The encart click reports
+          // the raw fix-temp iter number, so we shift it here so the
+          // overlay seeds the correct row.
+          initialIteration={
+            evalDiffFixTempOffset !== null
+              ? evalDiffResult.iteration + evalDiffFixTempOffset
+              : evalDiffResult.iteration
+          }
+          baseRequest={matrixRequestFromIdentity(fixDiffIdentity)}
+          fixRunId={run.runId}
+          fixTempOffset={evalDiffFixTempOffset ?? undefined}
+          onClose={() => {
+            setEvalDiffResult(null);
+            // Reset the cached matrix so the next open refetches both
+            // prod and fix-temp (the user may have run new evals
+            // between two diff openings).
+            setEvalDiffMatrix(null);
+            setEvalDiffFixTempOffset(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Merge a fix session's `.fix-temp/` matrix into the prod matrix so the diff
+ * overlay can offer prod and fix-temp iterations side-by-side. Each fix
+ * session's iteration counter restarts at 1, so we re-map fix-temp iter
+ * numbers by adding `prodMaxIter + 1` (or 1 if no prod history). The
+ * resulting `fixTempOffset` is passed to the overlay so it can render
+ * "fix N" labels and route the assertion drilldown to the right backend
+ * path via `fixRunId`.
+ *
+ * Returns `{ matrix: prod, fixTempOffset: null }` when there's nothing to
+ * merge (no fix-temp iters yet).
+ */
+function mergeFixTempIntoProdMatrix(
+  prod: EvalMatrix,
+  fixTemp: EvalMatrix | null,
+): { matrix: EvalMatrix; fixTempOffset: number | null } {
+  if (!fixTemp || fixTemp.iterations.length === 0) {
+    return { matrix: prod, fixTempOffset: null };
+  }
+  const prodMaxIter = prod.iterations.length > 0 ? Math.max(...prod.iterations) : 0;
+  const fixTempOffset = prodMaxIter; // fix-temp iter 1 → display index `prodMax + 1`
+  const remappedIterations = fixTemp.iterations.map((n) => n + fixTempOffset);
+
+  // Per-eval row stitching: union of evalNames from both matrices, with
+  // null cells where one side didn't have the eval at all (matches the
+  // "introduced at iter N" pattern from the prod matrix).
+  const evalNames = new Set<string>([
+    ...prod.rows.map((r) => r.evalName),
+    ...fixTemp.rows.map((r) => r.evalName),
+  ]);
+  const prodRowByName = new Map(prod.rows.map((r) => [r.evalName, r]));
+  const fixRowByName = new Map(fixTemp.rows.map((r) => [r.evalName, r]));
+  const mergedRows = Array.from(evalNames)
+    .sort()
+    .map((evalName) => {
+      const prodRow = prodRowByName.get(evalName);
+      const fixRow = fixRowByName.get(evalName);
+      const padNulls = (count: number) => Array.from({ length: count }, () => null);
+      return {
+        evalName,
+        withSkill: [
+          ...(prodRow?.withSkill ?? padNulls(prod.iterations.length)),
+          ...(fixRow?.withSkill ?? padNulls(fixTemp.iterations.length)),
+        ],
+        withoutSkill: [
+          ...(prodRow?.withoutSkill ?? padNulls(prod.iterations.length)),
+          ...(fixRow?.withoutSkill ?? padNulls(fixTemp.iterations.length)),
+        ],
+        // Tags describe behaviour over the prod history; if the eval only
+        // existed in the fix-temp matrix, fall back to the fix-temp tag,
+        // otherwise default to a neutral `stable` (the diff overlay only
+        // uses tags for the matrix grid header counts, not for picker UI).
+        tag: prodRow?.tag ?? fixRow?.tag ?? { kind: 'stable' as const, variance: 0 },
+      };
+    });
+
+  const matrix: EvalMatrix = {
+    skillName: prod.skillName,
+    iterations: [...prod.iterations, ...remappedIterations],
+    fingerprints: [...prod.fingerprints, ...fixTemp.fingerprints],
+    models: [...prod.models, ...fixTemp.models],
+    kinds: [...prod.kinds, ...fixTemp.kinds],
+    rows: mergedRows,
+    metrics: {
+      iterations: [...prod.iterations, ...remappedIterations],
+      passRateByIteration: [
+        ...prod.metrics.passRateByIteration,
+        ...fixTemp.metrics.passRateByIteration,
+      ],
+      tokensByIteration: [
+        ...prod.metrics.tokensByIteration,
+        ...fixTemp.metrics.tokensByIteration,
+      ],
+      tagCounts: prod.metrics.tagCounts,
+    },
+  };
+  return { matrix, fixTempOffset };
+}
+
+/**
+ * Tool names that mutate the sandbox tree. When one fires we drop the diff
+ * cache so any open `FixFileDiffView` re-fetches the new content. Mirrors
+ * `WRITE_TOOLS` in `RunSidePanel.tsx` — kept in sync.
+ */
+const DIFF_INVALIDATING_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
+/**
+ * Renders the side-by-side diff body for one sandbox file, with a sticky
+ * header that exposes a Back button to return to the conversation. Reuses
+ * `FileDiffPanel` for the actual diff rendering and the existing legacy
+ * fix-runner `readFixDiffFile` IPC for content.
+ */
+function FixFileDiffView({
+  runId,
+  relativePath,
+  cacheScope,
+  onBack,
+}: {
+  runId: string;
+  relativePath: string;
+  cacheScope: string;
+  onBack(): void;
+}) {
+  const { t } = useTranslation('runs');
+  const { t: tFix } = useTranslation('fix');
+
+  const fetchDiff = useMemo(
+    () =>
+      async (path: string): Promise<SkillDiffFileContent> => {
+        const payload: SkillDiffFilePayload = await window.nakiros.readFixDiffFile(runId, path);
+        return {
+          originalContent: payload.originalContent,
+          modifiedContent: payload.modifiedContent,
+          isBinary: payload.isBinary,
+        };
+      },
+    [runId],
+  );
+
+  const labels: SkillDiffLabels = {
+    filesPanelTitle: '',
+    originalColumn: tFix('review.originalColumn', { defaultValue: 'Original' }),
+    modifiedColumn: tFix('review.modifiedColumn', { defaultValue: 'Sandbox' }),
+    missingFile: tFix('review.missingFile', { defaultValue: '(missing)' }),
+    binaryNotice: tFix('review.binaryNotice', { defaultValue: 'Binary file — diff hidden.' }),
+    identicalNotice: tFix('review.identicalNotice', {
+      defaultValue: 'Files are identical.',
+    }),
+    loading: tFix('review.diffLoading', { defaultValue: 'Loading diff…' }),
+    errorTemplate: (message) =>
+      tFix('review.diffFailed', { defaultValue: 'Diff failed: {{message}}', message }),
+    emptyState: '',
+    sideOriginalOnly: tFix('review.sideRemoved', { defaultValue: 'removed' }),
+    sideModifiedOnly: tFix('review.sideAdded', { defaultValue: 'added' }),
+    sideBoth: tFix('review.sideModified', { defaultValue: 'modified' }),
+    addedLinesLabel: (count) =>
+      tFix('review.addedLines', { defaultValue: '+{{count}}', count }),
+    removedLinesLabel: (count) =>
+      tFix('review.removedLines', { defaultValue: '−{{count}}', count }),
+  };
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-n-border-subtle bg-n-surface px-4 py-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1.5 rounded-n-sm border border-n-border-subtle bg-n-canvas px-2 py-1 font-n-mono text-[11px] text-n-muted transition-colors hover:border-n-border-default hover:bg-n-sunken hover:text-n-fg"
+        >
+          <ArrowLeft size={11} strokeWidth={2.25} />
+          {t('diff.backToChat', { defaultValue: 'Back to conversation' })}
+        </button>
+        <span
+          className="min-w-0 flex-1 truncate font-n-mono text-[12px] text-n-fg"
+          title={relativePath}
+        >
+          {relativePath}
+        </span>
+      </div>
+      <div className="flex flex-1 overflow-hidden">
+        <FileDiffPanel
+          relativePath={relativePath}
+          fetchDiff={fetchDiff}
+          labels={labels}
+          cacheScope={cacheScope}
+        />
       </div>
     </div>
   );
@@ -419,6 +881,7 @@ function EvalRunScreen({
   // the recap. We lazy-fetch the matrix the first time it's needed.
   const [diffIteration, setDiffIteration] = useState<number | null>(null);
   const [diffMatrix, setDiffMatrix] = useState<EvalMatrix | null>(null);
+  const [diffFixTempOffset, setDiffFixTempOffset] = useState<number | null>(null);
 
   const runIds = useMemo(() => {
     if (agentRun?.meta?.kind === 'eval') return agentRun.meta.runIds;
@@ -549,16 +1012,35 @@ function EvalRunScreen({
     return identityFromAgentRun(agentRun, evalRuns);
   }, [agentRun, evalRuns]);
 
+  // If this batch was launched from a fix session (every run carries the
+  // parent `fixRunId`), grab it so the diff overlay can also fetch the
+  // fix-temp matrix and surface fix-temp iters next to prod ones.
+  const evalBatchFixRunId = useMemo<string | null>(() => {
+    if (!evalRuns || evalRuns.length === 0) return null;
+    return evalRuns[0]?.fixRunId ?? null;
+  }, [evalRuns]);
+
   // Lazy-fetch the matrix the first time the user opens the diff overlay.
+  // When the batch came from a fix run, fetch BOTH the prod matrix and
+  // the fix session's `.fix-temp/` matrix in parallel and merge them so
+  // the picker offers prod and fix-temp iters side-by-side. The
+  // remap-by-offset trick mirrors `RunScreen` for the fix chat path.
   useEffect(() => {
     if (diffIteration === null) return;
     if (diffMatrix) return;
     if (!diffIdentity) return;
     let cancelled = false;
-    void window.nakiros
-      .getEvalMatrix(matrixRequestFromIdentity(diffIdentity))
-      .then((m) => {
-        if (!cancelled) setDiffMatrix(m as EvalMatrix);
+    void Promise.all([
+      window.nakiros.getEvalMatrix(matrixRequestFromIdentity(diffIdentity)),
+      evalBatchFixRunId
+        ? window.nakiros.getFixTempMatrix(evalBatchFixRunId).catch(() => null)
+        : Promise.resolve(null),
+    ])
+      .then(([prod, fixTemp]) => {
+        if (cancelled) return;
+        const merged = mergeFixTempIntoProdMatrix(prod as EvalMatrix, fixTemp);
+        setDiffMatrix(merged.matrix);
+        setDiffFixTempOffset(merged.fixTempOffset);
       })
       .catch(() => {
         // swallow — overlay just won't open if the matrix can't be fetched
@@ -566,7 +1048,7 @@ function EvalRunScreen({
     return () => {
       cancelled = true;
     };
-  }, [diffIteration, diffMatrix, diffIdentity]);
+  }, [diffIteration, diffMatrix, diffIdentity, evalBatchFixRunId]);
 
   // EvalDiffOverlay reads `skill.evals.iterations` for timestamps. We don't
   // have the full Skill record on this screen — pass an empty stub so the
@@ -607,6 +1089,15 @@ function EvalRunScreen({
   ];
 
   const isRunning = agentRun.status === 'running' || agentRun.status === 'pending';
+  // Batch is "settled" when no run is still in flight — covers `done`
+  // (every run completed) AND `failed` / `cancelled` (some runs failed
+  // or were stopped). The recap UI is meaningful in all three cases:
+  // the user wants to see the per-eval breakdown regardless of whether
+  // the batch was 100% successful.
+  const isSettled =
+    agentRun.status === 'done' ||
+    agentRun.status === 'failed' ||
+    agentRun.status === 'cancelled';
 
   const finishedCount = (evalRuns ?? []).filter(
     (r) => r.status === 'completed' || r.status === 'failed' || r.status === 'stopped',
@@ -642,7 +1133,7 @@ function EvalRunScreen({
         onBack={onClose}
         onStop={isRunning ? handleEvalStop : undefined}
         onFinish={
-          agentRun.status === 'done'
+          isSettled
             ? () => {
                 for (const id of runIds) {
                   void window.nakiros.finishEvalRun(id).catch(() => undefined);
@@ -658,11 +1149,12 @@ function EvalRunScreen({
       />
 
       <div className="flex flex-1 overflow-hidden">
-        {agentRun.status === 'done' ? (
+        {isSettled ? (
           // Recap takes over the full viewport once every run in the batch
-          // has reached a terminal state. It pulls its own data (matrix +
-          // baselines + assertions per row) and exposes the next-step
-          // actions (View diff, Fix regression, Re-run on untested model).
+          // has reached a terminal state — done / failed / cancelled. It
+          // pulls its own data (matrix + baselines + assertions per row)
+          // and exposes the next-step actions (View diff, Fix regression,
+          // Re-run on untested model).
           <EvalRunRecap
             agentRun={agentRun}
             runs={evalRuns ?? []}
@@ -716,9 +1208,26 @@ function EvalRunScreen({
         <EvalDiffOverlay
           matrix={diffMatrix}
           skill={diffSkillStub}
-          initialIteration={diffIteration}
+          // The recap reports the raw iteration number (per-fix-session
+          // counter when this batch came from a fix). The merged matrix
+          // stores fix-temp iters at index `raw + fixTempOffset` to avoid
+          // collisions, so we shift here when applicable.
+          initialIteration={
+            evalBatchFixRunId !== null && diffFixTempOffset !== null
+              ? diffIteration + diffFixTempOffset
+              : diffIteration
+          }
           baseRequest={matrixRequestFromIdentity(diffIdentity)}
-          onClose={() => setDiffIteration(null)}
+          fixRunId={evalBatchFixRunId ?? undefined}
+          fixTempOffset={diffFixTempOffset ?? undefined}
+          onClose={() => {
+            setDiffIteration(null);
+            // Reset the cached matrix so a re-open refetches both prod
+            // and fix-temp (the user may have run new evals between two
+            // openings).
+            setDiffMatrix(null);
+            setDiffFixTempOffset(null);
+          }}
         />
       )}
     </div>

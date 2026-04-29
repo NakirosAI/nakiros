@@ -211,6 +211,21 @@ export interface RunnerSpec<TRun extends BaseRun, TStartReq, TEvent, TExtras> {
    * so a `helpers.fail()` mid-turn doesn't leak a timer.
    */
   afterStart?(entry: RunEntry<TRun, TEvent, TExtras>): void;
+
+  /**
+   * Optional. Called for every `tool_use` block streamed by the agent,
+   * AFTER the generic `{ type: 'tool', name, display }` event has been
+   * emitted. Receives the raw `input` so kind-specific runners can extract
+   * tool args and emit additional structured events.
+   *
+   * Used by the fix-runner to detect `Write` / `Edit` and emit `fix_edit`
+   * events for the inline diff cards. Other runners omit it.
+   */
+  afterToolUse?(
+    entry: RunEntry<TRun, TEvent, TExtras>,
+    name: string,
+    input: Record<string, unknown>,
+  ): void;
 }
 
 /** Public surface of a runner instance. */
@@ -321,12 +336,22 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       onText: (text) => {
         assistantText += text;
         blocks!.push({ type: 'text', text });
-        entry.eventLog.emit({ type: 'text', text } as unknown as TEvent);
+        // Stamp `ts` at emission so the frontend's buffered-event replay
+        // (after a refresh / reconnect) shows the real time the agent
+        // produced this chunk — not the time the user happened to reload
+        // the page. Persisted into events.jsonl for cross-process replay.
+        entry.eventLog.emit({ type: 'text', text, ts: new Date().toISOString() } as unknown as TEvent);
       },
-      onTool: (name, display) => {
+      onTool: (name, display, input) => {
         tools.push({ name, display });
         blocks!.push({ type: 'tool', name, display });
-        entry.eventLog.emit({ type: 'tool', name, display } as unknown as TEvent);
+        entry.eventLog.emit({
+          type: 'tool',
+          name,
+          display,
+          ts: new Date().toISOString(),
+        } as unknown as TEvent);
+        spec.afterToolUse?.(entry, name, input);
       },
       onUsage: (totalTokens) => {
         run.tokensUsed += totalTokens;

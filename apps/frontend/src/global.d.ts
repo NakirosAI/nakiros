@@ -37,6 +37,9 @@ import type {
   AnalyzeConvoRun,
   AnalyzeConvoRunEvent,
   FixBenchmarks,
+  FixEdit,
+  FixTimelineEntry,
+  FixUsage,
   SkillAgentTempFileEntry,
   SkillAgentTempFileContent,
   EvalMatrix,
@@ -231,6 +234,10 @@ declare global {
       getFixBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onFixEvent(cb: (event: AuditRunEvent) => void): () => void;
       listFixDiff(runId: string): Promise<SkillDiffEntry[]>;
+      getFixEditsHistory(runId: string): Promise<FixEdit[]>;
+      getFixTimeline(runId: string): Promise<FixTimelineEntry[]>;
+      getFixTempMatrix(runId: string): Promise<EvalMatrix>;
+      getFixUsage(runId: string): Promise<FixUsage>;
       readFixDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
 
       // Create (skill-factory "create" command)

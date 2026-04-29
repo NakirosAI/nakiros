@@ -25,6 +25,7 @@ import type {
 import { CURRENT_MODEL_FULL_IDS, CLAUDE_MODEL_LABELS, isClaudeModelId } from '@nakiros/shared';
 import { launchEvalBatch, launchFix, type OpenRunTabCallback } from '../../lib/run-launcher';
 import type { SkillTabIdentity } from '../../hooks/useTabs';
+import { useActiveFixForSkill } from '../../hooks/useAgentRun';
 import { formatTokens } from '../../utils/format';
 
 interface EvalRunRecapProps {
@@ -209,8 +210,10 @@ export default function EvalRunRecap({
     }
   };
 
+  const activeFix = useActiveFixForSkill(identity);
+
   const handleFixRegression = async () => {
-    if (!identity || !onOpenRunTab) return;
+    if (!identity || !onOpenRunTab || activeFix) return;
     await launchFix(identity, onOpenRunTab);
   };
 
@@ -369,17 +372,23 @@ export default function EvalRunRecap({
             {variant === 'skill-iteration' && regressionsList.length > 0 && (
               <NextStepCard
                 icon={<Wrench size={14} strokeWidth={2.25} />}
-                title={t('recap.actions.fixRegression.title', {
-                  defaultValue: 'Fix la régression sur {{names}}',
-                  names: regressionsList.join(', '),
-                })}
+                title={
+                  activeFix
+                    ? t('recap.actions.fixRegression.titleRunning', {
+                        defaultValue: 'Fix déjà en cours sur ce skill',
+                      })
+                    : t('recap.actions.fixRegression.title', {
+                        defaultValue: 'Fix la régression sur {{names}}',
+                        names: regressionsList.join(', '),
+                      })
+                }
                 subtitle={t('recap.actions.fixRegression.subtitle', {
                   defaultValue:
                     '{{count}} eval(s) en régression — lance un fix run pour les corriger.',
                   count: regressionsList.length,
                 })}
                 onClick={handleFixRegression}
-                disabled={!identity || !onOpenRunTab}
+                disabled={!identity || !onOpenRunTab || !!activeFix}
               />
             )}
             {variant === 'skill-iteration' && (
@@ -450,8 +459,11 @@ function pickHeroTone(
   variant: RecapVariant,
 ): HeroTone {
   let tone: HeroTone;
-  if (passRate >= 0.85) tone = 'good';
-  else if (passRate >= 0.5) tone = 'warn';
+  // Bands: >= 75% green, > 0% orange, 0% red. A run where every test
+  // fails is the only case that justifies the harsh red — anything that
+  // passes some tests is still salvageable and stays orange.
+  if (passRate >= 0.75) tone = 'good';
+  else if (passRate > 0) tone = 'warn';
   else tone = 'bad';
   if (variant === 'skill-iteration' && regressionsCount > 0 && tone === 'good') {
     tone = 'warn';
@@ -667,9 +679,9 @@ function PerEvalRowView({
   showVsBaseline: boolean;
 }) {
   const dotTone =
-    row.passRate >= 0.85
+    row.passRate >= 0.75
       ? 'bg-n-healthy'
-      : row.passRate >= 0.5
+      : row.passRate > 0
         ? 'bg-n-watch'
         : 'bg-n-critical';
   return (

@@ -180,7 +180,15 @@ export interface EvalMatrixMetrics {
  *   against skill iterations in the diff overlay, and see it on the
  *   sparkline as a distinct marker.
  */
-export type EvalIterationKind = 'skill' | 'baseline';
+/**
+ * - `'fix-temp'`: an iteration produced by a `fix:runEvalsInTemp` batch.
+ *   Lives in the same workspace as `'skill'` iterations so the matrix
+ *   surfaces the full evolution including in-progress fix experiments.
+ *   Carries `fixRunId` in `benchmark.json` so the lifecycle (finish →
+ *   promote latest to `'skill'` / reject → delete every iter of this
+ *   batch) can target them precisely.
+ */
+export type EvalIterationKind = 'skill' | 'baseline' | 'fix-temp';
 
 /** Complete eval matrix consumed by the Evolution view — iterations × evals grid + metrics. */
 export interface EvalMatrix {
@@ -249,6 +257,13 @@ export interface LoadIterationRunRequest {
   config: 'with_skill' | 'without_skill';
   /** Same role as on `GetEvalMatrixRequest` — points at the fix temp dir. */
   skillDirOverride?: string;
+  /**
+   * When set, loads the run from
+   * `<skillDir>/evals/.fix-temp/<fixRunId>/iteration-N/...` instead of the
+   * main `evals/workspace/`. Lets the diff overlay opened from a fix chat
+   * resolve fix-temp iterations alongside prod ones.
+   */
+  fixRunId?: string;
 }
 
 /** Full artefact bundle for a single iteration run (raw run + grading + outputs + diff + timing). */

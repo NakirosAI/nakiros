@@ -97,6 +97,9 @@ export function sweepOrphanNakirosProjectEntries(keep?: ReadonlySet<string>): Sw
       name.includes('-nakiros-runs-') ||
       name.includes('-nakiros-tmp-skills-') ||
       name.includes('-nakiros-sandboxes-') ||
+      // Baseline-only runs write artefacts under ~/.nakiros/baselines-tmp/batch-*/
+      // (global cache, not per-project) — encoded as `--nakiros-baselines-tmp-`.
+      name.includes('-nakiros-baselines-') ||
       name.includes('-evals-workspace-iteration-') ||
       // Comparison evals (A/B/C across models) — same shape as iteration
       // workspaces but rooted under `evals/comparisons/<ts>/<model>/eval-*`.

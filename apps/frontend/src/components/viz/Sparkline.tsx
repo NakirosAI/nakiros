@@ -23,13 +23,13 @@ interface SparklineProps {
   /** Optional accessible label — set when the sparkline isn't purely decorative. */
   ariaLabel?: string;
   /**
-   * Marker hint per data point. When a position is `'baseline'`, the
-   * sparkline overlays a small violet dot at that x to flag it as a
-   * baseline iteration (vs. a regular skill iteration). Length should
-   * match `data`; missing entries render as plain skill points. Used by
-   * the eval matrix to make baseline runs visible on the trend line.
+   * Marker hint per data point. Overlays a colored dot per kind:
+   *  - `'baseline'` → violet (without_skill refresh)
+   *  - `'fix-temp'` → amber (in-progress fix experiment)
+   * Plain `'skill'` entries render without a marker. Length should
+   * match `data`; missing entries render as plain skill points.
    */
-  markers?: ReadonlyArray<'skill' | 'baseline'>;
+  markers?: ReadonlyArray<'skill' | 'baseline' | 'fix-temp'>;
 }
 
 /**
@@ -47,6 +47,8 @@ interface SparklineProps {
  */
 /** Violet baseline marker — distinct from the accent line color. */
 const BASELINE_MARKER_COLOR = 'oklch(0.62 0.21 295)';
+/** Amber `fix-temp` marker — same hue as the watch tone for visibility. */
+const FIX_TEMP_MARKER_COLOR = 'oklch(0.74 0.16 75)';
 
 export default function Sparkline({
   data,
@@ -110,23 +112,26 @@ export default function Sparkline({
         strokeLinejoin="round"
         strokeLinecap="round"
       />
-      {/* Baseline markers — small violet dots overlaid at each baseline
-          iteration's x. The line still passes through the point, the dot
-          just flags it visually. */}
+      {/* Per-kind markers — small colored dots overlaid at each special
+          iteration's x. Violet for baseline, amber for fix-temp. The line
+          still passes through the point; the dot just flags it visually. */}
       {markers &&
-        markers.map((kind, i) =>
-          kind === 'baseline' && geometry.points[i] ? (
+        markers.map((kind, i) => {
+          if (!geometry.points[i]) return null;
+          if (kind !== 'baseline' && kind !== 'fix-temp') return null;
+          const color = kind === 'baseline' ? BASELINE_MARKER_COLOR : FIX_TEMP_MARKER_COLOR;
+          return (
             <circle
-              key={`baseline-${i}`}
+              key={`marker-${i}`}
               cx={geometry.points[i]![0]}
               cy={geometry.points[i]![1]}
               r="2.6"
-              fill={BASELINE_MARKER_COLOR}
+              fill={color}
               stroke="var(--n-bg-canvas)"
               strokeWidth={1}
             />
-          ) : null,
-        )}
+          );
+        })}
       {dot && (
         <circle cx={geometry.last[0]} cy={geometry.last[1]} r="2.5" fill={stroke} />
       )}

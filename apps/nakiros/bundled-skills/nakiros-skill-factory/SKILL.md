@@ -220,6 +220,60 @@ When Nakiros invokes `fix`, your cwd is a TEMPORARY copy of the skill. The user 
 
 Between turns, read `./evals/workspace/iteration-N/benchmark.json` (highest N) to check whether your last fix improved or regressed the skill. If it regressed, revert the change and try a different approach BEFORE telling the user the fix is ready.
 
+### Live progress artefacts (Nakiros-invoked only)
+
+In addition to editing the skill files, you MUST write two append-only JSONL files in `./outputs/` so Nakiros can drive its live sidebar. These files are workdir-only — they never get synced back to the real skill.
+
+#### 1. `outputs/fix-targets.jsonl` — the fix checklist
+
+Right after reading the latest audit and the latest eval iteration, write **one line per actionable fix item** you intend to address. Use the `Write` tool (read first if the file already exists, append your lines, write back) — do NOT shell `>>` redirect.
+
+Each line is a JSON object:
+
+```json
+{ "id": "<stable-slug>", "title": "<imperative action>", "source": "<provenance>", "status": "todo" }
+```
+
+- `id` — short stable slug, unique per run (e.g. `boundary-section`, `restate-intent-trigger`). Used to flip status later.
+- `title` — short imperative action shown in the sidebar (e.g. `Add boundary section`, `Add restate-intent trigger`). Keep it under ~50 chars.
+- `source` — provenance hint, optional. Use `audit:<checkId>` (e.g. `audit:safety.boundary`) when the target comes from a failed audit check, or `eval:iteration-N` when it comes from a failed eval assertion.
+- `status` — always `"todo"` for the initial registration.
+
+When you finish working on a target, **append a second line** with the same `id` and `status: "done"`:
+
+```json
+{ "id": "boundary-section", "status": "done" }
+```
+
+The reducer is last-line-wins per `id`. Do not rewrite the file — append only.
+
+#### 2. `outputs/fix-findings.jsonl` — observations during the fix
+
+When you discover something noteworthy while reading the skill or running tools, append a line. Examples of "noteworthy":
+
+- A **missing section** that the audit flagged but you haven't seen yet
+- A **contradictory instruction** between SKILL.md and a reference file
+- A **scope drift** between the skill and its evals (skill no longer produces output X, but evals.json still asserts on X)
+- An **audit obsolescence** (audit references files that no longer exist, or a previous version of the skill)
+- A **stale fixture** in `evals/files/` that still mentions removed behavior
+- A **script that doesn't exist** even though SKILL.md or evals reference it
+
+Each line is:
+
+```json
+{ "code": "<UPPER_SNAKE>", "title": "<one-line headline>", "detail": "<optional longer context>" }
+```
+
+- `code` — short uppercase identifier (e.g. `BOUNDARY_MISSING`, `SCOPE_DRIFT`, `AUDIT_STALE`, `STALE_FIXTURE`). Reuse the same code if you observe the same class of issue twice — Nakiros groups by code.
+- `title` — one-line headline rendered as the card title. Under ~80 chars.
+- `detail` — optional longer body. Skip unless it adds something the title doesn't.
+
+Do NOT add a `ts` field — Nakiros stamps the emission time itself when it observes the line. Anything you write there is overwritten.
+
+Findings are append-only and have no "done" semantics — they are a narrative log, not a checklist. Use targets for actionable items, findings for observations.
+
+If no audit / eval data exists at the start of the fix, you can skip the targets file until the user clarifies what to fix. Findings can still be emitted any time you discover something concrete.
+
 ## Improving from execution feedback
 
 1. **Understand** — Ask the user to describe: what happened, what was expected, and the exact prompt/output if possible.

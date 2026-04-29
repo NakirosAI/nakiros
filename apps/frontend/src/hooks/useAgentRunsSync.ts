@@ -73,6 +73,12 @@ function batchKey(run: SkillEvalRun): string {
     run.marketplaceName ?? '',
     run.skillName,
     run.iteration,
+    // Disambiguate fix-temp batches from prod batches: fix-temp evals
+    // restart their iteration counter at 1 per fix session, so without
+    // this discriminator a fix-temp `iter 1` would collide with a prod
+    // `iter 1` (same `agentRunStore` id → dismissed prod batches in
+    // `dismissedIds` could shadow live fix-temp batches).
+    run.fixRunId ?? '',
   ].join('|');
 }
 

@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   FileText,
   FlaskConical,
-  GitCompare,
   Play,
   RefreshCw,
   ShieldCheck,
@@ -24,6 +23,7 @@ import {
   loadSkillByIdentity,
 } from '../lib/skill-identity';
 import { launchAudit, launchFix, type OpenRunTabCallback } from '../lib/run-launcher';
+import { useActiveFixForSkill } from '../hooks/useAgentRun';
 
 interface Props {
   /** Cross-scope identity of the skill — drives every IPC call. */
@@ -98,6 +98,10 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
 
   const [isLaunchingAudit, setIsLaunchingAudit] = useState(false);
   const [isLaunchingFix, setIsLaunchingFix] = useState(false);
+  // True when a fix run is already in-flight for this skill — every Fix
+  // trigger on this screen disables itself in that case to avoid stacking
+  // sandboxes (only ONE fix per skill is supported by the runner today).
+  const activeFix = useActiveFixForSkill(identity);
 
   const handleLaunchAudit = async () => {
     if (!onOpenRunTab || isLaunchingAudit) return;
@@ -112,7 +116,7 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
   };
 
   const handleLaunchFix = async () => {
-    if (!onOpenRunTab || isLaunchingFix) return;
+    if (!onOpenRunTab || isLaunchingFix || activeFix) return;
     setIsLaunchingFix(true);
     try {
       await launchFix(identity, onOpenRunTab);
@@ -169,11 +173,20 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
           </button>
           <button
             type="button"
-            disabled={!onOpenRunTab || isLaunchingFix}
+            disabled={!onOpenRunTab || isLaunchingFix || !!activeFix}
             onClick={handleLaunchFix}
+            title={
+              activeFix
+                ? t('fixAlreadyRunning', {
+                    defaultValue: 'A fix is already running on this skill.',
+                  })
+                : undefined
+            }
             className={
               'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-2.5 font-n-mono text-[11.5px] text-n-accent ' +
-              (onOpenRunTab && !isLaunchingFix ? 'hover:bg-n-accent-soft' : 'opacity-60')
+              (onOpenRunTab && !isLaunchingFix && !activeFix
+                ? 'hover:bg-n-accent-soft'
+                : 'opacity-60')
             }
           >
             {isLaunchingFix ? (
@@ -183,7 +196,9 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
             )}
             {isLaunchingFix
               ? t('starting', { defaultValue: 'Starting…' })
-              : t('runFix', { defaultValue: 'Fix' })}
+              : activeFix
+                ? t('fixRunning', { defaultValue: 'Fix running' })
+                : t('runFix', { defaultValue: 'Fix' })}
           </button>
         </div>
       </div>
@@ -204,7 +219,12 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
           </div>
         )}
         {!skillError && skill && tab === 'audit' && (
-          <AuditTab identity={identity} skill={skill} />
+          <AuditTab
+            identity={identity}
+            skill={skill}
+            onOpenRunTab={onOpenRunTab}
+            activeFix={activeFix}
+          />
         )}
         {!skillError && skill && tab === 'evals' && (
           <EvalMatrixGrid
@@ -215,7 +235,11 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
           />
         )}
         {!skillError && skill && tab === 'fix' && (
-          <FixTab identity={identity} onOpenRunTab={onOpenRunTab} />
+          <FixTab
+            identity={identity}
+            onOpenRunTab={onOpenRunTab}
+            activeFix={activeFix}
+          />
         )}
         {!skillError && skill && tab === 'files' && (
           <SkillFilesTab identity={identity} skill={skill} />
@@ -271,8 +295,30 @@ function Tab({
 
 // ── Audit tab ──────────────────────────────────────────────────────────────
 
-function AuditTab({ identity, skill }: { identity: SkillTabIdentity; skill: Skill }) {
+function AuditTab({
+  identity,
+  skill,
+  onOpenRunTab,
+  activeFix,
+}: {
+  identity: SkillTabIdentity;
+  skill: Skill;
+  onOpenRunTab?: OpenRunTabCallback;
+  activeFix?: ReturnType<typeof useActiveFixForSkill>;
+}) {
   const { t } = useTranslation('skills');
+  const [isLaunchingFixFromAudit, setIsLaunchingFixFromAudit] = useState(false);
+  const handleFixFromAudit = async () => {
+    if (!onOpenRunTab || isLaunchingFixFromAudit || activeFix) return;
+    setIsLaunchingFixFromAudit(true);
+    try {
+      await launchFix(identity, onOpenRunTab);
+    } catch (err) {
+      console.error('[skill] launchFix from audit failed', err);
+    } finally {
+      setIsLaunchingFixFromAudit(false);
+    }
+  };
   const [history, setHistory] = useState<AuditHistoryEntry[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [selected, setSelected] = useState<AuditHistoryEntry | null>(null);
@@ -380,11 +426,32 @@ function AuditTab({ identity, skill }: { identity: SkillTabIdentity; skill: Skil
             />
             <button
               type="button"
-              disabled
-              className="inline-flex h-9 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[12px] text-n-accent opacity-60"
+              disabled={!onOpenRunTab || isLaunchingFixFromAudit || !!activeFix}
+              onClick={handleFixFromAudit}
+              title={
+                activeFix
+                  ? t('fixAlreadyRunning', {
+                      defaultValue: 'A fix is already running on this skill.',
+                    })
+                  : undefined
+              }
+              className={
+                'inline-flex h-9 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[12px] text-n-accent ' +
+                (onOpenRunTab && !isLaunchingFixFromAudit && !activeFix
+                  ? 'hover:bg-n-accent-soft'
+                  : 'opacity-60')
+              }
             >
-              <Wrench size={13} strokeWidth={2} />
-              {t('auditTab.fixFromAudit', { defaultValue: 'Fix from this audit' })}
+              {isLaunchingFixFromAudit ? (
+                <RefreshCw size={13} strokeWidth={2} className="animate-spin" />
+              ) : (
+                <Wrench size={13} strokeWidth={2} />
+              )}
+              {isLaunchingFixFromAudit
+                ? t('starting', { defaultValue: 'Starting…' })
+                : activeFix
+                  ? t('fixRunning', { defaultValue: 'Fix running' })
+                  : t('auditTab.fixFromAudit', { defaultValue: 'Fix from this audit' })}
             </button>
           </div>
         </div>
@@ -430,15 +497,17 @@ function AuditTab({ identity, skill }: { identity: SkillTabIdentity; skill: Skil
 function FixTab({
   identity,
   onOpenRunTab,
+  activeFix,
 }: {
   identity: SkillTabIdentity;
   onOpenRunTab?: OpenRunTabCallback;
+  activeFix?: ReturnType<typeof useActiveFixForSkill>;
 }) {
   const { t } = useTranslation('skills');
   const [isLaunching, setIsLaunching] = useState(false);
 
   const handleLaunch = async () => {
-    if (!onOpenRunTab || isLaunching) return;
+    if (!onOpenRunTab || isLaunching || activeFix) return;
     setIsLaunching(true);
     try {
       await launchFix(identity, onOpenRunTab);
@@ -473,11 +542,20 @@ function FixTab({
             <div className="mt-3.5 flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!onOpenRunTab || isLaunching}
+                disabled={!onOpenRunTab || isLaunching || !!activeFix}
                 onClick={handleLaunch}
+                title={
+                  activeFix
+                    ? t('fixAlreadyRunning', {
+                        defaultValue: 'A fix is already running on this skill.',
+                      })
+                    : undefined
+                }
                 className={
                   'inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[12px] text-n-accent ' +
-                  (onOpenRunTab && !isLaunching ? 'hover:bg-n-accent-soft' : 'opacity-60')
+                  (onOpenRunTab && !isLaunching && !activeFix
+                    ? 'hover:bg-n-accent-soft'
+                    : 'opacity-60')
                 }
               >
                 {isLaunching ? (
@@ -487,15 +565,9 @@ function FixTab({
                 )}
                 {isLaunching
                   ? t('starting', { defaultValue: 'Starting…' })
-                  : t('fixTab.run', { defaultValue: 'Lancer le fix' })}
-              </button>
-              <button
-                type="button"
-                disabled
-                className="inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-3 font-n-mono text-[12px] text-n-muted opacity-60"
-              >
-                <GitCompare size={12} strokeWidth={2} />
-                {t('fixTab.viewLastDiff', { defaultValue: 'Voir le dernier diff' })}
+                  : activeFix
+                    ? t('fixRunning', { defaultValue: 'Fix running' })
+                    : t('fixTab.run', { defaultValue: 'Lancer le fix' })}
               </button>
             </div>
           </div>

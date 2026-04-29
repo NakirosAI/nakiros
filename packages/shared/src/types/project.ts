@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AuditCheckOutcome, AuditManifest } from './audit-checks.js';
+import type { FixEvalResult, FixFinding, FixTarget } from './fix-progress.js';
 
 /** Supported AI coding agents that Nakiros can scan for projects and skills. */
 export type ProviderType = 'claude' | 'gemini' | 'cursor' | 'codex';
@@ -487,6 +488,16 @@ export interface SkillEvalRun {
   /** Wall-clock boundaries. */
   startedAt: string;
   finishedAt: string | null;
+  /**
+   * Set when this run was launched from a fix session via
+   * `fix:runEvalsInTemp`. Carries the parent fix's `runId` so the frontend
+   * can disambiguate fix-temp eval batches (per-fix-session iteration
+   * counter starting at 1) from prod eval batches that happen to share
+   * the same `iteration` number — without it, both would group under the
+   * same `(scope+skill+iteration)` key and dismissed prod batches could
+   * shadow live fix-temp batches.
+   */
+  fixRunId?: string;
   /** Any error message that occurred. */
   error: string | null;
   /**
@@ -495,6 +506,15 @@ export interface SkillEvalRun {
    * Cleared by a successful turn. Drives the "Reprendre" button in the UI.
    */
   interruptedByReboot?: boolean;
+  /**
+   * Set when the batch was launched with `skillDirOverride` (typically by
+   * `fix:runEvalsInTemp` against the fix's temp workdir). Lets the
+   * frontend forward the same override when loading the matrix /
+   * iteration artefacts so it reads from the temp dir rather than the
+   * real skill dir — otherwise the recap shows 0 assertions because the
+   * iteration lives in the temp tree only.
+   */
+  skillDirOverride?: string | null;
 }
 
 /** Output file metadata surfaced in the eval UI (size + mtime, no content). */
@@ -521,8 +541,8 @@ export interface EvalRunEvent {
   runId: string;
   event:
     | { type: 'status'; status: EvalRunStatus }
-    | { type: 'text'; text: string }
-    | { type: 'tool'; name: string; display: string }
+    | { type: 'text'; text: string; ts?: string }
+    | { type: 'tool'; name: string; display: string; ts?: string }
     | { type: 'tokens'; tokensUsed: number }
     | { type: 'waiting_for_input'; lastAssistantText: string }
     | { type: 'done'; exitCode: number; error?: string }
@@ -586,11 +606,25 @@ export interface StartEvalRunRequest {
   /** Max number of runs executing in parallel. Defaults to 4 if omitted. */
   maxConcurrent?: number;
   /**
-   * Override the resolved skill directory. Used by fix runs to evaluate the
-   * modified copy in the temp workdir BEFORE syncing to the real skill.
-   * When set, the eval runs write results into this directory's evals/workspace/.
+   * Override the resolved skill directory used as the *execution context*
+   * for the eval (the SKILL.md / references / evals.json the agent reads
+   * come from here, not the real skill dir). Used by fix runs so the
+   * agent evaluates the in-progress modified copy.
+   *
+   * Important: artefacts (`iteration-N/`) are still written to the real
+   * skill workspace (resolved from scope+skillName), so the matrix shows
+   * a unified history regardless of the eval source. Use {@link fixRunId}
+   * to tag the iteration as `'fix-temp'` and let lifecycle hooks promote
+   * (on Finish) or delete (on Reject) the iter accordingly.
    */
   skillDirOverride?: string;
+  /**
+   * When set, the iteration is tagged `kind: 'fix-temp'` in `benchmark.json`
+   * with this `fixRunId` so a later `fix:finish` can promote the latest to
+   * `'skill'` and `fix:stopRun` (reject) can delete every iter of the
+   * batch from the real workspace. Set by `fix:runEvalsInTemp`.
+   */
+  fixRunId?: string;
   /**
    * Claude model id to pass as `--model` to the CLI subprocess (e.g.
    * `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5`). When omitted
@@ -687,6 +721,18 @@ export interface AuditRun {
    * initialise to an empty array.
    */
   checkResults?: AuditCheckOutcome[];
+  /**
+   * Reduced-state fix targets derived from `outputs/fix-targets.jsonl` (the
+   * agent's append-only checklist). Only populated for fix runs — never for
+   * audit runs, even though they share the {@link AuditRun} shape. Drives
+   * the "Targets from audit" sidebar.
+   */
+  targets?: FixTarget[];
+  /**
+   * Append-only narrative findings the agent emitted during the fix
+   * (`outputs/fix-findings.jsonl`). Only populated for fix runs.
+   */
+  findings?: FixFinding[];
 }
 
 /**
@@ -733,8 +779,8 @@ export interface AnalyzeConvoRunEvent {
   runId: string;
   event:
     | { type: 'status'; status: AnalyzeConvoRunStatus }
-    | { type: 'text'; text: string }
-    | { type: 'tool'; name: string; display: string }
+    | { type: 'text'; text: string; ts?: string }
+    | { type: 'tool'; name: string; display: string; ts?: string }
     | { type: 'tokens'; tokensUsed: number }
     | { type: 'waiting_for_input'; lastAssistantText: string }
     | { type: 'done'; exitCode: number; error?: string; reportPath?: string }
@@ -752,8 +798,8 @@ export interface AuditRunEvent {
   runId: string;
   event:
     | { type: 'status'; status: AuditRunStatus }
-    | { type: 'text'; text: string }
-    | { type: 'tool'; name: string; display: string }
+    | { type: 'text'; text: string; ts?: string }
+    | { type: 'tool'; name: string; display: string; ts?: string }
     | { type: 'tokens'; tokensUsed: number }
     | { type: 'waiting_for_input'; lastAssistantText: string }
     | { type: 'done'; exitCode: number; error?: string; reportPath?: string }
@@ -769,6 +815,25 @@ export interface AuditRunEvent {
      * and updates the per-section progress + findings live panel.
      */
     | { type: 'check_result'; outcome: AuditCheckOutcome }
+    /**
+     * Reduced-state target snapshot for fix runs. Emitted whenever
+     * `outputs/fix-targets.jsonl` grows; carries the full effective list so
+     * the consumer doesn't need to replay individual entries to compute
+     * todo/done state. Frontend assigns to `run.targets`.
+     */
+    | { type: 'fix_targets'; targets: FixTarget[] }
+    /**
+     * One newly observed finding from `outputs/fix-findings.jsonl`. Frontend
+     * appends to `run.findings`.
+     */
+    | { type: 'fix_finding'; finding: FixFinding }
+    /**
+     * One eval result emitted when a `runFixEvalsInTemp` batch completes.
+     * Frontend appends a card to the fix timeline. Persisted in
+     * `outputs/fix-eval-results.jsonl` for replay; broadcast lazily by the
+     * fix-runner watcher (`scheduleFixEvalBatchWatcher`).
+     */
+    | { type: 'fix_eval_result'; result: FixEvalResult }
     /**
      * Handler-level failure broadcast by `withBroadcastOnError`. See
      * `EvalRunEvent`'s `error` variant for the contract — same semantics
@@ -805,6 +870,43 @@ export interface FixBenchmarkSnapshot {
 export interface FixBenchmarks {
   real: FixBenchmarkSnapshot | null;
   temp: FixBenchmarkSnapshot | null;
+}
+
+/**
+ * Per-kind raw token totals + the billed-equivalent and agent-active timer
+ * surfaced by the fix screen header. Computed on demand from the fix run's
+ * Claude Code session JSONL (the source of truth — the runner's own token
+ * tally drops cache_read / cache_creation today).
+ *
+ * `billedEquivalent` weighs each kind by its Anthropic pricing multiplier
+ * relative to base input (see `docs/decisions/token-accounting.md`):
+ *   input ×1, output ×5, cache_read ×0.1, cache_creation_5m ×1.25,
+ *   cache_creation_1h ×2. Surfaced as a single number in the "Tokens" stat
+ *   so users see a coherent cost signal regardless of cache hit rate.
+ *
+ * `agentActiveMs` is the sum of (assistant_ts − prev_user_ts) intervals
+ * over the session — i.e. wall-clock time the model actually spent
+ * generating, excluding user-input pauses. Frozen when the run is
+ * `waiting_for_input` or terminal.
+ */
+export interface FixUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreation5m: number;
+  cacheCreation1h: number;
+  /** Sum of all four token kinds without weighting — the raw context size. */
+  rawTotal: number;
+  /** Pricing-weighted sum surfaced in the header "Tokens" stat. */
+  billedEquivalent: number;
+  /** Agent-active wall-clock time over the run, excluding user-input pauses. */
+  agentActiveMs: number;
+  /** Timestamp of the last assistant turn parsed from the JSONL, or null when none. */
+  lastAssistantTurnAt: string | null;
+  /** Timestamp of the last user message parsed from the JSONL, or null when none. */
+  lastUserMessageAt: string | null;
+  /** Number of completed assistant turns observed in the session. */
+  assistantTurns: number;
 }
 
 /**

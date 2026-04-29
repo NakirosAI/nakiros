@@ -330,6 +330,10 @@ const client = {
   onFixEvent: (cb: (event: unknown) => void) => subscribe(C['fix:event'], cb),
   listFixDiff: (runId: string) => invoke(C['fix:listDiff'], runId),
   readFixDiffFile: (runId: string, relativePath: string) => invoke(C['fix:readDiffFile'], runId, relativePath),
+  getFixEditsHistory: (runId: string) => invoke(C['fix:getEditsHistory'], runId),
+  getFixTimeline: (runId: string) => invoke(C['fix:getTimeline'], runId),
+  getFixTempMatrix: (runId: string) => invoke(C['fix:getFixTempMatrix'], runId),
+  getFixUsage: (runId: string) => invoke(C['fix:getUsage'], runId),
 
   // Create
   startCreate: (request: unknown) => invoke(C['create:start'], request),

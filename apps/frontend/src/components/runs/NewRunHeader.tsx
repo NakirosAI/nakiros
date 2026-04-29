@@ -7,7 +7,6 @@ import {
   GitCompare,
   Plus,
   RefreshCw,
-  RotateCw,
   ShieldCheck,
   Square,
   Wrench,
@@ -28,8 +27,6 @@ interface NewRunHeaderProps {
   onStop?: () => void;
   /** Finish button shown once completed (audit / fix / create). */
   onFinish?: () => void;
-  /** Resume button shown when waiting / interrupted (sends a `--resume` continuation). */
-  onResume?: () => void;
   /** When true, the Stop button shows a spinner + "Stopping…" copy and
    *  disables itself to block double-clicks. */
   isStopping?: boolean;
@@ -61,7 +58,6 @@ export default function NewRunHeader({
   onBack,
   onStop,
   onFinish,
-  onResume,
   isStopping = false,
   progressPct,
   stepTotal,
@@ -141,18 +137,10 @@ export default function NewRunHeader({
           </div>
         )}
 
-        {(onResume || onStop || onFinish) && (
+        {(onStop || onFinish) && (
           <>
             <span className="h-3.5 w-px bg-n-border-subtle" />
             <div className="flex flex-shrink-0 gap-1.5">
-              {onResume && (status === 'awaiting_input' || status === 'cancelled') && (
-                <ActionButton
-                  icon={<RotateCw size={12} strokeWidth={2.25} />}
-                  label={t('resume', { defaultValue: 'Resume' })}
-                  tone="primary"
-                  onClick={onResume}
-                />
-              )}
               {onStop && (status === 'running' || status === 'pending') && (
                 <ActionButton
                   icon={

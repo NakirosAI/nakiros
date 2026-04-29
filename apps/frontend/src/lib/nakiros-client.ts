@@ -296,6 +296,9 @@ const client = {
   getEvalMatrix: (request: unknown) => invoke(C['eval:getMatrix'], request),
   loadIterationRun: (request: unknown) => invoke(C['eval:loadIterationRun'], request),
   listEvalBaselines: (request: unknown) => invoke(C['eval:listBaselines'], request),
+  getEvalTimeline: (runId: string) => invoke(C['eval:getTimeline'], runId),
+  getEvalIterationUsage: (runId: string) => invoke(C['eval:getIterationUsage'], runId),
+  getEvalBatchUsage: (runIds: string[]) => invoke(C['eval:getBatchUsage'], runIds),
 
   // Eval model comparison
   runModelComparison: (request: unknown) => invoke(C['comparison:run'], request),
@@ -314,6 +317,8 @@ const client = {
   listActiveAuditRuns: () => invoke(C['audit:listActive']),
   listAllAuditRuns: () => invoke(C['audit:listAll']),
   getAuditBufferedEvents: (runId: string) => invoke(C['audit:getBufferedEvents'], runId),
+  getAuditTimeline: (runId: string) => invoke(C['audit:getTimeline'], runId),
+  getAuditUsage: (runId: string) => invoke(C['audit:getUsage'], runId),
   onAuditEvent: (cb: (event: unknown) => void) => subscribe(C['audit:event'], cb),
 
   // Fix

@@ -53,3 +53,16 @@ export {
   writeExecutionSettings,
   type ExecutionSettingsOptions,
 } from './execution-settings.js';
+export {
+  getSessionJsonlPath,
+  parseSessionBlocks,
+  isCommandWrapperText,
+  pickUserFreeText,
+  type SessionBlock,
+} from './session-jsonl.js';
+export {
+  computeSessionUsage,
+  aggregateSessionUsage,
+  EMPTY_SESSION_USAGE,
+  TOKEN_MULTIPLIER,
+} from './session-usage.js';

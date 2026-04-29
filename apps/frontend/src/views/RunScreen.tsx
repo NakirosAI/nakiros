@@ -5,6 +5,7 @@ import type {
   AgentRunKind,
   AuditRun,
   AuditRunEvent,
+  ChatTimelineEntry,
   EvalMatrix,
   FixEvalResult,
   FixTimelineEntry,
@@ -201,10 +202,13 @@ function RunScreenBody({
   const { t } = useTranslation('runs');
   const [reportContent, setReportContent] = useState<string | null>(null);
   // Unified timeline derived from Claude Code's session jsonl — sole
-  // source of truth for the fix conversation view. Replaces the prior
-  // patchwork of `run.turns[*]` + live `text`/`tool` events + past edits.
-  // Audit / create still use the legacy live-event pipeline (their
-  // session jsonl story isn't ported yet).
+  // source of truth for the conversation view of fix and audit runs.
+  // Replaces the prior patchwork of `run.turns[*]` + live `text`/`tool`
+  // events + past edits. Eval / create still use the legacy live-event
+  // pipeline (their session jsonl story isn't ported yet).
+  //
+  // The widening to `FixTimelineEntry[]` covers both kinds — audit only
+  // populates the universal `user`/`assistant_text`/`tool` variants.
   const [fixTimeline, setFixTimeline] = useState<FixTimelineEntry[]>([]);
   // Bumped when an event lands that should force a fix-timeline refetch
   // outside the regular polling cadence (e.g. `fix_eval_result` arriving
@@ -303,17 +307,19 @@ function RunScreenBody({
     });
   }, [api, run.status, run.reportPath, reportContent]);
 
-  // Fetch the unified fix timeline from Claude Code's session jsonl. Sole
-  // source of truth for the chat view of a fix run — every entry carries
-  // its real ISO timestamp so the timeline survives a refresh hours later
-  // without artificial `Date.now()` stamping.
+  // Fetch the unified timeline from Claude Code's session jsonl. Sole
+  // source of truth for the chat view of fix + audit runs — every entry
+  // carries its real ISO timestamp so the timeline survives a refresh
+  // hours later without artificial `Date.now()` stamping.
   //
   // Polls every 1.5s while the run is RUNNING so new agent activity
   // appears within roughly the same delay as the daemon's live events
   // would have. On `waiting_for_input` / terminal we stop the timer —
   // the on-mount fetch + the status/turns effect cover the rest.
   useEffect(() => {
-    if (runKind !== 'fix' && runKind !== 'create') {
+    const useTimeline =
+      runKind === 'fix' || runKind === 'audit' || runKind === 'create';
+    if (!useTimeline) {
       setFixTimeline([]);
       return;
     }
@@ -322,15 +328,21 @@ function RunScreenBody({
       return;
     }
     let cancelled = false;
-    const fetchOnce = () =>
-      window.nakiros
-        .getFixTimeline(run.runId)
+    const fetchOnce = () => {
+      // Audit hits its own runner-backed IPC; fix and create both share
+      // the fix-runner registry, so they go through `getFixTimeline`.
+      const promise =
+        runKind === 'audit'
+          ? window.nakiros.getAuditTimeline(run.runId)
+          : window.nakiros.getFixTimeline(run.runId);
+      return promise
         .then((timeline) => {
           if (!cancelled) setFixTimeline(timeline);
         })
         .catch(() => {
           if (!cancelled) setFixTimeline([]);
         });
+    };
 
     void fetchOnce();
     const isLive = run.status === 'running' || run.status === 'starting';
@@ -347,24 +359,29 @@ function RunScreenBody({
   const isCompleted = run.status === 'completed';
   const isTerminal = isCompleted || run.status === 'failed' || run.status === 'stopped';
 
-  // Fix-only: pull the billed-equivalent token total + agent-active timer
+  // Fix + audit: pull the billed-equivalent token total + agent-active timer
   // from the Claude Code session JSONL. Bypasses the runner's own token
   // tally (which drops cache_read / cache_creation today). See
-  // `docs/decisions/token-accounting.md` for the policy.
+  // `docs/decisions/token-accounting.md` for the policy. Eval has its own
+  // batch-aggregated usage in the eval function below.
   const [fixUsage, setFixUsage] = useState<FixUsage | null>(null);
   useEffect(() => {
-    if (runKind !== 'fix') return;
+    if (runKind !== 'fix' && runKind !== 'audit') return;
     if (!run.sessionId) return;
     let cancelled = false;
-    const fetchOnce = () =>
-      window.nakiros
-        .getFixUsage(run.runId)
+    const fetchOnce = () => {
+      const promise =
+        runKind === 'audit'
+          ? window.nakiros.getAuditUsage(run.runId)
+          : window.nakiros.getFixUsage(run.runId);
+      return promise
         .then((u) => {
           if (!cancelled) setFixUsage(u);
         })
         .catch(() => {
           // best-effort — header just falls back to the legacy `run.tokensUsed`
         });
+    };
     void fetchOnce();
     // Poll while the agent could still emit turns. When the run is
     // waiting_for_input or terminal, one fetch on mount is enough — the
@@ -515,12 +532,13 @@ function RunScreenBody({
     }
   }
 
-  // Header stats. For fix runs we surface the **billed-equivalent**
-  // tokens + agent-active elapsed parsed from the session JSONL (see
-  // `docs/decisions/token-accounting.md`). Other run kinds keep the
-  // legacy `run.tokensUsed` + wall-clock elapsed until they migrate.
+  // Header stats. Fix and audit surface the **billed-equivalent** tokens +
+  // agent-active elapsed parsed from the session JSONL (see
+  // `docs/decisions/token-accounting.md`). Create still uses the legacy
+  // `run.tokensUsed` + wall-clock elapsed until it migrates.
   const stats: Array<{ label: string; value: string }> = [];
-  if (runKind === 'fix' && fixUsage) {
+  const useSessionUsage = (runKind === 'fix' || runKind === 'audit') && fixUsage;
+  if (useSessionUsage) {
     stats.push({ label: 'Tokens', value: formatTokens(fixUsage.billedEquivalent) });
     // While the agent is generating, tick from the run's startedAt-anchored
     // base by adding (now − last_user_ts) on top of the already-frozen
@@ -600,7 +618,9 @@ function RunScreenBody({
               turns={run.turns}
               liveEvents={liveEvents}
               isStreaming={isRunning}
-              fixTimeline={runKind === 'fix' ? fixTimeline : undefined}
+              timeline={
+                runKind === 'fix' || runKind === 'audit' ? fixTimeline : undefined
+              }
               onOpenEvalDiff={runKind === 'fix' ? setEvalDiffResult : undefined}
               skillName={runKind === 'fix' ? run.skillName : undefined}
             />
@@ -882,6 +902,19 @@ function EvalRunScreen({
   const [diffIteration, setDiffIteration] = useState<number | null>(null);
   const [diffMatrix, setDiffMatrix] = useState<EvalMatrix | null>(null);
   const [diffFixTempOffset, setDiffFixTempOffset] = useState<number | null>(null);
+  // Batch-aggregated billed-equivalent tokens + agent-active timer for
+  // the header stats. Sums every iteration's session JSONL — see
+  // `docs/decisions/token-accounting.md`. The legacy `aggregated.tokens`
+  // (sum of `tokensUsed` per run) drops cache_read / cache_creation, so
+  // we surface this when available and only fall back to the legacy
+  // sum during the brief window before the first poll resolves.
+  const [batchUsage, setBatchUsage] = useState<FixUsage | null>(null);
+  // Per-iteration timeline derived from the selected iteration's session
+  // jsonl — single source of truth, same pattern as fix/audit. Hoisted
+  // alongside the other useStates because React's hook order has to be
+  // stable across renders (the early-return on `!agentRun` below would
+  // skip this state otherwise → React error #310).
+  const [evalTimeline, setEvalTimeline] = useState<ChatTimelineEntry[]>([]);
 
   const runIds = useMemo(() => {
     if (agentRun?.meta?.kind === 'eval') return agentRun.meta.runIds;
@@ -916,6 +949,35 @@ function EvalRunScreen({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runIdsKey, agentRun?.status, refreshTick]);
+
+  // Fetch the batch-aggregated billed-equivalent + agent-active stats
+  // by summing every iteration's session JSONL. Polls 1.5s while any
+  // run in the batch could still emit turns; one fetch on settle is
+  // enough to capture the final totals.
+  useEffect(() => {
+    if (runIds.length === 0) {
+      setBatchUsage(null);
+      return;
+    }
+    let cancelled = false;
+    const fetchOnce = () =>
+      window.nakiros
+        .getEvalBatchUsage(runIds)
+        .then((u) => {
+          if (!cancelled) setBatchUsage(u);
+        })
+        .catch(() => {
+          // best-effort — header just falls back to the legacy aggregated tokens
+        });
+    void fetchOnce();
+    const isLive = agentRun?.status === 'running' || agentRun?.status === 'pending';
+    const timer = isLive ? setInterval(fetchOnce, 1500) : null;
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runIdsKey, agentRun?.status]);
 
   // Replay the buffered events for every run in the batch on mount,
   // then subscribe to the live event channel filtered by `runIds`. We
@@ -1059,6 +1121,45 @@ function EvalRunScreen({
     [diffIdentity],
   );
 
+  // Resolve the currently selected iteration. Hoisted above the early
+  // return because the timeline-fetch effect below depends on its fields
+  // — useEffect must always run in the same order on every render.
+  const selectedRun =
+    (evalRuns ?? []).find((r) => r.runId === selectedRunId) ?? (evalRuns ?? [])[0] ?? null;
+  const selectedEvalRunId = selectedRun?.runId ?? null;
+  const selectedEvalSessionId = selectedRun?.sessionId ?? null;
+  const selectedEvalStatus = selectedRun?.status ?? null;
+
+  // Fetch the selected iteration's timeline from its session jsonl.
+  // Switching iterations clears the previous timeline immediately so
+  // the chat doesn't flash the wrong run while the new fetch resolves.
+  // Until the run captures a `sessionId` (still queued / first turn
+  // before claude responds), the consumer falls back to the legacy
+  // `turns` + live event path so the chat isn't empty during the very
+  // first seconds.
+  useEffect(() => {
+    setEvalTimeline([]);
+    if (!selectedEvalRunId || !selectedEvalSessionId) return;
+    let cancelled = false;
+    const fetchOnce = () =>
+      window.nakiros
+        .getEvalTimeline(selectedEvalRunId)
+        .then((tl) => {
+          if (!cancelled) setEvalTimeline(tl);
+        })
+        .catch(() => {
+          if (!cancelled) setEvalTimeline([]);
+        });
+    void fetchOnce();
+    const isLive =
+      selectedEvalStatus === 'running' || selectedEvalStatus === 'starting';
+    const timer = isLive ? setInterval(fetchOnce, 1500) : null;
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [selectedEvalRunId, selectedEvalSessionId, selectedEvalStatus]);
+
   if (!agentRun) {
     return (
       <div className="flex h-full flex-1 flex-col overflow-hidden font-n-sans">
@@ -1073,9 +1174,11 @@ function EvalRunScreen({
   // Aggregated counters from the live eval runs (or AgentRun snapshot
   // before the per-run list lands).
   const aggregated = aggregateEvalRuns(evalRuns ?? []);
-  const totalTokens = aggregated.tokens || agentRun.tokensUsed || 0;
   const passed = aggregated.passed;
   const total = aggregated.total;
+
+  const tokensValue =
+    batchUsage?.billedEquivalent ?? aggregated.tokens ?? agentRun.tokensUsed ?? 0;
 
   const stats: Array<{ label: string; value: string }> = [
     {
@@ -1084,9 +1187,15 @@ function EvalRunScreen({
     },
     {
       label: t('panels.eval.tokens', { defaultValue: 'Tokens' }),
-      value: formatTokens(totalTokens),
+      value: formatTokens(tokensValue),
     },
   ];
+  if (batchUsage) {
+    stats.push({
+      label: t('panels.eval.elapsed', { defaultValue: 'Elapsed' }),
+      value: formatDuration(batchUsage.agentActiveMs),
+    });
+  }
 
   const isRunning = agentRun.status === 'running' || agentRun.status === 'pending';
   // Batch is "settled" when no run is still in flight — covers `done`
@@ -1103,12 +1212,9 @@ function EvalRunScreen({
     (r) => r.status === 'completed' || r.status === 'failed' || r.status === 'stopped',
   ).length;
 
-  // Resolve the currently selected run (chat focus). The auto-select
-  // effect above guarantees `selectedRunId` is always pointing at a
-  // valid run once `evalRuns` lands; we still guard against the brief
-  // window between mount and that first effect.
-  const selectedRun =
-    (evalRuns ?? []).find((r) => r.runId === selectedRunId) ?? (evalRuns ?? [])[0] ?? null;
+  // `selectedRun` was already derived above the early return; here we
+  // just resolve its event bucket. Kept inline because `eventsByRun`
+  // is the only state needed and the lookup is trivial.
   const selectedEvents = selectedRun ? eventsByRun[selectedRun.runId] ?? [] : [];
 
   const handleEvalStop = async () => {
@@ -1171,11 +1277,11 @@ function EvalRunScreen({
               )}
               {selectedRun && <EvalRunHeader selected={selectedRun} />}
               <RunStream
-                // Persisted turns from `run.json` survive a daemon reboot,
-                // so re-opening a completed eval (or rehydrating an
-                // interrupted one) replays the full conversation. The
-                // in-memory `eventsByRun` buffer only captures the live
-                // tail since this screen mounted.
+                // Persisted turns from `run.json` are only used as fallback
+                // while the timeline hasn't landed yet (still queued / first
+                // turn pre-sessionId). Once the iteration's session jsonl
+                // exists, the `timeline` prop takes over and these are
+                // ignored — same model as fix and audit.
                 turns={selectedRun?.turns ?? []}
                 liveEvents={selectedEvents}
                 isStreaming={
@@ -1183,6 +1289,7 @@ function EvalRunScreen({
                   !!selectedRun &&
                   (selectedRun.status === 'running' || selectedRun.status === 'starting')
                 }
+                timeline={evalTimeline.length > 0 ? evalTimeline : undefined}
               />
 
               {selectedRun?.status === 'waiting_for_input' && (

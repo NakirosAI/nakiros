@@ -30,10 +30,12 @@ import type {
   SkillEvalRun,
   EvalRunEvent,
   EvalRunOutputEntry,
+  ChatTimelineEntry,
   StartAuditRequest,
   AuditRun,
   AuditRunEvent,
   AuditHistoryEntry,
+  AuditTimelineEntry,
   AnalyzeConvoRun,
   AnalyzeConvoRunEvent,
   FixBenchmarks,
@@ -201,6 +203,9 @@ declare global {
       getEvalMatrix(request: GetEvalMatrixRequest): Promise<EvalMatrix>;
       loadIterationRun(request: LoadIterationRunRequest): Promise<IterationRunArtifact>;
       listEvalBaselines(request: ListBaselinesRequest): Promise<ListBaselinesResponse>;
+      getEvalTimeline(runId: string): Promise<ChatTimelineEntry[]>;
+      getEvalIterationUsage(runId: string): Promise<FixUsage>;
+      getEvalBatchUsage(runIds: string[]): Promise<FixUsage>;
       runModelComparison(request: RunComparisonRequest): Promise<RunComparisonResponse>;
       listModelComparisons(request: ListComparisonsRequest): Promise<ComparisonSummary[]>;
       getModelComparison(request: GetComparisonMatrixRequest): Promise<ComparisonMatrix | null>;
@@ -219,6 +224,8 @@ declare global {
       listActiveAuditRuns(): Promise<AuditRun[]>;
       listAllAuditRuns(): Promise<AuditRun[]>;
       getAuditBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
+      getAuditTimeline(runId: string): Promise<AuditTimelineEntry[]>;
+      getAuditUsage(runId: string): Promise<FixUsage>;
       onAuditEvent(cb: (event: AuditRunEvent) => void): () => void;
 
       // Fix

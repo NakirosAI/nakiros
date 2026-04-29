@@ -11,6 +11,8 @@ import {
   listAllAuditRuns,
   finishAudit,
   getAuditBufferedEvents,
+  getAuditTimeline,
+  getAuditUsage,
 } from '../../services/audit-runner.js';
 import { resolveSkillDir, type SkillScopeRef } from './skill-dir.js';
 import {
@@ -75,4 +77,8 @@ export const auditHandlers: HandlerRegistry = {
   ),
 
   'audit:getBufferedEvents': createTypedHandler(getAuditBufferedEvents),
+
+  'audit:getTimeline': createTypedHandler(getAuditTimeline),
+
+  'audit:getUsage': createTypedHandler(getAuditUsage),
 };

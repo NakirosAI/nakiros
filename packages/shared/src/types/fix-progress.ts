@@ -16,6 +16,8 @@
  * sidebar + the inline finding cards without round-tripping through the chat.
  */
 
+import type { ChatTimelineEntry } from './chat-timeline.js';
+
 export type FixTargetStatus = 'todo' | 'done';
 
 /**
@@ -82,15 +84,12 @@ export interface FixFinding {
  * position regardless of when the user opened the screen.
  */
 export type FixTimelineEntry =
-  /** First message the user typed (or Nakiros's bootstrap prompt). */
-  | { kind: 'user'; ts: string; text: string }
-  /** Assistant's free-form text reply. */
-  | { kind: 'assistant_text'; ts: string; text: string }
   /**
-   * Assistant tool_use that is NOT a Write/Edit/MultiEdit and not on a
-   * Nakiros runtime path. Rendered as the generic tool box.
+   * Universal kinds (user / assistant_text / tool) shared with every other
+   * run kind — see {@link ChatTimelineEntry}. Defined here as a union member
+   * so the fix-specific kinds below extend the same shape.
    */
-  | { kind: 'tool'; ts: string; name: string; display: string }
+  | ChatTimelineEntry
   /**
    * Assistant Write/Edit/MultiEdit on a skill source file. Rendered as
    * the rich diff card. Edits to runtime paths (outputs/, audits/, …) are

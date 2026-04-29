@@ -37,6 +37,7 @@ import { formatTool } from './runner-core/tool-format.js';
 
 import {
   cleanupRunWorkdir,
+  computeSessionUsage,
   createRunner,
   encodeProjectPath,
   isActiveRunStatus,
@@ -1071,192 +1072,17 @@ export function getFixTimeline(runId: string): FixTimelineEntry[] {
 }
 
 /**
- * Empty-state {@link FixUsage} returned when the session JSONL doesn't
- * exist yet (run starting / sessionId not yet captured) or can't be read.
- */
-const EMPTY_FIX_USAGE: FixUsage = {
-  inputTokens: 0,
-  outputTokens: 0,
-  cacheReadTokens: 0,
-  cacheCreation5m: 0,
-  cacheCreation1h: 0,
-  rawTotal: 0,
-  billedEquivalent: 0,
-  agentActiveMs: 0,
-  lastAssistantTurnAt: null,
-  lastUserMessageAt: null,
-  assistantTurns: 0,
-};
-
-/**
- * Anthropic's billing multipliers relative to base input. Centralised here
- * (rather than scattered in the UI) so the single source of cost truth
- * lives next to the parser. See `docs/decisions/token-accounting.md` for
- * the rationale and the link to Anthropic's pricing table.
- */
-const TOKEN_MULTIPLIER = {
-  input: 1,
-  output: 5,
-  cacheRead: 0.1,
-  cacheCreation5m: 1.25,
-  cacheCreation1h: 2,
-} as const;
-
-/**
  * Compute the billed-equivalent + agent-active stats for a fix run by
- * walking its Claude Code session JSONL. The CLI writes one line per
- * exchange; assistant lines carry a complete `message.usage` block (with
- * separated cache_read / cache_creation_5m / cache_creation_1h fields)
- * and a `timestamp`. User lines also carry timestamps.
- *
- * The "billed-equivalent" sums the four token kinds weighted by their
- * Anthropic pricing multipliers (cache_read ×0.1 ≪ output ×5). The
- * "agent-active" elapsed sums every `(assistant_ts − prev_user_ts)`
- * interval — i.e. wall-clock the model actually spent generating, not
- * counting user-input pauses.
- *
- * Bypasses the runner's own token tally entirely because
+ * walking its Claude Code session JSONL. Delegates to the shared helper
+ * — see {@link computeSessionUsage} for the full algorithm and pricing
+ * rationale. Bypasses the runner's own token tally entirely because
  * `claude-stream.ts` currently drops the cache fields on the floor.
- *
- * Returns {@link EMPTY_FIX_USAGE} when the session file isn't there yet.
  */
 export function getFixUsage(runId: string): FixUsage {
   const entry = runner.registry().get(runId);
-  if (!entry) return EMPTY_FIX_USAGE;
+  if (!entry) return computeSessionUsage('', null);
   const { sessionId, workdir, startedAt } = entry.run;
-  if (!sessionId) return EMPTY_FIX_USAGE;
-
-  const sessionFile = join(
-    homedir(),
-    '.claude',
-    'projects',
-    encodeProjectPath(workdir),
-    `${sessionId}.jsonl`,
-  );
-  if (!existsSync(sessionFile)) return EMPTY_FIX_USAGE;
-
-  let raw: string;
-  try {
-    raw = readFileSync(sessionFile, 'utf8');
-  } catch {
-    return EMPTY_FIX_USAGE;
-  }
-
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cacheReadTokens = 0;
-  let cacheCreation5m = 0;
-  let cacheCreation1h = 0;
-  let agentActiveMs = 0;
-  let assistantTurns = 0;
-  let lastAssistantTurnAt: string | null = null;
-  let lastUserMessageAt: string | null = null;
-
-  // The "previous user marker" used to bracket each assistant turn's
-  // active interval. Seeded with the run's own startedAt so the very
-  // first assistant turn (which immediately follows the auto-injected
-  // boot prompt) gets a sensible start anchor instead of being skipped.
-  let prevUserTs: string | null = startedAt ?? null;
-
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-    const obj = parsed as {
-      type?: string;
-      timestamp?: string;
-      isMeta?: boolean;
-      isSidechain?: boolean;
-      message?: {
-        role?: string;
-        usage?: {
-          input_tokens?: number;
-          output_tokens?: number;
-          cache_read_input_tokens?: number;
-          cache_creation_input_tokens?: number;
-          cache_creation?: {
-            ephemeral_5m_input_tokens?: number;
-            ephemeral_1h_input_tokens?: number;
-          };
-        };
-      };
-    };
-
-    if (obj.isMeta) continue;
-    if (obj.isSidechain) continue;
-    const ts = typeof obj.timestamp === 'string' ? obj.timestamp : null;
-    if (!ts) continue;
-
-    if (obj.type === 'user') {
-      lastUserMessageAt = ts;
-      prevUserTs = ts;
-      continue;
-    }
-
-    if (obj.type !== 'assistant') continue;
-
-    const usage = obj.message?.usage;
-    if (usage) {
-      inputTokens += usage.input_tokens ?? 0;
-      outputTokens += usage.output_tokens ?? 0;
-      cacheReadTokens += usage.cache_read_input_tokens ?? 0;
-      // The CLI sometimes reports cache_creation_input_tokens at the
-      // top-level only, sometimes inside `cache_creation.ephemeral_*`.
-      // Prefer the granular breakdown when present so we apply the right
-      // 5m/1h multiplier; fall back to the top-level (treat as 5m, the
-      // default TTL) when the granular block is missing.
-      const granular = usage.cache_creation;
-      if (granular) {
-        cacheCreation5m += granular.ephemeral_5m_input_tokens ?? 0;
-        cacheCreation1h += granular.ephemeral_1h_input_tokens ?? 0;
-      } else if (usage.cache_creation_input_tokens) {
-        cacheCreation5m += usage.cache_creation_input_tokens;
-      }
-    }
-
-    // Agent-active interval: from the previous user message (or run
-    // start, for the first turn) to this assistant turn's timestamp.
-    // Negative deltas (clock skew, replays) are clamped at 0.
-    if (prevUserTs) {
-      const delta = new Date(ts).getTime() - new Date(prevUserTs).getTime();
-      if (Number.isFinite(delta) && delta > 0) agentActiveMs += delta;
-    }
-    // After an assistant turn, the next active interval starts only
-    // when the user replies — until then we're in waiting_for_input
-    // and time should NOT count.
-    prevUserTs = null;
-
-    lastAssistantTurnAt = ts;
-    assistantTurns += 1;
-  }
-
-  const rawTotal = inputTokens + outputTokens + cacheReadTokens + cacheCreation5m + cacheCreation1h;
-  const billedEquivalent = Math.round(
-    inputTokens * TOKEN_MULTIPLIER.input +
-      outputTokens * TOKEN_MULTIPLIER.output +
-      cacheReadTokens * TOKEN_MULTIPLIER.cacheRead +
-      cacheCreation5m * TOKEN_MULTIPLIER.cacheCreation5m +
-      cacheCreation1h * TOKEN_MULTIPLIER.cacheCreation1h,
-  );
-
-  return {
-    inputTokens,
-    outputTokens,
-    cacheReadTokens,
-    cacheCreation5m,
-    cacheCreation1h,
-    rawTotal,
-    billedEquivalent,
-    agentActiveMs,
-    lastAssistantTurnAt,
-    lastUserMessageAt,
-    assistantTurns,
-  };
+  return computeSessionUsage(workdir, sessionId, startedAt);
 }
 
 /**

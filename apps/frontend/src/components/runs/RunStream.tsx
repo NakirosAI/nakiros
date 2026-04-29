@@ -19,22 +19,23 @@ import type {
 import type { LiveStreamEvent } from '../ConversationTurn';
 
 interface RunStreamProps {
-  /** Persisted turns from the run snapshot — used for audit/eval/create only. */
+  /** Persisted turns from the run snapshot — used for eval/create only (legacy path). */
   turns: AuditRunTurn[];
-  /** Live in-flight events — used for audit/eval/create only. */
+  /** Live in-flight events — used for eval/create only (legacy path). */
   liveEvents: LiveStreamEvent[];
   /** Whether the run is currently emitting — adds the "streaming…" tail. */
   isStreaming: boolean;
   /**
-   * Unified fix-conversation timeline derived from Claude Code's session
-   * jsonl. When provided (fix-only), it becomes the SOLE source for the
-   * conversation rendering — `turns` and `liveEvents` are ignored, and
-   * findings flow as `kind: 'finding'` entries in this same array (no
-   * separate prop). This is the architecture we want long-term; the
-   * legacy turns/liveEvents path remains for audit / eval / create until
-   * they're ported too.
+   * Unified conversation timeline derived from Claude Code's session
+   * jsonl. When provided, it becomes the SOLE source for the conversation
+   * rendering — `turns` and `liveEvents` are ignored. Used for fix/audit
+   * runs today (eval/create still on the legacy turns+liveEvents path).
+   *
+   * The variant is `FixTimelineEntry` (the wider union); audit runs only
+   * populate the universal `user`/`assistant_text`/`tool` kinds, while
+   * fix runs additionally populate `edit`/`finding`/`eval_result`.
    */
-  fixTimeline?: FixTimelineEntry[];
+  timeline?: FixTimelineEntry[];
   /**
    * Fix-only — click handler for the [diff >] button on `eval_result`
    * cards. Receives the FixEvalResult so the host can open
@@ -85,16 +86,17 @@ export default function RunStream({
   turns,
   liveEvents,
   isStreaming,
-  fixTimeline,
+  timeline,
   onOpenEvalDiff,
   skillName,
 }: RunStreamProps) {
   const { t } = useTranslation('runs');
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Fix runs build their timeline from Claude Code's session jsonl
-  // exclusively. Other run kinds keep the legacy turns + liveEvents path.
-  const items = fixTimeline
-    ? buildItemsFromTimeline(fixTimeline, onOpenEvalDiff, skillName)
+  // Fix and audit runs build their timeline from Claude Code's session
+  // jsonl exclusively. Other run kinds keep the legacy turns +
+  // liveEvents path until they're ported too.
+  const items = timeline
+    ? buildItemsFromTimeline(timeline, onOpenEvalDiff, skillName)
     : buildItems(turns, liveEvents);
 
   // Pin to bottom whenever new content lands.

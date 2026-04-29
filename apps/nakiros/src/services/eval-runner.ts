@@ -22,8 +22,10 @@ import { homedir } from 'os';
 
 import {
   EventLog,
+  aggregateSessionUsage,
   buildClaudeArgs,
   captureSandboxDiff,
+  computeSessionUsage,
   createEvalSandbox,
   createTmpSandbox,
   deleteClaudeProjectEntry,
@@ -31,17 +33,21 @@ import {
   destroyTmpSandbox,
   encodeProjectPath,
   findGitRoot,
+  formatTool,
   generateRunId,
   listSandboxUntracked,
+  parseSessionBlocks,
   persistRunJson,
   spawnClaudeTurn,
   writeExecutionSettings,
 } from './runner-core/index.js';
 
 import type {
+  ChatTimelineEntry,
   EvalRunConfig,
   EvalRunEvent,
   EvalRunStatus,
+  FixUsage,
   SkillEvalAssertionDefinition,
   SkillEvalDefinition,
   SkillEvalRun,
@@ -1181,6 +1187,112 @@ export function getRun(runId: string): SkillEvalRun | null {
  */
 export function getEvalBufferedEvents(runId: string): EvalRunEvent['event'][] {
   return runs.get(runId)?.eventLog.getBuffered() ?? [];
+}
+
+/**
+ * Build the conversation timeline of a single eval iteration directly from
+ * Claude Code's session jsonl. One iteration = one `SkillEvalRun` =
+ * one Claude session, so this returns the full chat for that iteration
+ * (with_skill or without_skill).
+ *
+ * Same pattern as `getFixTimeline` / `getAuditTimeline` — see
+ * `feedback_session_jsonl_source_of_truth.md`. Surfaces the universal
+ * `user` / `assistant_text` / `tool` kinds; eval doesn't need
+ * specialised cards (its outputs are scored externally via
+ * `grading.json`).
+ *
+ * Filters Write/Edit on Nakiros-internal artefacts (`run.json`,
+ * `events.jsonl`, `grading.json`) so they don't surface as tool noise —
+ * the agent's actual work is the Writes to `outputs/<file>` which we
+ * keep visible. The cwd used for path resolution is the run's
+ * `executionDir` (sandbox path), falling back to `workdir` for legacy
+ * runs that predate the sandbox split.
+ *
+ * Returns an empty array when the run is unknown, has no `sessionId`
+ * yet (still queued / starting), or its session jsonl is missing on
+ * disk.
+ */
+export function getEvalTimeline(runId: string): ChatTimelineEntry[] {
+  const entry = runs.get(runId);
+  if (!entry) return [];
+  const { run } = entry;
+  if (!run.sessionId) return [];
+
+  const cwd = run.executionDir ?? run.workdir;
+  const out: ChatTimelineEntry[] = [];
+
+  for (const block of parseSessionBlocks(cwd, run.sessionId)) {
+    if (block.kind === 'user_text') {
+      out.push({ kind: 'user', ts: block.ts, text: block.text });
+      continue;
+    }
+    if (block.kind === 'assistant_text') {
+      out.push({ kind: 'assistant_text', ts: block.ts, text: block.text });
+      continue;
+    }
+    if (
+      (block.name === 'Write' || block.name === 'Edit' || block.name === 'MultiEdit') &&
+      isEvalRuntimeOnlyPath(block.input, cwd)
+    ) {
+      continue;
+    }
+    out.push({
+      kind: 'tool',
+      ts: block.ts,
+      name: block.name,
+      display: formatTool(block.name, block.input),
+    });
+  }
+
+  out.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+  return out;
+}
+
+/**
+ * Compute the billed-equivalent + agent-active stats for ONE eval
+ * iteration. Walks the iteration's session jsonl in its execution dir
+ * (sandbox path); falls back to `workdir` for legacy runs that predate
+ * the sandbox split. Same algorithm as fix and audit — see
+ * {@link computeSessionUsage}.
+ *
+ * Returns the empty-state value when the iteration is unknown or has no
+ * sessionId yet.
+ */
+export function getEvalIterationUsage(runId: string): FixUsage {
+  const entry = runs.get(runId);
+  if (!entry) return computeSessionUsage('', null);
+  const { run } = entry;
+  const cwd = run.executionDir ?? run.workdir;
+  return computeSessionUsage(cwd, run.sessionId, run.startedAt);
+}
+
+/**
+ * Aggregate billed-equivalent + agent-active stats over a list of
+ * iteration runIds (a batch). Used by the eval batch header to surface
+ * a coherent cost+timer signal across with_skill / without_skill /
+ * baseline iterations launched together. Unknown runIds are silently
+ * skipped (their slot contributes zero).
+ *
+ * `agentActiveMs` sums concurrent intervals — this is "total agent
+ * compute spent on the batch", NOT wall-clock duration of the slowest
+ * iteration. Wall-clock elapsed is still derivable from `agentRun.startedAt`
+ * client-side if the UI needs it.
+ */
+export function getEvalBatchUsage(runIds: string[]): FixUsage {
+  return aggregateSessionUsage(runIds.map((id) => getEvalIterationUsage(id)));
+}
+
+/**
+ * True when a tool input targets a Nakiros-internal eval artefact
+ * (`run.json`, `events.jsonl`, `grading.json`). The agent's work product
+ * lives under `outputs/`; those Writes ARE the iteration's deliverable
+ * and stay visible in the timeline as tool boxes.
+ */
+function isEvalRuntimeOnlyPath(input: Record<string, unknown>, cwd: string): boolean {
+  const filePath = typeof input.file_path === 'string' ? input.file_path : '';
+  if (!filePath) return false;
+  const rel = relative(cwd, filePath);
+  return rel === 'run.json' || rel === 'events.jsonl' || rel === 'grading.json';
 }
 
 /**

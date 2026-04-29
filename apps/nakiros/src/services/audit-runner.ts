@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync } from 'fs';
-import { join, basename } from 'path';
+import { join, basename, relative } from 'path';
 import { homedir } from 'os';
 
 import type {
@@ -8,14 +8,19 @@ import type {
   AuditManifest,
   AuditRun,
   AuditRunEvent,
+  AuditTimelineEntry,
+  FixUsage,
   StartAuditRequest,
 } from '@nakiros/shared';
 
 import {
   cleanupRunWorkdir,
+  computeSessionUsage,
   createRunner,
   encodeProjectPath,
+  formatTool,
   isActiveRunStatus,
+  parseSessionBlocks,
   persistRunJson,
   type RehydrateResult,
   type RunEntry,
@@ -452,6 +457,92 @@ export function getAuditRun(runId: string): AuditRun | null {
  */
 export function getAuditBufferedEvents(runId: string): AuditEvent[] {
   return runner.getBufferedEvents(runId);
+}
+
+/**
+ * Build the audit-conversation timeline directly from Claude Code's session
+ * jsonl. Single source of truth for the chat view of an audit run — same
+ * pattern as `getFixTimeline`. Returns the universal `user` /
+ * `assistant_text` / `tool` kinds; the audit-progress sidebar (manifest,
+ * sections, findings) is driven by a separate event stream and does not
+ * appear in this timeline.
+ *
+ * Filters Write/Edit/MultiEdit on Nakiros-internal artefacts (the
+ * audit-progress jsonl and the manifest json) so they don't surface as
+ * generic tool calls — the user already sees them in the sidebar. The
+ * archived audit report (`audits/audit-*.md`) IS surfaced as a tool box
+ * since it represents work the user can recognize.
+ *
+ * Returns an empty array when the run has no sessionId yet (fresh run,
+ * first turn still streaming) or the file is missing.
+ */
+export function getAuditTimeline(runId: string): AuditTimelineEntry[] {
+  const entry = runner.registry().get(runId);
+  if (!entry) return [];
+  const { sessionId, workdir } = entry.run;
+  if (!sessionId) return [];
+
+  const out: AuditTimelineEntry[] = [];
+
+  for (const block of parseSessionBlocks(workdir, sessionId)) {
+    if (block.kind === 'user_text') {
+      out.push({ kind: 'user', ts: block.ts, text: block.text });
+      continue;
+    }
+    if (block.kind === 'assistant_text') {
+      out.push({ kind: 'assistant_text', ts: block.ts, text: block.text });
+      continue;
+    }
+    // Assistant tool_use: skip Writes to the live-progress artefacts (already
+    // surfaced in the sidebar). Other tools — Bash, Read, the Write that
+    // produces `audits/audit-*.md`, etc. — render as the generic tool box.
+    if (
+      (block.name === 'Write' || block.name === 'Edit' || block.name === 'MultiEdit') &&
+      isAuditProgressPath(block.input, workdir)
+    ) {
+      continue;
+    }
+    out.push({
+      kind: 'tool',
+      ts: block.ts,
+      name: block.name,
+      display: formatTool(block.name, block.input),
+    });
+  }
+
+  // Stable chronological order — `parseSessionBlocks` returns file order,
+  // which is already chronological in practice, but a sort defends against
+  // any out-of-order writes during streaming.
+  out.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+  return out;
+}
+
+/**
+ * Compute the billed-equivalent + agent-active stats for an audit run by
+ * walking its Claude Code session JSONL. Delegates to the shared
+ * {@link computeSessionUsage} helper — same algorithm and pricing rules
+ * as fix and eval. Returns the empty-state value when the run has no
+ * sessionId yet (still queued / first turn).
+ */
+export function getAuditUsage(runId: string): FixUsage {
+  const entry = runner.registry().get(runId);
+  if (!entry) return computeSessionUsage('', null);
+  const { sessionId, workdir, startedAt } = entry.run;
+  return computeSessionUsage(workdir, sessionId, startedAt);
+}
+
+/**
+ * True when the tool input targets `outputs/audit-progress.jsonl` or
+ * `outputs/audit-manifest.json`. These are the live-progress artefacts the
+ * skill writes during an audit; they're already streamed to the sidebar
+ * via the typed `manifest` / `check_result` events, so re-rendering them
+ * as generic tool calls in the chat would be redundant noise.
+ */
+function isAuditProgressPath(input: Record<string, unknown>, workdir: string): boolean {
+  const filePath = typeof input.file_path === 'string' ? input.file_path : '';
+  if (!filePath) return false;
+  const rel = relative(workdir, filePath);
+  return rel === 'outputs/audit-progress.jsonl' || rel === 'outputs/audit-manifest.json';
 }
 
 /** List archived audit reports for a given skill, newest first. */

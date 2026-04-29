@@ -102,6 +102,9 @@ export const IPC_CHANNELS = {
   'eval:getMatrix': 'eval:getMatrix',
   'eval:loadIterationRun': 'eval:loadIterationRun',
   'eval:listBaselines': 'eval:listBaselines',
+  'eval:getTimeline': 'eval:getTimeline',
+  'eval:getIterationUsage': 'eval:getIterationUsage',
+  'eval:getBatchUsage': 'eval:getBatchUsage',
 
   // Eval model comparison (A/B/C across Haiku/Sonnet/Opus)
   'comparison:run': 'comparison:run',
@@ -121,6 +124,8 @@ export const IPC_CHANNELS = {
   'audit:listActive': 'audit:listActive',
   'audit:listAll': 'audit:listAll',
   'audit:getBufferedEvents': 'audit:getBufferedEvents',
+  'audit:getTimeline': 'audit:getTimeline',
+  'audit:getUsage': 'audit:getUsage',
 
   // Fix runner
   'fix:start': 'fix:start',

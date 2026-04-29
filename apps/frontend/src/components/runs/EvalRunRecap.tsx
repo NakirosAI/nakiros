@@ -101,6 +101,13 @@ export default function EvalRunRecap({
   // Matrix lookup — needed for prev-iteration deltas + the "models tested"
   // set. Skipped for baseline-only batches (no entry in the matrix).
   const [matrix, setMatrix] = useState<EvalMatrix | null>(null);
+  // Fix-launched batches: the current iteration lives in
+  // `<skillDir>/evals/.fix-temp/<fixRunId>/iteration-N` (per-fix-session
+  // counter), not in the main prod workspace. Without this side-fetch
+  // the per-eval lookup `prodMatrix.iterations.indexOf(currentIteration)`
+  // matches a stale prod iteration with the same number (e.g. prod iter 1
+  // from a previous run) and surfaces wrong pass/fail counts.
+  const [fixTempMatrix, setFixTempMatrix] = useState<EvalMatrix | null>(null);
   // Baseline cache list — used to compute "vs baseline" deltas per eval.
   const [baselines, setBaselines] = useState<BaselineEntry[] | null>(null);
   // Lazy: assertions per eval, fetched on row expand.
@@ -108,6 +115,11 @@ export default function EvalRunRecap({
   const [loadingAssertions, setLoadingAssertions] = useState<Record<string, boolean>>({});
   const [expandedEvals, setExpandedEvals] = useState<Set<string>>(new Set());
   const [launchingModel, setLaunchingModel] = useState<string | null>(null);
+
+  // Detect whether this batch came from a fix run (every SkillEvalRun in
+  // the batch carries the parent `fixRunId`). When set we also fetch the
+  // fix-temp matrix and use it for the per-eval cell lookup.
+  const fixRunId = focusRuns[0]?.fixRunId ?? null;
 
   useEffect(() => {
     if (!identity) return;
@@ -122,11 +134,15 @@ export default function EvalRunRecap({
           ? { pluginName: identity.pluginName, marketplaceName: identity.marketplaceName }
           : {}),
       }),
+      fixRunId
+        ? window.nakiros.getFixTempMatrix(fixRunId).catch(() => null)
+        : Promise.resolve(null),
     ])
-      .then(([m, b]) => {
+      .then(([m, b, ft]) => {
         if (cancelled) return;
         setMatrix(m as EvalMatrix);
         setBaselines((b as ListBaselinesResponse).baselines);
+        setFixTempMatrix(ft as EvalMatrix | null);
       })
       .catch(() => {
         // Best-effort — recap still shows what we know from `runs`.
@@ -134,11 +150,12 @@ export default function EvalRunRecap({
     return () => {
       cancelled = true;
     };
-  }, [identity]);
+  }, [identity, fixRunId]);
 
   const perEvalRows = useMemo<PerEvalRow[]>(
-    () => buildPerEvalRows(focusRuns, matrix, baselines, agentRun, focusConfig),
-    [focusRuns, matrix, baselines, agentRun, focusConfig],
+    () =>
+      buildPerEvalRows(focusRuns, matrix, baselines, agentRun, focusConfig, fixTempMatrix),
+    [focusRuns, matrix, baselines, agentRun, focusConfig, fixTempMatrix],
   );
 
   const passed = perEvalRows.reduce((s, r) => s + r.passed, 0);
@@ -174,6 +191,11 @@ export default function EvalRunRecap({
         iteration: focusRun.iteration,
         evalName,
         config: focusConfig,
+        // Fix-launched evals live under `.fix-temp/<fixRunId>/iteration-N/`;
+        // without this the handler reads a stale prod iter with the same
+        // number (e.g. an old prod iter 1 that has nothing to do with the
+        // current fix). Same reason `buildPerEvalRows` uses `fixTempMatrix`.
+        ...(focusRun.fixRunId ? { fixRunId: focusRun.fixRunId } : {}),
       })) as IterationRunArtifact;
       const items = (artifact.grading?.assertion_results ?? []).map((a) => ({
         text: a.text,
@@ -556,6 +578,7 @@ function buildPerEvalRows(
   baselines: BaselineEntry[] | null,
   agentRun: AgentRun,
   focusConfig: 'with_skill' | 'without_skill',
+  fixTempMatrix: EvalMatrix | null,
 ): PerEvalRow[] {
   // Group runs by evalName.
   const perEval = new Map<string, SkillEvalRun[]>();
@@ -571,13 +594,35 @@ function buildPerEvalRows(
     baselineByEval.set(b.evalName, b);
   }
 
-  // Find the previous iteration's with_skill cells from the matrix (if
-  // applicable). We compare against the iteration *immediately before* the
-  // current one — `agentRun.meta.iteration` is the current iteration.
+  // For fix-launched batches the iteration counter restarts at 1 inside
+  // `.fix-temp/<fixRunId>/`, so the cells must be looked up in the
+  // fix-temp matrix. The prod matrix is still used for the "vs prev"
+  // comparison — but with the right semantics: prev = last `kind: skill`
+  // iter from prod (i.e. "the skill as it ran in production before this
+  // fix session"), not iter idx−1 of the merged sequence.
+  const isFixLaunched = fixTempMatrix !== null && fixTempMatrix.iterations.length > 0;
+  const cellMatrix = isFixLaunched ? (fixTempMatrix as EvalMatrix) : matrix;
+
   const currentIteration =
     agentRun.meta?.kind === 'eval' ? agentRun.meta.iteration : undefined;
   const prevByEval = new Map<string, EvalMatrixCell>();
-  if (matrix && currentIteration !== undefined) {
+  if (isFixLaunched && matrix) {
+    // Walk prod from the highest iteration down; pick the first `kind:
+    // skill` row and use its with_skill cells as prev. Mirrors
+    // `computeFixEvalPrevious` in the daemon's fix-eval batch finaliser.
+    const prodIters = matrix.iterations
+      .map((iter, idx) => ({ iter, idx, kind: matrix.kinds[idx] }))
+      .filter((e) => e.kind === 'skill')
+      .sort((a, b) => b.iter - a.iter);
+    const lastSkill = prodIters[0];
+    if (lastSkill) {
+      for (const row of matrix.rows) {
+        const cell = row.withSkill[lastSkill.idx];
+        if (cell) prevByEval.set(row.evalName, cell);
+      }
+    }
+  } else if (matrix && currentIteration !== undefined) {
+    // Non-fix path: prev = iter immediately before the current one in prod.
     const idx = matrix.iterations.indexOf(currentIteration);
     const prevIdx = idx > 0 ? idx - 1 : -1;
     if (prevIdx >= 0) {
@@ -605,10 +650,10 @@ function buildPerEvalRows(
       // For the recap row, pull from the matrix when available (it has the
       // per-eval config stats for the current iteration).
     }
-    if (matrix && currentIteration !== undefined) {
-      const idx = matrix.iterations.indexOf(currentIteration);
+    if (cellMatrix && currentIteration !== undefined) {
+      const idx = cellMatrix.iterations.indexOf(currentIteration);
       if (idx >= 0) {
-        const matRow = matrix.rows.find((r) => r.evalName === evalName);
+        const matRow = cellMatrix.rows.find((r) => r.evalName === evalName);
         const cell =
           focusConfig === 'with_skill'
             ? matRow?.withSkill[idx]

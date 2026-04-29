@@ -1,5 +1,6 @@
 import type { AuditRun } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
+import { computeEvalRunId } from './eval-batch-key';
 
 /**
  * Centralised "start a run + open its tab" helpers used by every
@@ -100,22 +101,20 @@ export async function launchEvalBatch(
     ...options,
   });
 
-  // Mirror `useAgentRunsSync.batchKey` so the unified store and the
-  // tab agree on the same id. Baseline-only runs use a Date.now()-based
-  // iteration server-side (see eval-runner.ts) to stay unique per batch
-  // — the same key formula works for both flavours.
-  const projectId = identity.scope === 'project' ? identity.projectId : '';
-  const pluginName = identity.scope === 'plugin' ? identity.pluginName : '';
-  const marketplaceName = identity.scope === 'plugin' ? identity.marketplaceName : '';
-  const batchKey = [
-    identity.scope,
-    projectId,
-    pluginName,
-    marketplaceName,
-    identity.skillName,
-    response.iteration,
-  ].join('|');
-  const runId = `eval:${batchKey}`;
+  // Use the canonical helper so the tab id matches the AgentRun id the
+  // store derives in `useAgentRunsSync`. Baseline-only runs use a
+  // Date.now()-based iteration server-side (see eval-runner.ts) to stay
+  // unique per batch — the same key formula works for both flavours.
+  const runId = computeEvalRunId({
+    scope: identity.scope,
+    skillName: identity.skillName,
+    iteration: response.iteration,
+    projectId: identity.scope === 'project' ? identity.projectId : undefined,
+    pluginName: identity.scope === 'plugin' ? identity.pluginName : undefined,
+    marketplaceName:
+      identity.scope === 'plugin' ? identity.marketplaceName : undefined,
+    // No `fixRunId`: prod batches always pass an empty trailing segment.
+  });
   openRunTab({
     runId,
     runKind: 'eval',
@@ -139,25 +138,22 @@ export async function launchFixEval(
     runId: fixRun.runId,
     includeBaseline: false,
   });
-  const projectId = fixRun.scope === 'project' ? fixRun.projectId ?? '' : '';
-  const pluginName = fixRun.scope === 'plugin' ? fixRun.pluginName ?? '' : '';
-  const marketplaceName = fixRun.scope === 'plugin' ? fixRun.marketplaceName ?? '' : '';
-  // Must match `useAgentRunsSync.batchKey` exactly (same fields, same
-  // order) — including the `fixRunId` discriminator, otherwise the tab's
-  // `runId` won't match the AgentRun the store registers and the screen
-  // stays on loading forever (or worse, picks up a dismissed prod batch
-  // with the same iter number).
-  const batchKey = [
-    fixRun.scope,
-    projectId,
-    pluginName,
-    marketplaceName,
-    fixRun.skillName,
-    response.iteration,
-    fixRun.runId,
-  ].join('|');
+  // Tab id must match `useAgentRunsSync.batchKey` — including the
+  // `fixRunId` discriminator, otherwise the freshly-opened tab stays on
+  // "Loading…" or picks up a dismissed prod batch with the same iter
+  // number. Using the shared helper guarantees alignment.
+  const runId = computeEvalRunId({
+    scope: fixRun.scope,
+    skillName: fixRun.skillName,
+    iteration: response.iteration,
+    projectId: fixRun.scope === 'project' ? fixRun.projectId : undefined,
+    pluginName: fixRun.scope === 'plugin' ? fixRun.pluginName : undefined,
+    marketplaceName:
+      fixRun.scope === 'plugin' ? fixRun.marketplaceName : undefined,
+    fixRunId: fixRun.runId,
+  });
   openRunTab({
-    runId: `eval:${batchKey}`,
+    runId,
     runKind: 'eval',
     label: `Eval · ${fixRun.skillName} · iter ${response.iteration}`,
   });

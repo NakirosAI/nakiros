@@ -8,6 +8,7 @@ import type {
 } from '@nakiros/shared';
 
 import { agentRunStore } from '../lib/agent-run-store';
+import { computeEvalBatchKey } from '../lib/eval-batch-key';
 import { usePolling } from './usePolling';
 
 // ── Status maps ─────────────────────────────────────────────────────────────
@@ -65,21 +66,22 @@ function auditLikeToAgentRun(
 
 // ── eval — grouped by (skill, iteration) so a 5-run batch shows one row ────
 
+/**
+ * Wrapper around the canonical `computeEvalBatchKey` helper — exists so the
+ * sync layer can adapt a `SkillEvalRun` to the helper's shape without
+ * duplicating the join logic (which used to drift from `launchEvalBatch`
+ * and break the freshly-opened tab — see [lib/eval-batch-key.ts]).
+ */
 function batchKey(run: SkillEvalRun): string {
-  return [
-    run.scope,
-    run.projectId ?? '',
-    run.pluginName ?? '',
-    run.marketplaceName ?? '',
-    run.skillName,
-    run.iteration,
-    // Disambiguate fix-temp batches from prod batches: fix-temp evals
-    // restart their iteration counter at 1 per fix session, so without
-    // this discriminator a fix-temp `iter 1` would collide with a prod
-    // `iter 1` (same `agentRunStore` id → dismissed prod batches in
-    // `dismissedIds` could shadow live fix-temp batches).
-    run.fixRunId ?? '',
-  ].join('|');
+  return computeEvalBatchKey({
+    scope: run.scope,
+    skillName: run.skillName,
+    iteration: run.iteration,
+    projectId: run.projectId,
+    pluginName: run.pluginName,
+    marketplaceName: run.marketplaceName,
+    fixRunId: run.fixRunId,
+  });
 }
 
 function aggregateEvalStatus(runs: SkillEvalRun[]): AgentRunStatus {

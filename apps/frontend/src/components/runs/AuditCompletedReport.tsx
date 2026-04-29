@@ -11,7 +11,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { AuditCheckSeverity, AuditRun, Skill } from '@nakiros/shared';
-import { launchEvalBatch, type OpenRunTabCallback } from '../../lib/run-launcher';
+import { launchEvalBatch, launchFix, type OpenRunTabCallback } from '../../lib/run-launcher';
+import { useActiveFixForSkill } from '../../hooks/useAgentRun';
 import type { SkillTabIdentity } from '../../hooks/useTabs';
 
 interface AuditCompletedReportProps {
@@ -32,10 +33,12 @@ interface AuditCompletedReportProps {
  * report, so the numbers stay authoritative even when the report wording
  * drifts.
  *
- * Fix / Eval next-steps wiring is intentionally deferred to a separate
- * session (the user explicitly asked to revisit the action handlers later);
- * we ship the buttons disabled with their visual but no click behaviour
- * other than the "open markdown" one.
+ * Next-steps actions wired:
+ *   - Fix run: `launchFix(identity, openRunTab)`. Disabled while a fix
+ *     run is already in flight for this skill (`useActiveFixForSkill`).
+ *   - Eval batch: `launchEvalBatch`. Disabled when the skill has no eval
+ *     suite defined (`!skill.hasEvals`).
+ *   - Open markdown report: forwards to `onOpenReport` (system editor).
  */
 export default function AuditCompletedReport({
   run,
@@ -61,12 +64,18 @@ export default function AuditCompletedReport({
     };
   }, [run]);
   const [isLaunchingEval, setIsLaunchingEval] = useState(false);
+  const [isLaunchingFix, setIsLaunchingFix] = useState(false);
+
+  // Memoised so it doesn't re-create the identity object on every render —
+  // `useActiveFixForSkill` short-circuits on referential equality.
+  const identity = useMemo(() => identityFromRun(run), [run]);
+  // Disable the Fix button when a fix run is already in flight for this
+  // skill. Mirrors the gating in `EvalRunRecap.handleFixRegression`.
+  const activeFix = useActiveFixForSkill(identity);
 
   const canLaunchEval = Boolean(skill?.hasEvals && onOpenRunTab && !isLaunchingEval);
   async function handleLaunchEval(): Promise<void> {
-    if (!skill || !onOpenRunTab) return;
-    const identity = identityFromRun(run);
-    if (!identity) return;
+    if (!skill || !onOpenRunTab || !identity) return;
     setIsLaunchingEval(true);
     try {
       // No `model` — let the daemon use its default. The user can still
@@ -76,6 +85,21 @@ export default function AuditCompletedReport({
       console.error('[audit-completed] launchEvalBatch failed', err);
     } finally {
       setIsLaunchingEval(false);
+    }
+  }
+
+  const canLaunchFix = Boolean(
+    identity && onOpenRunTab && !activeFix && !isLaunchingFix,
+  );
+  async function handleLaunchFix(): Promise<void> {
+    if (!identity || !onOpenRunTab || activeFix) return;
+    setIsLaunchingFix(true);
+    try {
+      await launchFix(identity, onOpenRunTab);
+    } catch (err) {
+      console.error('[audit-completed] launchFix failed', err);
+    } finally {
+      setIsLaunchingFix(false);
     }
   }
 
@@ -170,9 +194,10 @@ export default function AuditCompletedReport({
           </>
         )}
 
-        {/* Next steps — wiring deferred to a follow-up session, so the
-            buttons render visually but stay disabled (except the one that
-            opens the markdown report on disk). */}
+        {/* Next steps — Fix and Eval wired via `launchFix` / `launchEvalBatch`.
+            The Fix button is disabled while a fix run is already in flight
+            for this skill; Eval is disabled when the skill has no eval
+            suite defined. */}
         <SectionLabel>
           {t('audit.nextSteps.title', { defaultValue: 'Prochaines étapes' })}
         </SectionLabel>
@@ -184,10 +209,15 @@ export default function AuditCompletedReport({
               defaultValue: 'Lancer un Fix run pour corriger les {{count}} findings',
             })}
             primary
-            disabled
-            disabledReason={t('audit.nextSteps.disabled', {
-              defaultValue: 'Action wiring à venir',
-            })}
+            onClick={canLaunchFix ? handleLaunchFix : undefined}
+            disabled={!canLaunchFix}
+            disabledReason={
+              activeFix
+                ? t('audit.nextSteps.fixActive', {
+                    defaultValue: 'Un Fix run est déjà en cours pour ce skill.',
+                  })
+                : undefined
+            }
           />
           <NextStepRow
             icon={FlaskConical}

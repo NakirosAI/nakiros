@@ -23,7 +23,7 @@ import {
   HumanInteractionPanel,
   RunErrorBanner,
 } from '../components/runs';
-import { launchFixEval } from '../lib/run-launcher';
+import { launchCreateEval, launchFixEval } from '../lib/run-launcher';
 import NewRunHeader from '../components/runs/NewRunHeader';
 import RunStream from '../components/runs/RunStream';
 import RunSidePanel from '../components/runs/RunSidePanel';
@@ -272,11 +272,11 @@ function RunScreenBody({
         setRun((r) => ({ ...r, targets }));
         return;
       }
-      // Fix-only — invalidate the diff cache when the agent edits a
+      // Fix/create — invalidate the diff cache when the agent edits a
       // sandbox file so the open diff viewer re-fetches the new state.
-      // The sandbox panel's listFixDiff subscription already refreshes
-      // its file list on the same trigger.
-      if (innerType === 'tool' && runKind === 'fix') {
+      // The sandbox panel's listFixDiff/listCreateDiff subscription
+      // already refreshes its file list on the same trigger.
+      if (innerType === 'tool' && (runKind === 'fix' || runKind === 'create')) {
         const name = (inner as { name?: string }).name;
         if (name && DIFF_INVALIDATING_TOOLS.has(name)) {
           invalidateSkillDiffCache(`fix:${bootedRun.runId}`);
@@ -329,12 +329,12 @@ function RunScreenBody({
     }
     let cancelled = false;
     const fetchOnce = () => {
-      // Audit hits its own runner-backed IPC; fix and create both share
-      // the fix-runner registry, so they go through `getFixTimeline`.
       const promise =
         runKind === 'audit'
           ? window.nakiros.getAuditTimeline(run.runId)
-          : window.nakiros.getFixTimeline(run.runId);
+          : runKind === 'create'
+            ? window.nakiros.getCreateTimeline(run.runId)
+            : window.nakiros.getFixTimeline(run.runId);
       return promise
         .then((timeline) => {
           if (!cancelled) setFixTimeline(timeline);
@@ -366,14 +366,16 @@ function RunScreenBody({
   // batch-aggregated usage in the eval function below.
   const [fixUsage, setFixUsage] = useState<FixUsage | null>(null);
   useEffect(() => {
-    if (runKind !== 'fix' && runKind !== 'audit') return;
+    if (runKind !== 'fix' && runKind !== 'audit' && runKind !== 'create') return;
     if (!run.sessionId) return;
     let cancelled = false;
     const fetchOnce = () => {
       const promise =
         runKind === 'audit'
           ? window.nakiros.getAuditUsage(run.runId)
-          : window.nakiros.getFixUsage(run.runId);
+          : runKind === 'create'
+            ? window.nakiros.getCreateUsage(run.runId)
+            : window.nakiros.getFixUsage(run.runId);
       return promise
         .then((u) => {
           if (!cancelled) setFixUsage(u);
@@ -408,7 +410,7 @@ function RunScreenBody({
   const [evalDiffFixTempOffset, setEvalDiffFixTempOffset] = useState<number | null>(null);
 
   const fixDiffIdentity = useMemo<RunScreenIdentity | null>(() => {
-    if (runKind !== 'fix') return null;
+    if (runKind !== 'fix' && runKind !== 'create') return null;
     return {
       scope: run.scope,
       skillName: run.skillName,
@@ -494,9 +496,13 @@ function RunScreenBody({
     if (isLaunchingEval || !onOpenRunTab) return;
     setIsLaunchingEval(true);
     try {
-      await launchFixEval(run, onOpenRunTab);
+      if (runKind === 'create') {
+        await launchCreateEval(run, onOpenRunTab);
+      } else {
+        await launchFixEval(run, onOpenRunTab);
+      }
     } catch (err) {
-      console.error('[run] launchFixEval failed', err);
+      console.error('[run] launch eval failed', err);
       window.alert(
         t('errors.evalsStartFailed', {
           defaultValue: 'Could not launch evals: {{message}}',
@@ -537,7 +543,8 @@ function RunScreenBody({
   // `docs/decisions/token-accounting.md`). Create still uses the legacy
   // `run.tokensUsed` + wall-clock elapsed until it migrates.
   const stats: Array<{ label: string; value: string }> = [];
-  const useSessionUsage = (runKind === 'fix' || runKind === 'audit') && fixUsage;
+  const useSessionUsage =
+    (runKind === 'fix' || runKind === 'audit' || runKind === 'create') && fixUsage;
   if (useSessionUsage) {
     stats.push({ label: 'Tokens', value: formatTokens(fixUsage.billedEquivalent) });
     // While the agent is generating, tick from the run's startedAt-anchored
@@ -606,7 +613,7 @@ function RunScreenBody({
                 <AuditMarkdownViewer content={reportContent} />
               </div>
             </div>
-          ) : runKind === 'fix' && selectedDiffFile ? (
+          ) : (runKind === 'fix' || runKind === 'create') && selectedDiffFile ? (
             <FixFileDiffView
               runId={run.runId}
               relativePath={selectedDiffFile}
@@ -619,10 +626,12 @@ function RunScreenBody({
               liveEvents={liveEvents}
               isStreaming={isRunning}
               timeline={
-                runKind === 'fix' || runKind === 'audit' ? fixTimeline : undefined
+                runKind === 'fix' || runKind === 'audit' || runKind === 'create'
+                  ? fixTimeline
+                  : undefined
               }
               onOpenEvalDiff={runKind === 'fix' ? setEvalDiffResult : undefined}
-              skillName={runKind === 'fix' ? run.skillName : undefined}
+              skillName={runKind === 'fix' || runKind === 'create' ? run.skillName : undefined}
             />
           )}
 
@@ -634,19 +643,28 @@ function RunScreenBody({
           kind={runKind}
           run={run}
           reportContent={reportContent}
-          onReject={runKind === 'fix' ? handleReject : undefined}
+          onReject={runKind === 'fix' || runKind === 'create' ? handleReject : undefined}
           isRejecting={isRejecting}
           // Apply/Finish: surfaces the green "Apply & deploy" button in the
           // FixPanel. The handler chain (`handleFinish` → `api.actions.finish`
-          // → `fix:finish` → `runner.finish` → `spec.cleanupOnTerminal` →
-          // `cleanupRunWorkdir`) takes care of the sync-back, the
-          // fix-temp-iteration promotion, the tmp workdir teardown AND the
-          // matching `~/.claude/projects/<encoded>/` entry deletion.
-          onFinish={runKind === 'fix' ? handleFinish : undefined}
+          // → `fix:finish` / `create:finish` → `runner.finish` →
+          // `spec.cleanupOnTerminal` → `cleanupRunWorkdir`) takes care of the
+          // sync-back (into `.claude/skills-draft/<name>/` for create), tmp
+          // workdir teardown AND the matching `~/.claude/projects/<encoded>/`
+          // entry deletion.
+          onFinish={runKind === 'fix' || runKind === 'create' ? handleFinish : undefined}
           isFinishing={isFinishing}
-          selectedDiffFile={runKind === 'fix' ? selectedDiffFile : null}
-          onSelectDiffFile={runKind === 'fix' ? setSelectedDiffFile : undefined}
-          onLaunchEval={runKind === 'fix' && onOpenRunTab ? handleLaunchEval : undefined}
+          selectedDiffFile={
+            runKind === 'fix' || runKind === 'create' ? selectedDiffFile : null
+          }
+          onSelectDiffFile={
+            runKind === 'fix' || runKind === 'create' ? setSelectedDiffFile : undefined
+          }
+          onLaunchEval={
+            (runKind === 'fix' || runKind === 'create') && onOpenRunTab
+              ? handleLaunchEval
+              : undefined
+          }
           isLaunchingEval={isLaunchingEval}
         />
       </div>

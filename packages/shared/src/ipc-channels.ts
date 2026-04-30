@@ -158,10 +158,14 @@ export const IPC_CHANNELS = {
   'create:getBufferedEvents': 'create:getBufferedEvents',
   'create:listDiff': 'create:listDiff',
   'create:readDiffFile': 'create:readDiffFile',
+  'create:getTimeline': 'create:getTimeline',
+  'create:getUsage': 'create:getUsage',
+  'create:runEvals': 'create:runEvals',
 
   // Draft files (shared by fix + create — reads from the run's temp workdir)
   'skillAgent:listTempFiles': 'skillAgent:listTempFiles',
   'skillAgent:readTempFile': 'skillAgent:readTempFile',
+
 
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',

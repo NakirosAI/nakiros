@@ -17,6 +17,7 @@ import type {
   FixTimelineEntry,
 } from '@nakiros/shared';
 import type { LiveStreamEvent } from '../ConversationTurn';
+import ChatMarkdown from './ChatMarkdown';
 
 interface RunStreamProps {
   /** Persisted turns from the run snapshot — used for eval/create only (legacy path). */
@@ -275,8 +276,8 @@ function AssistantText({ text }: { text: string }) {
       <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-n-xs bg-n-accent-soft text-n-accent">
         <Sparkles size={13} strokeWidth={2.25} />
       </span>
-      <div className="min-w-0 flex-1 whitespace-pre-wrap text-[13px] leading-relaxed text-n-fg">
-        {text}
+      <div className="min-w-0 flex-1">
+        <ChatMarkdown content={text} />
       </div>
     </div>
   );

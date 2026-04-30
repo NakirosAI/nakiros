@@ -159,6 +159,35 @@ export async function launchFixEval(
   });
 }
 
+/**
+ * Kick off an eval batch against a create run's draft sandbox and open
+ * the resulting eval tab. Same shape as {@link launchFixEval} but routed
+ * through `create:runEvals`. The eval runner writes its iterations
+ * inside the draft folder (the runner override forces it) so they live
+ * with the sandbox until Apply & deploy syncs the whole tree to
+ * `.claude/skills/<name>/`.
+ */
+export async function launchCreateEval(
+  createRun: AuditRun,
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const response = await window.nakiros.runCreateEvals({ runId: createRun.runId });
+  const runId = computeEvalRunId({
+    scope: createRun.scope,
+    skillName: createRun.skillName,
+    iteration: response.iteration,
+    projectId: createRun.scope === 'project' ? createRun.projectId : undefined,
+    pluginName: createRun.scope === 'plugin' ? createRun.pluginName : undefined,
+    marketplaceName:
+      createRun.scope === 'plugin' ? createRun.marketplaceName : undefined,
+  });
+  openRunTab({
+    runId,
+    runKind: 'eval',
+    label: `Eval · ${createRun.skillName} · iter ${response.iteration}`,
+  });
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function identityToRequest(identity: SkillTabIdentity): {

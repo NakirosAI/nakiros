@@ -138,6 +138,7 @@ function evalBatchToAgentRun(runs: SkillEvalRun[]): AgentRun {
       kind: 'eval',
       runIds: runs.map((r) => r.runId),
       iteration: head.iteration,
+      ...(head.createRunId ? { createRunId: head.createRunId } : {}),
     },
   };
 }

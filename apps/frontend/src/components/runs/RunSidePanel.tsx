@@ -97,9 +97,10 @@ export default function RunSidePanel({
   isLaunchingEval,
 }: RunSidePanelProps) {
   if (kind === 'audit') return <AuditPanel run={run} reportContent={reportContent} />;
-  if (kind === 'fix')
+  if (kind === 'fix' || kind === 'create')
     return (
       <FixPanel
+        kind={kind}
         run={run}
         onReject={onReject}
         isRejecting={isRejecting}
@@ -111,7 +112,6 @@ export default function RunSidePanel({
         isLaunchingEval={isLaunchingEval}
       />
     );
-  if (kind === 'create') return <CreatePanel run={run} />;
   return <FallbackPanel kind={kind} />;
 }
 
@@ -333,6 +333,7 @@ function ScoreRing({ value, max, size }: { value: number; max: number; size: num
 // ── Fix ────────────────────────────────────────────────────────────────────
 
 function FixPanel({
+  kind,
   run,
   onReject,
   isRejecting,
@@ -343,6 +344,7 @@ function FixPanel({
   onLaunchEval,
   isLaunchingEval,
 }: {
+  kind: 'fix' | 'create';
   run: AuditRun;
   onReject?: () => void;
   isRejecting?: boolean;
@@ -357,15 +359,15 @@ function FixPanel({
   const [diff, setDiff] = useState<SkillDiffEntry[] | null>(null);
 
   // Event-driven refresh: refetch on mount, and again every time a
-  // Write/Edit tool_use lands on the fix stream. The daemon already
-  // emits `tool` events with the tool name — we just listen and ask
-  // for the new sandbox snapshot. The `run.status` dep covers the
-  // terminal flip (last write may bubble after the final tool event).
+  // Write/Edit tool_use lands on the run stream. Fix events come from
+  // `fix:event`, create events from `create:event` — the registry is
+  // shared but the broadcast channel is per-mode.
   useEffect(() => {
     let cancelled = false;
+    const listDiff =
+      kind === 'create' ? window.nakiros.listCreateDiff : window.nakiros.listFixDiff;
     const fetchDiff = () =>
-      window.nakiros
-        .listFixDiff(run.runId)
+      listDiff(run.runId)
         .then((entries) => {
           if (!cancelled) setDiff(entries);
         })
@@ -375,7 +377,9 @@ function FixPanel({
 
     void fetchDiff();
 
-    const unsubscribe = window.nakiros.onFixEvent((envelope) => {
+    const subscribe =
+      kind === 'create' ? window.nakiros.onCreateEvent : window.nakiros.onFixEvent;
+    const unsubscribe = subscribe((envelope) => {
       const e = envelope as { runId: string; event: { type: string; name?: string } };
       if (e.runId !== run.runId) return;
       if (e.event.type === 'tool' && isWriteTool(e.event.name)) {
@@ -387,15 +391,22 @@ function FixPanel({
       cancelled = true;
       unsubscribe();
     };
-  }, [run.runId, run.status]);
+  }, [kind, run.runId, run.status]);
 
   // Targets the agent registered in `outputs/fix-targets.jsonl` — the runner
   // tails the file and reduces it into `run.targets` (last-line-wins per id).
   const targets = run.targets ?? [];
   const targetsDone = targets.filter((t) => t.status === 'done').length;
 
+  const panelTitle =
+    kind === 'create'
+      ? t('panels.create.title', { defaultValue: 'Skill creation' })
+      : t('panels.fix.title', { defaultValue: 'Fix sandbox' });
+  const panelIcon = kind === 'create' ? Plus : Wrench;
+  const panelTone = kind === 'create' ? 'healthy' : 'violet';
+
   return (
-    <SidePanel icon={Wrench} title={t('panels.fix.title', { defaultValue: 'Fix sandbox' })} tone="violet">
+    <SidePanel icon={panelIcon} title={panelTitle} tone={panelTone}>
       <PanelSection
         label={t('panels.fix.sandboxTmpSkill', { defaultValue: 'Sandbox · tmp_skill' })}
       >
@@ -479,7 +490,8 @@ function FixPanel({
       )}
 
       {onLaunchEval &&
-        (run.status === 'completed' || run.status === 'waiting_for_input') && (
+        (run.status === 'completed' || run.status === 'waiting_for_input') &&
+        (diff ?? []).some((e) => e.relativePath === 'evals/evals.json') && (
           <PanelSection
             label={t('panels.fix.evalLabel', { defaultValue: 'Test the sandbox' })}
           >

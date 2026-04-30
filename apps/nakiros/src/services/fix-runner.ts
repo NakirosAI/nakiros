@@ -6,6 +6,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'fs';
 import type { Dirent } from 'fs';
@@ -32,6 +33,7 @@ import { IPC_CHANNELS } from '@nakiros/shared';
 
 import { eventBus } from '../daemon/event-bus.js';
 import { getRun as getEvalRun } from './eval-runner.js';
+import { getEffectiveLanguage } from './preferences.js';
 
 import { formatTool } from './runner-core/tool-format.js';
 
@@ -415,6 +417,40 @@ function toFixEdits(
   return [];
 }
 
+/**
+ * Recover a Claude session id from disk by inspecting the project entry
+ * directory mapped to `workdir`. Returns the basename (without `.jsonl`)
+ * of the most recently modified session file, or null when no entry
+ * exists. Used at boot to restore a sessionId that was never flushed to
+ * `run.json` before the daemon crashed — without it, the timeline view
+ * cannot locate the Claude conversation jsonl.
+ */
+function findLatestClaudeSessionId(workdir: string): string | null {
+  const projectsDir = join(homedir(), '.claude', 'projects', encodeProjectPath(workdir));
+  if (!existsSync(projectsDir)) return null;
+  let entries: string[];
+  try {
+    entries = readdirSync(projectsDir).filter((n) => n.endsWith('.jsonl'));
+  } catch {
+    return null;
+  }
+  if (entries.length === 0) return null;
+  let bestName: string | null = null;
+  let bestMtime = -Infinity;
+  for (const name of entries) {
+    try {
+      const mtime = statSync(join(projectsDir, name)).mtimeMs;
+      if (mtime > bestMtime) {
+        bestMtime = mtime;
+        bestName = name;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return bestName ? bestName.replace(/\.jsonl$/, '') : null;
+}
+
 // ─── Spec ──────────────────────────────────────────────────────────────────
 
 const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras> = {
@@ -433,6 +469,17 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       );
     }
 
+    // Both fix and create work in a sandbox under `~/.nakiros/tmp-skills/<runId>/`
+    // for two reasons:
+    //   1. Claude Code blocks writes inside any `.claude/**` directory by hard
+    //      rule (even with `acceptEdits`), so a draft folder under
+    //      `<project>/.claude/skills-draft/<name>/` would be unwritable.
+    //   2. Sandbox isolation lets the user Discard mid-run without leaving any
+    //      partial files inside the project.
+    // The destination folder (`req.skillDir`) is only materialised at finish
+    // time via `syncBackToSkill` — fix targets `.claude/skills/<name>/`,
+    // create targets `.claude/skills-draft/<name>/` (because the request
+    // carries `draft: true`).
     const workdir = join(tempRoot(), runId);
     mkdirSync(workdir, { recursive: true });
     // outputs/ is where the agent writes fix-targets.jsonl + fix-findings.jsonl
@@ -466,6 +513,12 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
 
   buildFirstPrompt(req, ctx) {
     const { workdir, extras } = ctx;
+    const language = getEffectiveLanguage();
+    const languageLine =
+      language === 'fr'
+        ? '- IMPORTANT: communique avec l\'utilisateur en français. Toutes tes questions, résumés, demandes de clarification et messages de progression doivent être en français.'
+        : '- IMPORTANT: communicate with the user in English. All your questions, summaries, clarifications and progress updates must be in English.';
+
     if (req.mode === 'fix') {
       const auditLine = extras.latestAuditFile
         ? `- Latest audit was copied to \`./audits/${extras.latestAuditFile}\` — read it first.`
@@ -479,6 +532,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       return `/${FACTORY_SKILL_NAME} fix ${req.skillName}
 
 You are working on a TEMPORARY copy of the skill, located at your current working directory (\`${workdir}\`).
+${languageLine}
 - Edit files here freely — all changes are synced back to the real skill (\`${extras.realSkillDir}\`) when the user clicks "Sync to skill". If the user clicks "Discard", your changes are thrown away.
 - All paths are relative to cwd: \`SKILL.md\`, \`references/\`, \`assets/\`, \`evals/\`, etc.
 - IMPORTANT: before declaring any file missing, run \`ls -la <dir>/\` (or Glob) RECURSIVELY. Empty-looking subdirs usually just weren't inspected. Do not overwrite existing files without reading them first — the copy of the skill is complete.
@@ -491,6 +545,7 @@ ${iterLine}
     return `/${FACTORY_SKILL_NAME} create ${req.skillName}
 
 You are creating a NEW skill from scratch. Your current working directory is a TEMPORARY workdir (\`${workdir}\`).
+${languageLine}
 - Write every file of the skill here: \`SKILL.md\`, \`references/\`, \`assets/\`, \`scripts/\`, \`templates/\`, \`evals/evals.json\`, etc.
 - All paths are relative to cwd. Do NOT try to write to \`${extras.realSkillDir}\` directly — Nakiros will copy the whole workdir there when the user clicks "Create skill".
 - If the user clicks "Discard", everything is thrown away.
@@ -568,13 +623,15 @@ You are creating a NEW skill from scratch. Your current working directory is a T
   },
 
   /**
-   * User-confirmed completion. Sync the temp workdir BACK to the real skill
-   * (replacing the existing source tree for `fix`, creating the skill dir for
-   * `create`), then let the factory destroy the temp workdir + remove the
-   * registry entry.
+   * User-confirmed completion. Sync the sandbox workdir BACK to the target
+   * skill directory:
+   *   - Fix:    target = `<project>/.claude/skills/<name>/` (replaces source).
+   *   - Create: target = `<project>/.claude/skills-draft/<name>/` (creates
+   *             the draft folder fresh — surfaces in the listing as a Draft).
    *
-   * Safety net for `create` mode: if the target appeared since start, refuse
-   * to sync and mark the run failed.
+   * `cleanupOnTerminal` then tears down the sandbox + Claude-Code project
+   * entry. For create, the safety check below refuses sync-back if the
+   * target somehow appeared during the run.
    */
   finish(entry, opts) {
     const { extras, run } = entry;
@@ -655,20 +712,40 @@ You are creating a NEW skill from scratch. Your current working directory is a T
       return { kind: 'cleanup' };
     }
 
-    // Non-terminal → rehydrate. Subprocess is gone. If we have a sessionId
-    // AND the session file still lives at
-    // `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl`, we can resume via
-    // `--resume` → collapse to waiting_for_input + flag interruptedByReboot
-    // so the UI surfaces "Reprendre". Otherwise the run is unresumable →
-    // collapse to `stopped` so the user still sees the partial conversation
-    // and can dismiss it.
+    // Non-terminal → rehydrate. Subprocess is gone.
+    //
+    // Fix: if we have a resumable sessionId we restore to `waiting_for_input`,
+    // otherwise we collapse to `stopped` so the user can dismiss the
+    // half-applied sandbox.
+    //
+    // Create: ALWAYS restore to `waiting_for_input` regardless of sessionId.
+    // The sandbox under `~/.nakiros/tmp-skills/<runId>/` is the user's draft —
+    // marking it terminal here would (1) hide it from the listing and
+    // (2) drop the cwd from `collectLiveProjectEntryNames`, letting the
+    // boot sweep wipe `~/.claude/projects/<encoded>/<sessionId>.jsonl` and
+    // erase the conversation history. Keeping it active preserves the tmp,
+    // the Claude session jsonl, and lets the user resume on the next
+    // message (with `--resume` if sessionId is recovered, fresh turn otherwise).
     const wasActive = blob.status === 'starting' || blob.status === 'running';
-    const sessionFile =
-      blob.sessionId
-        ? join(homedir(), '.claude', 'projects', encodeProjectPath(workdir), `${blob.sessionId}.jsonl`)
-        : null;
-    const canResume = !wasActive || (Boolean(blob.sessionId) && sessionFile !== null && existsSync(sessionFile));
-    const restoredStatus: AuditRun['status'] = canResume ? 'waiting_for_input' : 'stopped';
+    // run.json may not have flushed sessionId before the crash. Recover it
+    // from the most recent `*.jsonl` Claude wrote under the cwd-encoded
+    // project entry — that's where `getFixTimeline` will read history from.
+    const recoveredSessionId =
+      blob.sessionId ?? findLatestClaudeSessionId(workdir);
+    const sessionFile = recoveredSessionId
+      ? join(
+          homedir(),
+          '.claude',
+          'projects',
+          encodeProjectPath(workdir),
+          `${recoveredSessionId}.jsonl`,
+        )
+      : null;
+    const canResume =
+      !wasActive ||
+      (Boolean(recoveredSessionId) && sessionFile !== null && existsSync(sessionFile));
+    const restoredStatus: AuditRun['status'] =
+      mode === 'create' || canResume ? 'waiting_for_input' : 'stopped';
     const restoredRun: AuditRun = {
       runId: blob.runId,
       scope: blob.scope,
@@ -677,7 +754,7 @@ You are creating a NEW skill from scratch. Your current working directory is a T
       marketplaceName: blob.marketplaceName,
       skillName: blob.skillName,
       status: restoredStatus,
-      sessionId: blob.sessionId ?? null,
+      sessionId: recoveredSessionId,
       workdir,
       reportPath: blob.reportPath ?? null,
       turns: Array.isArray(blob.turns) ? blob.turns : [],
@@ -903,7 +980,11 @@ export function stopFix(runId: string): void {
   }
 }
 
-// Create runs share the same registry and lifecycle.
+// Create runs share the same registry and lifecycle as fix. The runner spec
+// branches internally on `mode === 'create'` only for the sync-back target
+// (draft folder vs prod skill folder). Discard, cleanup and stream API are
+// identical: a create sandbox under `~/.nakiros/tmp-skills/<runId>/` is wiped
+// the same way a fix sandbox is.
 export const finishCreate = finishFix;
 export const stopCreate = stopFix;
 export const sendCreateUserMessage = sendFixUserMessage;

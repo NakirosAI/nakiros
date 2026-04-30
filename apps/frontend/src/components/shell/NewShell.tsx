@@ -169,6 +169,7 @@ export default function NewShell({
                       key={project.id}
                       project={project}
                       onOpenSkill={(skillName) => updateTab(tab.id, { skillId: skillName })}
+                      onOpenRunTab={handleOpenRunByIds}
                     />
                   )}
                   {view === 'skills' && tab.skillId && (

@@ -498,6 +498,15 @@ export interface SkillEvalRun {
    * shadow live fix-temp batches.
    */
   fixRunId?: string;
+  /**
+   * Set when this run was launched from a create session via
+   * `create:runEvals`. Carries the parent create's `runId` so the
+   * frontend recap can locate the draft sandbox (its `workdir`) and
+   * read the per-iteration artefacts from there — without it, the
+   * recap would resolve `.claude/skills/<name>/` (which doesn't exist
+   * yet) and surface 0/0 with no assertions.
+   */
+  createRunId?: string;
   /** Any error message that occurred. */
   error: string | null;
   /**
@@ -625,6 +634,16 @@ export interface StartEvalRunRequest {
    * batch from the real workspace. Set by `fix:runEvalsInTemp`.
    */
   fixRunId?: string;
+  /**
+   * Set when the eval batch was launched from a create session via
+   * `create:runEvals`. Carries the parent create's `runId` so the
+   * resulting `SkillEvalRun` records can carry it back to the frontend
+   * recap (which uses it to read artefacts from the draft sandbox
+   * instead of the not-yet-existent prod skill folder). Iterations are
+   * NOT tagged `'fix-temp'` — they live with the draft and travel with
+   * it on Apply & deploy.
+   */
+  createRunId?: string;
   /**
    * Claude model id to pass as `--model` to the CLI subprocess (e.g.
    * `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5`). When omitted

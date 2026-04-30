@@ -120,12 +120,39 @@ export default function EvalRunRecap({
   // the batch carries the parent `fixRunId`). When set we also fetch the
   // fix-temp matrix and use it for the per-eval cell lookup.
   const fixRunId = focusRuns[0]?.fixRunId ?? null;
+  // Same idea for create runs — `createRunId` lets us redirect every
+  // artefact read to the draft sandbox (`<tmp>/evals/workspace/`) since
+  // the prod skill folder doesn't exist yet. The sandbox path is
+  // resolved once via `getCreateRun(...)` and reused for both the
+  // matrix fetch and lazy `loadIterationRun` calls.
+  const createRunId = focusRuns[0]?.createRunId ?? null;
+  const [createSandboxDir, setCreateSandboxDir] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!createRunId) {
+      setCreateSandboxDir(null);
+      return;
+    }
+    let cancelled = false;
+    void window.nakiros.getCreateRun(createRunId).then((createRun) => {
+      if (cancelled) return;
+      setCreateSandboxDir(createRun?.workdir ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [createRunId]);
 
   useEffect(() => {
     if (!identity) return;
+    if (createRunId && createSandboxDir === null) return;
     let cancelled = false;
+    const matrixRequest = {
+      ...matrixRequestFromIdentity(identity),
+      ...(createSandboxDir ? { skillDirOverride: createSandboxDir } : {}),
+    };
     void Promise.all([
-      window.nakiros.getEvalMatrix(matrixRequestFromIdentity(identity)),
+      window.nakiros.getEvalMatrix(matrixRequest),
       window.nakiros.listEvalBaselines({
         scope: identity.scope,
         skillName: identity.skillName,
@@ -150,7 +177,7 @@ export default function EvalRunRecap({
     return () => {
       cancelled = true;
     };
-  }, [identity, fixRunId]);
+  }, [identity, fixRunId, createRunId, createSandboxDir]);
 
   const perEvalRows = useMemo<PerEvalRow[]>(
     () =>
@@ -196,6 +223,11 @@ export default function EvalRunRecap({
         // number (e.g. an old prod iter 1 that has nothing to do with the
         // current fix). Same reason `buildPerEvalRows` uses `fixTempMatrix`.
         ...(focusRun.fixRunId ? { fixRunId: focusRun.fixRunId } : {}),
+        // Create-launched evals live inside the draft sandbox at
+        // `<workdir>/evals/workspace/iteration-N/`. We override skillDir
+        // so the handler reads from there instead of `.claude/skills/<name>/`
+        // (which doesn't exist for a draft).
+        ...(createSandboxDir ? { skillDirOverride: createSandboxDir } : {}),
       })) as IterationRunArtifact;
       const items = (artifact.grading?.assertion_results ?? []).map((a) => ({
         text: a.text,

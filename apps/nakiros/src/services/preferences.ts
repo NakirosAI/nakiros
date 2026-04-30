@@ -78,3 +78,14 @@ export function getSystemLanguage(): 'fr' | 'en' {
   const locale = process.env.LANG ?? process.env.LC_ALL ?? 'en';
   return locale.toLowerCase().startsWith('fr') ? 'fr' : 'en';
 }
+
+/**
+ * Resolve the effective UI language by collapsing the `'system'` preference
+ * onto the OS locale. Used by runner prompts so the agent answers the user
+ * in their preferred language.
+ */
+export function getEffectiveLanguage(): 'fr' | 'en' {
+  const pref = getPreferences().language;
+  if (pref === 'fr' || pref === 'en') return pref;
+  return getSystemLanguage();
+}

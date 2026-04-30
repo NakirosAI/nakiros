@@ -702,6 +702,7 @@ export async function startEvalRuns(
         // number, otherwise dismissed prod batches would shadow live
         // fix-temp batches via `dismissedIds`.
         ...(request.fixRunId ? { fixRunId: request.fixRunId } : {}),
+        ...(request.createRunId ? { createRunId: request.createRunId } : {}),
       };
 
       const eventLog = new EventLog<EvalRunEvent['event']>({

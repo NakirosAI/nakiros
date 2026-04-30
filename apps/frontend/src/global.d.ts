@@ -259,10 +259,17 @@ declare global {
       onCreateEvent(cb: (event: AuditRunEvent) => void): () => void;
       listCreateDiff(runId: string): Promise<SkillDiffEntry[]>;
       readCreateDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
+      getCreateTimeline(runId: string): Promise<FixTimelineEntry[]>;
+      getCreateUsage(runId: string): Promise<FixUsage>;
+      runCreateEvals(request: {
+        runId: string;
+        evalNames?: string[];
+      }): Promise<StartEvalRunResponse>;
 
       // Draft files (temp workdir preview for fix + create)
       listSkillAgentTempFiles(runId: string): Promise<SkillAgentTempFileEntry[]>;
       readSkillAgentTempFile(runId: string, relativePath: string): Promise<SkillAgentTempFileContent>;
+
 
       onScanProgress(cb: (progress: ScanProgress) => void): () => void;
     };

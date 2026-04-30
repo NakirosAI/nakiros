@@ -352,6 +352,10 @@ const client = {
   onCreateEvent: (cb: (event: unknown) => void) => subscribe(C['create:event'], cb),
   listCreateDiff: (runId: string) => invoke(C['create:listDiff'], runId),
   readCreateDiffFile: (runId: string, relativePath: string) => invoke(C['create:readDiffFile'], runId, relativePath),
+  getCreateTimeline: (runId: string) => invoke(C['create:getTimeline'], runId),
+  getCreateUsage: (runId: string) => invoke(C['create:getUsage'], runId),
+  runCreateEvals: (request: { runId: string; evalNames?: string[] }) =>
+    invoke(C['create:runEvals'], request),
 
   // Meta
   getVersionInfo: (options?: { force?: boolean }) => invoke(C['meta:getVersionInfo'], options ?? {}),
@@ -359,6 +363,7 @@ const client = {
   // Skill agent temp files
   listSkillAgentTempFiles: (runId: string) => invoke(C['skillAgent:listTempFiles'], runId),
   readSkillAgentTempFile: (runId: string, relativePath: string) => invoke(C['skillAgent:readTempFile'], runId, relativePath),
+
 
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),

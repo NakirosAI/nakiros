@@ -4,18 +4,34 @@ import { join } from 'path';
 import type {
   ConversationAnalysis,
   ConversationCompaction,
+  ConversationCostSample,
   ConversationFrictionPoint,
   ConversationHealthZone,
   ConversationHotFile,
+  ConversationPausePoint,
   ConversationTip,
   ConversationToolStats,
 } from '@nakiros/shared';
+
+// Billed-equivalent multipliers (tokens of input-equivalent).
+const M_INPUT = 1;
+const M_OUTPUT = 5;
+const M_CACHE_READ = 0.1;
+const M_CACHE_5M = 1.25;
+const M_CACHE_1H = 2;
 
 // ---------------------------------------------------------------------------
 // Heuristic constants
 // ---------------------------------------------------------------------------
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // default Anthropic prompt cache TTL
+// Anthropic prompt cache TTL — Claude Code can opt into the 1h beta cache via
+// `cache_control: { ttl: "1h" }`. We auto-detect per-session by inspecting the
+// `usage.cache_creation` breakdown (`ephemeral_5m_input_tokens` vs
+// `ephemeral_1h_input_tokens`). Empirically Claude Code uses 1h beta
+// systematically since 2026-04, but we keep the detection so we stay correct
+// if it changes. See `feedback_cache_1h_beta_default` memory.
+const CACHE_TTL_5M_MS = 5 * 60 * 1000;
+const CACHE_TTL_1H_MS = 60 * 60 * 1000;
 
 // Context window detection — Claude Code can opt into the 1M context for
 // Opus 4.x via beta, and we can't read that header from the JSONL. Fall back
@@ -110,6 +126,25 @@ export function analyzeConversation(
 
   if (entries.length === 0) return null;
 
+  // --- Pre-scan: detect dominant cache mode (5m vs 1h beta) ---
+  // Claude Code uses the 1h beta cache by default since 2026-04, but we detect
+  // per-session to stay honest. The TTL drives `cacheMissTurns` and
+  // `wastedCacheTokens` — a 5min hardcoded TTL produces 14× more "false pause"
+  // events when the session actually used 1h beta.
+  let count1h = 0;
+  let count5m = 0;
+  for (const entry of entries) {
+    if (entry['type'] !== 'assistant') continue;
+    const msg = entry['message'] as { usage?: { cache_creation?: Record<string, number> } } | undefined;
+    const cc = msg?.usage?.cache_creation;
+    if (!cc) continue;
+    if ((cc['ephemeral_1h_input_tokens'] ?? 0) > 0) count1h++;
+    if ((cc['ephemeral_5m_input_tokens'] ?? 0) > 0) count5m++;
+  }
+  const cacheMode: '5m' | '1h' = count1h > count5m ? '1h' : '5m';
+  const cacheTtlMs = cacheMode === '1h' ? CACHE_TTL_1H_MS : CACHE_TTL_5M_MS;
+  const cacheTtlMin = cacheTtlMs / 60_000;
+
   // First pass: collect ordered timeline of relevant events to compute offsets
   // and build summary / metadata.
   let startedAt = '';
@@ -120,6 +155,10 @@ export function analyzeConversation(
 
   const compactions: ConversationCompaction[] = [];
   const frictionPoints: ConversationFrictionPoint[] = [];
+  const costSamples: ConversationCostSample[] = [];
+  const pausePoints: ConversationPausePoint[] = [];
+  let pendingPause: ConversationPausePoint | null = null;
+  let cumBilled = 0;
   const toolStats: Record<string, ConversationToolStats> = {};
   const slashCommandSet = new Set<string>();
   const editCounts = new Map<string, number>();
@@ -162,7 +201,9 @@ export function analyzeConversation(
       : 0;
 
     if (timestamp) {
-      if (!startedAt) startedAt = timestamp;
+      if (!startedAt) {
+        startedAt = timestamp;
+      }
       lastMessageAt = timestamp;
     }
     if (!gitBranch && entry['gitBranch']) gitBranch = entry['gitBranch'] as string;
@@ -255,9 +296,22 @@ export function analyzeConversation(
 
       // Cache miss detection — real user reply arriving > TTL after last
       // assistant reply forces a full cache rewrite on the next turn.
-      if (lastAssistantTimestamp && timestamp) {
+      // We push a PausePoint with wastedTokens=0 (filled in when we encounter
+      // the next assistant turn).
+      if (lastAssistantTimestamp && timestamp && startedAt) {
         const gapMs = new Date(timestamp).getTime() - new Date(lastAssistantTimestamp).getTime();
-        if (gapMs > CACHE_TTL_MS) cacheMissTurns++;
+        if (gapMs > cacheTtlMs) {
+          cacheMissTurns++;
+          const tMs = new Date(timestamp).getTime() - new Date(startedAt).getTime();
+          const pp: ConversationPausePoint = {
+            tMs,
+            offsetPct: entryOffset,
+            gapMs,
+            wastedTokens: 0,
+          };
+          pausePoints.push(pp);
+          pendingPause = pp;
+        }
       }
 
       continue;
@@ -280,6 +334,7 @@ export function analyzeConversation(
 
       // Tool use + hot file tracking.
       let turnLastTool: string | null = lastAssistantToolName;
+      const turnToolNames: string[] = [];
       if (Array.isArray(msg?.content)) {
         for (const block of msg!.content) {
           const b = block as {
@@ -292,6 +347,7 @@ export function analyzeConversation(
           stats.count++;
           toolStats[b.name] = stats;
           turnLastTool = b.name;
+          turnToolNames.push(b.name);
 
           // Files touched by edit-like tools.
           if (
@@ -310,14 +366,36 @@ export function analyzeConversation(
       lastAssistantToolName = turnLastTool;
 
       // Token accounting from message.usage.
-      const usage = msg?.usage;
+      const usage = msg?.usage as {
+        input_tokens?: number;
+        output_tokens?: number;
+        cache_creation_input_tokens?: number;
+        cache_read_input_tokens?: number;
+        cache_creation?: {
+          ephemeral_5m_input_tokens?: number;
+          ephemeral_1h_input_tokens?: number;
+        };
+      } | undefined;
       if (usage) {
         const input = usage.input_tokens ?? 0;
         const output = usage.output_tokens ?? 0;
         const cacheRead = usage.cache_read_input_tokens ?? 0;
-        const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+        // Read 5m/1h breakdown when available; fall back to flat field for
+        // older format compatibility.
+        const cc = usage.cache_creation ?? {};
+        let cache5m = cc.ephemeral_5m_input_tokens ?? 0;
+        let cache1h = cc.ephemeral_1h_input_tokens ?? 0;
+        if (cache5m === 0 && cache1h === 0 && usage.cache_creation_input_tokens) {
+          // Format without breakdown: assume 5m (Anthropic default).
+          cache5m = usage.cache_creation_input_tokens;
+        }
+        const cacheCreation = cache5m + cache1h;
 
-        totalTokens += input + output + cacheRead + cacheCreation;
+        // totalTokens matches what Claude Code reports as "consumed": fresh
+        // input + output + cache writes. Cache reads are excluded — they're
+        // re-uses of already-paid tokens, not new consumption (and including
+        // them would inflate by 50× on a session with heavy cache hits).
+        totalTokens += input + output + cacheCreation;
         cacheReadTokens += cacheRead;
         cacheCreationTokens += cacheCreation;
 
@@ -326,12 +404,42 @@ export function analyzeConversation(
         contextSamples.push({ offsetPct: entryOffset, tokens: ctxOnThisTurn });
 
         // Attribute waste: cache_creation tokens on a turn that came after a
-        // > TTL gap is directly avoidable spend.
-        if (lastAssistantTimestamp && timestamp) {
-          const gapMs =
-            new Date(timestamp).getTime() - new Date(lastAssistantTimestamp).getTime();
-          if (gapMs > CACHE_TTL_MS) wastedCacheTokens += cacheCreation;
+        // > TTL gap is directly avoidable spend. The pendingPause was set in
+        // the user-message branch; we close it here and stamp wastedTokens.
+        let wastedRewrite = 0;
+        if (pendingPause) {
+          wastedRewrite = cacheCreation;
+          pendingPause.wastedTokens = wastedRewrite;
+          pendingPause = null;
+          wastedCacheTokens += wastedRewrite;
         }
+
+        // Push a CostSample for this assistant turn — this drives the cost
+        // track in the sismograph.
+        const billed =
+          input * M_INPUT +
+          output * M_OUTPUT +
+          cacheRead * M_CACHE_READ +
+          cache5m * M_CACHE_5M +
+          cache1h * M_CACHE_1H;
+        cumBilled += billed;
+        const tMs =
+          startedAt && timestamp
+            ? new Date(timestamp).getTime() - new Date(startedAt).getTime()
+            : 0;
+        costSamples.push({
+          tMs,
+          offsetPct: entryOffset,
+          input,
+          output,
+          cacheRead,
+          cache5m,
+          cache1h,
+          billed,
+          cumBilled,
+          wastedRewrite,
+          toolNames: turnToolNames,
+        });
       }
 
       if (timestamp) lastAssistantTimestamp = timestamp;
@@ -432,6 +540,7 @@ export function analyzeConversation(
     hotFiles,
     cacheMissTurns,
     wastedCacheTokens,
+    cacheTtlMin,
   });
 
   const tips = buildTips({
@@ -445,6 +554,7 @@ export function analyzeConversation(
     hotFiles,
     cacheMissTurns,
     wastedCacheTokens,
+    cacheTtlMin,
     durationMs,
     slashCommands: Array.from(slashCommandSet),
     sidechainCount,
@@ -467,10 +577,15 @@ export function analyzeConversation(
     healthZone,
     contextSamples,
 
+    cacheMode,
+    cacheTtlMin,
     cacheReadTokens,
     cacheCreationTokens,
     cacheMissTurns,
     wastedCacheTokens,
+
+    costSamples,
+    pausePoints,
 
     frictionPoints,
 
@@ -501,6 +616,7 @@ function buildDiagnostic(args: {
   hotFiles: ConversationHotFile[];
   cacheMissTurns: number;
   wastedCacheTokens: number;
+  cacheTtlMin: number;
 }): string {
   const parts: string[] = [];
 
@@ -542,7 +658,7 @@ function buildDiagnostic(args: {
   if (args.cacheMissTurns >= 3) {
     const kWaste = Math.round(args.wastedCacheTokens / 1000);
     parts.push(
-      `${args.cacheMissTurns} reprises > 5 min, ~${kWaste}k tokens de cache rewrite évitables`,
+      `${args.cacheMissTurns} reprises > ${args.cacheTtlMin}min, ~${kWaste}k tokens de cache rewrite évitables`,
     );
   }
 
@@ -568,6 +684,7 @@ function buildTips(args: {
   hotFiles: ConversationHotFile[];
   cacheMissTurns: number;
   wastedCacheTokens: number;
+  cacheTtlMin: number;
   durationMs: number;
   slashCommands: string[];
   sidechainCount: number;
@@ -578,11 +695,19 @@ function buildTips(args: {
 
   // --- Context management ------------------------------------------------
   if (args.compactions.length >= 2) {
+    // Compaction cost estimate: each compaction wrote a fresh prompt prefix
+    // covering preTokens worth of context. The marginal cost over a session
+    // that didn't need to be split is roughly preTokens × cache_create_5m
+    // multiplier (assuming 5m default; we don't know the per-compaction TTL).
+    const compactionCostTokens = args.compactions.reduce(
+      (sum, c) => sum + (c.preTokens || 0),
+      0,
+    );
     tips.push({
       id: 'split-sessions',
       category: 'context',
       severity: 'critical',
-      data: { count: args.compactions.length },
+      data: { count: args.compactions.length, economyTokens: compactionCostTokens },
     });
   } else if (args.compactions.length === 1) {
     tips.push({
@@ -608,19 +733,32 @@ function buildTips(args: {
   }
 
   // --- Cache efficiency --------------------------------------------------
+  // Both tips are user-actionable: split before pause / keep session continuous.
+  // We do NOT suggest "enable 1h cache" because it's an API setting Claude Code
+  // controls internally — not something the user can toggle.
   if (args.wastedCacheTokens >= 500_000) {
     tips.push({
-      id: 'use-extended-cache',
+      id: 'split-before-long-pause',
       category: 'cache',
       severity: 'warning',
-      data: { cacheMisses: args.cacheMissTurns, wastedK },
+      data: {
+        cacheMisses: args.cacheMissTurns,
+        wastedK,
+        ttlMin: args.cacheTtlMin,
+        economyTokens: args.wastedCacheTokens,
+      },
     });
   } else if (args.cacheMissTurns >= 5) {
     tips.push({
       id: 'keep-session-continuous',
       category: 'cache',
       severity: 'info',
-      data: { cacheMisses: args.cacheMissTurns, wastedK },
+      data: {
+        cacheMisses: args.cacheMissTurns,
+        wastedK,
+        ttlMin: args.cacheTtlMin,
+        economyTokens: args.wastedCacheTokens,
+      },
     });
   }
 
@@ -690,9 +828,16 @@ function buildTips(args: {
     });
   }
 
-  // Severity order: critical > warning > info
+  // Sort by economy potential first (descending tokens economisable), then by
+  // severity. Tips without an `economyTokens` data field fall to the bottom of
+  // their severity bucket.
   const weight = { critical: 0, warning: 1, info: 2 } as const;
-  tips.sort((a, b) => weight[a.severity] - weight[b.severity]);
+  tips.sort((a, b) => {
+    const ea = typeof a.data['economyTokens'] === 'number' ? (a.data['economyTokens'] as number) : 0;
+    const eb = typeof b.data['economyTokens'] === 'number' ? (b.data['economyTokens'] as number) : 0;
+    if (ea !== eb) return eb - ea;
+    return weight[a.severity] - weight[b.severity];
+  });
 
   // Cap — too many tips is noise, first 5 is actionable.
   return tips.slice(0, 5);

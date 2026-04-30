@@ -1,7 +1,81 @@
 @import "tailwindcss";
 @import "../styles.css";
+@import "./tokens.css";
 
 @custom-variant dark (&:is(.dark *, :root[data-theme='dark'] *));
+
+/*
+ * Nakiros new-design Tailwind tokens.
+ *
+ * Exposes the OKLch token set from `tokens.css` to Tailwind utilities
+ * with an `n-` prefix to avoid colliding with the legacy theme block
+ * below (which still maps shadcn vars to the hex token set in
+ * `../styles.css`). Every utility coming from this block is namespaced:
+ *
+ *   bg-n-canvas, bg-n-surface, bg-n-raised, bg-n-sunken,
+ *   text-n-fg, text-n-muted, text-n-subtle, text-n-faint,
+ *   border-n-subtle, border-n-default, border-n-strong,
+ *   bg-n-accent, text-n-accent, bg-n-accent-soft, border-n-accent-line,
+ *   bg-n-healthy-soft, bg-n-watch-soft, bg-n-critical-soft, ...
+ *   font-n-sans, font-n-mono,
+ *   rounded-n-xs/sm/md/lg/xl,
+ *   shadow-n-card, shadow-n-pop, shadow-n-glow-accent.
+ *
+ * This block introduces no visual change: nothing consumes these
+ * utilities yet — they become available for the screens ported in
+ * later phases.
+ */
+@theme inline {
+  --color-n-canvas:  var(--n-bg-canvas);
+  --color-n-surface: var(--n-bg-surface);
+  --color-n-raised:  var(--n-bg-raised);
+  --color-n-sunken:  var(--n-bg-sunken);
+  --color-n-overlay: var(--n-bg-overlay);
+
+  --color-n-border-subtle:  var(--n-border-subtle);
+  --color-n-border-default: var(--n-border-default);
+  --color-n-border-strong:  var(--n-border-strong);
+
+  --color-n-fg:        var(--n-fg);
+  --color-n-muted:     var(--n-fg-muted);
+  --color-n-subtle:    var(--n-fg-subtle);
+  --color-n-faint:     var(--n-fg-faint);
+
+  --color-n-accent:        var(--n-accent);
+  --color-n-accent-strong: var(--n-accent-strong);
+  --color-n-accent-soft:   var(--n-accent-soft);
+  --color-n-accent-line:   var(--n-accent-line);
+
+  --color-n-healthy:       var(--n-healthy);
+  --color-n-healthy-soft:  var(--n-healthy-soft);
+  --color-n-watch:         var(--n-watch);
+  --color-n-watch-soft:    var(--n-watch-soft);
+  --color-n-critical:      var(--n-critical);
+  --color-n-critical-soft: var(--n-critical-soft);
+  --color-n-info:          var(--n-info);
+  --color-n-info-soft:     var(--n-info-soft);
+  --color-n-violet:        var(--n-violet);
+  --color-n-violet-soft:   var(--n-violet-soft);
+
+  --color-n-track-tokens:   var(--n-track-tokens);
+  --color-n-track-context:  var(--n-track-context);
+  --color-n-track-friction: var(--n-track-friction);
+  --color-n-track-tools:    var(--n-track-tools);
+  --color-n-track-cache:    var(--n-track-cache);
+
+  --font-n-sans: var(--n-font-sans);
+  --font-n-mono: var(--n-font-mono);
+
+  --radius-n-xs: var(--n-r-xs);
+  --radius-n-sm: var(--n-r-sm);
+  --radius-n-md: var(--n-r-md);
+  --radius-n-lg: var(--n-r-lg);
+  --radius-n-xl: var(--n-r-xl);
+
+  --shadow-n-card:        var(--n-shadow-card);
+  --shadow-n-pop:         var(--n-shadow-pop);
+  --shadow-n-glow-accent: var(--n-shadow-glow-accent);
+}
 
 @theme inline {
   --color-background: var(--background);

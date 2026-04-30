@@ -200,6 +200,8 @@ const client = {
   listProjects: () => invoke(C['project:list']),
   getProject: (id: string) => invoke(C['project:get'], id),
   dismissProject: (id: string) => invoke(C['project:dismiss'], id),
+  listDismissedProjects: () => invoke(C['project:listDismissed']),
+  undismissProject: (id: string) => invoke(C['project:undismiss'], id),
   listProjectConversations: (projectId: string) => invoke(C['project:listConversations'], projectId),
   getProjectConversationMessages: (projectId: string, sessionId: string) =>
     invoke(C['project:getConversationMessages'], projectId, sessionId),
@@ -207,6 +209,12 @@ const client = {
     invoke(C['project:analyzeConversation'], projectId, sessionId),
   listProjectConversationsWithAnalysis: (projectId: string) =>
     invoke(C['project:listConversationsWithAnalysis'], projectId),
+  getProjectAggregate: (projectId: string) =>
+    invoke(C['project:getAggregate'], projectId),
+  refreshProjectAggregate: (projectId: string) =>
+    invoke(C['project:refreshAggregate'], projectId),
+  onProjectAggregateUpdated: (cb: (aggregate: unknown) => void) =>
+    subscribe(C['project:aggregateUpdated'], cb),
   loadConversationDeepAnalysis: (projectId: string, sessionId: string) =>
     invoke(C['project:loadDeepAnalysis'], projectId, sessionId),
   deepAnalyzeConversation: (projectId: string, sessionId: string) =>
@@ -287,6 +295,10 @@ const client = {
   readEvalRunDiffPatch: (runId: string) => invoke(C['eval:readDiffPatch'], runId),
   getEvalMatrix: (request: unknown) => invoke(C['eval:getMatrix'], request),
   loadIterationRun: (request: unknown) => invoke(C['eval:loadIterationRun'], request),
+  listEvalBaselines: (request: unknown) => invoke(C['eval:listBaselines'], request),
+  getEvalTimeline: (runId: string) => invoke(C['eval:getTimeline'], runId),
+  getEvalIterationUsage: (runId: string) => invoke(C['eval:getIterationUsage'], runId),
+  getEvalBatchUsage: (runIds: string[]) => invoke(C['eval:getBatchUsage'], runIds),
 
   // Eval model comparison
   runModelComparison: (request: unknown) => invoke(C['comparison:run'], request),
@@ -305,6 +317,8 @@ const client = {
   listActiveAuditRuns: () => invoke(C['audit:listActive']),
   listAllAuditRuns: () => invoke(C['audit:listAll']),
   getAuditBufferedEvents: (runId: string) => invoke(C['audit:getBufferedEvents'], runId),
+  getAuditTimeline: (runId: string) => invoke(C['audit:getTimeline'], runId),
+  getAuditUsage: (runId: string) => invoke(C['audit:getUsage'], runId),
   onAuditEvent: (cb: (event: unknown) => void) => subscribe(C['audit:event'], cb),
 
   // Fix
@@ -321,6 +335,10 @@ const client = {
   onFixEvent: (cb: (event: unknown) => void) => subscribe(C['fix:event'], cb),
   listFixDiff: (runId: string) => invoke(C['fix:listDiff'], runId),
   readFixDiffFile: (runId: string, relativePath: string) => invoke(C['fix:readDiffFile'], runId, relativePath),
+  getFixEditsHistory: (runId: string) => invoke(C['fix:getEditsHistory'], runId),
+  getFixTimeline: (runId: string) => invoke(C['fix:getTimeline'], runId),
+  getFixTempMatrix: (runId: string) => invoke(C['fix:getFixTempMatrix'], runId),
+  getFixUsage: (runId: string) => invoke(C['fix:getUsage'], runId),
 
   // Create
   startCreate: (request: unknown) => invoke(C['create:start'], request),
@@ -334,6 +352,10 @@ const client = {
   onCreateEvent: (cb: (event: unknown) => void) => subscribe(C['create:event'], cb),
   listCreateDiff: (runId: string) => invoke(C['create:listDiff'], runId),
   readCreateDiffFile: (runId: string, relativePath: string) => invoke(C['create:readDiffFile'], runId, relativePath),
+  getCreateTimeline: (runId: string) => invoke(C['create:getTimeline'], runId),
+  getCreateUsage: (runId: string) => invoke(C['create:getUsage'], runId),
+  runCreateEvals: (request: { runId: string; evalNames?: string[] }) =>
+    invoke(C['create:runEvals'], request),
 
   // Meta
   getVersionInfo: (options?: { force?: boolean }) => invoke(C['meta:getVersionInfo'], options ?? {}),
@@ -341,6 +363,7 @@ const client = {
   // Skill agent temp files
   listSkillAgentTempFiles: (runId: string) => invoke(C['skillAgent:listTempFiles'], runId),
   readSkillAgentTempFile: (runId: string, relativePath: string) => invoke(C['skillAgent:readTempFile'], runId, relativePath),
+
 
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),

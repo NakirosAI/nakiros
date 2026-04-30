@@ -13,6 +13,8 @@ type StoredProject = Project;
  */
 const PURGE_PATH_PATTERNS: RegExp[] = [
   /\/evals\/workspace\/iteration-\d+\/eval-[^/]+\/(with_skill|without_skill)\/?$/,
+  // Comparison evals: …/evals/comparisons/<ISO-timestamp>/<model>/eval-<name>/(with|without)_skill
+  /\/evals\/comparisons\/[^/]+\/[^/]+\/eval-[^/]+\/(with_skill|without_skill)\/?$/,
 ];
 
 function isObsoletePath(projectPath: string): boolean {
@@ -100,6 +102,32 @@ export function dismissProject(id: string): void {
   if (idx < 0) return;
   all[idx] = { ...all[idx], status: 'dismissed' };
   writeAll(all);
+}
+
+/**
+ * Return every dismissed project from the persisted registry. Used by the home
+ * screen's "Show dismissed" panel so users can restore a project they
+ * previously hid.
+ */
+export function listDismissedProjects(): Project[] {
+  return readAll().filter((p) => p.status === 'dismissed').map(stripInternal);
+}
+
+/**
+ * Flip a previously-dismissed project back to `active`. Returns the restored
+ * project, or `null` when the id is unknown / already active. Restoration only
+ * lasts until the next scan unless the project is still detected on disk —
+ * `scan()` would skip dismissed entries entirely, so undoing the dismissal is
+ * the only way to make the project re-appear.
+ */
+export function undismissProject(id: string): Project | null {
+  const all = readAll();
+  const idx = all.findIndex((p) => p.id === id);
+  if (idx < 0) return null;
+  if (all[idx].status === 'active') return stripInternal(all[idx]);
+  all[idx] = { ...all[idx], status: 'active' };
+  writeAll(all);
+  return stripInternal(all[idx]);
 }
 
 /** True when at least one non-dismissed project exists. Cheap check used by onboarding gates. */

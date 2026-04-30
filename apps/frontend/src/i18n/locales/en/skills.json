@@ -1,4 +1,78 @@
 {
+  "skillsTitle": "Skills",
+  "skillsCount_one": "{{count}} skill",
+  "skillsCount_other": "{{count}} skills",
+  "searchPlaceholder": "Search skills…",
+  "noMatch": "No skill matches your search.",
+  "emptyState": "This project has no skill yet.",
+  "back": "Back",
+  "notFound": "Skill not found",
+  "runAudit": "Audit",
+  "runFix": "Fix",
+  "runEvalsStarting": "Starting…",
+  "starting": "Starting…",
+  "auditTab": {
+    "empty": "No audit has been recorded for this skill yet.",
+    "emptyReport": "This audit report is empty.",
+    "title": "Audit —",
+    "file": "File:",
+    "scoreLabel": "score",
+    "fixFromAudit": "Fix from this audit"
+  },
+  "evalsTab": {
+    "empty": "No eval iteration recorded yet.",
+    "emptyHint": "Run a first batch via the Run evals button (coming soon).",
+    "noBaselineHint": "no baseline runs",
+    "includeBaseline": "Include baseline (without-skill)",
+    "defined": "Evals defined",
+    "assertions": "assertions",
+    "noDefinitions": "No eval defined for this skill yet.",
+    "obsoleteBaselines": {
+      "badge_one": "{{count}} obsolete baseline",
+      "badge_other": "{{count}} obsolete baselines",
+      "tooltip": "{{count}} baseline(s) computed on a model version that is no longer current. Use the kebab menu to recompute."
+    },
+    "baselineMenu": {
+      "aria": "Baseline actions",
+      "refresh": "Recompute baseline"
+    }
+  },
+  "iterationsTab": {
+    "heading": "Iterations · history",
+    "count_one": "{{count}} iteration",
+    "count_other": "{{count}} iterations",
+    "empty": "No iteration recorded yet.",
+    "emptyHint": "Run a first batch of evals to populate the history."
+  },
+  "filesTab": {
+    "empty": "No file in this skill folder.",
+    "emptyFile": "This file is empty.",
+    "pickAFile": "Select a file to preview",
+    "binary": "Image preview not supported here."
+  },
+  "fixTab": {
+    "title": "Run a Fix on this skill",
+    "intro": "The fix builds on the latest audit and existing evals. It works on a sandbox copy",
+    "introCont": "iterates, and deploys when you hit \"Finish\".",
+    "run": "Run fix",
+    "viewLastDiff": "View last diff",
+    "comingHint": "Wired up in Phase 4 (RunScreen)"
+  },
+  "diff": {
+    "back": "Back to matrix",
+    "export": "Export diff",
+    "promote": "Promote",
+    "noPrevious": "No previous iteration to compare with.",
+    "kpiPassRate": "Pass rate",
+    "kpiRegressions": "Regressions",
+    "kpiTokens": "Tokens",
+    "kpiDuration": "Duration",
+    "perEval": "Per-eval comparison",
+    "regressionsOnly": "Regressions only",
+    "noRegression": "No regression on this run.",
+    "assertions": "assertion-by-assertion",
+    "noAssertion": "No grading.json available for this eval at these iterations."
+  },
   "loading": "Loading skills…",
   "heading": "Skills ({{count}})",
   "newSkill": "New skill",

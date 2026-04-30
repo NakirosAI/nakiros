@@ -108,11 +108,68 @@ function aggregateRunSummary(evals: Record<string, EvalStats>, key: 'with_skill'
 }
 
 /**
- * Compute `benchmark.json` for a completed iteration by scanning each eval-XXX subdirectory.
- * Writes the file at `{skillDir}/evals/workspace/iteration-N/benchmark.json`.
+ * Optional inputs for {@link writeIterationBenchmark}. Used by the eval runner
+ * to inject baseline stats sourced from the cache (`~/.nakiros/baselines/...`)
+ * when a given eval was a cache hit and therefore did not produce on-disk
+ * `without_skill/` artefacts for this iteration.
  */
-export function writeIterationBenchmark(skillDir: string, skillName: string, iteration: number): void {
-  const iterDir = join(skillDir, 'evals', 'workspace', `iteration-${iteration}`);
+export interface WriteBenchmarkOptions {
+  /**
+   * Per-eval baseline stats to use as fallback when the iteration workspace
+   * has no `without_skill/` directory for that eval. Cache misses in the same
+   * iteration still write their fresh baseline to disk and are picked up via
+   * the on-disk scan — they don't appear in this map.
+   */
+  baselinesByEval?: Record<string, EvalConfigStats | undefined>;
+  /**
+   * What kind of run produced this iteration: `'skill'` for a normal eval
+   * batch, `'baseline'` for a baseline-only refresh, or `'fix-temp'` for
+   * an iteration produced by `fix:runEvalsInTemp`. Surfaced by the matrix
+   * so the frontend can distinguish them visually (muted column bg,
+   * sparkline marker color, diff selector tag). Defaults to `'skill'`
+   * when omitted, matching pre-refactor benchmarks.
+   */
+  kind?: 'skill' | 'baseline' | 'fix-temp';
+  /**
+   * Owning fix runId when `kind === 'fix-temp'`. Lets `fix:finish` promote
+   * the latest fix-temp iter of `fixRunId` to `'skill'` and `fix:stopRun`
+   * delete every iter of the batch.
+   */
+  fixRunId?: string;
+}
+
+/**
+ * Resolve the workspace directory under which `iteration-N/` folders live
+ * for a given context. Skill iterations and baseline refreshes go into
+ * `evals/workspace/`; fix-temp iterations are isolated under
+ * `evals/.fix-temp/<fixRunId>/` so they never bump the skill's iteration
+ * counter and the main eval matrix never sees them.
+ */
+export function resolveEvalWorkspaceDir(skillDir: string, fixRunId?: string): string {
+  return fixRunId
+    ? join(skillDir, 'evals', '.fix-temp', fixRunId)
+    : join(skillDir, 'evals', 'workspace');
+}
+
+/**
+ * Compute `benchmark.json` for a completed iteration by scanning each eval-XXX subdirectory.
+ * Writes the file at `{skillDir}/evals/workspace/iteration-N/benchmark.json` for
+ * regular skill/baseline iterations, or at
+ * `{skillDir}/evals/.fix-temp/<fixRunId>/iteration-N/benchmark.json` when
+ * `opts.fixRunId` is set (fix-temp evals — kept out of the main history).
+ *
+ * When `opts.baselinesByEval` is provided, evals without an on-disk
+ * `without_skill/` dir fall back to the supplied stats (typically reused from
+ * the per-model baseline cache populated by the eval runner).
+ */
+export function writeIterationBenchmark(
+  skillDir: string,
+  skillName: string,
+  iteration: number,
+  opts: WriteBenchmarkOptions = {},
+): void {
+  const workspaceDir = resolveEvalWorkspaceDir(skillDir, opts.fixRunId);
+  const iterDir = join(workspaceDir, `iteration-${iteration}`);
   if (!existsSync(iterDir)) return;
 
   let evalDirs: string[];
@@ -133,7 +190,8 @@ export function writeIterationBenchmark(skillDir: string, skillName: string, ite
     const evalName = evalDirName.replace(/^eval-/, '');
     const evalDir = join(iterDir, evalDirName);
     const withSkill = collectConfigStats(evalDir, 'with_skill');
-    const withoutSkill = collectConfigStats(evalDir, 'without_skill');
+    const onDiskBaseline = collectConfigStats(evalDir, 'without_skill');
+    const withoutSkill = onDiskBaseline ?? opts.baselinesByEval?.[evalName];
 
     if (!iterationModel) {
       const timing = readJson<TimingFile>(join(evalDir, 'with_skill', 'timing.json'));
@@ -175,10 +233,43 @@ export function writeIterationBenchmark(skillDir: string, skillName: string, ite
     );
   }
 
+  // Preserve `kind` / `fix_run_id` from the existing `benchmark.json` when
+  // the caller didn't pass them. Otherwise the per-run mid-batch refresh
+  // (which has no opts) would clobber a `'fix-temp'` tag set by the final
+  // batch write earlier in the same iteration.
+  const existingPath = join(iterDir, 'benchmark.json');
+  let existingKind: 'skill' | 'baseline' | 'fix-temp' | undefined;
+  let existingFixRunId: string | undefined;
+  if (existsSync(existingPath)) {
+    try {
+      const prev = JSON.parse(readFileSync(existingPath, 'utf8')) as {
+        kind?: 'skill' | 'baseline' | 'fix-temp';
+        fix_run_id?: string;
+      };
+      if (prev.kind === 'skill' || prev.kind === 'baseline' || prev.kind === 'fix-temp') {
+        existingKind = prev.kind;
+      }
+      if (typeof prev.fix_run_id === 'string') existingFixRunId = prev.fix_run_id;
+    } catch {
+      // ignore — fall through to defaults
+    }
+  }
+  const resolvedKind = opts.kind ?? existingKind ?? 'skill';
+  const resolvedFixRunId = opts.fixRunId ?? existingFixRunId;
+
   const benchmark = {
     skill_name: skillName,
     iteration,
     timestamp: new Date().toISOString(),
+    // `'baseline'` for baseline-only refreshes triggered from the kebab
+    // menu; `'skill'` for normal eval batches; `'fix-temp'` for evals
+    // launched from a fix run (against its in-progress sandbox). The
+    // matrix uses this to tag iterations without re-deriving the kind
+    // from cell contents.
+    kind: resolvedKind,
+    // Set only on `'fix-temp'` iterations — lets the fix lifecycle
+    // (finish/reject) target the right batch in the workspace.
+    ...(resolvedFixRunId ? { fix_run_id: resolvedFixRunId } : {}),
     skill_fingerprint: skillFingerprint,
     model: iterationModel,
     run_summary: {
@@ -189,15 +280,23 @@ export function writeIterationBenchmark(skillDir: string, skillName: string, ite
     per_eval: perEval,
   };
 
-  writeFileSync(join(iterDir, 'benchmark.json'), JSON.stringify(benchmark, null, 2), 'utf8');
+  writeFileSync(existingPath, JSON.stringify(benchmark, null, 2), 'utf8');
 }
 
 /**
  * Read the highest-numbered iteration's benchmark.json from a skill dir.
  * Returns null if no iterations or no benchmark file exists.
+ *
+ * When `fixRunId` is set, reads from `evals/.fix-temp/<fixRunId>/` instead
+ * of the main workspace — used by `fix:getBenchmarks` to surface the
+ * latest fix-temp result in the fix chat without polluting the prod
+ * history.
  */
-export function readLatestIterationBenchmark(skillDir: string): FixBenchmarkSnapshot | null {
-  const workspaceDir = join(skillDir, 'evals', 'workspace');
+export function readLatestIterationBenchmark(
+  skillDir: string,
+  fixRunId?: string,
+): FixBenchmarkSnapshot | null {
+  const workspaceDir = resolveEvalWorkspaceDir(skillDir, fixRunId);
   if (!existsSync(workspaceDir)) return null;
 
   let iterNums: number[];

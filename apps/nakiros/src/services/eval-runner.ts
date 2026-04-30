@@ -1,18 +1,31 @@
 import { type ChildProcess, execFile } from 'child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join, relative, sep } from 'path';
+import { dirname, join, relative, sep } from 'path';
 import { promisify } from 'util';
 
 import { gradeLlmAssertionsBatch, JUDGE_MODEL } from './eval-llm-grader.js';
-import { writeIterationBenchmark } from './eval-benchmark.js';
+import {
+  collectConfigStats,
+  resolveEvalWorkspaceDir,
+  writeIterationBenchmark,
+  type EvalConfigStats,
+} from './eval-benchmark.js';
 import { cleanupEvalArtifacts } from './eval-artifact-cleanup.js';
+import { computeEvalFingerprint } from './eval-fingerprint.js';
+import {
+  getBaseline,
+  upsertBaseline,
+  type BaselineKey,
+} from './baseline-store.js';
 
 import { homedir } from 'os';
 
 import {
   EventLog,
+  aggregateSessionUsage,
   buildClaudeArgs,
   captureSandboxDiff,
+  computeSessionUsage,
   createEvalSandbox,
   createTmpSandbox,
   deleteClaudeProjectEntry,
@@ -20,23 +33,28 @@ import {
   destroyTmpSandbox,
   encodeProjectPath,
   findGitRoot,
+  formatTool,
   generateRunId,
   listSandboxUntracked,
+  parseSessionBlocks,
   persistRunJson,
   spawnClaudeTurn,
   writeExecutionSettings,
 } from './runner-core/index.js';
 
 import type {
+  ChatTimelineEntry,
   EvalRunConfig,
   EvalRunEvent,
   EvalRunStatus,
+  FixUsage,
   SkillEvalAssertionDefinition,
   SkillEvalDefinition,
   SkillEvalRun,
   StartEvalRunRequest,
   StartEvalRunResponse,
 } from '@nakiros/shared';
+import { DEFAULT_EVAL_MODEL, resolveModelFullId } from '@nakiros/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -75,8 +93,8 @@ function getSkillDir(request: StartEvalRunRequest, resolveSkillDir: (req: StartE
   return resolveSkillDir(request);
 }
 
-function computeNextIteration(skillDir: string): number {
-  const workspaceDir = join(skillDir, 'evals', 'workspace');
+function computeNextIteration(skillDir: string, fixRunId?: string): number {
+  const workspaceDir = resolveEvalWorkspaceDir(skillDir, fixRunId);
   if (!existsSync(workspaceDir)) return 1;
   try {
     const dirs = readdirSync(workspaceDir, { withFileTypes: true })
@@ -99,8 +117,10 @@ function prepareArtifactDir(
   iteration: number,
   evalName: string,
   config: EvalRunConfig,
+  fixRunId?: string,
 ): string {
-  const dir = join(skillDir, 'evals', 'workspace', `iteration-${iteration}`, `eval-${evalName}`, config);
+  const workspaceDir = resolveEvalWorkspaceDir(skillDir, fixRunId);
+  const dir = join(workspaceDir, `iteration-${iteration}`, `eval-${evalName}`, config);
   mkdirSync(join(dir, 'outputs'), { recursive: true });
   return dir;
 }
@@ -433,9 +453,25 @@ export async function startEvalRuns(
   request: StartEvalRunRequest,
   options: StartRunsOptions,
 ): Promise<StartEvalRunResponse> {
+  // Two roles of "skill dir":
+  //  - `skillDir` (= override when present) is the execution context: where
+  //    `evals.json`, fixtures, the SKILL.md to copy into the with_skill
+  //    sandbox come from. For fix-evals this is the temp workdir so the
+  //    agent sees the in-progress edits.
+  //  - `skillRealDir` is the persisted workspace: where iteration-N/ goes
+  //    on disk. Always the resolved real skill dir, even when an override
+  //    is set, so the matrix surfaces a unified history (skill + baseline
+  //    + fix-temp iterations live side by side).
   const skillDir = getSkillDir(request, options.resolveSkillDir);
+  const skillRealDir = options.resolveSkillDir({
+    ...request,
+    skillDirOverride: undefined,
+  });
   if (!existsSync(skillDir)) {
     throw new Error(`Skill directory not found: ${skillDir}`);
+  }
+  if (!existsSync(skillRealDir)) {
+    throw new Error(`Real skill directory not found: ${skillRealDir}`);
   }
 
   const evalsJsonPath = join(skillDir, 'evals', 'evals.json');
@@ -476,9 +512,69 @@ export async function startEvalRuns(
     throw new Error('No matching evals to run');
   }
 
-  const iteration = options.fixedIteration ?? computeNextIteration(skillDir);
-  const includeBaseline = request.includeBaseline === true;
-  const configs: EvalRunConfig[] = includeBaseline ? ['with_skill', 'without_skill'] : ['with_skill'];
+  const baselineOnly = request.baselineOnly === true;
+
+  // Baseline-only runs are persisted as real iterations under the skill's
+  // workspace (just like skill iterations) — they bump the iteration
+  // counter, get their own benchmark.json (with `kind: 'baseline'`), and
+  // surface in the matrix / sparkline / diff selector. The per-model
+  // cache is still upserted at the end so skill iterations can reuse the
+  // value without recomputing.
+  // Fix-temp evals get their own counter under
+  // `evals/.fix-temp/<fixRunId>/` so they start at 1 per fix session and
+  // don't bump the skill's main iteration counter.
+  const iteration = options.fixedIteration ?? computeNextIteration(skillRealDir, request.fixRunId);
+  if (request.fixRunId) {
+    console.log(
+      `[eval-runner] startEvalRuns fixRunId=${request.fixRunId} iteration=${iteration} skillRealDir=${skillRealDir}`,
+    );
+  }
+  // baselineOnly implies "always run baseline" — refreshBaseline is then
+  // moot, but we keep the explicit flag for the non-baseline-only path.
+  const refreshBaseline = baselineOnly || request.refreshBaseline === true;
+
+  // Resolve the alias once. Used for both:
+  //  - The cache key, so opus-resolved-to-4-7 today doesn't get reused when
+  //    opus resolves to 4-8 tomorrow.
+  //  - The `--model` flag passed to claude, so the actual run model matches
+  //    the cache key (we don't trust claude's CLI to resolve the alias the
+  //    same way we do).
+  const modelFullId = resolveModelFullId(request.model ?? DEFAULT_EVAL_MODEL);
+
+  // Per-eval baseline plan: lookup cache, decide whether to schedule a
+  // without_skill run for this iteration. Cache hits skip the run entirely
+  // (~50% token saving when iterating on the same skill+model).
+  interface BaselineDecision {
+    key: BaselineKey;
+    /** Stats reused from the cache when present (cache hit, no run). */
+    cachedStats: EvalConfigStats | null;
+    /** True when a fresh `without_skill` run is scheduled for this iteration. */
+    needsRun: boolean;
+  }
+  const baselineByEval = new Map<string, BaselineDecision>();
+  for (const def of selectedDefs) {
+    const evalFingerprint = computeEvalFingerprint(skillDir, {
+      name: def.name,
+      prompt: def.prompt,
+      expected_output: def.expectedOutput,
+      mode: def.mode,
+      files: def.files,
+      output_files: def.outputFiles,
+      assertions: def.assertions,
+    });
+    const key: BaselineKey = {
+      skillName: request.skillName,
+      evalName: def.name,
+      modelFullId,
+      evalFingerprint,
+    };
+    const cached = refreshBaseline ? null : getBaseline(key);
+    baselineByEval.set(def.name, {
+      key,
+      cachedStats: cached?.stats ?? null,
+      needsRun: cached === null,
+    });
+  }
 
   // Detect the skill's enclosing git repo once — all runs in this batch share
   // the same source. `null` when the skill lives outside a git repo (bundled,
@@ -487,10 +583,20 @@ export async function startEvalRuns(
 
   const createdRuns: SkillEvalRun[] = [];
   for (const def of selectedDefs) {
+    const decision = baselineByEval.get(def.name);
+    if (!decision) {
+      // Defensive: every selectedDef has a decision built above.
+      continue;
+    }
+    const configs: EvalRunConfig[] = baselineOnly
+      ? ['without_skill']
+      : decision.needsRun
+        ? ['with_skill', 'without_skill']
+        : ['with_skill'];
     for (const config of configs) {
       const artifactDir = options.artifactRootOverride
         ? prepareArtifactDirAt(options.artifactRootOverride, def.name, config)
-        : prepareArtifactDir(skillDir, iteration, def.name, config);
+        : prepareArtifactDir(skillRealDir, iteration, def.name, config, request.fixRunId);
 
       const runId = generateRunId('run');
 
@@ -579,13 +685,24 @@ export async function startEvalRuns(
         mode: def.mode ?? 'autonomous',
         outputFiles: def.outputFiles,
         isolatedHome: null,
-        model: request.model ?? null,
+        // Always store the resolved full id so it matches the baseline cache
+        // key. Skipping resolution would let claude's CLI alias us silently.
+        model: modelFullId,
         turns: [],
         tokensUsed: 0,
         durationMs: 0,
         startedAt: new Date().toISOString(),
         finishedAt: null,
         error: null,
+        skillDirOverride: request.skillDirOverride ?? null,
+        // Persisted on every run of this batch when launched from a fix
+        // session — the frontend's `useAgentRunsSync.batchKey` uses it to
+        // disambiguate fix-temp batches (per-session iter counter
+        // starting at 1) from prod batches that happen to share an iter
+        // number, otherwise dismissed prod batches would shadow live
+        // fix-temp batches via `dismissedIds`.
+        ...(request.fixRunId ? { fixRunId: request.fixRunId } : {}),
+        ...(request.createRunId ? { createRunId: request.createRunId } : {}),
       };
 
       const eventLog = new EventLog<EvalRunEvent['event']>({
@@ -638,9 +755,54 @@ export async function startEvalRuns(
 
     await Promise.all(workers);
 
+    // ── Persist freshly-computed baselines into the per-model cache ────────
+    // For each eval where we scheduled a `without_skill` run (cache miss
+    // or `refreshBaseline: true`), read its grading/timing artefacts and
+    // upsert into `~/.nakiros/baselines/...`. Failed runs (no grading.json)
+    // are skipped — the next iteration retries naturally on cache miss.
+    for (const decision of baselineByEval.values()) {
+      if (!decision.needsRun) continue;
+      const baselineRun = createdRuns.find(
+        (r) => r.evalName === decision.key.evalName && r.config === 'without_skill',
+      );
+      if (!baselineRun) continue;
+      const evalDir = dirname(baselineRun.workdir);
+      const stats = collectConfigStats(evalDir, 'without_skill');
+      if (stats) {
+        try {
+          upsertBaseline(decision.key, stats);
+        } catch (err) {
+          console.error('[eval-runner] Failed to persist baseline cache:', err);
+        }
+      }
+    }
+
     if (!options.skipBenchmarkWrite) {
+      // Pass cache-hit baselines so the benchmark.json gets a `without_skill`
+      // section even when no fresh baseline run produced on-disk artefacts
+      // for this iteration. Cache miss evals already wrote their baseline
+      // artefacts to disk, so they're picked up by the on-disk scan.
+      const cachedBaselinesByEval: Record<string, EvalConfigStats | undefined> = {};
+      for (const [evalName, decision] of baselineByEval) {
+        if (decision.cachedStats) cachedBaselinesByEval[evalName] = decision.cachedStats;
+      }
+      // The iteration kind is tagged based on the request shape:
+      //  - `fixRunId` set → eval was launched from `fix:runEvalsInTemp` →
+      //    `'fix-temp'` so the matrix UI can mark it (and the fix
+      //    finish/reject lifecycle can target the batch via `fix_run_id`)
+      //  - `baselineOnly` → `'baseline'` (kebab "Recalculer la baseline")
+      //  - otherwise normal skill iteration
+      const kind: 'fix-temp' | 'baseline' | 'skill' = request.fixRunId
+        ? 'fix-temp'
+        : baselineOnly
+          ? 'baseline'
+          : 'skill';
       try {
-        writeIterationBenchmark(skillDir, request.skillName, iteration);
+        writeIterationBenchmark(skillRealDir, request.skillName, iteration, {
+          baselinesByEval: cachedBaselinesByEval,
+          kind,
+          ...(request.fixRunId ? { fixRunId: request.fixRunId } : {}),
+        });
       } catch (err) {
         console.error('[eval-runner] Failed to write benchmark.json:', err);
       }
@@ -655,14 +817,54 @@ export async function startEvalRuns(
   };
 }
 
+/**
+ * Build the user prompt for the first turn of a run, accounting for the two
+ * eval-prompt styles (question form vs. slash-prefixed reproduction).
+ *
+ * - `with_skill`: ensure the prompt invokes `/<skillName>` exactly once.
+ * - `without_skill`: ensure the prompt does NOT start with `/<skillName>`,
+ *   so claude doesn't try to execute a slash command that's been denied
+ *   in the sandbox (which makes claude no-op without calling the model).
+ */
+function renderFirstTurnPrompt(
+  config: 'with_skill' | 'without_skill',
+  skillName: string,
+  promptFromDefinition: string,
+): string {
+  const prefix = `/${skillName}`;
+  const startsWithSkillCmd =
+    promptFromDefinition === prefix ||
+    promptFromDefinition.startsWith(`${prefix} `) ||
+    promptFromDefinition.startsWith(`${prefix}\n`);
+  if (config === 'with_skill') {
+    return startsWithSkillCmd ? promptFromDefinition : `${prefix} ${promptFromDefinition}`;
+  }
+  // without_skill
+  if (!startsWithSkillCmd) return promptFromDefinition;
+  // Strip the leading `/<skillName>` (and one separator if any).
+  const remainder = promptFromDefinition.slice(prefix.length);
+  return remainder.replace(/^[\s]+/, '');
+}
+
 async function executeRun(entry: RunEntry, definition: SkillEvalDefinition, skillDir: string): Promise<void> {
   const { run } = entry;
 
-  // For with_skill runs, invoke the skill explicitly on the first turn via the /skill-name pattern.
-  const firstTurnPrompt =
-    run.config === 'with_skill'
-      ? `/${run.skillName} ${definition.prompt}`
-      : definition.prompt;
+  // Eval prompts can be written two ways:
+  //   (a) as a question (e.g. "audit this skill: …") — the runner is
+  //       expected to invoke the skill via `/<skillName>` for `with_skill`,
+  //       and just send the question as-is for `without_skill`.
+  //   (b) as a "real-world reproduction" already starting with the slash
+  //       command (e.g. "/coucou j'ai une fonction qui renvoie undefined…")
+  //       — the runner must NOT double-prefix for `with_skill`, and must
+  //       STRIP the `/<skillName>` prefix for `without_skill` so claude
+  //       sees a regular question instead of trying to execute a slash
+  //       command that doesn't exist in this sandbox (which silently
+  //       no-ops the model call: tokensUsed=0, empty assistant turn).
+  const firstTurnPrompt = renderFirstTurnPrompt(
+    run.config,
+    run.skillName,
+    definition.prompt,
+  );
 
   await executeTurn(entry, skillDir, firstTurnPrompt, /* isFirstTurn */ true);
 
@@ -775,6 +977,12 @@ async function executeTurn(
   });
   entry.child = null;
 
+  // If the user called stopRun() while the turn was in flight, the SIGTERM'd
+  // child returns a non-zero exit — but the run is `stopped`, not `failed`.
+  // stopRun() has already torn down the sandbox and broadcast the terminal
+  // state; bail out before we overwrite it with `failed`.
+  if (entry.killed) return;
+
   if (result.exitCode !== 0 || result.error) {
     run.status = 'failed';
     run.error = result.error;
@@ -839,8 +1047,12 @@ async function finalizeRun(entry: RunEntry, definition: SkillEvalDefinition): Pr
   deleteClaudeProjectEntry(executionDirBeforeTeardown);
 
   try {
-    const iterDir = deriveIterDir(run);
-    if (iterDir) writeIterationBenchmark(iterDir.skillDir, run.skillName, run.iteration);
+    const derived = deriveIterDir(run);
+    if (derived) {
+      writeIterationBenchmark(derived.skillDir, run.skillName, run.iteration, {
+        ...(derived.fixRunId ? { fixRunId: derived.fixRunId, kind: 'fix-temp' } : {}),
+      });
+    }
   } catch (err) {
     console.error('[eval-runner] Failed to refresh benchmark.json:', err);
   }
@@ -876,9 +1088,21 @@ function teardownSandbox(entry: RunEntry): void {
   }
 }
 
-function deriveIterDir(run: SkillEvalRun): { skillDir: string; iterDir: string } | null {
-  const marker = '/evals/workspace/';
-  const idx = run.workdir.indexOf(marker);
+function deriveIterDir(
+  run: SkillEvalRun,
+): { skillDir: string; iterDir: string; fixRunId?: string } | null {
+  const fixMarker = '/evals/.fix-temp/';
+  let idx = run.workdir.indexOf(fixMarker);
+  if (idx !== -1) {
+    const skillDir = run.workdir.slice(0, idx);
+    const after = run.workdir.slice(idx + fixMarker.length);
+    const fixRunId = after.split('/')[0];
+    if (!fixRunId) return null;
+    const iterDir = join(skillDir, 'evals', '.fix-temp', fixRunId, `iteration-${run.iteration}`);
+    return { skillDir, iterDir, fixRunId };
+  }
+  const wsMarker = '/evals/workspace/';
+  idx = run.workdir.indexOf(wsMarker);
   if (idx === -1) return null;
   const skillDir = run.workdir.slice(0, idx);
   const iterDir = join(skillDir, 'evals', 'workspace', `iteration-${run.iteration}`);
@@ -964,6 +1188,112 @@ export function getRun(runId: string): SkillEvalRun | null {
  */
 export function getEvalBufferedEvents(runId: string): EvalRunEvent['event'][] {
   return runs.get(runId)?.eventLog.getBuffered() ?? [];
+}
+
+/**
+ * Build the conversation timeline of a single eval iteration directly from
+ * Claude Code's session jsonl. One iteration = one `SkillEvalRun` =
+ * one Claude session, so this returns the full chat for that iteration
+ * (with_skill or without_skill).
+ *
+ * Same pattern as `getFixTimeline` / `getAuditTimeline` — see
+ * `feedback_session_jsonl_source_of_truth.md`. Surfaces the universal
+ * `user` / `assistant_text` / `tool` kinds; eval doesn't need
+ * specialised cards (its outputs are scored externally via
+ * `grading.json`).
+ *
+ * Filters Write/Edit on Nakiros-internal artefacts (`run.json`,
+ * `events.jsonl`, `grading.json`) so they don't surface as tool noise —
+ * the agent's actual work is the Writes to `outputs/<file>` which we
+ * keep visible. The cwd used for path resolution is the run's
+ * `executionDir` (sandbox path), falling back to `workdir` for legacy
+ * runs that predate the sandbox split.
+ *
+ * Returns an empty array when the run is unknown, has no `sessionId`
+ * yet (still queued / starting), or its session jsonl is missing on
+ * disk.
+ */
+export function getEvalTimeline(runId: string): ChatTimelineEntry[] {
+  const entry = runs.get(runId);
+  if (!entry) return [];
+  const { run } = entry;
+  if (!run.sessionId) return [];
+
+  const cwd = run.executionDir ?? run.workdir;
+  const out: ChatTimelineEntry[] = [];
+
+  for (const block of parseSessionBlocks(cwd, run.sessionId)) {
+    if (block.kind === 'user_text') {
+      out.push({ kind: 'user', ts: block.ts, text: block.text });
+      continue;
+    }
+    if (block.kind === 'assistant_text') {
+      out.push({ kind: 'assistant_text', ts: block.ts, text: block.text });
+      continue;
+    }
+    if (
+      (block.name === 'Write' || block.name === 'Edit' || block.name === 'MultiEdit') &&
+      isEvalRuntimeOnlyPath(block.input, cwd)
+    ) {
+      continue;
+    }
+    out.push({
+      kind: 'tool',
+      ts: block.ts,
+      name: block.name,
+      display: formatTool(block.name, block.input),
+    });
+  }
+
+  out.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+  return out;
+}
+
+/**
+ * Compute the billed-equivalent + agent-active stats for ONE eval
+ * iteration. Walks the iteration's session jsonl in its execution dir
+ * (sandbox path); falls back to `workdir` for legacy runs that predate
+ * the sandbox split. Same algorithm as fix and audit — see
+ * {@link computeSessionUsage}.
+ *
+ * Returns the empty-state value when the iteration is unknown or has no
+ * sessionId yet.
+ */
+export function getEvalIterationUsage(runId: string): FixUsage {
+  const entry = runs.get(runId);
+  if (!entry) return computeSessionUsage('', null);
+  const { run } = entry;
+  const cwd = run.executionDir ?? run.workdir;
+  return computeSessionUsage(cwd, run.sessionId, run.startedAt);
+}
+
+/**
+ * Aggregate billed-equivalent + agent-active stats over a list of
+ * iteration runIds (a batch). Used by the eval batch header to surface
+ * a coherent cost+timer signal across with_skill / without_skill /
+ * baseline iterations launched together. Unknown runIds are silently
+ * skipped (their slot contributes zero).
+ *
+ * `agentActiveMs` sums concurrent intervals — this is "total agent
+ * compute spent on the batch", NOT wall-clock duration of the slowest
+ * iteration. Wall-clock elapsed is still derivable from `agentRun.startedAt`
+ * client-side if the UI needs it.
+ */
+export function getEvalBatchUsage(runIds: string[]): FixUsage {
+  return aggregateSessionUsage(runIds.map((id) => getEvalIterationUsage(id)));
+}
+
+/**
+ * True when a tool input targets a Nakiros-internal eval artefact
+ * (`run.json`, `events.jsonl`, `grading.json`). The agent's work product
+ * lives under `outputs/`; those Writes ARE the iteration's deliverable
+ * and stay visible in the timeline as tool boxes.
+ */
+function isEvalRuntimeOnlyPath(input: Record<string, unknown>, cwd: string): boolean {
+  const filePath = typeof input.file_path === 'string' ? input.file_path : '';
+  if (!filePath) return false;
+  const rel = relative(cwd, filePath);
+  return rel === 'run.json' || rel === 'events.jsonl' || rel === 'grading.json';
 }
 
 /**

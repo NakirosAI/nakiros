@@ -22,5 +22,68 @@
   "rescan": "Rescan",
   "projects": "Projects",
   "dismiss": "Dismiss this project",
-  "noProjects": "No Claude Code project detected. Run a rescan or start using Claude Code."
+  "noProjects": "No Claude Code project detected. Run a rescan or start using Claude Code.",
+  "hero": {
+    "tagline": "Analyze, audit, and improve the skills powering your Claude Code agents — entirely on your machine.",
+    "nakirosSkills": "Nakiros Skills",
+    "rescan": "Rescan",
+    "rescanning": "Scanning…"
+  },
+  "rescanBanner": {
+    "scanning": "Scanning · {{current}}/{{total}}",
+    "scanningProject": "{{name}}",
+    "starting": "Starting scan…",
+    "refreshing": "Refreshing project metrics…"
+  },
+  "dismissed": {
+    "show": "Show dismissed",
+    "hide": "Hide dismissed",
+    "heading": "Dismissed projects",
+    "empty": "No dismissed project.",
+    "noMatch": "No dismissed project matches your search.",
+    "restore": "Restore"
+  },
+  "tabs": {
+    "projects": "Projects",
+    "plugins": "Plugins",
+    "globals": "Globals",
+    "nakiros": "Nakiros"
+  },
+  "searchPlaceholder": "Search projects, skills, paths…",
+  "projectsTab": {
+    "heading": "Projects",
+    "found": "{{count}} found",
+    "scannedFrom": "scanned ~/.claude/projects",
+    "noMatch": "No project matches your search.",
+    "empty": "No project scanned yet."
+  },
+  "pluginsTab": {
+    "heading": "Marketplaces",
+    "empty": "No plugin skill detected.",
+    "noMatch": "No marketplace matches your search."
+  },
+  "marketplace": {
+    "label": "Marketplace",
+    "unnamed": "unnamed",
+    "kpiPlugins": "Plugins",
+    "kpiSkills": "Skills",
+    "kpiEvals": "Evals",
+    "kpiAudits": "Audits",
+    "pluginsHeading": "Plugins",
+    "noPlugins": "No plugin found in this marketplace.",
+    "noSkills": "No skill in this marketplace yet.",
+    "noMatch": "No skill matches your search.",
+    "allSkills": "All skills · {{count}}",
+    "searchPlaceholder": "Search skills…"
+  },
+  "globalsTab": {
+    "heading": "Skills installed at ~/.claude/skills",
+    "empty": "No skill installed in ~/.claude/skills.",
+    "noMatch": "No global matches your search."
+  },
+  "nakirosTab": {
+    "heading": "Skills bundled with Nakiros",
+    "empty": "No bundled skill installed.",
+    "noMatch": "No bundled skill matches your search."
+  }
 }

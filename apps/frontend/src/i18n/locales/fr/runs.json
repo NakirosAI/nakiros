@@ -1,9 +1,46 @@
 {
   "back": "Retour",
   "stop": "Arrêter",
+  "stopping": "Arrêt…",
+  "starting": "Démarrage…",
   "finish": "Terminer",
+  "finishAndDeploy": "Terminer & déployer",
   "discard": "Abandonner",
   "resume": "Reprendre",
+  "streaming": "diffusion…",
+  "boot": {
+    "notFound": "Run introuvable ou déjà rejeté."
+  },
+  "titles": {
+    "audit": "Audit",
+    "fix": "Fix",
+    "create": "Créer un skill"
+  },
+  "unsupported": {
+    "title": "Bientôt disponible",
+    "body": "Ce type de run sera câblé dans une prochaine PR."
+  },
+  "panels": {
+    "eval": {
+      "title": "Lot d'évals",
+      "iteration": "Itération",
+      "passRate": "Taux de réussite",
+      "delta": "Δ vs baseline",
+      "runs": "Runs du lot",
+      "passed": "Réussis",
+      "tokens": "Tokens",
+      "empty": "Aucun run d'eval trouvé dans ce lot.",
+      "progression": "Progression",
+      "queue": "File d'évals",
+      "uplift": "uplift du taux de réussite",
+      "upliftBody": "With-skill bat la baseline sur {{wins}}/{{total}} évals terminées.",
+      "runningWithBaseline": "évals en cours · with-skill ▲ vs baseline ▽",
+      "runningWithSkill": "évals en cours · with-skill ▲",
+      "noBaseline": "Aucun run baseline dans ce lot.",
+      "withSkill": "Avec skill",
+      "baseline": "Baseline"
+    }
+  },
   "interruptedBadge": "Interrompu",
   "interruptedTooltip": "Ce run a été coupé par un redémarrage du daemon. Clique sur Reprendre pour relancer la conversation.",
   "error": {

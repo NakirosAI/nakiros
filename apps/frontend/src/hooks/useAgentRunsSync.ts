@@ -8,6 +8,7 @@ import type {
 } from '@nakiros/shared';
 
 import { agentRunStore } from '../lib/agent-run-store';
+import { computeEvalBatchKey } from '../lib/eval-batch-key';
 import { usePolling } from './usePolling';
 
 // ── Status maps ─────────────────────────────────────────────────────────────
@@ -65,15 +66,22 @@ function auditLikeToAgentRun(
 
 // ── eval — grouped by (skill, iteration) so a 5-run batch shows one row ────
 
+/**
+ * Wrapper around the canonical `computeEvalBatchKey` helper — exists so the
+ * sync layer can adapt a `SkillEvalRun` to the helper's shape without
+ * duplicating the join logic (which used to drift from `launchEvalBatch`
+ * and break the freshly-opened tab — see [lib/eval-batch-key.ts]).
+ */
 function batchKey(run: SkillEvalRun): string {
-  return [
-    run.scope,
-    run.projectId ?? '',
-    run.pluginName ?? '',
-    run.marketplaceName ?? '',
-    run.skillName,
-    run.iteration,
-  ].join('|');
+  return computeEvalBatchKey({
+    scope: run.scope,
+    skillName: run.skillName,
+    iteration: run.iteration,
+    projectId: run.projectId,
+    pluginName: run.pluginName,
+    marketplaceName: run.marketplaceName,
+    fixRunId: run.fixRunId,
+  });
 }
 
 function aggregateEvalStatus(runs: SkillEvalRun[]): AgentRunStatus {
@@ -97,10 +105,18 @@ function evalBatchToAgentRun(runs: SkillEvalRun[]): AgentRun {
     : undefined;
   const totalTokens = runs.reduce((acc, r) => acc + (r.tokensUsed ?? 0), 0);
 
+  // Baseline-only batches (only `without_skill` runs) use a Date.now()-based
+  // iteration server-side as a unique batch key. We don't want to surface
+  // that giant timestamp to users — show "Baseline" instead of "iter X".
+  const isBaselineOnly = runs.every((r) => r.config === 'without_skill');
+  const title = isBaselineOnly
+    ? `Baseline · ${head.skillName} (${runs.length})`
+    : `Eval · ${head.skillName} · iter ${head.iteration} (${runs.length})`;
+
   return {
     id: `eval:${batchKey(head)}`,
     kind: 'eval',
-    title: `Eval · ${head.skillName} · iter ${head.iteration} (${runs.length})`,
+    title,
     target: {
       type: 'skill',
       scope: head.scope,
@@ -122,6 +138,7 @@ function evalBatchToAgentRun(runs: SkillEvalRun[]): AgentRun {
       kind: 'eval',
       runIds: runs.map((r) => r.runId),
       iteration: head.iteration,
+      ...(head.createRunId ? { createRunId: head.createRunId } : {}),
     },
   };
 }

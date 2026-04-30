@@ -1,7 +1,9 @@
 {
   "loading": "Analyse des conversations…",
   "empty": "Aucune conversation trouvée pour ce projet.",
+  "emptyForFilter": "Aucune conversation ne correspond à ce filtre.",
   "headingAnalysis": "Conversations — {{count}} analysées",
+  "subheadingByHealth": "Triées par santé (critiques d'abord)",
   "sort": {
     "label": "Tri",
     "score": "Par santé (critiques d'abord)",
@@ -38,9 +40,41 @@
   "diagnostic": {
     "healthy": "Conversation saine — pas de signal notable"
   },
+  "hover": {
+    "cumBilled": "cumul billed",
+    "wasted": "GASPILLÉ",
+    "compaction": "Compaction",
+    "pause": "Pause",
+    "friction": "Friction"
+  },
   "drawer": {
     "title": "Diagnostic",
     "close": "Fermer",
+    "tabs": {
+      "diagnostic": "Diagnostic",
+      "timeline": "Timeline",
+      "transcript": "Transcript"
+    },
+    "markers": "Événements",
+    "readingGuide": "Lecture",
+    "readingGuideBody": "La bande colorée suit le contexte par tour rapporté à la fenêtre {{window}} — vert sain, ambre vigilance, rouge dégradé. Les barres violettes verticales marquent les compactions. Les triangles rouges sous l'axe marquent les frictions user détectées.",
+    "timeline": {
+      "filter": {
+        "all": "Tout",
+        "user": "User",
+        "assistant": "Assistant",
+        "tools": "Outils",
+        "system": "Système",
+        "friction": "Friction"
+      },
+      "empty": "Aucun message ne correspond à ce filtre."
+    },
+    "transcript": {
+      "searchPlaceholder": "Rechercher dans le transcript…",
+      "clearSearch": "Effacer",
+      "records": "records",
+      "empty": "Aucun record ne correspond à ce filtre."
+    },
     "timeline": "Chronologie du contexte",
     "timelineLegend": "tokens par tour · compactions · frictions · erreurs outils",
     "overview": "Vue d'ensemble",
@@ -61,7 +95,7 @@
       "cacheRead": "Cache hits",
       "cacheCreation": "Cache writes",
       "wasted": "Gaspillage évitable",
-      "cacheMisses": "Pauses > 5 min"
+      "cacheMisses": "Pauses > {{ttlMin}}min"
     }
   },
   "loadingMessages": "Chargement des messages bruts…",
@@ -96,13 +130,13 @@
       "title": "Surveiller la croissance du contexte",
       "body": "Contexte à {{ctxPct}}% de la fenêtre — pas encore critique mais la dégradation commence. Reste attentif aux signaux de dérive (réponses qui ignorent le début de la conv)."
     },
-    "use-extended-cache": {
-      "title": "Activer le cache étendu 1h",
-      "body": "{{cacheMisses}} pauses > 5 min ont coûté ~{{wastedK}}k tokens de cache rewrite. Sur une session aussi étalée, le cache beta 1h (`extended-cache-ttl-2025-04-11`) est largement rentable."
+    "split-before-long-pause": {
+      "title": "Splitter avant une pause longue",
+      "body": "{{cacheMisses}} pauses > {{ttlMin}}min ont fait expirer le cache — ~{{wastedK}}k tokens de rewrite évitables. Quand tu sais que tu vas couper longtemps, lance /clear ou démarre une nouvelle session plutôt que de revenir et payer la reconstruction du cache."
     },
     "keep-session-continuous": {
       "title": "Garder la session continue",
-      "body": "{{cacheMisses}} pauses > 5 min ont fait expirer le cache — ~{{wastedK}}k tokens rewrites évitables. Quand tu sais que tu vas pauser, envoie un message court pour rafraîchir le TTL."
+      "body": "{{cacheMisses}} pauses > {{ttlMin}}min ont fait expirer le cache — ~{{wastedK}}k tokens rewrites évitables. Quand tu sais que tu vas pauser, envoie un message court pour rafraîchir le TTL."
     },
     "restate-intent-mid": {
       "title": "Restater l'intent en milieu de session",

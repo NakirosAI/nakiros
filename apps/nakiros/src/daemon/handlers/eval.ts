@@ -7,11 +7,15 @@ import type {
   EvalRunOutputEntry,
   GetEvalMatrixRequest,
   IterationRunArtifact,
+  ListBaselinesRequest,
+  ListBaselinesResponse,
   LoadIterationRunRequest,
   SkillEvalDefinition,
   SkillEvalRun,
   StartEvalRunRequest,
 } from '@nakiros/shared';
+
+import { listBaselines } from '../../services/baseline-store.js';
 
 import {
   startEvalRuns,
@@ -22,6 +26,9 @@ import {
   finishWaitingRun as finishEvalWaitingRun,
   getRun as getEvalRun,
   getEvalBufferedEvents,
+  getEvalTimeline,
+  getEvalIterationUsage,
+  getEvalBatchUsage,
 } from '../../services/eval-runner.js';
 import { readIterationFeedback, saveEvalFeedback } from '../../services/eval-feedback.js';
 import { buildEvalMatrix } from '../../services/eval-matrix.js';
@@ -128,6 +135,12 @@ export const evalHandlers: HandlerRegistry = {
 
   'eval:getBufferedEvents': createTypedHandler(getEvalBufferedEvents),
 
+  'eval:getTimeline': createTypedHandler(getEvalTimeline),
+
+  'eval:getIterationUsage': createTypedHandler(getEvalIterationUsage),
+
+  'eval:getBatchUsage': createTypedHandler(getEvalBatchUsage),
+
   'eval:getFeedback': createTypedHandler(
     (request: StartEvalRunRequest & { iteration: number }) => {
       const skillDir = resolveSkillDir(request);
@@ -219,12 +232,45 @@ export const evalHandlers: HandlerRegistry = {
     return buildEvalMatrix(skillDir, request.skillName);
   }),
 
+  /**
+   * List every cached baseline for a skill. Used by the matrix toolbar's
+   * kebab menu (Recalculer baseline / Voir baselines obsolètes) and by the
+   * obsolescence toast at eval-start time.
+   *
+   * Stats are remapped from the snake_case on-disk shape (`pass_rate`,
+   * `duration_ms`) to the frontend's camelCase convention.
+   */
+  'eval:listBaselines': createTypedHandler(
+    (request: ListBaselinesRequest): ListBaselinesResponse => {
+      const records = listBaselines(request.skillName);
+      return {
+        baselines: records.map((r) => ({
+          skillName: r.skillName,
+          evalName: r.evalName,
+          modelFullId: r.modelFullId,
+          evalFingerprint: r.evalFingerprint,
+          stats: {
+            passed: r.stats.passed,
+            failed: r.stats.failed,
+            total: r.stats.total,
+            passRate: r.stats.pass_rate,
+            tokens: r.stats.tokens,
+            durationMs: r.stats.duration_ms,
+          },
+          computedAt: r.computedAt,
+          isObsolete: r.isObsolete,
+        })),
+      };
+    },
+  ),
+
   'eval:loadIterationRun': createTypedHandler((request: LoadIterationRunRequest): IterationRunArtifact => {
     const skillDir = resolveSkillDir(request);
+    const workspaceDir = request.fixRunId
+      ? join(skillDir, 'evals', '.fix-temp', request.fixRunId)
+      : join(skillDir, 'evals', 'workspace');
     const runDir = join(
-      skillDir,
-      'evals',
-      'workspace',
+      workspaceDir,
       `iteration-${request.iteration}`,
       `eval-${request.evalName}`,
       request.config,

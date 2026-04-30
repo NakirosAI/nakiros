@@ -1,4 +1,78 @@
 {
+  "skillsTitle": "Skills",
+  "skillsCount_one": "{{count}} skill",
+  "skillsCount_other": "{{count}} skills",
+  "searchPlaceholder": "Rechercher un skill…",
+  "noMatch": "Aucun skill ne correspond à ta recherche.",
+  "emptyState": "Ce projet ne contient pas encore de skill.",
+  "back": "Retour",
+  "notFound": "Skill introuvable",
+  "runAudit": "Audit",
+  "runFix": "Fix",
+  "runEvalsStarting": "Démarrage…",
+  "starting": "Démarrage…",
+  "auditTab": {
+    "empty": "Aucun audit n'a été enregistré pour ce skill.",
+    "emptyReport": "Ce rapport d'audit est vide.",
+    "title": "Audit —",
+    "file": "Fichier :",
+    "scoreLabel": "score",
+    "fixFromAudit": "Fix depuis cet audit"
+  },
+  "evalsTab": {
+    "empty": "Aucune itération d'eval enregistrée.",
+    "emptyHint": "Lance une première série via le bouton Run evals (bientôt disponible).",
+    "noBaselineHint": "aucun run baseline",
+    "includeBaseline": "Inclure baseline (without-skill)",
+    "defined": "Evals définies",
+    "assertions": "assertions",
+    "noDefinitions": "Aucun eval défini pour ce skill.",
+    "obsoleteBaselines": {
+      "badge_one": "{{count}} baseline obsolète",
+      "badge_other": "{{count}} baselines obsolètes",
+      "tooltip": "{{count}} baseline(s) calculée(s) sur une version de modèle qui n'est plus la version courante. Utilise le menu kebab pour recalculer."
+    },
+    "baselineMenu": {
+      "aria": "Actions baseline",
+      "refresh": "Recalculer la baseline"
+    }
+  },
+  "iterationsTab": {
+    "heading": "Itérations · historique",
+    "count_one": "{{count}} itération",
+    "count_other": "{{count}} itérations",
+    "empty": "Aucune itération enregistrée.",
+    "emptyHint": "Lance une première série d'évals pour peupler l'historique."
+  },
+  "filesTab": {
+    "empty": "Aucun fichier dans ce skill.",
+    "emptyFile": "Ce fichier est vide.",
+    "pickAFile": "Sélectionne un fichier pour voir son contenu",
+    "binary": "Aperçu d'image non pris en charge ici."
+  },
+  "fixTab": {
+    "title": "Lance un Fix sur ce skill",
+    "intro": "Le fix s'appuie sur l'audit le plus récent et les évals existantes. Il travaille sur une copie sandbox",
+    "introCont": "itère, et déploie au « Finish ».",
+    "run": "Lancer le fix",
+    "viewLastDiff": "Voir le dernier diff",
+    "comingHint": "Câblage en phase 4 (RunScreen)"
+  },
+  "diff": {
+    "back": "Retour à la matrice",
+    "export": "Export diff",
+    "promote": "Promote",
+    "noPrevious": "Aucune itération précédente à comparer.",
+    "kpiPassRate": "Pass rate",
+    "kpiRegressions": "Régressions",
+    "kpiTokens": "Tokens",
+    "kpiDuration": "Durée",
+    "perEval": "Comparaison par eval",
+    "regressionsOnly": "Régressions seulement",
+    "noRegression": "Aucune régression sur ce run.",
+    "assertions": "assertion par assertion",
+    "noAssertion": "Aucun grading.json disponible pour cet eval sur ces itérations."
+  },
   "loading": "Chargement des skills…",
   "heading": "Skills ({{count}})",
   "newSkill": "Nouveau skill",

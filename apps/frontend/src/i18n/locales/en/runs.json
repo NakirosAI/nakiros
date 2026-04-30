@@ -1,9 +1,46 @@
 {
   "back": "Back",
   "stop": "Stop",
+  "stopping": "Stopping…",
+  "starting": "Starting…",
   "finish": "Finish",
+  "finishAndDeploy": "Finish & deploy",
   "discard": "Discard",
   "resume": "Reprendre",
+  "streaming": "streaming…",
+  "boot": {
+    "notFound": "Run not found or already discarded."
+  },
+  "titles": {
+    "audit": "Audit",
+    "fix": "Fix",
+    "create": "Create skill"
+  },
+  "unsupported": {
+    "title": "Coming soon",
+    "body": "This run kind is wired up in a follow-up PR."
+  },
+  "panels": {
+    "eval": {
+      "title": "Eval batch",
+      "iteration": "Iteration",
+      "passRate": "Pass rate",
+      "delta": "Delta vs baseline",
+      "runs": "Runs in batch",
+      "passed": "Passed",
+      "tokens": "Tokens",
+      "empty": "No eval run found in this batch.",
+      "progression": "Progression",
+      "queue": "Eval queue",
+      "uplift": "pass rate uplift",
+      "upliftBody": "With-skill outperforms baseline on {{wins}}/{{total}} completed evals so far.",
+      "runningWithBaseline": "evals running · with-skill ▲ vs baseline ▽",
+      "runningWithSkill": "evals running · with-skill ▲",
+      "noBaseline": "No baseline runs in this batch.",
+      "withSkill": "With skill",
+      "baseline": "Baseline"
+    }
+  },
   "interruptedBadge": "Interrompu",
   "interruptedTooltip": "Ce run a été coupé par un redémarrage du daemon. Clique sur Reprendre pour relancer la conversation.",
   "error": {

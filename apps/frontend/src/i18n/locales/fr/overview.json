@@ -22,8 +22,21 @@
     "count": "Conversations",
     "avgScore": "Score moyen",
     "compactionRate": "Avec compaction",
-    "cacheWaste": "Cache gaspillé"
+    "cacheWaste": "Cache gaspillé",
+    "cacheWasteSub": "tokens",
+    "frictions": "Frictions",
+    "windowSub": "{{window}} derniers"
   },
+  "hb": {
+    "convs": "conversations",
+    "lastDays": "{{n}} derniers jours"
+  },
+  "toolStatUses_one": "{{count}} usage",
+  "toolStatUses_other": "{{count}} usages",
+  "fileStatConvs_one": "{{count}} conv",
+  "fileStatConvs_other": "{{count}} convs",
+  "fileStatEdits_one": "{{count}} édition",
+  "fileStatEdits_other": "{{count}} éditions",
   "zones": {
     "healthy": "Saines",
     "watch": "À surveiller",

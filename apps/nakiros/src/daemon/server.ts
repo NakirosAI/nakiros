@@ -10,6 +10,7 @@ import {
   listAllCreateRuns,
   listAllFixRuns,
   restoreOrCleanupTempWorkdirs,
+  sweepFixTempArtifacts,
 } from '../services/fix-runner.js';
 import { listAllAuditRuns, restoreOrCleanupAuditWorkdirs } from '../services/audit-runner.js';
 import {
@@ -30,6 +31,7 @@ import { cleanupEvalArtifacts } from '../services/eval-artifact-cleanup.js';
 import { syncBundledSkills } from '../services/bundled-skills-sync.js';
 import {
   encodeProjectPath,
+  isActiveRunStatus,
   sweepOrphanNakirosProjectEntries,
   sweepOrphanSandboxes,
 } from '../services/runner-core/index.js';
@@ -57,21 +59,35 @@ const PLACEHOLDER_HTML = `<!DOCTYPE html>
 
 /**
  * Build the set of `~/.claude/projects/<encoded>` entry names that any
- * registered run still references. Passed to
+ * **still-active** run references. Passed to
  * {@link sweepOrphanNakirosProjectEntries} so the sweep only deletes entries
  * with no live owner — the `Reprendre` flow needs the session file at the
  * encoded cwd path to still be there.
+ *
+ * Terminal runs (completed / failed / stopped) are excluded: the user can't
+ * resume them, so their `~/.claude/projects/<>` entry is dead weight.
+ * Without this filter, every past eval iteration kept its entry forever
+ * because eval runs are persisted indefinitely under their skill workspace.
  */
 function collectLiveProjectEntryNames(): Set<string> {
   const names = new Set<string>();
   const add = (cwd: string | null | undefined): void => {
     if (cwd) names.add(encodeProjectPath(cwd));
   };
-  for (const run of listAllAuditRuns()) add(run.workdir);
-  for (const run of listAllFixRuns()) add(run.workdir);
-  for (const run of listAllCreateRuns()) add(run.workdir);
-  for (const run of listAllAnalyzeConvoRuns()) add(run.workdir);
+  for (const run of listAllAuditRuns()) {
+    if (isActiveRunStatus(run.status)) add(run.workdir);
+  }
+  for (const run of listAllFixRuns()) {
+    if (isActiveRunStatus(run.status)) add(run.workdir);
+  }
+  for (const run of listAllCreateRuns()) {
+    if (isActiveRunStatus(run.status)) add(run.workdir);
+  }
+  for (const run of listAllAnalyzeConvoRuns()) {
+    if (isActiveRunStatus(run.status)) add(run.workdir);
+  }
   for (const run of listAllEvalRuns()) {
+    if (!isActiveRunStatus(run.status)) continue;
     add(run.workdir);
     add(run.executionDir);
   }
@@ -153,11 +169,30 @@ export function bootstrapDaemonRuntime(): void {
   // `loadPersistedRuns` once per directory. Bounded by the total number of
   // skills the user has across project / bundled / claude-global / plugin
   // scopes — fast in practice, and any failure is per-skill (logged).
+  let skillDirsForSweeps: string[] = [];
   try {
-    const skillDirs = collectAllSkillDirs();
-    restoreEvalRunsForSkillDirs(skillDirs);
+    skillDirsForSweeps = collectAllSkillDirs();
+    restoreEvalRunsForSkillDirs(skillDirsForSweeps);
   } catch (err) {
     console.warn('[nakiros] eval boot rehydrate failed:', err instanceof Error ? err.message : err);
+  }
+  // Wipe orphan fix-temp session dirs (no live fix run owning them) and any
+  // legacy `kind: 'fix-temp'` iterations that older builds wrote into the
+  // main workspace by mistake. Must run AFTER `restoreOrCleanupTempWorkdirs`
+  // so the registry already knows about rehydrated waiting fix runs and we
+  // don't wipe their session dirs.
+  try {
+    const swept = sweepFixTempArtifacts(skillDirsForSweeps);
+    if (swept.orphansDeleted > 0 || swept.legacyDeleted > 0) {
+      console.log(
+        `[nakiros] Swept fix-temp: ${swept.orphansDeleted} orphan session(s), ${swept.legacyDeleted} legacy iter(s).`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      '[nakiros] sweepFixTempArtifacts failed:',
+      err instanceof Error ? err.message : err,
+    );
   }
   cleanupEvalArtifacts();
   // Reclaim `~/.claude/projects/*` entries left behind by previous runs whose

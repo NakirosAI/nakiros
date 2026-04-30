@@ -155,15 +155,39 @@ Do NOT chain into `eval create` automatically. The user decides when — evals w
 
 ## Auditing skills
 
-**The report MUST be written as a file. Chat-only output is a bug.**
+**Every audit MUST produce three artefacts:**
 
-1. Read the ENTIRE skill directory (SKILL.md + all subdirectories)
-2. Run 23-check checklist. For conditional checks (#18, #20, #23), evaluate whether the condition applies FIRST. If it doesn't → N/A (pass). If it does but the skill doesn't meet it → ❌.
-3. Build the report content following **exactly** the format in `assets/outputs/audit-report.md` (table structure, not prose)
-4. **Use the `Write` tool** to save the report to `outputs/audit-report.md` in the current working directory. Do this BEFORE writing any chat summary.
-5. In chat, give a short summary only: `"Score X/23 — full report saved to outputs/audit-report.md"`. Do NOT paste the full report in chat — the user reads it from the file.
+- `outputs/audit-manifest.json` — the static taxonomy of the 23 checks (sections, severities, finding codes). Always identical for a given skill-factory version. Written for you by the helper script in step 1.
+- `outputs/audit-progress.jsonl` — one JSON line per check, in eval order. The helper script seeds this with ~10 deterministic checks; you append the rest as you evaluate them.
+- `outputs/audit-report.md` — the human-readable summary, written **last**. Chat-only output is a bug.
 
-When Nakiros invokes the audit, it archives the file into `{skill}/audits/audit-{ISO}.md` automatically. When invoked directly via Claude Code, the file stays in `outputs/` for the user to inspect.
+The `.json` + `.jsonl` files are what Nakiros streams to the UI to drive the live "X/23 checks done" sidebar — DO NOT skip them, and DO NOT change their schema. The markdown report is for the human.
+
+### Audit procedure (5 steps)
+
+1. **Run the static check script** — it writes the manifest + the deterministic checks for you:
+   ```
+   node "$(realpath ~/.claude/skills/nakiros-skill-factory)/scripts/run-static-checks.mjs" \
+     --skill-dir <absolute-path-to-the-skill-being-audited> \
+     --output-dir outputs
+   ```
+   Read `outputs/audit-progress.jsonl` after this — every line tells you a check that's already done. Do not re-evaluate those checks; only the ones not yet present in the file.
+
+2. **Read the skill being audited** — `SKILL.md` + every subdirectory. You need the full content for the judgement-based checks below.
+
+3. **Append one JSONL line per remaining check.** Use the `Write` tool to append (read the file first, append your lines, write back) — do NOT shell `>>` redirect, it's not part of your tool surface. Each line is exactly:
+   ```json
+   { "checkId": "<slug from the manifest>", "result": "pass" | "fail" | "na", "detail": "<one short sentence>" }
+   ```
+   Use `na` only for conditional checks (#18 no-mocks if skill doesn't touch infra, #20 auth/security if no auth surface, #23 LLM docs if no framework). `na` counts as a pass.
+
+   Check ids are slugs declared in `outputs/audit-manifest.json` (e.g. `content.gotchas_section`, `safety.no_mocks`). Do NOT invent ids — only use what the manifest declares. If you're unsure which slug to use, re-read the manifest.
+
+4. **Write the markdown report** to `outputs/audit-report.md` following the format in `assets/outputs/audit-report.md` (table structure, not prose). Use the JSONL outcomes as your source of truth — they're authoritative.
+
+5. **Chat summary** — one line only: `"Score X/23 — full report saved to outputs/audit-report.md"`. Do NOT paste the full report in chat.
+
+When Nakiros invokes the audit, it archives `audit-report.md` into `{skill}/audits/audit-{ISO}.md` automatically. When invoked directly via Claude Code, the files stay in `outputs/` for the user to inspect.
 
 ## Fixing skills
 
@@ -195,6 +219,60 @@ When Nakiros invokes `fix`, your cwd is a TEMPORARY copy of the skill. The user 
 - Click **Discard** to throw away your changes.
 
 Between turns, read `./evals/workspace/iteration-N/benchmark.json` (highest N) to check whether your last fix improved or regressed the skill. If it regressed, revert the change and try a different approach BEFORE telling the user the fix is ready.
+
+### Live progress artefacts (Nakiros-invoked only)
+
+In addition to editing the skill files, you MUST write two append-only JSONL files in `./outputs/` so Nakiros can drive its live sidebar. These files are workdir-only — they never get synced back to the real skill.
+
+#### 1. `outputs/fix-targets.jsonl` — the fix checklist
+
+Right after reading the latest audit and the latest eval iteration, write **one line per actionable fix item** you intend to address. Use the `Write` tool (read first if the file already exists, append your lines, write back) — do NOT shell `>>` redirect.
+
+Each line is a JSON object:
+
+```json
+{ "id": "<stable-slug>", "title": "<imperative action>", "source": "<provenance>", "status": "todo" }
+```
+
+- `id` — short stable slug, unique per run (e.g. `boundary-section`, `restate-intent-trigger`). Used to flip status later.
+- `title` — short imperative action shown in the sidebar (e.g. `Add boundary section`, `Add restate-intent trigger`). Keep it under ~50 chars.
+- `source` — provenance hint, optional. Use `audit:<checkId>` (e.g. `audit:safety.boundary`) when the target comes from a failed audit check, or `eval:iteration-N` when it comes from a failed eval assertion.
+- `status` — always `"todo"` for the initial registration.
+
+When you finish working on a target, **append a second line** with the same `id` and `status: "done"`:
+
+```json
+{ "id": "boundary-section", "status": "done" }
+```
+
+The reducer is last-line-wins per `id`. Do not rewrite the file — append only.
+
+#### 2. `outputs/fix-findings.jsonl` — observations during the fix
+
+When you discover something noteworthy while reading the skill or running tools, append a line. Examples of "noteworthy":
+
+- A **missing section** that the audit flagged but you haven't seen yet
+- A **contradictory instruction** between SKILL.md and a reference file
+- A **scope drift** between the skill and its evals (skill no longer produces output X, but evals.json still asserts on X)
+- An **audit obsolescence** (audit references files that no longer exist, or a previous version of the skill)
+- A **stale fixture** in `evals/files/` that still mentions removed behavior
+- A **script that doesn't exist** even though SKILL.md or evals reference it
+
+Each line is:
+
+```json
+{ "code": "<UPPER_SNAKE>", "title": "<one-line headline>", "detail": "<optional longer context>" }
+```
+
+- `code` — short uppercase identifier (e.g. `BOUNDARY_MISSING`, `SCOPE_DRIFT`, `AUDIT_STALE`, `STALE_FIXTURE`). Reuse the same code if you observe the same class of issue twice — Nakiros groups by code.
+- `title` — one-line headline rendered as the card title. Under ~80 chars.
+- `detail` — optional longer body. Skip unless it adds something the title doesn't.
+
+Do NOT add a `ts` field — Nakiros stamps the emission time itself when it observes the line. Anything you write there is overwritten.
+
+Findings are append-only and have no "done" semantics — they are a narrative log, not a checklist. Use targets for actionable items, findings for observations.
+
+If no audit / eval data exists at the start of the fix, you can skip the targets file until the user clarifies what to fix. Findings can still be emitted any time you discover something concrete.
 
 ## Improving from execution feedback
 

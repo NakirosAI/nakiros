@@ -3,9 +3,15 @@ import {
   listProjects,
   getProject,
   dismissProject,
+  listDismissedProjects,
+  undismissProject,
 } from '../../services/project-scanner.js';
 import { listConversations, getConversationMessages } from '../../services/conversation-parser.js';
-import { analyzeConversation } from '../../services/conversation-analyzer.js';
+import { getOrComputeAnalysis } from '../../services/conversation-analysis-cache.js';
+import {
+  loadProjectAggregate,
+  refreshProjectAggregate,
+} from '../../services/project-aggregate-cache.js';
 import {
   loadDeepAnalysis,
   runDeepAnalysis,
@@ -53,6 +59,8 @@ export const projectHandlers: HandlerRegistry = {
   'project:list': createTypedHandler(listProjects),
   'project:get': createTypedHandler(getProject),
   'project:dismiss': createTypedHandler(dismissProject),
+  'project:listDismissed': createTypedHandler(listDismissedProjects),
+  'project:undismiss': createTypedHandler(undismissProject),
   'project:getStats': createTypedHandler(() => null),
   'project:getGlobalStats': createTypedHandler(() => null),
 
@@ -71,7 +79,7 @@ export const projectHandlers: HandlerRegistry = {
   'project:analyzeConversation': createTypedHandler((projectId: string, sessionId: string) => {
     const project = getProject(projectId);
     if (!project) return null;
-    return analyzeConversation(project.providerProjectDir, sessionId, projectId);
+    return getOrComputeAnalysis(project.providerProjectDir, sessionId, projectId);
   }),
 
   'project:listConversationsWithAnalysis': createTypedHandler((projectId: string) => {
@@ -79,9 +87,17 @@ export const projectHandlers: HandlerRegistry = {
     if (!project) return [];
     const convs = listConversations(project.providerProjectDir, projectId);
     return convs
-      .map((c) => analyzeConversation(project.providerProjectDir, c.sessionId, projectId))
+      .map((c) => getOrComputeAnalysis(project.providerProjectDir, c.sessionId, projectId))
       .filter((x): x is NonNullable<typeof x> => x !== null);
   }),
+
+  'project:getAggregate': createTypedHandler((projectId: string) =>
+    loadProjectAggregate(projectId),
+  ),
+
+  'project:refreshAggregate': createTypedHandler((projectId: string) =>
+    refreshProjectAggregate(projectId),
+  ),
 
   'project:loadDeepAnalysis': createTypedHandler((_projectId: string, sessionId: string) =>
     loadDeepAnalysis(sessionId),

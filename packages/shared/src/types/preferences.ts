@@ -13,6 +13,18 @@ export type ResolvedLanguage = 'fr' | 'en';
 /** Supported agent providers across installers, runners, and scanners. */
 export type AgentProvider = 'claude' | 'codex' | 'cursor';
 
+/**
+ * UI density preference for the new-design token system. Drives
+ * `[data-density]` overrides of `--n-row-h` and `--n-pad-card`.
+ */
+export type DensityPreference = 'standard' | 'compact' | 'comfy';
+
+/** Default UI density when no preference is stored yet. */
+export const DEFAULT_DENSITY: DensityPreference = 'standard';
+
+/** Default Nakiros teal accent hue, in OKLch hue degrees [0, 360). */
+export const DEFAULT_ACCENT_HUE = 195;
+
 /** Default URL the local Nakiros daemon listens on when running on localhost. */
 export const DEFAULT_MCP_SERVER_URL = 'http://localhost:3737';
 
@@ -22,6 +34,10 @@ export interface AppPreferences {
   language: LanguagePreference;
   updatedAt: string;
   mcpServerUrl?: string;
+  /** UI density. Defaults to `'standard'` when unset. */
+  density?: DensityPreference;
+  /** Accent hue in OKLch hue degrees [0, 360). Defaults to {@link DEFAULT_ACCENT_HUE}. */
+  accentHue?: number;
 }
 
 /** Factory defaults applied when no preferences file exists yet. */
@@ -29,4 +45,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: 'dark',
   language: 'system',
   updatedAt: '',
+  density: DEFAULT_DENSITY,
+  accentHue: DEFAULT_ACCENT_HUE,
 };

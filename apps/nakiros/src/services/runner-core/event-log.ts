@@ -35,7 +35,22 @@ const EVENTS_FILE = 'events.jsonl';
 
 function defaultShouldBuffer(event: unknown): boolean {
   const type = (event as { type?: unknown })?.type;
-  return type === 'text' || type === 'tool';
+  // Audit `manifest` + `check_result` are bufferisable too — without them, a
+  // WebSocket reconnect mid-run would drop the structured audit progress and
+  // the sidebar would only refill via the next `getRun` poll. The shape stays
+  // small (one taxonomy + ≤ 23 outcomes), so the cap is irrelevant in practice.
+  // Same for fix `fix_targets` + `fix_finding`. Diff cards (`fix_edit`) come
+  // exclusively from the session-jsonl replay (`fix:getEditsHistory`), so we
+  // do NOT buffer them — single source of truth.
+  return (
+    type === 'text' ||
+    type === 'tool' ||
+    type === 'manifest' ||
+    type === 'check_result' ||
+    type === 'fix_targets' ||
+    type === 'fix_finding' ||
+    type === 'fix_eval_result'
+  );
 }
 
 export class EventLog<TEvent> {

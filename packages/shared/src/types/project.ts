@@ -2,6 +2,9 @@
 // Nakiros Agent Team — Project types
 // ---------------------------------------------------------------------------
 
+import type { AuditCheckOutcome, AuditManifest } from './audit-checks.js';
+import type { FixEvalResult, FixFinding, FixTarget } from './fix-progress.js';
+
 /** Supported AI coding agents that Nakiros can scan for projects and skills. */
 export type ProviderType = 'claude' | 'gemini' | 'cursor' | 'codex';
 
@@ -100,6 +103,48 @@ export interface ConversationFrictionPoint {
   precedingTool: string | null;
 }
 
+/**
+ * One assistant turn's cost breakdown — drives the sismograph cost-stacked
+ * track. All token fields are raw (input-token-equivalent multipliers are
+ * applied to compute `billed` and `cumBilled`).
+ */
+export interface ConversationCostSample {
+  /** Milliseconds since the session's first timestamp. */
+  tMs: number;
+  /** Position in the conversation (0-1), aligned with other offsetPct fields. */
+  offsetPct: number;
+  /** Raw `input_tokens` from `usage`. */
+  input: number;
+  /** Raw `output_tokens` from `usage`. */
+  output: number;
+  /** Raw `cache_read_input_tokens` from `usage`. */
+  cacheRead: number;
+  /** Cache write (5min TTL) tokens — `usage.cache_creation.ephemeral_5m_input_tokens`. */
+  cache5m: number;
+  /** Cache write (1h TTL) tokens — `usage.cache_creation.ephemeral_1h_input_tokens`. */
+  cache1h: number;
+  /** Billed-equivalent for this turn (×1/×5/×0.1/×1.25/×2). */
+  billed: number;
+  /** Cumulative billed-equivalent up to and including this turn. */
+  cumBilled: number;
+  /** Portion of (cache5m + cache1h) attributed as wasted rewrite (turn followed a > TTL pause). */
+  wastedRewrite: number;
+  /** Tools invoked on this turn (names, in order). */
+  toolNames: string[];
+}
+
+/** Pause detected when the gap between user reply and last assistant message exceeded the cache TTL. */
+export interface ConversationPausePoint {
+  /** Milliseconds since the session's first timestamp. */
+  tMs: number;
+  /** Position in the conversation (0-1). */
+  offsetPct: number;
+  /** Duration of the gap that caused the cache miss (ms). */
+  gapMs: number;
+  /** Tokens of cache_creation attributed to this pause (= directly avoidable rewrite cost). */
+  wastedTokens: number;
+}
+
 /** Per-tool usage stats aggregated across a conversation. */
 export interface ConversationToolStats {
   /** Total tool_use invocations for this tool. */
@@ -157,7 +202,11 @@ export interface ConversationAnalysis {
 
   // --- Context health ---
   compactions: ConversationCompaction[];
-  /** Sum of input_tokens + output_tokens + cache_creation + cache_read across all assistant turns. */
+  /**
+   * Tokens consumed across all assistant turns (input + output + cache_creation).
+   * Cache reads are excluded — they're re-uses of already-paid tokens. Matches
+   * the "tokens consumed" counter Claude Code surfaces in the UI.
+   */
   totalTokens: number;
   /** Peak in-context tokens on a single turn (input + cache_read + cache_creation). */
   maxContextTokens: number;
@@ -170,10 +219,26 @@ export interface ConversationAnalysis {
   // --- Cache efficiency ---
   cacheReadTokens: number;
   cacheCreationTokens: number;
-  /** User turns where time since last assistant message exceeded 5 min (default TTL). */
+  /**
+   * Detected cache TTL mode for this session. Claude Code uses the 1h beta
+   * cache by default since 2026-04, but we detect per-session via the
+   * `usage.cache_creation` breakdown to stay correct.
+   */
+  cacheMode: '5m' | '1h';
+  /** TTL in minutes corresponding to {@link cacheMode} (5 or 60). */
+  cacheTtlMin: number;
+  /** User turns where time since last assistant message exceeded the detected TTL. */
   cacheMissTurns: number;
   /** Tokens written to cache on those miss turns — directly the avoidable cost. */
   wastedCacheTokens: number;
+
+  /**
+   * Per-turn cost breakdown — drives the sismograph cost track. Empty for
+   * sessions with no assistant turns (shouldn't happen for valid JSONLs).
+   */
+  costSamples: ConversationCostSample[];
+  /** Pauses > {@link cacheTtlMin} that forced cache rewrite, with attributed waste. */
+  pausePoints: ConversationPausePoint[];
 
   // --- Friction ---
   frictionPoints: ConversationFrictionPoint[];
@@ -200,6 +265,29 @@ export interface ConversationAnalysis {
   diagnostic: string;
   /** Actionable suggestions for improving future conversations, ranked by severity. */
   tips: ConversationTip[];
+}
+
+// ---------------------------------------------------------------------------
+// Project aggregate — cheap rollup of all conversation analyses for a
+// project, used by the Home screen to paint cards instantly. Persisted under
+// `~/.nakiros/cache/aggregates/{projectId}.json` and refreshed in background
+// via `project:refreshAggregate`.
+// ---------------------------------------------------------------------------
+
+/** Per-project rollup of conversation health metrics. */
+export interface ProjectAggregate {
+  projectId: string;
+  /** Average score across analyses, 0-100. `null` when the project has no conversations yet. */
+  score: number | null;
+  healthy: number;
+  watch: number;
+  critical: number;
+  totalConvs: number;
+  totalTokens: number;
+  /** ISO timestamp of the last successful recompute. */
+  computedAt: string;
+  /** Schema version — bumped when token semantics change. Stale caches are ignored. */
+  version?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +552,25 @@ export interface SkillEvalRun {
   /** Wall-clock boundaries. */
   startedAt: string;
   finishedAt: string | null;
+  /**
+   * Set when this run was launched from a fix session via
+   * `fix:runEvalsInTemp`. Carries the parent fix's `runId` so the frontend
+   * can disambiguate fix-temp eval batches (per-fix-session iteration
+   * counter starting at 1) from prod eval batches that happen to share
+   * the same `iteration` number — without it, both would group under the
+   * same `(scope+skill+iteration)` key and dismissed prod batches could
+   * shadow live fix-temp batches.
+   */
+  fixRunId?: string;
+  /**
+   * Set when this run was launched from a create session via
+   * `create:runEvals`. Carries the parent create's `runId` so the
+   * frontend recap can locate the draft sandbox (its `workdir`) and
+   * read the per-iteration artefacts from there — without it, the
+   * recap would resolve `.claude/skills/<name>/` (which doesn't exist
+   * yet) and surface 0/0 with no assertions.
+   */
+  createRunId?: string;
   /** Any error message that occurred. */
   error: string | null;
   /**
@@ -472,6 +579,15 @@ export interface SkillEvalRun {
    * Cleared by a successful turn. Drives the "Reprendre" button in the UI.
    */
   interruptedByReboot?: boolean;
+  /**
+   * Set when the batch was launched with `skillDirOverride` (typically by
+   * `fix:runEvalsInTemp` against the fix's temp workdir). Lets the
+   * frontend forward the same override when loading the matrix /
+   * iteration artefacts so it reads from the temp dir rather than the
+   * real skill dir — otherwise the recap shows 0 assertions because the
+   * iteration lives in the temp tree only.
+   */
+  skillDirOverride?: string | null;
 }
 
 /** Output file metadata surfaced in the eval UI (size + mtime, no content). */
@@ -498,8 +614,8 @@ export interface EvalRunEvent {
   runId: string;
   event:
     | { type: 'status'; status: EvalRunStatus }
-    | { type: 'text'; text: string }
-    | { type: 'tool'; name: string; display: string }
+    | { type: 'text'; text: string; ts?: string }
+    | { type: 'tool'; name: string; display: string; ts?: string }
     | { type: 'tokens'; tokensUsed: number }
     | { type: 'waiting_for_input'; lastAssistantText: string }
     | { type: 'done'; exitCode: number; error?: string }
@@ -526,15 +642,72 @@ export interface StartEvalRunRequest {
   projectId?: string;
   skillName: string;
   evalNames?: string[];
+  /**
+   * @deprecated since baseline-per-model refactor (PR2). The daemon now always
+   * provides a baseline (cache hit when available, fresh compute on miss), so
+   * this flag is ignored. The field is kept temporarily to avoid breaking
+   * pre-PR3 callers — to be removed when the frontend migrates.
+   * Prefer {@link refreshBaseline} when you need to force a recompute.
+   */
   includeBaseline?: boolean;
+  /**
+   * Force a fresh baseline compute even when one is already cached for
+   * `(skillName, evalName, modelFullId, evalFingerprint)`. Used by the
+   * "Recalculer la baseline" action in the matrix toolbar. Defaults to
+   * `false` — cache is reused on hit.
+   */
+  refreshBaseline?: boolean;
+  /**
+   * Run only the baseline (`without_skill`) configuration. Used by the
+   * "Recalculer la baseline" kebab action so it doesn't waste tokens on a
+   * `with_skill` run the user did not ask for.
+   *
+   * When `true`:
+   *  - `with_skill` is skipped for every selected eval.
+   *  - Artefacts go into a temp dir under `~/.nakiros/baselines-tmp/`,
+   *    NOT into the iteration workspace — the iteration counter is not
+   *    bumped and the matrix doesn't gain a phantom column.
+   *  - `benchmark.json` is not written.
+   *  - The freshly-computed baselines are upserted to the per-model cache,
+   *    then the temp dir is removed.
+   *
+   * Implies `refreshBaseline: true` semantically — the cache for the
+   * selected `(skill, eval, modelFullId, evalFingerprint)` keys is always
+   * overwritten when the run succeeds.
+   */
+  baselineOnly?: boolean;
   /** Max number of runs executing in parallel. Defaults to 4 if omitted. */
   maxConcurrent?: number;
   /**
-   * Override the resolved skill directory. Used by fix runs to evaluate the
-   * modified copy in the temp workdir BEFORE syncing to the real skill.
-   * When set, the eval runs write results into this directory's evals/workspace/.
+   * Override the resolved skill directory used as the *execution context*
+   * for the eval (the SKILL.md / references / evals.json the agent reads
+   * come from here, not the real skill dir). Used by fix runs so the
+   * agent evaluates the in-progress modified copy.
+   *
+   * Important: artefacts (`iteration-N/`) are still written to the real
+   * skill workspace (resolved from scope+skillName), so the matrix shows
+   * a unified history regardless of the eval source. Use {@link fixRunId}
+   * to tag the iteration as `'fix-temp'` and let lifecycle hooks promote
+   * (on Finish) or delete (on Reject) the iter accordingly.
    */
   skillDirOverride?: string;
+  /**
+   * When set, the iteration is tagged `kind: 'fix-temp'` in `benchmark.json`
+   * with this `fixRunId` so a later `fix:finish` can promote the latest to
+   * `'skill'` and `fix:stopRun` (reject) can delete every iter of the
+   * batch from the real workspace. Set by `fix:runEvalsInTemp`.
+   */
+  fixRunId?: string;
+  /**
+   * Set when the eval batch was launched from a create session via
+   * `create:runEvals`. Carries the parent create's `runId` so the
+   * resulting `SkillEvalRun` records can carry it back to the frontend
+   * recap (which uses it to read artefacts from the draft sandbox
+   * instead of the not-yet-existent prod skill folder). Iterations are
+   * NOT tagged `'fix-temp'` — they live with the draft and travel with
+   * it on Apply & deploy.
+   */
+  createRunId?: string;
   /**
    * Claude model id to pass as `--model` to the CLI subprocess (e.g.
    * `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5`). When omitted
@@ -610,6 +783,39 @@ export interface AuditRun {
    * distinguish an interrupted run from a run genuinely awaiting them.
    */
   interruptedByReboot?: boolean;
+  /**
+   * Static taxonomy emitted by the skill-factory at the start of the run
+   * (`outputs/audit-manifest.json`). Drives the live sidebar — sections, check
+   * labels, severities, finding codes. `null` until the agent runs the static
+   * check script. Persisted so boot rehydration restores the sidebar shape.
+   *
+   * Optional because `AuditRun` is also reused as the shape for `fix-runner`,
+   * which never produces an audit manifest. Audit runs always initialise the
+   * field (to `null` initially, then assigned).
+   */
+  manifest?: AuditManifest | null;
+  /**
+   * Per-check outcomes appended live to `outputs/audit-progress.jsonl`. Order
+   * is the order the runner observed them — the script emits the deterministic
+   * checks first, the agent appends the judgement-based ones. Persisted so the
+   * sidebar resumes where it left off after a daemon restart.
+   *
+   * Optional for the same reason as {@link manifest}. Audit runs always
+   * initialise to an empty array.
+   */
+  checkResults?: AuditCheckOutcome[];
+  /**
+   * Reduced-state fix targets derived from `outputs/fix-targets.jsonl` (the
+   * agent's append-only checklist). Only populated for fix runs — never for
+   * audit runs, even though they share the {@link AuditRun} shape. Drives
+   * the "Targets from audit" sidebar.
+   */
+  targets?: FixTarget[];
+  /**
+   * Append-only narrative findings the agent emitted during the fix
+   * (`outputs/fix-findings.jsonl`). Only populated for fix runs.
+   */
+  findings?: FixFinding[];
 }
 
 /**
@@ -656,8 +862,8 @@ export interface AnalyzeConvoRunEvent {
   runId: string;
   event:
     | { type: 'status'; status: AnalyzeConvoRunStatus }
-    | { type: 'text'; text: string }
-    | { type: 'tool'; name: string; display: string }
+    | { type: 'text'; text: string; ts?: string }
+    | { type: 'tool'; name: string; display: string; ts?: string }
     | { type: 'tokens'; tokensUsed: number }
     | { type: 'waiting_for_input'; lastAssistantText: string }
     | { type: 'done'; exitCode: number; error?: string; reportPath?: string }
@@ -675,11 +881,42 @@ export interface AuditRunEvent {
   runId: string;
   event:
     | { type: 'status'; status: AuditRunStatus }
-    | { type: 'text'; text: string }
-    | { type: 'tool'; name: string; display: string }
+    | { type: 'text'; text: string; ts?: string }
+    | { type: 'tool'; name: string; display: string; ts?: string }
     | { type: 'tokens'; tokensUsed: number }
     | { type: 'waiting_for_input'; lastAssistantText: string }
     | { type: 'done'; exitCode: number; error?: string; reportPath?: string }
+    /**
+     * Static check taxonomy. Emitted once, the first time the runner observes
+     * `outputs/audit-manifest.json`. Drives the sidebar skeleton (sections,
+     * check labels, severities). Frontend caches it on the run state.
+     */
+    | { type: 'manifest'; manifest: AuditManifest }
+    /**
+     * One check decided. Emitted per new line observed in
+     * `outputs/audit-progress.jsonl`. Frontend appends to `run.checkResults`
+     * and updates the per-section progress + findings live panel.
+     */
+    | { type: 'check_result'; outcome: AuditCheckOutcome }
+    /**
+     * Reduced-state target snapshot for fix runs. Emitted whenever
+     * `outputs/fix-targets.jsonl` grows; carries the full effective list so
+     * the consumer doesn't need to replay individual entries to compute
+     * todo/done state. Frontend assigns to `run.targets`.
+     */
+    | { type: 'fix_targets'; targets: FixTarget[] }
+    /**
+     * One newly observed finding from `outputs/fix-findings.jsonl`. Frontend
+     * appends to `run.findings`.
+     */
+    | { type: 'fix_finding'; finding: FixFinding }
+    /**
+     * One eval result emitted when a `runFixEvalsInTemp` batch completes.
+     * Frontend appends a card to the fix timeline. Persisted in
+     * `outputs/fix-eval-results.jsonl` for replay; broadcast lazily by the
+     * fix-runner watcher (`scheduleFixEvalBatchWatcher`).
+     */
+    | { type: 'fix_eval_result'; result: FixEvalResult }
     /**
      * Handler-level failure broadcast by `withBroadcastOnError`. See
      * `EvalRunEvent`'s `error` variant for the contract — same semantics
@@ -716,6 +953,43 @@ export interface FixBenchmarkSnapshot {
 export interface FixBenchmarks {
   real: FixBenchmarkSnapshot | null;
   temp: FixBenchmarkSnapshot | null;
+}
+
+/**
+ * Per-kind raw token totals + the billed-equivalent and agent-active timer
+ * surfaced by the fix screen header. Computed on demand from the fix run's
+ * Claude Code session JSONL (the source of truth — the runner's own token
+ * tally drops cache_read / cache_creation today).
+ *
+ * `billedEquivalent` weighs each kind by its Anthropic pricing multiplier
+ * relative to base input (see `docs/decisions/token-accounting.md`):
+ *   input ×1, output ×5, cache_read ×0.1, cache_creation_5m ×1.25,
+ *   cache_creation_1h ×2. Surfaced as a single number in the "Tokens" stat
+ *   so users see a coherent cost signal regardless of cache hit rate.
+ *
+ * `agentActiveMs` is the sum of (assistant_ts − prev_user_ts) intervals
+ * over the session — i.e. wall-clock time the model actually spent
+ * generating, excluding user-input pauses. Frozen when the run is
+ * `waiting_for_input` or terminal.
+ */
+export interface FixUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreation5m: number;
+  cacheCreation1h: number;
+  /** Sum of all four token kinds without weighting — the raw context size. */
+  rawTotal: number;
+  /** Pricing-weighted sum surfaced in the header "Tokens" stat. */
+  billedEquivalent: number;
+  /** Agent-active wall-clock time over the run, excluding user-input pauses. */
+  agentActiveMs: number;
+  /** Timestamp of the last assistant turn parsed from the JSONL, or null when none. */
+  lastAssistantTurnAt: string | null;
+  /** Timestamp of the last user message parsed from the JSONL, or null when none. */
+  lastUserMessageAt: string | null;
+  /** Number of completed assistant turns observed in the session. */
+  assistantTurns: number;
 }
 
 /**

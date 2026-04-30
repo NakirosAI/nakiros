@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "skillName": "{{SKILL_NAME}}",
+  "totalChecks": 23,
+  "sections": [
+    { "id": "frontmatter",  "label": "Frontmatter",     "checks": ["frontmatter.name_match", "frontmatter.description_quality", "frontmatter.user_invocable", "frontmatter.no_extra_fields"] },
+    { "id": "io",           "label": "Inputs / Outputs", "checks": ["io.inputs_section", "io.outputs_section", "io.example_flow", "io.output_paths_clear"] },
+    { "id": "structure",    "label": "Structure",        "checks": ["structure.under_500_lines", "structure.refs_externalized", "structure.context_loading", "structure.commands_at_bottom"] },
+    { "id": "content",      "label": "Content",          "checks": ["content.procedural", "content.adds_what_lacks", "content.defaults_not_menus", "content.gotchas_section", "content.actionable"] },
+    { "id": "safety",       "label": "Safety",           "checks": ["safety.no_mocks", "safety.ask_when_unsure", "safety.auth_security"] },
+    { "id": "consistency",  "label": "Consistency",      "checks": ["consistency.french_rule", "consistency.paths_match", "consistency.llm_docs"] }
+  ],
+  "checks": [
+    { "id": "frontmatter.name_match",         "section": "frontmatter", "label": "name matches folder, lowercase, no consecutive hyphens", "severityIfFail": "critical", "findingCode": "NAME_MISMATCH" },
+    { "id": "frontmatter.description_quality","section": "frontmatter", "label": "description: WHAT + WHEN + trigger keywords (< 1024 chars)", "severityIfFail": "warn",    "findingCode": "DESC_TOO_SHORT" },
+    { "id": "frontmatter.user_invocable",     "section": "frontmatter", "label": "user-invocable set correctly",                              "severityIfFail": "warn",    "findingCode": "USER_INVOCABLE_WRONG" },
+    { "id": "frontmatter.no_extra_fields",    "section": "frontmatter", "label": "no unnecessary frontmatter fields",                         "severityIfFail": "info",    "findingCode": "EXTRA_FIELDS" },
+
+    { "id": "io.inputs_section",              "section": "io",          "label": "Inputs section with commands, args, files, external data",  "severityIfFail": "warn",    "findingCode": "INPUTS_MISSING" },
+    { "id": "io.outputs_section",             "section": "io",          "label": "Outputs section with ALL files, side effects, chat",        "severityIfFail": "warn",    "findingCode": "OUTPUTS_MISSING" },
+    { "id": "io.example_flow",                "section": "io",          "label": "at least one concrete input → output example flow",         "severityIfFail": "warn",    "findingCode": "NO_EXAMPLE_FLOW" },
+    { "id": "io.output_paths_clear",          "section": "io",          "label": "output file paths use clear patterns",                      "severityIfFail": "info",    "findingCode": "OUTPUT_PATHS_VAGUE" },
+
+    { "id": "structure.under_500_lines",      "section": "structure",   "label": "under 500 lines / ~5000 tokens",                            "severityIfFail": "warn",    "findingCode": "SKILL_TOO_LONG" },
+    { "id": "structure.refs_externalized",    "section": "structure",   "label": "heavy reference material lives in references/",            "severityIfFail": "warn",    "findingCode": "REFS_INLINE" },
+    { "id": "structure.context_loading",      "section": "structure",   "label": "context loading lists ALL files with WHEN conditions",      "severityIfFail": "warn",    "findingCode": "CONTEXT_LOADING_INCOMPLETE" },
+    { "id": "structure.commands_at_bottom",   "section": "structure",   "label": "available commands listed at the bottom",                   "severityIfFail": "info",    "findingCode": "COMMANDS_MISSING" },
+
+    { "id": "content.procedural",             "section": "content",     "label": "procedures, not declarations",                              "severityIfFail": "warn",    "findingCode": "DECLARATIVE" },
+    { "id": "content.adds_what_lacks",        "section": "content",     "label": "adds what agent LACKS, omits what it KNOWS",                "severityIfFail": "info",    "findingCode": "REDUNDANT_CONTENT" },
+    { "id": "content.defaults_not_menus",     "section": "content",     "label": "defaults, not menus",                                       "severityIfFail": "warn",    "findingCode": "MENU_INSTEAD_OF_DEFAULT" },
+    { "id": "content.gotchas_section",        "section": "content",     "label": "gotchas section with project-specific traps",               "severityIfFail": "warn",    "findingCode": "GOTCHAS_MISSING" },
+    { "id": "content.actionable",             "section": "content",     "label": "every instruction is specific and actionable",              "severityIfFail": "warn",    "findingCode": "VAGUE_INSTRUCTIONS" },
+
+    { "id": "safety.no_mocks",                "section": "safety",      "label": "no mocks rule (when skill touches real infra)",             "severityIfFail": "critical","findingCode": "MOCKS_RULE_MISSING" },
+    { "id": "safety.ask_when_unsure",         "section": "safety",      "label": "ASK when unsure rule",                                      "severityIfFail": "warn",    "findingCode": "ASK_RULE_MISSING" },
+    { "id": "safety.auth_security",           "section": "safety",      "label": "auth/security context referenced when relevant",            "severityIfFail": "critical","findingCode": "AUTH_CONTEXT_MISSING" },
+
+    { "id": "consistency.french_rule",        "section": "consistency", "label": "french communication rule present",                         "severityIfFail": "info",    "findingCode": "FRENCH_RULE_MISSING" },
+    { "id": "consistency.paths_match",        "section": "consistency", "label": "file paths match current project structure",                "severityIfFail": "warn",    "findingCode": "INVALID_PATHS" },
+    { "id": "consistency.llm_docs",           "section": "consistency", "label": "LLM docs referenced when using specific frameworks",        "severityIfFail": "info",    "findingCode": "LLM_DOCS_MISSING" }
+  ]
+}

@@ -1,19 +1,27 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync } from 'fs';
-import { join, basename } from 'path';
+import { join, basename, relative } from 'path';
 import { homedir } from 'os';
 
 import type {
+  AuditCheckOutcome,
   AuditHistoryEntry,
+  AuditManifest,
   AuditRun,
   AuditRunEvent,
+  AuditTimelineEntry,
+  FixUsage,
   StartAuditRequest,
 } from '@nakiros/shared';
 
 import {
   cleanupRunWorkdir,
+  computeSessionUsage,
   createRunner,
   encodeProjectPath,
+  formatTool,
   isActiveRunStatus,
+  parseSessionBlocks,
+  persistRunJson,
   type RehydrateResult,
   type RunEntry,
   type RunnerSpec,
@@ -26,6 +34,104 @@ const KIND = 'audit';
 interface AuditEntryExtras {
   /** Absolute path to the real skill directory — used to archive the audit report. */
   skillDir: string;
+  /**
+   * Polling timer that re-reads `outputs/audit-manifest.json` +
+   * `outputs/audit-progress.jsonl` while the run is in flight. Started in
+   * `afterStart`, self-arrests on terminal status, also cleared by
+   * `cleanupOnTerminal`. NOT persisted to `run.json` (rebuilt at boot).
+   */
+  syncTimer: NodeJS.Timeout | null;
+}
+
+const PROGRESS_POLL_MS = 1000;
+
+/**
+ * Re-read the two artefacts the skill writes during an audit and emit the
+ * diff:
+ *
+ *   - `outputs/audit-manifest.json` — once, on first sight.
+ *   - `outputs/audit-progress.jsonl` — append-only; emit each new line.
+ *
+ * Tolerates a partially-written file (truncated last line, malformed JSON):
+ * skip the bad line, retry next tick. The full markdown report is still the
+ * source of truth at the end — these events drive the live sidebar only.
+ */
+function syncAuditProgress(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>): void {
+  const { run } = entry;
+  // The fields are typed optional because `AuditRun` is also the shape for
+  // fix-runner, which doesn't audit anything. Audit runs always initialise
+  // them in `createInitialRun` / `rehydrate` — but narrow here to be safe.
+  if (!run.checkResults) run.checkResults = [];
+  const outputsDir = join(run.workdir, 'outputs');
+
+  let mutated = false;
+
+  if (!run.manifest) {
+    const manifestPath = join(outputsDir, 'audit-manifest.json');
+    if (existsSync(manifestPath)) {
+      try {
+        const raw = readFileSync(manifestPath, 'utf8');
+        const manifest = JSON.parse(raw) as AuditManifest;
+        if (manifest && Array.isArray(manifest.checks) && Array.isArray(manifest.sections)) {
+          run.manifest = manifest;
+          mutated = true;
+          entry.eventLog.emit({ type: 'manifest', manifest });
+        }
+      } catch (err) {
+        console.warn(`[audit-runner] Could not parse audit-manifest.json (run ${run.runId}): ${(err as Error).message}`);
+      }
+    }
+  }
+
+  const progressPath = join(outputsDir, 'audit-progress.jsonl');
+  if (existsSync(progressPath)) {
+    let raw: string;
+    try {
+      raw = readFileSync(progressPath, 'utf8');
+    } catch {
+      raw = '';
+    }
+    const known = new Set(run.checkResults.map((o) => o.checkId));
+    const lines = raw.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        continue; // partial write, retry on next poll
+      }
+      const o = parsed as Partial<AuditCheckOutcome>;
+      if (!o || typeof o.checkId !== 'string' || known.has(o.checkId)) continue;
+      if (o.result !== 'pass' && o.result !== 'fail' && o.result !== 'na') continue;
+      const outcome: AuditCheckOutcome = {
+        checkId: o.checkId,
+        result: o.result,
+        detail: typeof o.detail === 'string' ? o.detail : '',
+      };
+      run.checkResults.push(outcome);
+      known.add(outcome.checkId);
+      mutated = true;
+      entry.eventLog.emit({ type: 'check_result', outcome });
+    }
+  }
+
+  // Persist whenever we mutated the run — without this, a daemon restart
+  // would lose every check captured live and the rehydrated `run.json` would
+  // show `manifest: null, checkResults: []` even on a completed audit. The
+  // generic runner-core `persist()` is private; we duplicate the call shape
+  // (`{ ...run, _extras }`) it uses so the rehydrate path keeps working.
+  if (mutated) {
+    persistRunJson(run.workdir, { ...run, _extras: entry.extras });
+  }
+}
+
+function stopProgressPolling(extras: AuditEntryExtras): void {
+  if (extras.syncTimer) {
+    clearInterval(extras.syncTimer);
+    extras.syncTimer = null;
+  }
 }
 
 /** Internal start request — `StartAuditRequest` + the resolved skill directory. */
@@ -120,7 +226,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
 
   prepareWorkdir(req, runId) {
     const workdir = prepareWorkdir(req.skillDir, req.skillName, runId);
-    return { workdir, extras: { skillDir: req.skillDir } };
+    return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
   },
 
   buildFirstPrompt(req) {
@@ -145,13 +251,33 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       startedAt: new Date().toISOString(),
       finishedAt: null,
       error: null,
+      manifest: null,
+      checkResults: [],
     };
   },
 
+  afterStart(entry) {
+    entry.extras.syncTimer = setInterval(() => {
+      // Self-arrest as soon as the run reaches a terminal state, even if
+      // cleanupOnTerminal hasn't fired yet (e.g. helpers.fail mid-turn).
+      const status = entry.run.status;
+      if (entry.killed || status === 'completed' || status === 'failed' || status === 'stopped') {
+        stopProgressPolling(entry.extras);
+        return;
+      }
+      syncAuditProgress(entry);
+    }, PROGRESS_POLL_MS);
+  },
+
   onTurnComplete(entry, helpers) {
+    // One last sync before deciding what to do with the run — captures any
+    // line the agent appended in the very last tool call before it returned.
+    syncAuditProgress(entry);
+
     const result = archiveReport(entry);
     if (result.ok) {
       entry.run.reportPath = result.reportPath;
+      stopProgressPolling(entry.extras);
       helpers.complete(entry);
       entry.eventLog.emit({ type: 'done', exitCode: 0, reportPath: result.reportPath });
       return;
@@ -160,7 +286,12 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     helpers.wait(entry);
   },
 
+  onTurnFailed(entry) {
+    stopProgressPolling(entry.extras);
+  },
+
   cleanupOnTerminal(entry) {
+    stopProgressPolling(entry.extras);
     cleanupRunWorkdir(entry.run.workdir);
   },
 
@@ -226,10 +357,14 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         restoredStatus === 'waiting_for_input' && wasActive
           ? true
           : blob.interruptedByReboot,
+      // Restore live audit state — sidebar resumes where it left off without
+      // re-reading the workdir until the next turn (which re-syncs anyway).
+      manifest: blob.manifest ?? null,
+      checkResults: Array.isArray(blob.checkResults) ? blob.checkResults : [],
     };
 
-    console.log(`[audit-runner] Restored audit ${restoredRun.runId} for "${restoredRun.skillName}" (status=${restoredStatus})`);
-    return { kind: 'rehydrate', run: restoredRun, extras: { skillDir } };
+    console.log(`[audit-runner] Restored audit ${restoredRun.runId} for "${restoredRun.skillName}" (status=${restoredStatus}, ${restoredRun.checkResults?.length ?? 0}/${restoredRun.manifest?.totalChecks ?? '?'} checks)`);
+    return { kind: 'rehydrate', run: restoredRun, extras: { skillDir, syncTimer: null } };
   },
 };
 
@@ -322,6 +457,92 @@ export function getAuditRun(runId: string): AuditRun | null {
  */
 export function getAuditBufferedEvents(runId: string): AuditEvent[] {
   return runner.getBufferedEvents(runId);
+}
+
+/**
+ * Build the audit-conversation timeline directly from Claude Code's session
+ * jsonl. Single source of truth for the chat view of an audit run — same
+ * pattern as `getFixTimeline`. Returns the universal `user` /
+ * `assistant_text` / `tool` kinds; the audit-progress sidebar (manifest,
+ * sections, findings) is driven by a separate event stream and does not
+ * appear in this timeline.
+ *
+ * Filters Write/Edit/MultiEdit on Nakiros-internal artefacts (the
+ * audit-progress jsonl and the manifest json) so they don't surface as
+ * generic tool calls — the user already sees them in the sidebar. The
+ * archived audit report (`audits/audit-*.md`) IS surfaced as a tool box
+ * since it represents work the user can recognize.
+ *
+ * Returns an empty array when the run has no sessionId yet (fresh run,
+ * first turn still streaming) or the file is missing.
+ */
+export function getAuditTimeline(runId: string): AuditTimelineEntry[] {
+  const entry = runner.registry().get(runId);
+  if (!entry) return [];
+  const { sessionId, workdir } = entry.run;
+  if (!sessionId) return [];
+
+  const out: AuditTimelineEntry[] = [];
+
+  for (const block of parseSessionBlocks(workdir, sessionId)) {
+    if (block.kind === 'user_text') {
+      out.push({ kind: 'user', ts: block.ts, text: block.text });
+      continue;
+    }
+    if (block.kind === 'assistant_text') {
+      out.push({ kind: 'assistant_text', ts: block.ts, text: block.text });
+      continue;
+    }
+    // Assistant tool_use: skip Writes to the live-progress artefacts (already
+    // surfaced in the sidebar). Other tools — Bash, Read, the Write that
+    // produces `audits/audit-*.md`, etc. — render as the generic tool box.
+    if (
+      (block.name === 'Write' || block.name === 'Edit' || block.name === 'MultiEdit') &&
+      isAuditProgressPath(block.input, workdir)
+    ) {
+      continue;
+    }
+    out.push({
+      kind: 'tool',
+      ts: block.ts,
+      name: block.name,
+      display: formatTool(block.name, block.input),
+    });
+  }
+
+  // Stable chronological order — `parseSessionBlocks` returns file order,
+  // which is already chronological in practice, but a sort defends against
+  // any out-of-order writes during streaming.
+  out.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+  return out;
+}
+
+/**
+ * Compute the billed-equivalent + agent-active stats for an audit run by
+ * walking its Claude Code session JSONL. Delegates to the shared
+ * {@link computeSessionUsage} helper — same algorithm and pricing rules
+ * as fix and eval. Returns the empty-state value when the run has no
+ * sessionId yet (still queued / first turn).
+ */
+export function getAuditUsage(runId: string): FixUsage {
+  const entry = runner.registry().get(runId);
+  if (!entry) return computeSessionUsage('', null);
+  const { sessionId, workdir, startedAt } = entry.run;
+  return computeSessionUsage(workdir, sessionId, startedAt);
+}
+
+/**
+ * True when the tool input targets `outputs/audit-progress.jsonl` or
+ * `outputs/audit-manifest.json`. These are the live-progress artefacts the
+ * skill writes during an audit; they're already streamed to the sidebar
+ * via the typed `manifest` / `check_result` events, so re-rendering them
+ * as generic tool calls in the chat would be redundant noise.
+ */
+function isAuditProgressPath(input: Record<string, unknown>, workdir: string): boolean {
+  const filePath = typeof input.file_path === 'string' ? input.file_path : '';
+  if (!filePath) return false;
+  const rel = relative(workdir, filePath);
+  return rel === 'outputs/audit-progress.jsonl' || rel === 'outputs/audit-manifest.json';
 }
 
 /** List archived audit reports for a given skill, newest first. */

@@ -72,7 +72,18 @@ export type AgentRunTarget = SkillRunTarget | ConversationRunTarget;
  *   so clicking the entry can open `EvalRunsView` with the full batch.
  */
 export type AgentRunMeta =
-  | { kind: 'eval'; runIds: string[]; iteration: number };
+  | {
+      kind: 'eval';
+      runIds: string[];
+      iteration: number;
+      /**
+       * Set when this eval batch was launched from a create run via
+       * `create:runEvals`. The recap uses it to read iteration artefacts
+       * from the draft sandbox (the create run's workdir) instead of the
+       * not-yet-existent `.claude/skills/<name>/` folder.
+       */
+      createRunId?: string;
+    };
 
 /**
  * The unified run primitive surfaced to the runs center, the activity feed,

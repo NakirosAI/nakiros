@@ -200,6 +200,32 @@ export interface RunnerSpec<TRun extends BaseRun, TStartReq, TEvent, TExtras> {
    * the EventLog (e.g. on rebind to surface the live status). Optional.
    */
   emitOnRebind?(entry: RunEntry<TRun, TEvent, TExtras>, opts: RunOpts<TEvent>): void;
+
+  /**
+   * Called once, right after the registry entry is created and persisted, but
+   * before the first turn fires. Use this to start side effects bound to the
+   * lifetime of the run (e.g. polling timers that watch artefacts the agent
+   * writes during a turn). The corresponding teardown belongs in
+   * {@link cleanupOnTerminal}, which runs on stop / finish — and you should
+   * also have your side effect self-arrest if it observes a terminal status,
+   * so a `helpers.fail()` mid-turn doesn't leak a timer.
+   */
+  afterStart?(entry: RunEntry<TRun, TEvent, TExtras>): void;
+
+  /**
+   * Optional. Called for every `tool_use` block streamed by the agent,
+   * AFTER the generic `{ type: 'tool', name, display }` event has been
+   * emitted. Receives the raw `input` so kind-specific runners can extract
+   * tool args and emit additional structured events.
+   *
+   * Used by the fix-runner to detect `Write` / `Edit` and emit `fix_edit`
+   * events for the inline diff cards. Other runners omit it.
+   */
+  afterToolUse?(
+    entry: RunEntry<TRun, TEvent, TExtras>,
+    name: string,
+    input: Record<string, unknown>,
+  ): void;
 }
 
 /** Public surface of a runner instance. */
@@ -310,12 +336,22 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       onText: (text) => {
         assistantText += text;
         blocks!.push({ type: 'text', text });
-        entry.eventLog.emit({ type: 'text', text } as unknown as TEvent);
+        // Stamp `ts` at emission so the frontend's buffered-event replay
+        // (after a refresh / reconnect) shows the real time the agent
+        // produced this chunk — not the time the user happened to reload
+        // the page. Persisted into events.jsonl for cross-process replay.
+        entry.eventLog.emit({ type: 'text', text, ts: new Date().toISOString() } as unknown as TEvent);
       },
-      onTool: (name, display) => {
+      onTool: (name, display, input) => {
         tools.push({ name, display });
         blocks!.push({ type: 'tool', name, display });
-        entry.eventLog.emit({ type: 'tool', name, display } as unknown as TEvent);
+        entry.eventLog.emit({
+          type: 'tool',
+          name,
+          display,
+          ts: new Date().toISOString(),
+        } as unknown as TEvent);
+        spec.afterToolUse?.(entry, name, input);
       },
       onUsage: (totalTokens) => {
         run.tokensUsed += totalTokens;
@@ -332,6 +368,12 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       blocks,
     });
     entry.child = null;
+
+    // If the user called stop() while the turn was in flight, the SIGTERM'd
+    // child returns a non-zero exit — but the run is `stopped`, not `failed`.
+    // stop() has already persisted/broadcast the terminal state; bail out
+    // before we overwrite it with `failed`.
+    if (entry.killed) return;
 
     if (result.exitCode !== 0 || result.error) {
       run.status = 'failed';
@@ -399,6 +441,7 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
     };
     registry.set(runId, entry);
     persist(entry);
+    spec.afterStart?.(entry);
 
     const firstPrompt = spec.buildFirstPrompt(req, { workdir, runId, extras });
     void executeTurn(entry, firstPrompt, true).then(() => {
@@ -529,14 +572,19 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       };
       const eventLog = makeEventLog(workdir, result.run.runId, opts);
       eventLog.restore();
-      registry.set(result.run.runId, {
+      const restoredEntry: RunEntry<TRun, TEvent, TExtras> = {
         run: result.run,
         child: null,
         killed: false,
         eventLog,
         extras: result.extras,
-      });
+      };
+      registry.set(result.run.runId, restoredEntry);
       persistRunJson(workdir, { ...result.run, _extras: result.extras });
+      // afterStart fires for fresh runs *and* rehydrated ones — the spec's
+      // side effects (e.g. audit progress polling) need to come back online
+      // after a daemon restart too. Self-arrest takes care of stopped runs.
+      spec.afterStart?.(restoredEntry);
     }
   }
 

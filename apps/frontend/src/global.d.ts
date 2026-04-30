@@ -17,6 +17,7 @@ import type {
   VersionInfo,
   ResolvedLanguage,
   Project,
+  ProjectAggregate,
   ProjectConversation,
   ConversationMessage,
   ConversationAnalysis,
@@ -29,18 +30,25 @@ import type {
   SkillEvalRun,
   EvalRunEvent,
   EvalRunOutputEntry,
+  ChatTimelineEntry,
   StartAuditRequest,
   AuditRun,
   AuditRunEvent,
   AuditHistoryEntry,
+  AuditTimelineEntry,
   AnalyzeConvoRun,
   AnalyzeConvoRunEvent,
   FixBenchmarks,
+  FixEdit,
+  FixTimelineEntry,
+  FixUsage,
   SkillAgentTempFileEntry,
   SkillAgentTempFileContent,
   EvalMatrix,
   GetEvalMatrixRequest,
   IterationRunArtifact,
+  ListBaselinesRequest,
+  ListBaselinesResponse,
   LoadIterationRunRequest,
   ComparisonFingerprintStatus,
   ComparisonMatrix,
@@ -118,11 +126,16 @@ declare global {
       listProjects(): Promise<Project[]>;
       getProject(id: string): Promise<Project | null>;
       dismissProject(id: string): Promise<void>;
+      listDismissedProjects(): Promise<Project[]>;
+      undismissProject(id: string): Promise<Project | null>;
 
       listProjectConversations(projectId: string): Promise<ProjectConversation[]>;
       getProjectConversationMessages(projectId: string, sessionId: string): Promise<ConversationMessage[]>;
       analyzeProjectConversation(projectId: string, sessionId: string): Promise<ConversationAnalysis | null>;
       listProjectConversationsWithAnalysis(projectId: string): Promise<ConversationAnalysis[]>;
+      getProjectAggregate(projectId: string): Promise<ProjectAggregate | null>;
+      refreshProjectAggregate(projectId: string): Promise<ProjectAggregate | null>;
+      onProjectAggregateUpdated(cb: (aggregate: ProjectAggregate) => void): () => void;
       loadConversationDeepAnalysis(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis | null>;
       /** @deprecated kept for backward compat — prefer the streaming analyzeConvo:* family. */
       deepAnalyzeConversation(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis>;
@@ -189,6 +202,10 @@ declare global {
       readEvalRunDiffPatch(runId: string): Promise<string | null>;
       getEvalMatrix(request: GetEvalMatrixRequest): Promise<EvalMatrix>;
       loadIterationRun(request: LoadIterationRunRequest): Promise<IterationRunArtifact>;
+      listEvalBaselines(request: ListBaselinesRequest): Promise<ListBaselinesResponse>;
+      getEvalTimeline(runId: string): Promise<ChatTimelineEntry[]>;
+      getEvalIterationUsage(runId: string): Promise<FixUsage>;
+      getEvalBatchUsage(runIds: string[]): Promise<FixUsage>;
       runModelComparison(request: RunComparisonRequest): Promise<RunComparisonResponse>;
       listModelComparisons(request: ListComparisonsRequest): Promise<ComparisonSummary[]>;
       getModelComparison(request: GetComparisonMatrixRequest): Promise<ComparisonMatrix | null>;
@@ -207,6 +224,8 @@ declare global {
       listActiveAuditRuns(): Promise<AuditRun[]>;
       listAllAuditRuns(): Promise<AuditRun[]>;
       getAuditBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
+      getAuditTimeline(runId: string): Promise<AuditTimelineEntry[]>;
+      getAuditUsage(runId: string): Promise<FixUsage>;
       onAuditEvent(cb: (event: AuditRunEvent) => void): () => void;
 
       // Fix
@@ -222,6 +241,10 @@ declare global {
       getFixBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onFixEvent(cb: (event: AuditRunEvent) => void): () => void;
       listFixDiff(runId: string): Promise<SkillDiffEntry[]>;
+      getFixEditsHistory(runId: string): Promise<FixEdit[]>;
+      getFixTimeline(runId: string): Promise<FixTimelineEntry[]>;
+      getFixTempMatrix(runId: string): Promise<EvalMatrix>;
+      getFixUsage(runId: string): Promise<FixUsage>;
       readFixDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
 
       // Create (skill-factory "create" command)
@@ -236,10 +259,17 @@ declare global {
       onCreateEvent(cb: (event: AuditRunEvent) => void): () => void;
       listCreateDiff(runId: string): Promise<SkillDiffEntry[]>;
       readCreateDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
+      getCreateTimeline(runId: string): Promise<FixTimelineEntry[]>;
+      getCreateUsage(runId: string): Promise<FixUsage>;
+      runCreateEvals(request: {
+        runId: string;
+        evalNames?: string[];
+      }): Promise<StartEvalRunResponse>;
 
       // Draft files (temp workdir preview for fix + create)
       listSkillAgentTempFiles(runId: string): Promise<SkillAgentTempFileEntry[]>;
       readSkillAgentTempFile(runId: string, relativePath: string): Promise<SkillAgentTempFileContent>;
+
 
       onScanProgress(cb: (progress: ScanProgress) => void): () => void;
     };

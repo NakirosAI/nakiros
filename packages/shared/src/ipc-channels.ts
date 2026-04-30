@@ -54,6 +54,11 @@ export const IPC_CHANNELS = {
   'project:readSkillFile': 'project:readSkillFile',
   'project:saveSkillFile': 'project:saveSkillFile',
   'project:getRecommendations': 'project:getRecommendations',
+  'project:getAggregate': 'project:getAggregate',
+  'project:refreshAggregate': 'project:refreshAggregate',
+  'project:aggregateUpdated': 'project:aggregateUpdated',
+  'project:listDismissed': 'project:listDismissed',
+  'project:undismiss': 'project:undismiss',
 
   // Nakiros bundled skills
   'nakiros:listBundledSkills': 'nakiros:listBundledSkills',
@@ -96,6 +101,10 @@ export const IPC_CHANNELS = {
   'eval:readDiffPatch': 'eval:readDiffPatch',
   'eval:getMatrix': 'eval:getMatrix',
   'eval:loadIterationRun': 'eval:loadIterationRun',
+  'eval:listBaselines': 'eval:listBaselines',
+  'eval:getTimeline': 'eval:getTimeline',
+  'eval:getIterationUsage': 'eval:getIterationUsage',
+  'eval:getBatchUsage': 'eval:getBatchUsage',
 
   // Eval model comparison (A/B/C across Haiku/Sonnet/Opus)
   'comparison:run': 'comparison:run',
@@ -115,6 +124,8 @@ export const IPC_CHANNELS = {
   'audit:listActive': 'audit:listActive',
   'audit:listAll': 'audit:listAll',
   'audit:getBufferedEvents': 'audit:getBufferedEvents',
+  'audit:getTimeline': 'audit:getTimeline',
+  'audit:getUsage': 'audit:getUsage',
 
   // Fix runner
   'fix:start': 'fix:start',
@@ -130,6 +141,10 @@ export const IPC_CHANNELS = {
   'fix:getBufferedEvents': 'fix:getBufferedEvents',
   'fix:listDiff': 'fix:listDiff',
   'fix:readDiffFile': 'fix:readDiffFile',
+  'fix:getEditsHistory': 'fix:getEditsHistory',
+  'fix:getTimeline': 'fix:getTimeline',
+  'fix:getFixTempMatrix': 'fix:getFixTempMatrix',
+  'fix:getUsage': 'fix:getUsage',
 
   // Create runner — thin mirror of fix:* with different temp-workdir seeding and sync-back policy.
   'create:start': 'create:start',
@@ -143,10 +158,14 @@ export const IPC_CHANNELS = {
   'create:getBufferedEvents': 'create:getBufferedEvents',
   'create:listDiff': 'create:listDiff',
   'create:readDiffFile': 'create:readDiffFile',
+  'create:getTimeline': 'create:getTimeline',
+  'create:getUsage': 'create:getUsage',
+  'create:runEvals': 'create:runEvals',
 
   // Draft files (shared by fix + create — reads from the run's temp workdir)
   'skillAgent:listTempFiles': 'skillAgent:listTempFiles',
   'skillAgent:readTempFile': 'skillAgent:readTempFile',
+
 
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',

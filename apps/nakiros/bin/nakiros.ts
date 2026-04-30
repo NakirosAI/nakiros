@@ -2,15 +2,17 @@ import { parseArgs } from 'node:util';
 import open from 'open';
 import { bootstrapDaemonRuntime, createDaemonServer } from '../src/daemon/server.js';
 import { findFreePort, DEFAULT_PORT } from '../src/daemon/port.js';
+import { runBaselineCleanup } from '../src/scripts/baseline-cleanup.js';
 
 const HELP = `
 nakiros — local daemon that observes Claude Code and lets you inspect,
 audit, evaluate and improve skills from your browser.
 
 Usage:
-  nakiros [options]
+  nakiros [options]                  Start the daemon (default).
+  nakiros baseline:cleanup [opts]    Remove legacy baseline run dirs.
 
-Options:
+Options (daemon):
   --port <n>   Preferred port (default 4242 or NAKIROS_PORT). Falls
                back to the next free port if taken.
   --no-open    Do not open the browser automatically.
@@ -23,9 +25,20 @@ Examples:
   nakiros
   nakiros --port 5000
   nakiros --no-open
+  nakiros baseline:cleanup           # dry-run, see what would be deleted
+  nakiros baseline:cleanup --apply
 `;
 
 async function main(): Promise<void> {
+  // Subcommand dispatch — runs before parseArgs so the daemon flags don't
+  // collide with subcommand-specific ones. Subcommands take everything after
+  // their name as their own args.
+  const subcommand = process.argv[2];
+  if (subcommand === 'baseline:cleanup') {
+    const code = await runBaselineCleanup(process.argv.slice(3));
+    process.exit(code);
+  }
+
   const { values } = parseArgs({
     options: {
       port: { type: 'string' },

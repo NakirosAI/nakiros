@@ -28,6 +28,15 @@ function cachePath(projectId: string): string {
   return join(cacheDir(), `${projectId}.json`);
 }
 
+/**
+ * Bumped when the aggregate or underlying ConversationAnalysis token semantics
+ * change. Old caches without this version field (or with a smaller one) are
+ * invalidated by `loadProjectAggregate` so the frontend falls back to refresh.
+ *
+ * v1 (2026-04-30) — totalTokens now excludes cache_read (matches Claude Code).
+ */
+const AGGREGATE_VERSION = 1;
+
 /** In-memory dedupe so concurrent refreshes share a single recompute pass. */
 const inFlight = new Map<string, Promise<ProjectAggregate | null>>();
 
@@ -40,7 +49,10 @@ export function loadProjectAggregate(projectId: string): ProjectAggregate | null
   const file = cachePath(projectId);
   if (!existsSync(file)) return null;
   try {
-    return JSON.parse(readFileSync(file, 'utf8')) as ProjectAggregate;
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as ProjectAggregate;
+    // Stale schema → force refresh on the frontend side.
+    if ((parsed.version ?? 0) < AGGREGATE_VERSION) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -101,6 +113,7 @@ function aggregateAnalyses(
       totalConvs: 0,
       totalTokens: 0,
       computedAt: new Date().toISOString(),
+      version: AGGREGATE_VERSION,
     };
   }
 
@@ -126,5 +139,6 @@ function aggregateAnalyses(
     totalConvs: analyses.length,
     totalTokens: tokenSum,
     computedAt: new Date().toISOString(),
+    version: AGGREGATE_VERSION,
   };
 }

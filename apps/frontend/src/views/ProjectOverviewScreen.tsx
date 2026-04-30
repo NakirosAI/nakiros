@@ -11,7 +11,9 @@ import {
   Zap,
 } from 'lucide-react';
 import type { ConversationAnalysis, Project } from '@nakiros/shared';
-import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
+import { ConvDrawer } from '../components/conversations/ConvDrawer';
+// Legacy modal kept commented for reference; new design uses ConvDrawer (slide-in).
+// import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
 import {
   aggregate,
   recurringHotFiles,
@@ -347,8 +349,7 @@ export default function ProjectOverviewScreen({ project }: Props) {
       </div>
 
       {selected && (
-        <ConversationDiagnosticPanel
-          project={project}
+        <ConvDrawer
           analysis={selected}
           onClose={() => setSelected(null)}
         />

@@ -127,7 +127,7 @@ export function ConversationDiagnosticPanel({ project, analysis, onClose }: Prop
               value={formatLargeTokens(analysis.cacheCreationTokens)}
             />
             <Field
-              label={t('drawer.fields.cacheMisses')}
+              label={t('drawer.fields.cacheMisses', { ttlMin: analysis.cacheTtlMin })}
               value={analysis.cacheMissTurns.toString()}
               accent={analysis.cacheMissTurns >= 3}
             />

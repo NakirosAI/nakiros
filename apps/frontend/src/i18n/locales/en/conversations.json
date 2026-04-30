@@ -37,6 +37,13 @@
     "hotFiles_one": "{{count}} hot file",
     "hotFiles_other": "{{count}} hot files"
   },
+  "hover": {
+    "cumBilled": "cumul billed",
+    "wasted": "WASTED",
+    "compaction": "Compaction",
+    "pause": "Pause",
+    "friction": "Friction"
+  },
   "diagnostic": {
     "healthy": "Healthy conversation — no notable signal"
   },
@@ -87,7 +94,7 @@
       "cacheRead": "Cache hits",
       "cacheCreation": "Cache writes",
       "wasted": "Avoidable waste",
-      "cacheMisses": "Gaps > 5 min"
+      "cacheMisses": "Gaps > {{ttlMin}}min"
     }
   },
   "loadingMessages": "Loading raw messages…",
@@ -122,13 +129,13 @@
       "title": "Watch the context growth",
       "body": "Context at {{ctxPct}}% of window — not critical yet but degradation starts here. Watch for drift signals (answers that ignore the start of the conversation)."
     },
-    "use-extended-cache": {
-      "title": "Enable the 1h extended cache",
-      "body": "{{cacheMisses}} pauses > 5 min cost ~{{wastedK}}k tokens in cache rewrites. On a session this spread out, the 1h cache beta (`extended-cache-ttl-2025-04-11`) pays for itself."
+    "split-before-long-pause": {
+      "title": "Split before a long pause",
+      "body": "{{cacheMisses}} pauses > {{ttlMin}}min expired the cache — ~{{wastedK}}k tokens in avoidable rewrites. When you know you're stepping away for a while, run /clear or start a new session instead of coming back and paying for cache reconstruction."
     },
     "keep-session-continuous": {
       "title": "Keep the session continuous",
-      "body": "{{cacheMisses}} pauses > 5 min expired the cache — ~{{wastedK}}k tokens in avoidable rewrites. If you know a pause is coming, send a short message to refresh the TTL."
+      "body": "{{cacheMisses}} pauses > {{ttlMin}}min expired the cache — ~{{wastedK}}k tokens in avoidable rewrites. If you know a pause is coming, send a short message to refresh the TTL."
     },
     "restate-intent-mid": {
       "title": "Restate intent mid-session",

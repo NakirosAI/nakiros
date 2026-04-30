@@ -159,7 +159,7 @@ export function DiagnosticTab({ analysis }: Props) {
           <Kpi label={t('drawer.fields.cacheRead')} value={cacheReadK} tone="healthy" />
           <Kpi label={t('drawer.fields.cacheCreation')} value={cacheCreationK} />
           <Kpi
-            label={t('drawer.fields.cacheMisses')}
+            label={t('drawer.fields.cacheMisses', { ttlMin: analysis.cacheTtlMin })}
             value={String(cacheMisses)}
             tone={cacheMisses >= 5 ? 'watch' : 'neutral'}
           />
@@ -303,6 +303,8 @@ function RecRow({ tip }: { tip: ConversationTip }) {
 
   const tone = toneForSeverity(tip.severity);
   const Icon = iconForCategory(tip.category);
+  const economyTokens =
+    typeof tip.data['economyTokens'] === 'number' ? (tip.data['economyTokens'] as number) : 0;
 
   return (
     <li className="flex items-start gap-3 rounded-n-md border border-n-border-subtle bg-n-surface px-3.5 py-2.5">
@@ -315,8 +317,24 @@ function RecRow({ tip }: { tip: ConversationTip }) {
         <Icon size={13} className={tone.iconFg} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-medium text-n-fg">
-          {t(`tips.${tip.id}.title`, { defaultValue: tip.id, ...tip.data })}
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="text-[13px] font-medium text-n-fg">
+            {t(`tips.${tip.id}.title`, { defaultValue: tip.id, ...tip.data })}
+          </div>
+          {economyTokens > 0 && (
+            <span
+              className={
+                'flex-shrink-0 font-n-mono text-[11px] tabular-nums ' +
+                (tip.severity === 'critical'
+                  ? 'text-n-critical'
+                  : tip.severity === 'warning'
+                    ? 'text-n-watch'
+                    : 'text-n-muted')
+              }
+            >
+              {formatEconomy(economyTokens)}
+            </span>
+          )}
         </div>
         <div className="mt-0.5 text-[12px] leading-relaxed text-n-muted">
           {t(`tips.${tip.id}.body`, { defaultValue: '', ...tip.data })}
@@ -324,6 +342,12 @@ function RecRow({ tip }: { tip: ConversationTip }) {
       </div>
     </li>
   );
+}
+
+function formatEconomy(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M billed`;
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}k billed`;
+  return `${tokens} billed`;
 }
 
 function toneForSeverity(severity: ConversationTip['severity']): {

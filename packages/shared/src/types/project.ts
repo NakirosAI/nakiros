@@ -103,6 +103,48 @@ export interface ConversationFrictionPoint {
   precedingTool: string | null;
 }
 
+/**
+ * One assistant turn's cost breakdown — drives the sismograph cost-stacked
+ * track. All token fields are raw (input-token-equivalent multipliers are
+ * applied to compute `billed` and `cumBilled`).
+ */
+export interface ConversationCostSample {
+  /** Milliseconds since the session's first timestamp. */
+  tMs: number;
+  /** Position in the conversation (0-1), aligned with other offsetPct fields. */
+  offsetPct: number;
+  /** Raw `input_tokens` from `usage`. */
+  input: number;
+  /** Raw `output_tokens` from `usage`. */
+  output: number;
+  /** Raw `cache_read_input_tokens` from `usage`. */
+  cacheRead: number;
+  /** Cache write (5min TTL) tokens — `usage.cache_creation.ephemeral_5m_input_tokens`. */
+  cache5m: number;
+  /** Cache write (1h TTL) tokens — `usage.cache_creation.ephemeral_1h_input_tokens`. */
+  cache1h: number;
+  /** Billed-equivalent for this turn (×1/×5/×0.1/×1.25/×2). */
+  billed: number;
+  /** Cumulative billed-equivalent up to and including this turn. */
+  cumBilled: number;
+  /** Portion of (cache5m + cache1h) attributed as wasted rewrite (turn followed a > TTL pause). */
+  wastedRewrite: number;
+  /** Tools invoked on this turn (names, in order). */
+  toolNames: string[];
+}
+
+/** Pause detected when the gap between user reply and last assistant message exceeded the cache TTL. */
+export interface ConversationPausePoint {
+  /** Milliseconds since the session's first timestamp. */
+  tMs: number;
+  /** Position in the conversation (0-1). */
+  offsetPct: number;
+  /** Duration of the gap that caused the cache miss (ms). */
+  gapMs: number;
+  /** Tokens of cache_creation attributed to this pause (= directly avoidable rewrite cost). */
+  wastedTokens: number;
+}
+
 /** Per-tool usage stats aggregated across a conversation. */
 export interface ConversationToolStats {
   /** Total tool_use invocations for this tool. */
@@ -160,7 +202,11 @@ export interface ConversationAnalysis {
 
   // --- Context health ---
   compactions: ConversationCompaction[];
-  /** Sum of input_tokens + output_tokens + cache_creation + cache_read across all assistant turns. */
+  /**
+   * Tokens consumed across all assistant turns (input + output + cache_creation).
+   * Cache reads are excluded — they're re-uses of already-paid tokens. Matches
+   * the "tokens consumed" counter Claude Code surfaces in the UI.
+   */
   totalTokens: number;
   /** Peak in-context tokens on a single turn (input + cache_read + cache_creation). */
   maxContextTokens: number;
@@ -173,10 +219,26 @@ export interface ConversationAnalysis {
   // --- Cache efficiency ---
   cacheReadTokens: number;
   cacheCreationTokens: number;
-  /** User turns where time since last assistant message exceeded 5 min (default TTL). */
+  /**
+   * Detected cache TTL mode for this session. Claude Code uses the 1h beta
+   * cache by default since 2026-04, but we detect per-session via the
+   * `usage.cache_creation` breakdown to stay correct.
+   */
+  cacheMode: '5m' | '1h';
+  /** TTL in minutes corresponding to {@link cacheMode} (5 or 60). */
+  cacheTtlMin: number;
+  /** User turns where time since last assistant message exceeded the detected TTL. */
   cacheMissTurns: number;
   /** Tokens written to cache on those miss turns — directly the avoidable cost. */
   wastedCacheTokens: number;
+
+  /**
+   * Per-turn cost breakdown — drives the sismograph cost track. Empty for
+   * sessions with no assistant turns (shouldn't happen for valid JSONLs).
+   */
+  costSamples: ConversationCostSample[];
+  /** Pauses > {@link cacheTtlMin} that forced cache rewrite, with attributed waste. */
+  pausePoints: ConversationPausePoint[];
 
   // --- Friction ---
   frictionPoints: ConversationFrictionPoint[];
@@ -224,6 +286,8 @@ export interface ProjectAggregate {
   totalTokens: number;
   /** ISO timestamp of the last successful recompute. */
   computedAt: string;
+  /** Schema version — bumped when token semantics change. Stale caches are ignored. */
+  version?: number;
 }
 
 // ---------------------------------------------------------------------------

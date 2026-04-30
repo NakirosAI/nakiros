@@ -28,8 +28,15 @@ interface CacheEntry {
  * Bumped when `ConversationAnalysis` shape or `analyzeConversation` scoring
  * changes. Existing cache files with a mismatched version are ignored and
  * recomputed.
+ *
+ * v2 (2026-04-30) — added `costSamples`, `pausePoints`, `cacheMode`,
+ * `cacheTtlMin`. Auto-detection of cache 1h beta also fixes wastedCacheTokens.
+ *
+ * v3 (2026-04-30) — `totalTokens` now excludes cache_read (matches Claude
+ * Code's "consumed" counter). Old caches inflated this by 50× on heavy-cache
+ * sessions.
  */
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 3;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

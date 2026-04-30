@@ -27,14 +27,8 @@ interface NewShellProps {
 }
 
 /**
- * Shell experimentale du new-design (Phase 1 PR2b). Activée via le flag
- * URL `?shell=new`. Pilotée par {@link useTabs}, elle ouvre les projets
- * dans des onglets parallèles. Pour cette PR, chaque onglet projet rend
- * le {@link Dashboard} actuel pour préserver la parité fonctionnelle —
- * la refonte des écrans suit dans les phases ultérieures.
- *
- * Out of scope ici : RunDock (PR2c), Home fusionnée 3-tabs (Phase 6),
- * persistence des onglets (post-Phase 1, si demandé).
+ * Shell principal de Nakiros. Pilotée par {@link useTabs}, elle ouvre les
+ * projets, runs, skills et marketplaces dans des onglets parallèles.
  */
 export default function NewShell({
   projects,

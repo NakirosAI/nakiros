@@ -12,8 +12,6 @@ import {
 } from 'lucide-react';
 import type { ConversationAnalysis, Project } from '@nakiros/shared';
 import { ConvDrawer } from '../components/conversations/ConvDrawer';
-// Legacy modal kept commented for reference; new design uses ConvDrawer (slide-in).
-// import { ConversationDiagnosticPanel } from '../components/conversations/ConversationDiagnosticPanel';
 import {
   aggregate,
   recurringHotFiles,
@@ -45,12 +43,11 @@ const WINDOW_KEYS: WindowKey[] = ['10', '30', '90', 'all'];
  * - A Health distribution bar (healthy / watch / critical)
  * - 3 ranked lists (top tips / fragile tools / hot files) reusing the
  *   same `Conversations Aggregation` helpers as the legacy overview
- * - A "Critical conversations" list opening the existing
- *   {@link ConversationDiagnosticPanel} for drill-down
+ * - A "Critical conversations" list opening {@link ConvDrawer} for
+ *   drill-down
  *
  * Mounted from {@link NewShell} when the active project tab's `view` is
- * `'overview'`. The legacy {@link ProjectOverview} stays accessible
- * outside of `?shell=new`.
+ * `'overview'`.
  */
 export default function ProjectOverviewScreen({ project }: Props) {
   const { t } = useTranslation('overview');

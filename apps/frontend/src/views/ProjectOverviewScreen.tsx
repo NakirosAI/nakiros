@@ -385,11 +385,7 @@ function KPI({
           {label}
         </span>
         {icon && (
-          <span className="text-n-faint">
-            {/* `as any` to set size on cloned lucide elt without dragging the type. */}
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-            {wrapIcon(icon)}
-          </span>
+          <span className="text-n-faint">{wrapIcon(icon)}</span>
         )}
       </div>
       <div className="mt-0.5 flex items-baseline gap-2">

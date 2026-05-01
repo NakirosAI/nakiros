@@ -1,0 +1,65 @@
+{
+  "list": {
+    "title": "Styles de sortie",
+    "subtitle": "Modes de réponse alternatifs (concis, enseignement, review…). Les styles personnalisés vivent sous `.claude/output-styles/` et sont sélectionnés via `outputStyle` dans `settings.json` ou `settings.local.json`.",
+    "newStyle": "Nouveau style",
+    "loading": "Chargement des styles…",
+    "activeBadge": "Actif",
+    "builtIn": "intégré",
+    "builtInHelp": "Les styles intégrés sont fournis avec Claude Code et ne sont pas stockés sur le disque — bascule sur un style personnalisé pour l'éditer ici, ou utilise `/config` dans Claude Code pour switcher.",
+    "source": "depuis {{source}}",
+    "noActive": "Aucun style actif",
+    "noActiveHelp": "Aucun `outputStyle` défini dans `settings.json` / `settings.local.json` — Claude Code utilise son style `Default`.",
+    "keepCoding": "garde les instructions de code",
+    "empty": {
+      "title": "Aucun style personnalisé",
+      "description": "Crée-en un pour ajouter un mode enseignement, un mode reviewer strict, un mode concis pour les recherches rapides — tout ce qui adapte la façon de répondre de Claude sans changer ce qu'il peut faire."
+    },
+    "error": {
+      "title": "Impossible de charger les styles",
+      "retry": "Réessayer"
+    }
+  },
+  "editor": {
+    "titleCreate": "Nouveau style de sortie",
+    "subtitleCreate": "Personnalise la façon dont Claude répond quand ce style est actif.",
+    "subtitleEdit": "Comment Claude répond quand ce style est actif.",
+    "loading": "Chargement du style…",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "create": "Créer",
+    "delete": "Supprimer",
+    "confirmDelete": "Supprimer le style « {{name}} » ? Action irréversible.",
+    "reload": "Recharger depuis le disque",
+    "nameLabel": "Nom",
+    "namePlaceholder": "explicateur-concis",
+    "nameHelp": "Lettres minuscules, chiffres et tirets. Sauvé dans `.claude/output-styles/<nom>.md`.",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Explique brièvement le raisonnement et demande à l'utilisateur de coder les petites parties.",
+    "descriptionHelp": "Affiché à l'utilisateur dans le picker `/config` de Claude Code.",
+    "keepCodingLabel": "Garder les instructions de code",
+    "keepCodingHelp": "Par défaut, les styles personnalisés retirent les instructions de code par défaut de Claude Code. Active cette option pour les conserver en plus de tes ajouts (recommandé pour les styles orientés code).",
+    "bodyLabel": "Contenu du style (markdown)",
+    "bodyPlaceholder": "À la fin de chaque tâche, ajoute une courte note « Pourquoi cette approche » expliquant la décision de design clé.",
+    "previewBody": "Aperçu",
+    "editBody": "Édition",
+    "errors": {
+      "invalidName": "Le nom doit contenir uniquement minuscules, chiffres et tirets.",
+      "invalidNameTitle": "Nom invalide",
+      "alreadyExists": "Un style porte déjà ce nom.",
+      "alreadyExistsTitle": "Nom déjà pris",
+      "notFound": "Ce style n'existe plus sur le disque.",
+      "notFoundTitle": "Introuvable",
+      "conflict": "Ce style a été modifié en dehors de Nakiros. Recharge pour voir la dernière version.",
+      "conflictTitle": "Modification externe détectée",
+      "writeFailed": "Impossible d'écrire sur le disque.",
+      "writeFailedTitle": "Écriture échouée",
+      "projectNotFound": "Projet introuvable.",
+      "projectNotFoundTitle": "Projet inconnu",
+      "readFailed": "Impossible de lire ce style.",
+      "readFailedTitle": "Lecture échouée",
+      "partialCreate": "Style créé mais le corps n'a pas pu être enregistré : {{error}}"
+    }
+  }
+}

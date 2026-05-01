@@ -60,7 +60,7 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
         { id: 'rules', label: 'Rules', icon: <Layers size={18} strokeWidth={2} />, disabled: false },
         { id: 'subagents', label: 'Subagents', icon: <Bot size={18} strokeWidth={2} />, disabled: false },
         { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false },
-        { id: 'outputStyles', label: 'Output styles', icon: <Sliders size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 3' },
+        { id: 'outputStyles', label: 'Output styles', icon: <Sliders size={18} strokeWidth={2} />, disabled: false },
         { id: 'mcp', label: 'MCP', icon: <Plug size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 5' },
         { id: 'hooks', label: 'Hooks', icon: <Zap size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 6' },
       ],

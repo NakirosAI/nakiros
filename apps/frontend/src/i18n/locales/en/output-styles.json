@@ -1,0 +1,65 @@
+{
+  "list": {
+    "title": "Output styles",
+    "subtitle": "Alternate response modes (concise, teaching, review…). Custom styles live under `.claude/output-styles/` and are selected via `outputStyle` in `settings.json` or `settings.local.json`.",
+    "newStyle": "New output style",
+    "loading": "Loading output styles…",
+    "activeBadge": "Active",
+    "builtIn": "built-in",
+    "builtInHelp": "Built-in styles ship with Claude Code and aren't stored on disk — switch to a custom one to edit it here, or use Claude Code's `/config` command to swap.",
+    "source": "from {{source}}",
+    "noActive": "No active style",
+    "noActiveHelp": "No `outputStyle` set in `settings.json` / `settings.local.json` — Claude Code uses its `Default` style.",
+    "keepCoding": "keeps coding instructions",
+    "empty": {
+      "title": "No custom output styles",
+      "description": "Create one to add a teaching mode, a strict reviewer mode, a concise mode for quick lookups — anything that adapts how Claude responds without changing what it can do."
+    },
+    "error": {
+      "title": "Could not load output styles",
+      "retry": "Retry"
+    }
+  },
+  "editor": {
+    "titleCreate": "New output style",
+    "subtitleCreate": "Customise how Claude responds when this style is active.",
+    "subtitleEdit": "How Claude responds when this style is active.",
+    "loading": "Loading output style…",
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "delete": "Delete",
+    "confirmDelete": "Delete output style \"{{name}}\"? This cannot be undone.",
+    "reload": "Reload from disk",
+    "nameLabel": "Name",
+    "namePlaceholder": "concise-explainer",
+    "nameHelp": "Lowercase letters, digits and dashes. Saved as `.claude/output-styles/<name>.md`.",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Explains reasoning briefly and asks the user to fill in small pieces.",
+    "descriptionHelp": "Shown to the user in Claude Code's `/config` picker.",
+    "keepCodingLabel": "Keep coding instructions",
+    "keepCodingHelp": "By default, custom output styles drop Claude Code's default coding instructions. Enable this to keep them alongside your additions (recommended for code-related styles).",
+    "bodyLabel": "Style body (markdown)",
+    "bodyPlaceholder": "After completing each task, add a brief 'Why this approach' note explaining the key design decision.",
+    "previewBody": "Preview",
+    "editBody": "Edit",
+    "errors": {
+      "invalidName": "Name must use lowercase letters, digits and dashes only.",
+      "invalidNameTitle": "Invalid name",
+      "alreadyExists": "An output style with this name already exists.",
+      "alreadyExistsTitle": "Name taken",
+      "notFound": "This output style no longer exists on disk.",
+      "notFoundTitle": "Not found",
+      "conflict": "This output style was modified outside Nakiros. Reload to see the latest version.",
+      "conflictTitle": "External edit detected",
+      "writeFailed": "Could not write to disk.",
+      "writeFailedTitle": "Write failed",
+      "projectNotFound": "Project not found.",
+      "projectNotFoundTitle": "Unknown project",
+      "readFailed": "Could not read this output style.",
+      "readFailedTitle": "Read failed",
+      "partialCreate": "Created the output style, but failed to save the body: {{error}}"
+    }
+  }
+}

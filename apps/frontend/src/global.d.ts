@@ -69,6 +69,11 @@ import type {
   AgentMutationResult,
   CreateAgentRequest,
   SaveAgentRequest,
+  CreateOutputStyleRequest,
+  OutputStyleFileContent,
+  OutputStyleMutationResult,
+  OutputStylesListResult,
+  SaveOutputStyleRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -312,6 +317,25 @@ declare global {
         request: SaveAgentRequest,
       ): Promise<AgentMutationResult>;
       deleteClaudeAgent(projectId: string, name: string): Promise<AgentMutationResult>;
+
+      // .claude/output-styles/ editor (Module 3 V2)
+      listClaudeOutputStyles(projectId: string): Promise<OutputStylesListResult>;
+      readClaudeOutputStyle(
+        projectId: string,
+        name: string,
+      ): Promise<OutputStyleFileContent | null>;
+      createClaudeOutputStyle(
+        projectId: string,
+        request: CreateOutputStyleRequest,
+      ): Promise<OutputStyleMutationResult>;
+      saveClaudeOutputStyle(
+        projectId: string,
+        request: SaveOutputStyleRequest,
+      ): Promise<OutputStyleMutationResult>;
+      deleteClaudeOutputStyle(
+        projectId: string,
+        name: string,
+      ): Promise<OutputStyleMutationResult>;
     };
   }
 }

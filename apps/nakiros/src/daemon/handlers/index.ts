@@ -19,6 +19,7 @@ import { analyzeConvoHandlers } from './analyze-convo.js';
 import { claudeConfigHandlers } from './claude-config.js';
 import { claudeRulesHandlers } from './claude-rules.js';
 import { claudeAgentsHandlers } from './claude-agents.js';
+import { claudeOutputStylesHandlers } from './claude-output-styles.js';
 
 /** Signature every IPC handler must implement — takes an arg array, returns a value or promise. */
 export type IpcHandler = (args: unknown[]) => Promise<unknown> | unknown;
@@ -57,5 +58,6 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...claudeConfigHandlers,
     ...claudeRulesHandlers,
     ...claudeAgentsHandlers,
+    ...claudeOutputStylesHandlers,
   };
 }

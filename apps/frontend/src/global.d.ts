@@ -58,6 +58,12 @@ import type {
   ListComparisonsRequest,
   RunComparisonRequest,
   RunComparisonResponse,
+  ClaudeConfigSnapshot,
+  CreateRuleRequest,
+  RuleEntry,
+  RuleFileContent,
+  RuleMutationResult,
+  SaveRuleRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -272,6 +278,20 @@ declare global {
 
 
       onScanProgress(cb: (progress: ScanProgress) => void): () => void;
+
+      // .claude/ configuration explorer (read-only V1)
+      scanClaudeConfig(projectId: string): Promise<ClaudeConfigSnapshot | null>;
+      readClaudeConfigFile(projectId: string, relativePath: string): Promise<string | null>;
+
+      // .claude/rules/ editor (Module 1 V2)
+      listClaudeRules(projectId: string): Promise<RuleEntry[]>;
+      readClaudeRule(projectId: string, name: string): Promise<RuleFileContent | null>;
+      createClaudeRule(
+        projectId: string,
+        request: CreateRuleRequest,
+      ): Promise<RuleMutationResult>;
+      saveClaudeRule(projectId: string, request: SaveRuleRequest): Promise<RuleMutationResult>;
+      deleteClaudeRule(projectId: string, name: string): Promise<RuleMutationResult>;
     };
   }
 }

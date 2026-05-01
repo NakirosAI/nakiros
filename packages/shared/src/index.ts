@@ -20,6 +20,7 @@ export * from './types/agent-run.js';
 export * from './types/audit-checks.js';
 export * from './types/chat-timeline.js';
 export * from './types/fix-progress.js';
+export * from './types/claude-config.js';
 export * from './constants/claude-models.js';
 export * from './constants/editor-definitions.js';
 export * from './ipc-channels.js';

@@ -21,8 +21,24 @@ import type { AgentRunKind } from '@nakiros/shared';
  * (cf. plan PR2b decision #2).
  */
 
-/** Sub-view within a project tab. Mirrors the new-design sidebar items. */
-export type ProjectTabView = 'overview' | 'skills' | 'convs' | 'recs' | 'settings';
+/** Sub-view within a project tab. Mirrors the new-design sidebar items.
+ *
+ * The `.claude/` configuration is split into one tab per category (Module 1+
+ * V2). Modules not yet shipped render a "Coming soon" placeholder. Skills is
+ * the existing tab kept untouched for now.
+ */
+export type ProjectTabView =
+  | 'overview'
+  | 'convs'
+  | 'claudeMd'
+  | 'rules'
+  | 'subagents'
+  | 'skills'
+  | 'outputStyles'
+  | 'mcp'
+  | 'hooks'
+  | 'recs'
+  | 'settings';
 
 interface HomeTab {
   id: string;

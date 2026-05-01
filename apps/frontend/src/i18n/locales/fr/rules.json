@@ -1,0 +1,61 @@
+{
+  "list": {
+    "title": "Règles",
+    "subtitle": "Instructions ciblées que Claude lit quand il touche à certains fichiers. Utilise `paths:` pour limiter une règle à un dossier ou type de fichier, ou laisse vide pour une règle toujours active.",
+    "newRule": "Nouvelle règle",
+    "alwaysOn": "toujours active",
+    "loading": "Chargement des règles…",
+    "empty": {
+      "title": "Aucune règle",
+      "description": "Les règles permettent de cibler des conventions à certains fichiers. Par exemple : tes conventions de tests uniquement chargées quand Claude édite un `*.test.ts`."
+    },
+    "error": {
+      "title": "Impossible de charger les règles",
+      "retry": "Réessayer"
+    }
+  },
+  "editor": {
+    "titleCreate": "Nouvelle règle",
+    "subtitleCreate": "Définis une règle markdown que Claude lit uniquement quand des fichiers correspondants entrent dans le contexte.",
+    "subtitleEdit": "Chargée par Claude quand un des chemins du scope correspond.",
+    "loading": "Chargement de la règle…",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "create": "Créer",
+    "delete": "Supprimer",
+    "confirmDelete": "Supprimer la règle « {{name}} » ? Action irréversible.",
+    "reload": "Recharger depuis le disque",
+    "nameLabel": "Nom",
+    "namePlaceholder": "conventions-tests",
+    "nameHelp": "Lettres minuscules, chiffres et tirets uniquement. Sauvée dans `.claude/rules/<nom>.md`.",
+    "pathsLabel": "Où cette règle s'applique",
+    "pathsHelp": "Motifs glob. Liste vide = règle toujours chargée au démarrage.",
+    "alwaysOn": "Toujours active (pas de chemin = globale)",
+    "pathPlaceholder": "src/**/*.ts",
+    "add": "Ajouter",
+    "removePath": "Retirer {{path}}",
+    "suggestions": "Suggestions",
+    "bodyLabel": "Contenu de la règle (markdown)",
+    "bodyPlaceholder": "# Tests\n\n- Utiliser des noms descriptifs…",
+    "previewBody": "Aperçu",
+    "editBody": "Édition",
+    "errors": {
+      "invalidName": "Le nom doit contenir uniquement minuscules, chiffres et tirets.",
+      "invalidNameTitle": "Nom invalide",
+      "alreadyExists": "Une règle porte déjà ce nom.",
+      "alreadyExistsTitle": "Nom déjà pris",
+      "notFound": "Cette règle n'existe plus sur le disque.",
+      "notFoundTitle": "Introuvable",
+      "conflict": "Cette règle a été modifiée en dehors de Nakiros. Recharge pour voir la dernière version.",
+      "conflictTitle": "Modification externe détectée",
+      "writeFailed": "Impossible d'écrire sur le disque.",
+      "writeFailedTitle": "Écriture échouée",
+      "projectNotFound": "Projet introuvable.",
+      "projectNotFoundTitle": "Projet inconnu",
+      "readFailed": "Impossible de lire cette règle.",
+      "readFailedTitle": "Lecture échouée",
+      "partialCreate": "Règle créée mais le corps n'a pas pu être enregistré : {{error}}"
+    }
+  }
+}

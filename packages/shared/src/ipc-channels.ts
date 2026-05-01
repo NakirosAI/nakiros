@@ -167,6 +167,17 @@ export const IPC_CHANNELS = {
   'skillAgent:readTempFile': 'skillAgent:readTempFile',
 
 
+  // .claude/ configuration explorer (read-only V1)
+  'claudeConfig:scan': 'claudeConfig:scan',
+  'claudeConfig:readFile': 'claudeConfig:readFile',
+
+  // .claude/rules/ editor (Module 1 V2)
+  'claudeRules:list': 'claudeRules:list',
+  'claudeRules:read': 'claudeRules:read',
+  'claudeRules:create': 'claudeRules:create',
+  'claudeRules:save': 'claudeRules:save',
+  'claudeRules:delete': 'claudeRules:delete',
+
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',
   'analyzeConvo:stopRun': 'analyzeConvo:stopRun',

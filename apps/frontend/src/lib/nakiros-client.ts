@@ -365,6 +365,11 @@ const client = {
   readSkillAgentTempFile: (runId: string, relativePath: string) => invoke(C['skillAgent:readTempFile'], runId, relativePath),
 
 
+  // .claude/ configuration explorer (read-only V1)
+  scanClaudeConfig: (projectId: string) => invoke(C['claudeConfig:scan'], projectId),
+  readClaudeConfigFile: (projectId: string, relativePath: string) =>
+    invoke(C['claudeConfig:readFile'], projectId, relativePath),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

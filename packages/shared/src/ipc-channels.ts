@@ -167,6 +167,10 @@ export const IPC_CHANNELS = {
   'skillAgent:readTempFile': 'skillAgent:readTempFile',
 
 
+  // .claude/ configuration explorer (read-only V1)
+  'claudeConfig:scan': 'claudeConfig:scan',
+  'claudeConfig:readFile': 'claudeConfig:readFile',
+
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',
   'analyzeConvo:stopRun': 'analyzeConvo:stopRun',

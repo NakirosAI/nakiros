@@ -4,18 +4,18 @@ import { Plus, X } from 'lucide-react';
 
 interface PathPickerProps {
   paths: string[];
+  /** Project-aware suggestions, computed once by the parent. Falls back to
+   *  the generic list below when null/empty (initial render or scan failure). */
+  suggestions: string[] | null;
   onChange(next: string[]): void;
 }
 
-const SUGGESTIONS = [
+const FALLBACK_SUGGESTIONS = [
   '**/*.ts',
   '**/*.tsx',
   '**/*.test.ts',
-  '**/*.test.tsx',
   '**/*.md',
   'src/**',
-  'src/api/**',
-  'src/components/**',
 ];
 
 /**
@@ -24,12 +24,14 @@ const SUGGESTIONS = [
  * suggestions is shown only when the relevant ones are not already in the
  * list. An empty list = always-on rule (loaded at session start).
  */
-export default function PathPicker({ paths, onChange }: PathPickerProps) {
+export default function PathPicker({ paths, suggestions, onChange }: PathPickerProps) {
   const { t } = useTranslation('rules');
   const [draft, setDraft] = useState('');
   const trimmed = draft.trim();
   const canAdd = trimmed.length > 0 && !paths.includes(trimmed);
-  const remainingSuggestions = SUGGESTIONS.filter((s) => !paths.includes(s));
+  const effectiveSuggestions =
+    suggestions && suggestions.length > 0 ? suggestions : FALLBACK_SUGGESTIONS;
+  const remainingSuggestions = effectiveSuggestions.filter((s) => !paths.includes(s));
 
   const add = () => {
     if (!canAdd) return;

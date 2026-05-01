@@ -14,6 +14,7 @@ import {
   readRuleForEditor,
   saveRule,
 } from '../../services/claude-rules-writer.js';
+import { suggestRulePaths } from '../../services/path-suggester.js';
 import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
@@ -82,4 +83,10 @@ export const claudeRulesHandlers: HandlerRegistry = {
       return deleteRule(project.projectPath, name);
     },
   ),
+
+  'claudeRules:suggestPaths': createTypedHandler((projectId: string): string[] => {
+    const project = getProject(projectId);
+    if (!project) return [];
+    return suggestRulePaths(project.projectPath);
+  }),
 };

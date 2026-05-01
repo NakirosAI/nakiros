@@ -1,0 +1,70 @@
+{
+  "list": {
+    "title": "Sous-agents",
+    "subtitle": "Agents spécialisés auxquels Claude peut déléguer. Chacun tourne dans son propre contexte avec un system prompt et des restrictions d'outils dédiés.",
+    "newAgent": "Nouveau sous-agent",
+    "loading": "Chargement des sous-agents…",
+    "empty": {
+      "title": "Aucun sous-agent",
+      "description": "Les sous-agents permettent de préserver le contexte, de restreindre les outils et de router des tâches vers des modèles plus rapides. Claude les invoque selon leur description, ou via @-mention."
+    },
+    "error": {
+      "title": "Impossible de charger les sous-agents",
+      "retry": "Réessayer"
+    }
+  },
+  "editor": {
+    "titleCreate": "Nouveau sous-agent",
+    "subtitleCreate": "Définis un sous-agent spécialisé. Claude délègue selon la description.",
+    "subtitleEdit": "Définition du sous-agent. Claude délègue selon la description.",
+    "loading": "Chargement du sous-agent…",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "create": "Créer",
+    "delete": "Supprimer",
+    "confirmDelete": "Supprimer le sous-agent « {{name}} » ? Action irréversible.",
+    "reload": "Recharger depuis le disque",
+    "nameLabel": "Nom",
+    "namePlaceholder": "revue-code",
+    "nameHelp": "Lettres minuscules, chiffres et tirets ; doit commencer par une lettre. Sauvé dans `.claude/agents/<nom>.md`.",
+    "frontmatterLabel": "Frontmatter",
+    "structured": "Structuré",
+    "raw": "Brut",
+    "cantParseStructured": "Le frontmatter n'est pas du YAML valide — passe en mode Brut pour corriger.",
+    "fields": {
+      "description": "Description",
+      "descriptionPlaceholder": "Revue de code pour correctness, sécurité et maintenabilité. À utiliser de manière proactive après chaque changement.",
+      "descriptionHelp": "Indique à Claude quand déléguer. Sois précis — inclure « use proactively » encourage l'auto-délégation.",
+      "model": "Modèle",
+      "modelCustom": "personnalisé…",
+      "color": "Couleur",
+      "colorNone": "(aucune)",
+      "tools": "Outils",
+      "toolsHelp": "Liste blanche. Vide = le sous-agent hérite de tous les outils de la session principale."
+    },
+    "bodyLabel": "System prompt (markdown)",
+    "bodyPlaceholder": "Tu es un reviewer de code senior. Focus sur la correctness, la sécurité et la maintenabilité. Toujours fournir un fix concret pour chaque finding.",
+    "previewBody": "Aperçu",
+    "editBody": "Édition",
+    "errors": {
+      "invalidName": "Le nom doit commencer par une lettre minuscule et contenir uniquement minuscules, chiffres et tirets.",
+      "invalidNameTitle": "Nom invalide",
+      "alreadyExists": "Un sous-agent porte déjà ce nom.",
+      "alreadyExistsTitle": "Nom déjà pris",
+      "notFound": "Ce sous-agent n'existe plus sur le disque.",
+      "notFoundTitle": "Introuvable",
+      "conflict": "Ce sous-agent a été modifié en dehors de Nakiros. Recharge pour voir la dernière version.",
+      "conflictTitle": "Modification externe détectée",
+      "invalidYaml": "Le frontmatter n'est pas du YAML valide — corrige en mode Brut.",
+      "invalidYamlTitle": "YAML invalide",
+      "writeFailed": "Impossible d'écrire sur le disque.",
+      "writeFailedTitle": "Écriture échouée",
+      "projectNotFound": "Projet introuvable.",
+      "projectNotFoundTitle": "Projet inconnu",
+      "readFailed": "Impossible de lire ce sous-agent.",
+      "readFailedTitle": "Lecture échouée",
+      "partialCreate": "Sous-agent créé mais le corps n'a pas pu être enregistré : {{error}}"
+    }
+  }
+}

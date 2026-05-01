@@ -33,6 +33,7 @@ import frVersion from './locales/fr/version.json';
 import frComparison from './locales/fr/comparison.json';
 import frRuns from './locales/fr/runs.json';
 import frRulesEditor from './locales/fr/rules.json';
+import frSubagents from './locales/fr/subagents.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -66,6 +67,7 @@ import enVersion from './locales/en/version.json';
 import enComparison from './locales/en/comparison.json';
 import enRuns from './locales/en/runs.json';
 import enRulesEditor from './locales/en/rules.json';
+import enSubagents from './locales/en/subagents.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -103,6 +105,7 @@ const resources = {
     comparison: frComparison,
     runs: frRuns,
     rules: frRulesEditor,
+    subagents: frSubagents,
   },
   en: {
     common: enCommon,
@@ -137,6 +140,7 @@ const resources = {
     comparison: enComparison,
     runs: enRuns,
     rules: enRulesEditor,
+    subagents: enSubagents,
   },
 };
 

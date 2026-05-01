@@ -1,0 +1,70 @@
+{
+  "list": {
+    "title": "Subagents",
+    "subtitle": "Specialized agents the main Claude can delegate to. Each runs in its own context window with its own system prompt and tool restrictions.",
+    "newAgent": "New subagent",
+    "loading": "Loading subagents…",
+    "empty": {
+      "title": "No subagents yet",
+      "description": "Subagents help you preserve context, enforce tool restrictions, and route tasks to faster models. They're invoked by Claude based on their description, or via @-mention."
+    },
+    "error": {
+      "title": "Could not load subagents",
+      "retry": "Retry"
+    }
+  },
+  "editor": {
+    "titleCreate": "New subagent",
+    "subtitleCreate": "Define a specialized subagent. Claude delegates based on the description.",
+    "subtitleEdit": "Subagent definition. Claude delegates based on the description.",
+    "loading": "Loading subagent…",
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "delete": "Delete",
+    "confirmDelete": "Delete subagent \"{{name}}\"? This cannot be undone.",
+    "reload": "Reload from disk",
+    "nameLabel": "Name",
+    "namePlaceholder": "code-reviewer",
+    "nameHelp": "Lowercase letters, digits and dashes; must start with a letter. Saved as `.claude/agents/<name>.md`.",
+    "frontmatterLabel": "Frontmatter",
+    "structured": "Structured",
+    "raw": "Raw",
+    "cantParseStructured": "Frontmatter can't be parsed as YAML — switch to Raw to fix it.",
+    "fields": {
+      "description": "Description",
+      "descriptionPlaceholder": "Reviews code for correctness, security, and maintainability. Use proactively after code changes.",
+      "descriptionHelp": "Tells Claude when to delegate. Be specific — including \"use proactively\" encourages auto-delegation.",
+      "model": "Model",
+      "modelCustom": "custom…",
+      "color": "Color",
+      "colorNone": "(none)",
+      "tools": "Tools",
+      "toolsHelp": "Allowlist. Empty = the subagent inherits every tool from the main session."
+    },
+    "bodyLabel": "System prompt (markdown)",
+    "bodyPlaceholder": "You are a senior code reviewer. Focus on correctness, security, and maintainability. Always provide a concrete fix with each finding.",
+    "previewBody": "Preview",
+    "editBody": "Edit",
+    "errors": {
+      "invalidName": "Name must start with a lowercase letter and use lowercase letters, digits and dashes only.",
+      "invalidNameTitle": "Invalid name",
+      "alreadyExists": "A subagent with this name already exists.",
+      "alreadyExistsTitle": "Name taken",
+      "notFound": "This subagent no longer exists on disk.",
+      "notFoundTitle": "Not found",
+      "conflict": "This subagent was modified outside Nakiros. Reload to see the latest version.",
+      "conflictTitle": "External edit detected",
+      "invalidYaml": "Frontmatter is not valid YAML — fix it in Raw mode.",
+      "invalidYamlTitle": "Invalid YAML",
+      "writeFailed": "Could not write to disk.",
+      "writeFailedTitle": "Write failed",
+      "projectNotFound": "Project not found.",
+      "projectNotFoundTitle": "Unknown project",
+      "readFailed": "Could not read this subagent.",
+      "readFailedTitle": "Read failed",
+      "partialCreate": "Created the subagent, but failed to save the body: {{error}}"
+    }
+  }
+}

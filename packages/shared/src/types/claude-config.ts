@@ -187,6 +187,55 @@ export type RuleMutationErrorCode =
   | 'project-not-found'
   | 'write-failed';
 
+// ── Subagent editor (Module 2 — V2 edit) ───────────────────────────────────-
+export interface AgentFileContent {
+  name: string;
+  relativePath: string;
+  /** ISO timestamp of the file's last modification at read time (lock token). */
+  mtime: string;
+  /** Raw YAML frontmatter (without the surrounding `---` markers). The frontend
+   *  parses this into a `Document` to expose structured + raw views. */
+  frontmatterRaw: string;
+  body: string;
+  /** Best-effort extraction of the essentials, for the list view and as a
+   *  fallback when the frontend can't parse the YAML. */
+  parsed: AgentParsedEssentials;
+}
+
+export interface AgentParsedEssentials {
+  description: string | null;
+  model: string | null;
+  tools: string[];
+  color: string | null;
+}
+
+export interface SaveAgentRequest {
+  name: string;
+  frontmatterRaw: string;
+  body: string;
+  mtimeAtRead: string;
+}
+
+export interface CreateAgentRequest {
+  /** Filename without `.md`; lowercase letters, digits and dashes only. */
+  name: string;
+  /** Optional description seeded into the new file's frontmatter. */
+  description?: string;
+}
+
+export type AgentMutationResult =
+  | { ok: true; file: AgentFileContent }
+  | { ok: false; code: AgentMutationErrorCode; message: string; currentMtime?: string };
+
+export type AgentMutationErrorCode =
+  | 'invalid-name'
+  | 'invalid-yaml'
+  | 'already-exists'
+  | 'not-found'
+  | 'conflict'
+  | 'project-not-found'
+  | 'write-failed';
+
 // ── skills (gateway only) ──────────────────────────────────────────────────
 export interface SkillsGatewayInfo {
   present: boolean;

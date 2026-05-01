@@ -64,6 +64,11 @@ import type {
   RuleFileContent,
   RuleMutationResult,
   SaveRuleRequest,
+  AgentEntry,
+  AgentFileContent,
+  AgentMutationResult,
+  CreateAgentRequest,
+  SaveAgentRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -294,6 +299,19 @@ declare global {
       deleteClaudeRule(projectId: string, name: string): Promise<RuleMutationResult>;
       /** Project-aware path-glob suggestions for the rule editor. */
       suggestClaudeRulePaths(projectId: string): Promise<string[]>;
+
+      // .claude/agents/ editor (Module 2 V2)
+      listClaudeAgents(projectId: string): Promise<AgentEntry[]>;
+      readClaudeAgent(projectId: string, name: string): Promise<AgentFileContent | null>;
+      createClaudeAgent(
+        projectId: string,
+        request: CreateAgentRequest,
+      ): Promise<AgentMutationResult>;
+      saveClaudeAgent(
+        projectId: string,
+        request: SaveAgentRequest,
+      ): Promise<AgentMutationResult>;
+      deleteClaudeAgent(projectId: string, name: string): Promise<AgentMutationResult>;
     };
   }
 }

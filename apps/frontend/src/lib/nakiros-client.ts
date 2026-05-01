@@ -385,6 +385,19 @@ const client = {
   suggestClaudeRulePaths: (projectId: string) =>
     invoke(C['claudeRules:suggestPaths'], projectId),
 
+  // .claude/agents/ editor (Module 2 V2)
+  listClaudeAgents: (projectId: string) => invoke(C['claudeAgents:list'], projectId),
+  readClaudeAgent: (projectId: string, name: string) =>
+    invoke(C['claudeAgents:read'], projectId, name),
+  createClaudeAgent: (projectId: string, request: { name: string; description?: string }) =>
+    invoke(C['claudeAgents:create'], projectId, request),
+  saveClaudeAgent: (
+    projectId: string,
+    request: { name: string; frontmatterRaw: string; body: string; mtimeAtRead: string },
+  ) => invoke(C['claudeAgents:save'], projectId, request),
+  deleteClaudeAgent: (projectId: string, name: string) =>
+    invoke(C['claudeAgents:delete'], projectId, name),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

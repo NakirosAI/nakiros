@@ -32,7 +32,7 @@ import frBundledConflicts from './locales/fr/bundled-conflicts.json';
 import frVersion from './locales/fr/version.json';
 import frComparison from './locales/fr/comparison.json';
 import frRuns from './locales/fr/runs.json';
-import frClaudeConfig from './locales/fr/claude-config.json';
+import frRulesEditor from './locales/fr/rules.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -65,7 +65,7 @@ import enBundledConflicts from './locales/en/bundled-conflicts.json';
 import enVersion from './locales/en/version.json';
 import enComparison from './locales/en/comparison.json';
 import enRuns from './locales/en/runs.json';
-import enClaudeConfig from './locales/en/claude-config.json';
+import enRulesEditor from './locales/en/rules.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -102,7 +102,7 @@ const resources = {
     version: frVersion,
     comparison: frComparison,
     runs: frRuns,
-    'claude-config': frClaudeConfig,
+    rules: frRulesEditor,
   },
   en: {
     common: enCommon,
@@ -136,7 +136,7 @@ const resources = {
     version: enVersion,
     comparison: enComparison,
     runs: enRuns,
-    'claude-config': enClaudeConfig,
+    rules: enRulesEditor,
   },
 };
 

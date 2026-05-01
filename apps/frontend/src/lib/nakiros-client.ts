@@ -370,6 +370,19 @@ const client = {
   readClaudeConfigFile: (projectId: string, relativePath: string) =>
     invoke(C['claudeConfig:readFile'], projectId, relativePath),
 
+  // .claude/rules/ editor (Module 1 V2)
+  listClaudeRules: (projectId: string) => invoke(C['claudeRules:list'], projectId),
+  readClaudeRule: (projectId: string, name: string) =>
+    invoke(C['claudeRules:read'], projectId, name),
+  createClaudeRule: (projectId: string, request: { name: string; paths?: string[] }) =>
+    invoke(C['claudeRules:create'], projectId, request),
+  saveClaudeRule: (
+    projectId: string,
+    request: { name: string; paths: string[]; body: string; mtimeAtRead: string },
+  ) => invoke(C['claudeRules:save'], projectId, request),
+  deleteClaudeRule: (projectId: string, name: string) =>
+    invoke(C['claudeRules:delete'], projectId, name),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

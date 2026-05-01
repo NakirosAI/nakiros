@@ -1,11 +1,16 @@
 import { useState, type ReactNode } from 'react';
 import {
+  Bot,
+  FileText,
   Home,
-  Sparkles,
-  MessageSquare,
-  FolderCog,
+  Layers,
   Lightbulb,
+  MessageSquare,
+  Plug,
   Settings as SettingsIcon,
+  Sliders,
+  Sparkles,
+  Zap,
 } from 'lucide-react';
 import nakirosLogo from '../../assets/icon.svg';
 import type { ProjectTabView } from '../../hooks/useTabs';
@@ -16,8 +21,12 @@ interface SidebarItem {
   icon: ReactNode;
   /** When true, the item is rendered greyed-out + non-interactive. */
   disabled: boolean;
-  /** Tooltip suffix shown after the label (e.g. "Phase 3"). */
+  /** Tooltip suffix shown after the label (e.g. "Module 2"). */
   comingIn?: string;
+}
+
+interface SidebarSection {
+  items: SidebarItem[];
 }
 
 interface NewShellSidebarProps {
@@ -26,25 +35,41 @@ interface NewShellSidebarProps {
 }
 
 /**
- * Vertical icon rail of the new-design shell — port of the `Sidebar`
- * component in `apps/Nakiros-new-design/shell.jsx`. Renders 4 entries
- * for project tabs (Overview / Skills / Conversations / Recommendations).
+ * Vertical icon rail of the new-design shell.
  *
- * Only `overview` is wired in PR3b; the three others are visible but
- * disabled with a tooltip pointing at the upcoming phase. They become
- * active when their respective screen ships (Phases 3 → 5 of the
- * migration plan in `docs/refactoring/07-new-design-integration.md`).
+ * Three logical sections separated by thin dividers:
+ * - **Project domain**: Overview, Conversations
+ * - **`.claude/` configuration**: CLAUDE.md, Rules, Subagents, Skills,
+ *   Output styles, MCP, Hooks. One tab per category. Modules not yet
+ *   shipped are disabled with a tooltip pointing at the target module.
+ * - **Nakiros**: Recommendations (placeholder), Settings (bottom).
  *
- * Tooltips appear on hover; a delayed mount avoids flicker on rapid
- * mouse traversals.
+ * Tooltips appear on hover with a slight delay to avoid flicker.
  */
 export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarProps) {
-  const items: SidebarItem[] = [
-    { id: 'overview', label: 'Overview', icon: <Home size={18} strokeWidth={2} />, disabled: false },
-    { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false },
-    { id: 'convs', label: 'Conversations', icon: <MessageSquare size={18} strokeWidth={2} />, disabled: false },
-    { id: 'claudeConfig', label: '.claude', icon: <FolderCog size={18} strokeWidth={2} />, disabled: false },
-    { id: 'recs', label: 'Recommendations', icon: <Lightbulb size={18} strokeWidth={2} />, disabled: true, comingIn: 'Phase 5' },
+  const sections: SidebarSection[] = [
+    {
+      items: [
+        { id: 'overview', label: 'Overview', icon: <Home size={18} strokeWidth={2} />, disabled: false },
+        { id: 'convs', label: 'Conversations', icon: <MessageSquare size={18} strokeWidth={2} />, disabled: false },
+      ],
+    },
+    {
+      items: [
+        { id: 'claudeMd', label: 'CLAUDE.md', icon: <FileText size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 7' },
+        { id: 'rules', label: 'Rules', icon: <Layers size={18} strokeWidth={2} />, disabled: false },
+        { id: 'subagents', label: 'Subagents', icon: <Bot size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 2' },
+        { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false },
+        { id: 'outputStyles', label: 'Output styles', icon: <Sliders size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 3' },
+        { id: 'mcp', label: 'MCP', icon: <Plug size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 5' },
+        { id: 'hooks', label: 'Hooks', icon: <Zap size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 6' },
+      ],
+    },
+    {
+      items: [
+        { id: 'recs', label: 'Recommendations', icon: <Lightbulb size={18} strokeWidth={2} />, disabled: true, comingIn: 'Phase 5' },
+      ],
+    },
   ];
 
   const settingsItem: SidebarItem = {
@@ -60,13 +85,18 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
         <img src={nakirosLogo} alt="Nakiros" width={22} height={22} />
       </div>
       <nav className="flex flex-1 flex-col items-center gap-1">
-        {items.map((item) => (
-          <SidebarBtn
-            key={item.id}
-            item={item}
-            active={!item.disabled && active === item.id}
-            onClick={() => !item.disabled && onNavigate(item.id)}
-          />
+        {sections.map((section, idx) => (
+          <div key={idx} className="flex flex-col items-center gap-1">
+            {idx > 0 && <div className="my-1.5 h-px w-6 bg-n-border-subtle" />}
+            {section.items.map((item) => (
+              <SidebarBtn
+                key={item.id}
+                item={item}
+                active={!item.disabled && active === item.id}
+                onClick={() => !item.disabled && onNavigate(item.id)}
+              />
+            ))}
+          </div>
         ))}
       </nav>
       <SidebarBtn

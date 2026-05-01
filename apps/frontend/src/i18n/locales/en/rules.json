@@ -1,0 +1,61 @@
+{
+  "list": {
+    "title": "Rules",
+    "subtitle": "Topic-scoped instructions Claude reads when it touches matching files. Use `paths:` to limit a rule to a directory or file type, or leave it empty for an always-on rule.",
+    "newRule": "New rule",
+    "alwaysOn": "always on",
+    "loading": "Loading rules…",
+    "empty": {
+      "title": "No rules yet",
+      "description": "Rules let you scope conventions to specific files. For example, testing conventions only loaded when Claude edits a `*.test.ts` file."
+    },
+    "error": {
+      "title": "Could not load rules",
+      "retry": "Retry"
+    }
+  },
+  "editor": {
+    "titleCreate": "New rule",
+    "subtitleCreate": "Define a markdown rule that Claude reads only when matching files enter context.",
+    "subtitleEdit": "Loaded by Claude when one of the scope paths matches.",
+    "loading": "Loading rule…",
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "delete": "Delete",
+    "confirmDelete": "Delete rule \"{{name}}\"? This cannot be undone.",
+    "reload": "Reload from disk",
+    "nameLabel": "Name",
+    "namePlaceholder": "testing-conventions",
+    "nameHelp": "Lowercase letters, digits and dashes. The rule will be saved as `.claude/rules/<name>.md`.",
+    "pathsLabel": "Where this rule applies",
+    "pathsHelp": "Glob patterns. Empty list = the rule is always loaded at session start.",
+    "alwaysOn": "Always on (no path = global)",
+    "pathPlaceholder": "src/**/*.ts",
+    "add": "Add",
+    "removePath": "Remove {{path}}",
+    "suggestions": "Suggestions",
+    "bodyLabel": "Rule body (markdown)",
+    "bodyPlaceholder": "# Testing\n\n- Use descriptive names…",
+    "previewBody": "Preview",
+    "editBody": "Edit",
+    "errors": {
+      "invalidName": "Name must use lowercase letters, digits and dashes only.",
+      "invalidNameTitle": "Invalid name",
+      "alreadyExists": "A rule with this name already exists.",
+      "alreadyExistsTitle": "Name taken",
+      "notFound": "This rule no longer exists on disk.",
+      "notFoundTitle": "Not found",
+      "conflict": "This rule was modified outside Nakiros. Reload to see the latest version.",
+      "conflictTitle": "External edit detected",
+      "writeFailed": "Could not write to disk.",
+      "writeFailedTitle": "Write failed",
+      "projectNotFound": "Project not found.",
+      "projectNotFoundTitle": "Unknown project",
+      "readFailed": "Could not read this rule.",
+      "readFailedTitle": "Read failed",
+      "partialCreate": "Created the rule, but failed to save the body: {{error}}"
+    }
+  }
+}

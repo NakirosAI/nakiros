@@ -144,6 +144,49 @@ export interface RuleEntry {
   lastModified: string | null;
 }
 
+// ── Rule editor (Module 1 — V2 edit) ───────────────────────────────────────-
+export interface RuleFileContent {
+  name: string;
+  relativePath: string;
+  /** ISO timestamp of the file's last modification at read time. Used as the
+   *  optimistic-lock token: `claudeRules:save` rejects if the file changed. */
+  mtime: string;
+  /** YAML-frontmatter `paths:` field. Empty = always-on rule. */
+  paths: string[];
+  /** Markdown body after frontmatter. */
+  body: string;
+}
+
+export interface SaveRuleRequest {
+  /** Identifier (filename without `.md`). */
+  name: string;
+  paths: string[];
+  body: string;
+  /** Mtime of the file at the time the editor read it. The save aborts when
+   *  the on-disk mtime differs (file was modified externally). */
+  mtimeAtRead: string;
+}
+
+export interface CreateRuleRequest {
+  /** Filename without `.md`; lowercase letters, digits, dashes only. */
+  name: string;
+  /** Optional initial paths. */
+  paths?: string[];
+}
+
+/** Discriminated result for rule mutations. */
+export type RuleMutationResult =
+  | { ok: true; file: RuleFileContent }
+  | { ok: false; code: RuleMutationErrorCode; message: string; currentMtime?: string };
+
+export type RuleMutationErrorCode =
+  | 'invalid-name'
+  | 'already-exists'
+  | 'not-found'
+  | 'conflict'
+  | 'project-not-found'
+  | 'write-failed';
+
 // ── skills (gateway only) ──────────────────────────────────────────────────
 export interface SkillsGatewayInfo {
   present: boolean;

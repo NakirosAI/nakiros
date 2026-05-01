@@ -177,6 +177,7 @@ export const IPC_CHANNELS = {
   'claudeRules:create': 'claudeRules:create',
   'claudeRules:save': 'claudeRules:save',
   'claudeRules:delete': 'claudeRules:delete',
+  'claudeRules:suggestPaths': 'claudeRules:suggestPaths',
 
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',

@@ -382,6 +382,8 @@ const client = {
   ) => invoke(C['claudeRules:save'], projectId, request),
   deleteClaudeRule: (projectId: string, name: string) =>
     invoke(C['claudeRules:delete'], projectId, name),
+  suggestClaudeRulePaths: (projectId: string) =>
+    invoke(C['claudeRules:suggestPaths'], projectId),
 
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),

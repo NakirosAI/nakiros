@@ -54,11 +54,31 @@ export default function RuleEditor(props: RuleEditorProps) {
   const [loading, setLoading] = useState<boolean>(!isCreate);
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [errorBanner, setErrorBanner] = useState<{
     code: string;
     message: string;
     showReload?: boolean;
   } | null>(null);
+
+  // Project-aware path suggestions — fetched once on mount, both for edit
+  // and create. Cheap (~150ms walk capped at depth 3) so no caching needed.
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .suggestClaudeRulePaths(props.projectId)
+      .then((items) => {
+        if (cancelled) return;
+        setSuggestions(items);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSuggestions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.projectId]);
 
   // Edit mode: fetch the file once on mount.
   useEffect(() => {
@@ -287,7 +307,7 @@ export default function RuleEditor(props: RuleEditorProps) {
           <label className="mb-1.5 block font-n-mono text-[10.5px] uppercase tracking-[1px] text-n-subtle">
             {t('editor.pathsLabel')}
           </label>
-          <PathPicker paths={paths} onChange={setPaths} />
+          <PathPicker paths={paths} suggestions={suggestions} onChange={setPaths} />
           <div className="mt-1 text-pretty text-[11.5px] leading-snug text-n-muted">
             {t('editor.pathsHelp')}
           </div>

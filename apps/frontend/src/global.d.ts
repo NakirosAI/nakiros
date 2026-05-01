@@ -292,6 +292,8 @@ declare global {
       ): Promise<RuleMutationResult>;
       saveClaudeRule(projectId: string, request: SaveRuleRequest): Promise<RuleMutationResult>;
       deleteClaudeRule(projectId: string, name: string): Promise<RuleMutationResult>;
+      /** Project-aware path-glob suggestions for the rule editor. */
+      suggestClaudeRulePaths(projectId: string): Promise<string[]>;
     };
   }
 }

@@ -398,6 +398,28 @@ const client = {
   deleteClaudeAgent: (projectId: string, name: string) =>
     invoke(C['claudeAgents:delete'], projectId, name),
 
+  // .claude/output-styles/ editor (Module 3 V2)
+  listClaudeOutputStyles: (projectId: string) =>
+    invoke(C['claudeOutputStyles:list'], projectId),
+  readClaudeOutputStyle: (projectId: string, name: string) =>
+    invoke(C['claudeOutputStyles:read'], projectId, name),
+  createClaudeOutputStyle: (
+    projectId: string,
+    request: { name: string; description?: string },
+  ) => invoke(C['claudeOutputStyles:create'], projectId, request),
+  saveClaudeOutputStyle: (
+    projectId: string,
+    request: {
+      name: string;
+      description: string;
+      keepCodingInstructions: boolean;
+      body: string;
+      mtimeAtRead: string;
+    },
+  ) => invoke(C['claudeOutputStyles:save'], projectId, request),
+  deleteClaudeOutputStyle: (projectId: string, name: string) =>
+    invoke(C['claudeOutputStyles:delete'], projectId, name),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

@@ -186,6 +186,13 @@ export const IPC_CHANNELS = {
   'claudeAgents:save': 'claudeAgents:save',
   'claudeAgents:delete': 'claudeAgents:delete',
 
+  // .claude/output-styles/ editor (Module 3 V2)
+  'claudeOutputStyles:list': 'claudeOutputStyles:list',
+  'claudeOutputStyles:read': 'claudeOutputStyles:read',
+  'claudeOutputStyles:create': 'claudeOutputStyles:create',
+  'claudeOutputStyles:save': 'claudeOutputStyles:save',
+  'claudeOutputStyles:delete': 'claudeOutputStyles:delete',
+
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',
   'analyzeConvo:stopRun': 'analyzeConvo:stopRun',

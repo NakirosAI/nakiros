@@ -10,6 +10,7 @@ import SkillsScreen from '../../views/SkillsScreen';
 import SkillDetailScreen from '../../views/SkillDetailScreen';
 import RulesScreen from '../../views/RulesScreen';
 import SubagentsScreen from '../../views/SubagentsScreen';
+import OutputStylesScreen from '../../views/OutputStylesScreen';
 import MarketplaceScreen from '../../views/MarketplaceScreen';
 import RunScreen from '../../views/RunScreen';
 import SettingsScreen from '../../views/SettingsScreen';
@@ -189,12 +190,16 @@ export default function NewShell({
                   {view === 'subagents' && (
                     <SubagentsScreen key={project.id} project={project} />
                   )}
+                  {view === 'outputStyles' && (
+                    <OutputStylesScreen key={project.id} project={project} />
+                  )}
                   {view === 'settings' && <SettingsScreen />}
                   {view !== 'overview' &&
                     view !== 'skills' &&
                     view !== 'convs' &&
                     view !== 'rules' &&
                     view !== 'subagents' &&
+                    view !== 'outputStyles' &&
                     view !== 'settings' && (
                       <ComingSoon view={view} onBack={() => setView('overview')} />
                     )}

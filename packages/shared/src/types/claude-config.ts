@@ -236,6 +236,56 @@ export type AgentMutationErrorCode =
   | 'project-not-found'
   | 'write-failed';
 
+// ── Output style editor (Module 3 — V2 edit) ───────────────────────────────-
+/** Built-in output styles shipped with Claude Code (not editable). */
+export type BuiltInOutputStyle = 'Default' | 'Explanatory' | 'Learning';
+
+export interface OutputStylesListResult {
+  items: OutputStyleEntry[];
+  /** Currently selected style — built-in name OR custom file name. Null when
+   *  no `outputStyle` is set in `settings.json` / `settings.local.json`. */
+  activeName: string | null;
+  /** Source of the active selection: project / local / none. */
+  activeSource: 'project' | 'local' | 'none';
+}
+
+export interface OutputStyleFileContent {
+  name: string;
+  relativePath: string;
+  /** ISO timestamp at read time (lock token for save). */
+  mtime: string;
+  /** Optional `name` frontmatter override (file name takes precedence in UI). */
+  frontmatterName: string | null;
+  description: string | null;
+  keepCodingInstructions: boolean;
+  body: string;
+}
+
+export interface SaveOutputStyleRequest {
+  name: string;
+  description: string;
+  keepCodingInstructions: boolean;
+  body: string;
+  mtimeAtRead: string;
+}
+
+export interface CreateOutputStyleRequest {
+  name: string;
+  description?: string;
+}
+
+export type OutputStyleMutationResult =
+  | { ok: true; file: OutputStyleFileContent }
+  | { ok: false; code: OutputStyleMutationErrorCode; message: string; currentMtime?: string };
+
+export type OutputStyleMutationErrorCode =
+  | 'invalid-name'
+  | 'already-exists'
+  | 'not-found'
+  | 'conflict'
+  | 'project-not-found'
+  | 'write-failed';
+
 // ── skills (gateway only) ──────────────────────────────────────────────────
 export interface SkillsGatewayInfo {
   present: boolean;

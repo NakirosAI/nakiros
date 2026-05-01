@@ -58,6 +58,7 @@ import type {
   ListComparisonsRequest,
   RunComparisonRequest,
   RunComparisonResponse,
+  ClaudeConfigSnapshot,
 } from '@nakiros/shared';
 
 declare global {
@@ -272,6 +273,10 @@ declare global {
 
 
       onScanProgress(cb: (progress: ScanProgress) => void): () => void;
+
+      // .claude/ configuration explorer (read-only V1)
+      scanClaudeConfig(projectId: string): Promise<ClaudeConfigSnapshot | null>;
+      readClaudeConfigFile(projectId: string, relativePath: string): Promise<string | null>;
     };
   }
 }

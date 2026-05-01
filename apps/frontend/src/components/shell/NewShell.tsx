@@ -8,6 +8,7 @@ import HomeScreen from '../../views/HomeScreen';
 import ProjectOverviewScreen from '../../views/ProjectOverviewScreen';
 import SkillsScreen from '../../views/SkillsScreen';
 import SkillDetailScreen from '../../views/SkillDetailScreen';
+import ClaudeConfigScreen from '../../views/ClaudeConfigScreen';
 import MarketplaceScreen from '../../views/MarketplaceScreen';
 import RunScreen from '../../views/RunScreen';
 import SettingsScreen from '../../views/SettingsScreen';
@@ -181,10 +182,18 @@ export default function NewShell({
                   {view === 'convs' && (
                     <ConversationsScreen key={project.id} project={project} />
                   )}
+                  {view === 'claudeConfig' && (
+                    <ClaudeConfigScreen
+                      key={project.id}
+                      project={project}
+                      onOpenSkillsTab={() => setView('skills')}
+                    />
+                  )}
                   {view === 'settings' && <SettingsScreen />}
                   {view !== 'overview' &&
                     view !== 'skills' &&
                     view !== 'convs' &&
+                    view !== 'claudeConfig' &&
                     view !== 'settings' && (
                       <ComingSoon view={view} onBack={() => setView('overview')} />
                     )}

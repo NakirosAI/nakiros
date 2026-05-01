@@ -120,8 +120,9 @@ export function readClaudeConfigFile(
 
   const rel = relative(projectRoot, filePath);
   const isMcp = rel === '.mcp.json';
+  const isClaudeMdAtRoot = rel === 'CLAUDE.md';
   const isInClaudeDir = rel === '.claude' || rel.startsWith('.claude/');
-  if (!isMcp && !isInClaudeDir) return null;
+  if (!isMcp && !isClaudeMdAtRoot && !isInClaudeDir) return null;
 
   if (!existsSync(filePath)) return null;
   try {

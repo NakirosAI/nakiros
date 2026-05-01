@@ -1,5 +1,12 @@
 import { useState, type ReactNode } from 'react';
-import { Home, Sparkles, MessageSquare, Lightbulb, Settings as SettingsIcon } from 'lucide-react';
+import {
+  Home,
+  Sparkles,
+  MessageSquare,
+  FolderCog,
+  Lightbulb,
+  Settings as SettingsIcon,
+} from 'lucide-react';
 import nakirosLogo from '../../assets/icon.svg';
 import type { ProjectTabView } from '../../hooks/useTabs';
 
@@ -36,6 +43,7 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
     { id: 'overview', label: 'Overview', icon: <Home size={18} strokeWidth={2} />, disabled: false },
     { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false },
     { id: 'convs', label: 'Conversations', icon: <MessageSquare size={18} strokeWidth={2} />, disabled: false },
+    { id: 'claudeConfig', label: '.claude', icon: <FolderCog size={18} strokeWidth={2} />, disabled: false },
     { id: 'recs', label: 'Recommendations', icon: <Lightbulb size={18} strokeWidth={2} />, disabled: true, comingIn: 'Phase 5' },
   ];
 

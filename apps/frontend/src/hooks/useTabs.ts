@@ -22,7 +22,13 @@ import type { AgentRunKind } from '@nakiros/shared';
  */
 
 /** Sub-view within a project tab. Mirrors the new-design sidebar items. */
-export type ProjectTabView = 'overview' | 'skills' | 'convs' | 'recs' | 'settings';
+export type ProjectTabView =
+  | 'overview'
+  | 'skills'
+  | 'convs'
+  | 'claudeConfig'
+  | 'recs'
+  | 'settings';
 
 interface HomeTab {
   id: string;

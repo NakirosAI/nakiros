@@ -286,6 +286,73 @@ export type OutputStyleMutationErrorCode =
   | 'project-not-found'
   | 'write-failed';
 
+// ── Permissions / settings.json editor (Module 4 — V2 edit) ────────────────-
+export type PermissionsScope = 'project' | 'local';
+
+export type PermissionsDefaultMode =
+  | 'default'
+  | 'acceptEdits'
+  | 'auto'
+  | 'dontAsk'
+  | 'bypassPermissions'
+  | 'plan';
+
+export interface PermissionsFileContent {
+  scope: PermissionsScope;
+  /** Absolute path on disk; reported even when the file is missing. */
+  path: string;
+  /** True when the file exists. False = empty `{}` returned to the editor. */
+  exists: boolean;
+  /** ISO mtime at read; empty string when file doesn't exist (lock token unused on first save). */
+  mtime: string;
+  allow: string[];
+  deny: string[];
+  ask: string[];
+  defaultMode: PermissionsDefaultMode | null;
+  /** Top-level keys that the user may legitimately want to edit here as raw
+   *  JSON (model, env, apiKeyHelper, claudeMdExcludes, autoMemoryEnabled, …).
+   *  Excludes anything managed in another tab (hooks → Hooks tab,
+   *  outputStyle → Output styles tab). Empty string when nothing applies. */
+  rest: string;
+  /** Opaque JSON string of fields managed in other tabs (hooks, outputStyle).
+   *  The frontend round-trips it back at save time so those settings survive
+   *  even though they're not editable here. Empty string when nothing applies. */
+  preservedJson: string;
+  /** Set when the on-disk file exists but is malformed. */
+  parseError?: string;
+}
+
+export interface SavePermissionsRequest {
+  scope: PermissionsScope;
+  allow: string[];
+  deny: string[];
+  ask: string[];
+  defaultMode: PermissionsDefaultMode | null;
+  /** JSON-serialized object containing every editable-here top-level key
+   *  (model, env, apiKeyHelper, …). Empty string is treated as `{}`. */
+  rest: string;
+  /** Opaque JSON string returned by `read`, re-applied verbatim so fields
+   *  managed in other tabs (hooks, outputStyle) are preserved. */
+  preservedJson: string;
+  /** mtime at read time; ignored when the file didn't exist (`exists: false`). */
+  mtimeAtRead: string;
+}
+
+export type PermissionsMutationResult =
+  | { ok: true; file: PermissionsFileContent }
+  | {
+      ok: false;
+      code: PermissionsMutationErrorCode;
+      message: string;
+      currentMtime?: string;
+    };
+
+export type PermissionsMutationErrorCode =
+  | 'invalid-rest-json'
+  | 'conflict'
+  | 'project-not-found'
+  | 'write-failed';
+
 // ── skills (gateway only) ──────────────────────────────────────────────────
 export interface SkillsGatewayInfo {
   present: boolean;

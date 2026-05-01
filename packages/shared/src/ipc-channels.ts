@@ -193,6 +193,10 @@ export const IPC_CHANNELS = {
   'claudeOutputStyles:save': 'claudeOutputStyles:save',
   'claudeOutputStyles:delete': 'claudeOutputStyles:delete',
 
+  // .claude/settings.json (+ .local) permissions editor (Module 4 V2)
+  'claudePermissions:read': 'claudePermissions:read',
+  'claudePermissions:save': 'claudePermissions:save',
+
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',
   'analyzeConvo:stopRun': 'analyzeConvo:stopRun',

@@ -420,6 +420,30 @@ const client = {
   deleteClaudeOutputStyle: (projectId: string, name: string) =>
     invoke(C['claudeOutputStyles:delete'], projectId, name),
 
+  // .claude/settings.json (+ .local) permissions editor (Module 4 V2)
+  readClaudePermissions: (projectId: string, scope: 'project' | 'local') =>
+    invoke(C['claudePermissions:read'], projectId, scope),
+  saveClaudePermissions: (
+    projectId: string,
+    request: {
+      scope: 'project' | 'local';
+      allow: string[];
+      deny: string[];
+      ask: string[];
+      defaultMode:
+        | 'default'
+        | 'acceptEdits'
+        | 'auto'
+        | 'dontAsk'
+        | 'bypassPermissions'
+        | 'plan'
+        | null;
+      rest: string;
+      preservedJson: string;
+      mtimeAtRead: string;
+    },
+  ) => invoke(C['claudePermissions:save'], projectId, request),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

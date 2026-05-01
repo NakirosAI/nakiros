@@ -35,6 +35,7 @@ export type ProjectTabView =
   | 'subagents'
   | 'skills'
   | 'outputStyles'
+  | 'permissions'
   | 'mcp'
   | 'hooks'
   | 'recs'

@@ -35,6 +35,7 @@ import frRuns from './locales/fr/runs.json';
 import frRulesEditor from './locales/fr/rules.json';
 import frSubagents from './locales/fr/subagents.json';
 import frOutputStyles from './locales/fr/output-styles.json';
+import frPermissions from './locales/fr/permissions.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -70,6 +71,7 @@ import enRuns from './locales/en/runs.json';
 import enRulesEditor from './locales/en/rules.json';
 import enSubagents from './locales/en/subagents.json';
 import enOutputStyles from './locales/en/output-styles.json';
+import enPermissions from './locales/en/permissions.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -109,6 +111,7 @@ const resources = {
     rules: frRulesEditor,
     subagents: frSubagents,
     'output-styles': frOutputStyles,
+    permissions: frPermissions,
   },
   en: {
     common: enCommon,
@@ -145,6 +148,7 @@ const resources = {
     rules: enRulesEditor,
     subagents: enSubagents,
     'output-styles': enOutputStyles,
+    permissions: enPermissions,
   },
 };
 

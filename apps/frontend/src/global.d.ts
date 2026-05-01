@@ -74,6 +74,10 @@ import type {
   OutputStyleMutationResult,
   OutputStylesListResult,
   SaveOutputStyleRequest,
+  PermissionsFileContent,
+  PermissionsMutationResult,
+  PermissionsScope,
+  SavePermissionsRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -336,6 +340,16 @@ declare global {
         projectId: string,
         name: string,
       ): Promise<OutputStyleMutationResult>;
+
+      // .claude/settings.json (+ .local) permissions editor (Module 4 V2)
+      readClaudePermissions(
+        projectId: string,
+        scope: PermissionsScope,
+      ): Promise<PermissionsFileContent | null>;
+      saveClaudePermissions(
+        projectId: string,
+        request: SavePermissionsRequest,
+      ): Promise<PermissionsMutationResult>;
     };
   }
 }

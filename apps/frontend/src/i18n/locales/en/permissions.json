@@ -1,0 +1,53 @@
+{
+  "title": "Permissions",
+  "subtitle": "What Claude is allowed (or refused) to do in this project. Stored in `.claude/settings.json` (shared with the team) and `.claude/settings.local.json` (your private override, gitignored).",
+  "loading": "Loading settings…",
+  "errorTitle": "Could not load settings",
+  "retry": "Retry",
+  "save": "Save",
+  "reload": "Reload from disk",
+  "badgeProject": "settings.json (shared)",
+  "badgeLocal": "settings.local.json (gitignored)",
+  "badgeMissing": "file does not exist yet — saving will create it",
+  "parseErrorTitle": "Settings file is malformed",
+  "parseErrorBody": "Could not parse JSON — fix it manually first, or save here to overwrite: {{error}}",
+  "scope": {
+    "project": "project",
+    "local": "local",
+    "projectTooltip": "settings.json — shared with your team via git",
+    "localTooltip": "settings.local.json — your personal override, gitignored"
+  },
+  "sections": {
+    "allow": "Allow",
+    "allowHelp": "Tools and Bash commands Claude can use without asking. Patterns: `Bash(npm test *)` matches anything starting with `npm test`; bare names like `Read` allow the whole tool.",
+    "deny": "Deny",
+    "denyHelp": "Tools / commands Claude is never allowed to call, even if explicitly requested. Use for irreversible operations like `Bash(rm -rf *)`.",
+    "ask": "Ask",
+    "askHelp": "Patterns that always prompt for confirmation, even when otherwise auto-approved. Useful for `Bash(git push *)` or anything that affects shared state.",
+    "defaultMode": "Default permission mode",
+    "defaultModeNone": "(use Claude Code's default)",
+    "defaultModeHelp": "Override how unmatched tool calls are handled. `acceptEdits` auto-accepts file edits. `bypassPermissions` skips every prompt — careful.",
+    "rest": "Other settings (raw JSON)",
+    "restHelp": "Everything else from `settings.json` (model, env, hooks, apiKeyHelper, claudeMdExcludes, autoMemoryEnabled…). Edit as JSON. Save validates the JSON before writing."
+  },
+  "crossTab": {
+    "title": "Edit elsewhere",
+    "outputStyle": "Active output style → Output styles tab",
+    "hooks": "Lifecycle hooks → Hooks tab (Module 6, coming soon)"
+  },
+  "editor": {
+    "add": "Add",
+    "removeEntry": "Remove {{value}}",
+    "suggestions": "Suggestions"
+  },
+  "errors": {
+    "invalidRestJson": "\"Other settings\" is not a valid JSON object.",
+    "invalidRestJsonTitle": "Invalid JSON",
+    "conflict": "This settings file was modified outside Nakiros. Reload to see the latest version.",
+    "conflictTitle": "External edit detected",
+    "writeFailed": "Could not write to disk.",
+    "writeFailedTitle": "Write failed",
+    "projectNotFound": "Project not found.",
+    "projectNotFoundTitle": "Unknown project"
+  }
+}

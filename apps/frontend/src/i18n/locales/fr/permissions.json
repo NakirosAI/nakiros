@@ -1,0 +1,53 @@
+{
+  "title": "Permissions",
+  "subtitle": "Ce que Claude a le droit (ou pas) de faire dans ce projet. Stocké dans `.claude/settings.json` (partagé avec l'équipe) et `.claude/settings.local.json` (ton override perso, gitignored).",
+  "loading": "Chargement des paramètres…",
+  "errorTitle": "Impossible de charger les paramètres",
+  "retry": "Réessayer",
+  "save": "Enregistrer",
+  "reload": "Recharger depuis le disque",
+  "badgeProject": "settings.json (partagé)",
+  "badgeLocal": "settings.local.json (gitignored)",
+  "badgeMissing": "fichier inexistant — l'enregistrer le créera",
+  "parseErrorTitle": "Fichier de paramètres mal formé",
+  "parseErrorBody": "Impossible de parser le JSON — corrige manuellement d'abord, ou enregistre ici pour écraser : {{error}}",
+  "scope": {
+    "project": "projet",
+    "local": "local",
+    "projectTooltip": "settings.json — partagé avec ton équipe via git",
+    "localTooltip": "settings.local.json — ton override personnel, gitignored"
+  },
+  "sections": {
+    "allow": "Autorisé",
+    "allowHelp": "Outils et commandes Bash que Claude peut utiliser sans demander. Patterns : `Bash(npm test *)` matche tout ce qui commence par `npm test` ; un nom seul comme `Read` autorise l'outil entier.",
+    "deny": "Refusé",
+    "denyHelp": "Outils / commandes que Claude ne peut jamais utiliser, même demandés explicitement. Utilise-le pour les opérations irréversibles comme `Bash(rm -rf *)`.",
+    "ask": "Demande confirmation",
+    "askHelp": "Patterns qui demandent toujours confirmation, même si auto-approuvés ailleurs. Utile pour `Bash(git push *)` ou tout ce qui touche à l'état partagé.",
+    "defaultMode": "Mode de permission par défaut",
+    "defaultModeNone": "(utiliser le défaut de Claude Code)",
+    "defaultModeHelp": "Override la façon dont les appels d'outil non matchés sont gérés. `acceptEdits` accepte automatiquement les édits de fichiers. `bypassPermissions` skip toutes les demandes — attention.",
+    "rest": "Autres paramètres (JSON brut)",
+    "restHelp": "Tout le reste de `settings.json` (model, env, hooks, apiKeyHelper, claudeMdExcludes, autoMemoryEnabled…). Édite en JSON. La sauvegarde valide le JSON avant écriture."
+  },
+  "crossTab": {
+    "title": "Édité ailleurs",
+    "outputStyle": "Style de sortie actif → onglet Output styles",
+    "hooks": "Hooks de cycle de vie → onglet Hooks (Module 6, à venir)"
+  },
+  "editor": {
+    "add": "Ajouter",
+    "removeEntry": "Retirer {{value}}",
+    "suggestions": "Suggestions"
+  },
+  "errors": {
+    "invalidRestJson": "\"Autres paramètres\" n'est pas un objet JSON valide.",
+    "invalidRestJsonTitle": "JSON invalide",
+    "conflict": "Ce fichier de paramètres a été modifié en dehors de Nakiros. Recharge pour voir la dernière version.",
+    "conflictTitle": "Modification externe détectée",
+    "writeFailed": "Impossible d'écrire sur le disque.",
+    "writeFailedTitle": "Écriture échouée",
+    "projectNotFound": "Projet introuvable.",
+    "projectNotFoundTitle": "Projet inconnu"
+  }
+}

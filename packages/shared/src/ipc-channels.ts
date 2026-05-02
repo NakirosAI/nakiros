@@ -214,6 +214,17 @@ export const IPC_CHANNELS = {
   'claudeMd:save': 'claudeMd:save',
   'claudeMd:delete': 'claudeMd:delete',
 
+  // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
+  'conversationIngest:status': 'conversationIngest:status',
+  'conversationIngest:previewHookDiff': 'conversationIngest:previewHookDiff',
+  'conversationIngest:enable': 'conversationIngest:enable',
+  'conversationIngest:disable': 'conversationIngest:disable',
+  'conversationIngest:purge': 'conversationIngest:purge',
+  'conversationIngest:runNow': 'conversationIngest:runNow',
+  'conversationIngest:listProjects': 'conversationIngest:listProjects',
+  'conversationIngest:listSessions': 'conversationIngest:listSessions',
+  'conversationIngest:progress': 'conversationIngest:progress',
+
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',
   'analyzeConvo:stopRun': 'analyzeConvo:stopRun',

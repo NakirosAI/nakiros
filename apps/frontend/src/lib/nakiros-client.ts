@@ -512,6 +512,19 @@ const client = {
   deleteClaudeMd: (projectId: string, scope: 'root' | 'claude-dir' | 'local') =>
     invoke(C['claudeMd:delete'], projectId, scope),
 
+  // Conversation ingest (Phase A V1)
+  getConversationIngestStatus: () => invoke(C['conversationIngest:status']),
+  previewConversationIngestHookDiff: () => invoke(C['conversationIngest:previewHookDiff']),
+  enableConversationIngest: () => invoke(C['conversationIngest:enable']),
+  disableConversationIngest: () => invoke(C['conversationIngest:disable']),
+  purgeConversationIngest: () => invoke(C['conversationIngest:purge']),
+  runNowConversationIngest: () => invoke(C['conversationIngest:runNow']),
+  listConversationIngestProjects: () => invoke(C['conversationIngest:listProjects']),
+  listConversationIngestSessions: (projectPath?: string) =>
+    invoke(C['conversationIngest:listSessions'], projectPath),
+  onConversationIngestProgress: (cb: (event: unknown) => void) =>
+    subscribe(C['conversationIngest:progress'], cb),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

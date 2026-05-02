@@ -91,6 +91,12 @@ import type {
   ClaudeMdMutationResult,
   ClaudeMdScope,
   SaveClaudeMdRequest,
+  ConversationIngestStatus,
+  ConversationIngestHookDiff,
+  ConversationIngestMutationResult,
+  ConversationIngestProject,
+  ConversationIngestSession,
+  ConversationIngestProgressEvent,
 } from '@nakiros/shared';
 
 declare global {
@@ -408,6 +414,19 @@ declare global {
         projectId: string,
         scope: ClaudeMdScope,
       ): Promise<ClaudeMdMutationResult>;
+
+      // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
+      getConversationIngestStatus(): Promise<ConversationIngestStatus>;
+      previewConversationIngestHookDiff(): Promise<ConversationIngestHookDiff>;
+      enableConversationIngest(): Promise<ConversationIngestMutationResult>;
+      disableConversationIngest(): Promise<ConversationIngestMutationResult>;
+      purgeConversationIngest(): Promise<ConversationIngestMutationResult>;
+      runNowConversationIngest(): Promise<ConversationIngestMutationResult>;
+      listConversationIngestProjects(): Promise<ConversationIngestProject[]>;
+      listConversationIngestSessions(projectPath?: string): Promise<ConversationIngestSession[]>;
+      onConversationIngestProgress(
+        cb: (event: ConversationIngestProgressEvent) => void,
+      ): () => void;
     };
   }
 }

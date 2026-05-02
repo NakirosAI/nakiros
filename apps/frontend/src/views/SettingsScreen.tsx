@@ -6,6 +6,7 @@ import {
   type LanguagePreference,
 } from '@nakiros/shared';
 import { usePreferences } from '../hooks/usePreferences';
+import ConversationIngestPanel from './ConversationIngestPanel';
 
 /**
  * New-design Settings — port of the `SettingsScreen` in
@@ -31,6 +32,7 @@ export default function SettingsScreen() {
   };
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="mx-auto w-full max-w-[720px] px-8 py-9 font-n-sans">
       <h1 className="m-0 mb-1 font-n-mono text-[18px] font-medium text-n-fg">Settings</h1>
       <p className="mt-0 mb-6 text-[13px] text-n-muted">
@@ -69,6 +71,9 @@ export default function SettingsScreen() {
         mono
       />
       <SettingCard label="Auto-rescan on launch" value="Enabled" />
+
+      <ConversationIngestPanel />
+    </div>
     </div>
   );
 }

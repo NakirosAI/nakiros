@@ -35,6 +35,10 @@ import {
   sweepOrphanNakirosProjectEntries,
   sweepOrphanSandboxes,
 } from '../services/runner-core/index.js';
+import {
+  isHookInstalled as isConversationIngestHookInstalled,
+  startWatcher as startConversationIngestWatcher,
+} from '../services/conversation-ingest/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -216,6 +220,20 @@ export function bootstrapDaemonRuntime(): void {
   const sandboxes = sweepOrphanSandboxes(getResumableSandboxPaths());
   if (sandboxes.deleted > 0) {
     console.log(`[nakiros] Swept ${sandboxes.deleted} orphan eval sandbox${sandboxes.deleted === 1 ? '' : 'es'}.`);
+  }
+
+  // Conversation ingest — only auto-start the watcher when the user has
+  // already opted in (the Stop hook is present in their settings.json). For
+  // first-time users the panel is dormant until they explicitly enable it.
+  try {
+    if (isConversationIngestHookInstalled()) {
+      startConversationIngestWatcher();
+    }
+  } catch (err) {
+    console.warn(
+      '[nakiros] conversation-ingest watcher boot failed:',
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 

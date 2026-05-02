@@ -39,6 +39,7 @@ import frPermissions from './locales/fr/permissions.json';
 import frMcp from './locales/fr/mcp.json';
 import frHooks from './locales/fr/hooks.json';
 import frClaudeMd from './locales/fr/claude-md.json';
+import frConversationIngest from './locales/fr/conversation-ingest.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -78,6 +79,7 @@ import enPermissions from './locales/en/permissions.json';
 import enMcp from './locales/en/mcp.json';
 import enHooks from './locales/en/hooks.json';
 import enClaudeMd from './locales/en/claude-md.json';
+import enConversationIngest from './locales/en/conversation-ingest.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -121,6 +123,7 @@ const resources = {
     mcp: frMcp,
     hooks: frHooks,
     'claude-md': frClaudeMd,
+    'conversation-ingest': frConversationIngest,
   },
   en: {
     common: enCommon,
@@ -161,6 +164,7 @@ const resources = {
     mcp: enMcp,
     hooks: enHooks,
     'claude-md': enClaudeMd,
+    'conversation-ingest': enConversationIngest,
   },
 };
 

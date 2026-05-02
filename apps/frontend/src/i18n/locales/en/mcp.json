@@ -1,0 +1,67 @@
+{
+  "list": {
+    "title": "MCP servers",
+    "subtitle": "External tools exposed to Claude via the Model Context Protocol. Defined in `.mcp.json` at the project root and shared with your team via git.",
+    "newServer": "New server",
+    "loading": "Loading MCP servers…",
+    "fileExists": ".mcp.json present",
+    "fileMissing": ".mcp.json doesn't exist yet — saving will create it",
+    "parseErrorTitle": ".mcp.json is malformed",
+    "empty": {
+      "title": "No MCP servers",
+      "description": "Add a server to give Claude access to GitHub, Linear, your database, browser automation, anything that exposes an MCP endpoint."
+    },
+    "error": {
+      "title": "Could not load MCP servers",
+      "retry": "Retry"
+    }
+  },
+  "editor": {
+    "titleCreate": "New MCP server",
+    "subtitleCreate": "Configure how Claude connects to this MCP server.",
+    "subtitleEdit": "How Claude connects to this MCP server.",
+    "loading": "Loading server…",
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "delete": "Delete",
+    "confirmDelete": "Delete MCP server \"{{name}}\"? This removes it from .mcp.json.",
+    "reload": "Reload from disk",
+    "add": "Add",
+    "fields": {
+      "name": "Name",
+      "nameHelp": "Letters, digits, dashes and underscores. Must be unique within `.mcp.json`.",
+      "transport": "Transport",
+      "command": "Command",
+      "args": "Arguments",
+      "url": "URL",
+      "headers": "Headers (JSON)",
+      "headersHelp": "Optional. Use `${VAR}` placeholders to read from your shell environment.",
+      "env": "Environment variables",
+      "envHelp": "Use `${VAR}` to read a value from your shell, or set a literal value. Tokens never land in .mcp.json when you use `${VAR}`.",
+      "envAdd": "Add variable",
+      "rest": "Other config (raw JSON)",
+      "restHelp": "Anything beyond the structured fields (scopes, custom keys…). Saved validates the JSON before writing."
+    },
+    "errors": {
+      "invalidName": "Server name must use letters, digits, dashes and underscores only.",
+      "invalidNameTitle": "Invalid name",
+      "invalidJson": "JSON is invalid.",
+      "invalidJsonTitle": "Invalid JSON",
+      "alreadyExists": "An MCP server with this name already exists.",
+      "alreadyExistsTitle": "Name taken",
+      "notFound": "This MCP server no longer exists in .mcp.json.",
+      "notFoundTitle": "Not found",
+      "conflict": "This .mcp.json was modified outside Nakiros. Reload to see the latest version.",
+      "conflictTitle": "External edit detected",
+      "writeFailed": "Could not write .mcp.json.",
+      "writeFailedTitle": "Write failed",
+      "projectNotFound": "Project not found.",
+      "projectNotFoundTitle": "Unknown project",
+      "readFailed": "Could not read this MCP server.",
+      "readFailedTitle": "Read failed",
+      "partialCreate": "Created the server, but failed to apply headers / other config: {{error}}"
+    }
+  }
+}

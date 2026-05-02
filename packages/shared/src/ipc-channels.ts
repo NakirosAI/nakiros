@@ -197,6 +197,13 @@ export const IPC_CHANNELS = {
   'claudePermissions:read': 'claudePermissions:read',
   'claudePermissions:save': 'claudePermissions:save',
 
+  // .mcp.json editor (Module 5 V2)
+  'claudeMcp:list': 'claudeMcp:list',
+  'claudeMcp:read': 'claudeMcp:read',
+  'claudeMcp:create': 'claudeMcp:create',
+  'claudeMcp:save': 'claudeMcp:save',
+  'claudeMcp:delete': 'claudeMcp:delete',
+
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',
   'analyzeConvo:stopRun': 'analyzeConvo:stopRun',

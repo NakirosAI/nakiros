@@ -444,6 +444,39 @@ const client = {
     },
   ) => invoke(C['claudePermissions:save'], projectId, request),
 
+  // .mcp.json editor (Module 5 V2)
+  listClaudeMcp: (projectId: string) => invoke(C['claudeMcp:list'], projectId),
+  readClaudeMcpServer: (projectId: string, name: string) =>
+    invoke(C['claudeMcp:read'], projectId, name),
+  createClaudeMcpServer: (
+    projectId: string,
+    request: {
+      name: string;
+      transport: 'stdio' | 'http' | 'sse';
+      command?: string;
+      args?: string[];
+      env?: Array<{ key: string; value: string }>;
+      url?: string;
+    },
+  ) => invoke(C['claudeMcp:create'], projectId, request),
+  saveClaudeMcpServer: (
+    projectId: string,
+    request: {
+      name: string;
+      newName?: string;
+      transport: 'stdio' | 'http' | 'sse';
+      command: string;
+      args: string[];
+      env: Array<{ key: string; value: string }>;
+      url: string;
+      headersJson: string;
+      restJson: string;
+      mtimeAtRead: string;
+    },
+  ) => invoke(C['claudeMcp:save'], projectId, request),
+  deleteClaudeMcpServer: (projectId: string, name: string, mtimeAtRead: string) =>
+    invoke(C['claudeMcp:delete'], projectId, name, mtimeAtRead),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

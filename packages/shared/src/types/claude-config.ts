@@ -353,6 +353,66 @@ export type PermissionsMutationErrorCode =
   | 'project-not-found'
   | 'write-failed';
 
+// ── MCP servers editor (Module 5 — V2 edit) ────────────────────────────────-
+export type McpTransport = 'stdio' | 'http' | 'sse';
+
+export interface McpServerForEditor {
+  name: string;
+  /** True for an existing server (edit), false for create. */
+  exists: boolean;
+  /** Mtime of `.mcp.json` at read time. Used as lock token at save. */
+  mtimeAtRead: string;
+  transport: McpTransport;
+  /** stdio only. */
+  command: string;
+  args: string[];
+  env: Array<{ key: string; value: string }>;
+  /** http / sse only. */
+  url: string;
+  /** Optional headers (http / sse) — JSON-stringified for round-trip. */
+  headersJson: string;
+  /** Opaque JSON of fields the structured editor doesn't surface
+   *  (anything beyond command/args/env/url/headers/transport/type). */
+  restJson: string;
+}
+
+export interface CreateMcpServerRequest {
+  name: string;
+  transport: McpTransport;
+  command?: string;
+  args?: string[];
+  env?: Array<{ key: string; value: string }>;
+  url?: string;
+}
+
+export interface SaveMcpServerRequest {
+  /** Original name used to find the existing entry. The server may be
+   *  renamed via `newName`. */
+  name: string;
+  newName?: string;
+  transport: McpTransport;
+  command: string;
+  args: string[];
+  env: Array<{ key: string; value: string }>;
+  url: string;
+  headersJson: string;
+  restJson: string;
+  mtimeAtRead: string;
+}
+
+export type McpMutationResult =
+  | { ok: true; mtime: string }
+  | { ok: false; code: McpMutationErrorCode; message: string; currentMtime?: string };
+
+export type McpMutationErrorCode =
+  | 'invalid-name'
+  | 'invalid-json'
+  | 'already-exists'
+  | 'not-found'
+  | 'conflict'
+  | 'project-not-found'
+  | 'write-failed';
+
 // ── skills (gateway only) ──────────────────────────────────────────────────
 export interface SkillsGatewayInfo {
   present: boolean;

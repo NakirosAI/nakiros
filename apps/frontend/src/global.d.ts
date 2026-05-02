@@ -78,6 +78,11 @@ import type {
   PermissionsMutationResult,
   PermissionsScope,
   SavePermissionsRequest,
+  CreateMcpServerRequest,
+  McpInfo,
+  McpMutationResult,
+  McpServerForEditor,
+  SaveMcpServerRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -350,6 +355,26 @@ declare global {
         projectId: string,
         request: SavePermissionsRequest,
       ): Promise<PermissionsMutationResult>;
+
+      // .mcp.json editor (Module 5 V2)
+      listClaudeMcp(projectId: string): Promise<McpInfo>;
+      readClaudeMcpServer(
+        projectId: string,
+        name: string,
+      ): Promise<McpServerForEditor | null>;
+      createClaudeMcpServer(
+        projectId: string,
+        request: CreateMcpServerRequest,
+      ): Promise<McpMutationResult>;
+      saveClaudeMcpServer(
+        projectId: string,
+        request: SaveMcpServerRequest,
+      ): Promise<McpMutationResult>;
+      deleteClaudeMcpServer(
+        projectId: string,
+        name: string,
+        mtimeAtRead: string,
+      ): Promise<McpMutationResult>;
     };
   }
 }

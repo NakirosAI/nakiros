@@ -63,7 +63,7 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
         { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false },
         { id: 'outputStyles', label: 'Output styles', icon: <Sliders size={18} strokeWidth={2} />, disabled: false },
         { id: 'permissions', label: 'Permissions', icon: <ShieldCheck size={18} strokeWidth={2} />, disabled: false },
-        { id: 'mcp', label: 'MCP', icon: <Plug size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 5' },
+        { id: 'mcp', label: 'MCP', icon: <Plug size={18} strokeWidth={2} />, disabled: false },
         { id: 'hooks', label: 'Hooks', icon: <Zap size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 6' },
       ],
     },

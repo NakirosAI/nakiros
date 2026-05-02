@@ -1,0 +1,67 @@
+{
+  "list": {
+    "title": "Serveurs MCP",
+    "subtitle": "Outils externes exposés à Claude via le Model Context Protocol. Définis dans `.mcp.json` à la racine du projet et partagés avec ton équipe via git.",
+    "newServer": "Nouveau serveur",
+    "loading": "Chargement des serveurs MCP…",
+    "fileExists": ".mcp.json présent",
+    "fileMissing": ".mcp.json n'existe pas encore — l'enregistrer le créera",
+    "parseErrorTitle": ".mcp.json est mal formé",
+    "empty": {
+      "title": "Aucun serveur MCP",
+      "description": "Ajoute un serveur pour donner à Claude accès à GitHub, Linear, ta base de données, l'automatisation navigateur — tout ce qui expose un endpoint MCP."
+    },
+    "error": {
+      "title": "Impossible de charger les serveurs MCP",
+      "retry": "Réessayer"
+    }
+  },
+  "editor": {
+    "titleCreate": "Nouveau serveur MCP",
+    "subtitleCreate": "Configure comment Claude se connecte à ce serveur MCP.",
+    "subtitleEdit": "Comment Claude se connecte à ce serveur MCP.",
+    "loading": "Chargement du serveur…",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "create": "Créer",
+    "delete": "Supprimer",
+    "confirmDelete": "Supprimer le serveur MCP « {{name}} » ? Action retire l'entrée de .mcp.json.",
+    "reload": "Recharger depuis le disque",
+    "add": "Ajouter",
+    "fields": {
+      "name": "Nom",
+      "nameHelp": "Lettres, chiffres, tirets et underscores. Doit être unique dans `.mcp.json`.",
+      "transport": "Transport",
+      "command": "Commande",
+      "args": "Arguments",
+      "url": "URL",
+      "headers": "Headers (JSON)",
+      "headersHelp": "Optionnel. Utilise `${VAR}` pour lire depuis ton environnement shell.",
+      "env": "Variables d'environnement",
+      "envHelp": "Utilise `${VAR}` pour lire depuis ton shell, ou pose une valeur littérale. Les tokens ne finissent jamais dans .mcp.json si tu utilises `${VAR}`.",
+      "envAdd": "Ajouter une variable",
+      "rest": "Autre config (JSON brut)",
+      "restHelp": "Tout ce qui dépasse les champs structurés (scopes, clés custom…). La sauvegarde valide le JSON avant écriture."
+    },
+    "errors": {
+      "invalidName": "Le nom doit utiliser uniquement lettres, chiffres, tirets et underscores.",
+      "invalidNameTitle": "Nom invalide",
+      "invalidJson": "JSON invalide.",
+      "invalidJsonTitle": "JSON invalide",
+      "alreadyExists": "Un serveur MCP porte déjà ce nom.",
+      "alreadyExistsTitle": "Nom déjà pris",
+      "notFound": "Ce serveur MCP n'existe plus dans .mcp.json.",
+      "notFoundTitle": "Introuvable",
+      "conflict": "Ce .mcp.json a été modifié en dehors de Nakiros. Recharge pour voir la dernière version.",
+      "conflictTitle": "Modification externe détectée",
+      "writeFailed": "Impossible d'écrire .mcp.json.",
+      "writeFailedTitle": "Écriture échouée",
+      "projectNotFound": "Projet introuvable.",
+      "projectNotFoundTitle": "Projet inconnu",
+      "readFailed": "Impossible de lire ce serveur MCP.",
+      "readFailedTitle": "Lecture échouée",
+      "partialCreate": "Serveur créé mais l'application des headers / autres config a échoué : {{error}}"
+    }
+  }
+}

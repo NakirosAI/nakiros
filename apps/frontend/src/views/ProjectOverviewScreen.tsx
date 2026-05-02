@@ -57,7 +57,12 @@ export default function ProjectOverviewScreen({ project }: Props) {
 
   const windowed = useMemo(() => {
     if (!analyses) return [];
-    const sorted = [...analyses].sort(
+    // Overview shows the project's own conversations — synthetic runs
+    // (sandbox / fix-temp / eval iterations) are filtered out unconditionally.
+    // Users who want to inspect synthetic runs can do so from the
+    // ConversationsScreen via its toggle.
+    const userScoped = analyses.filter((a) => a.kind !== 'synthetic');
+    const sorted = [...userScoped].sort(
       (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
     );
     if (windowKey === 'all') return sorted;

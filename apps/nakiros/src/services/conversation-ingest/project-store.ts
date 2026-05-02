@@ -6,12 +6,14 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 
 import type {
   ConversationIngestProject,
   ConversationIngestSession,
   ConversationIngestSessionKind,
+  ConversationMessage,
+  ProjectConversation,
 } from '@nakiros/shared';
 
 import {
@@ -245,4 +247,61 @@ export function purgeIngestData(): void {
 /** Absolute path of the body file for a session. */
 export function sessionBodyPath(session: ConversationIngestSession): string {
   return `${getProjectDir(session.projectPath)}/sessions/${session.sessionId}.json`;
+}
+
+interface SessionBody {
+  sessionId: string;
+  projectPath: string;
+  transcriptPath: string;
+  ingestedAt: string;
+  kind: ConversationIngestSessionKind;
+  messages: ConversationMessage[];
+}
+
+/**
+ * Read the parsed messages for a session. Returns `null` when the session is
+ * not yet indexed — callers should run `ensureProjectIndexed` first if a
+ * fresh ingest is desired before reading.
+ */
+export function readSessionBody(projectPath: string, sessionId: string): SessionBody | null {
+  const path = join(getProjectDir(projectPath), 'sessions', `${sessionId}.json`);
+  if (!existsSync(path)) return null;
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<SessionBody>;
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.messages)) return null;
+    return parsed as SessionBody;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Map an ingest-store session entry to the legacy `ProjectConversation` shape
+ * the project handlers expose to the UI. Centralised here so any field added
+ * to {@link ConversationIngestSession} that lifts up to the UI gets routed
+ * through one place.
+ */
+export function toProjectConversation(
+  session: ConversationIngestSession,
+  projectId: string,
+): ProjectConversation {
+  return {
+    sessionId: session.sessionId,
+    projectId,
+    startedAt: session.startedAt,
+    lastMessageAt: session.lastTurnAt,
+    messageCount: session.turnCount,
+    toolsUsed: session.toolsUsed,
+    gitBranch: session.gitBranch,
+    cwd: session.projectPath,
+    claudeVersion: session.claudeVersion,
+    summary: session.summary || '(no summary)',
+    kind: session.kind,
+  };
 }

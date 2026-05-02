@@ -19,6 +19,8 @@
     "cacheWaste": "With cache waste",
     "toolErrors": "With tool errors"
   },
+  "showSynthetic": "Show synthetic ({{count}})",
+  "showSyntheticTitle": "Sandbox / fix-temp / eval-iteration runs (Nakiros internal)",
   "health": {
     "healthy": "healthy",
     "watch": "watch",

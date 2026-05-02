@@ -58,6 +58,13 @@ export interface ConversationIngestSession {
   projectPath: string;
   /** Absolute path of the source `.jsonl` under `~/.claude/projects/<encoded>/`. */
   transcriptPath: string;
+  /**
+   * ISO mtime of the source `.jsonl` at ingest time. Used by
+   * `ensureProjectIndexed` to skip sessions whose source has not changed
+   * since the last ingest pass — `lastTurnAt` (a message timestamp) does
+   * not match the file mtime, so we track them separately.
+   */
+  transcriptMtime: string;
   /** ISO timestamp of when Nakiros parsed and stored this session. */
   ingestedAt: string;
   /** Total user/assistant/system turns parsed (post `conversation-parser` filtering). */
@@ -68,6 +75,14 @@ export interface ConversationIngestSession {
   lastTurnAt: string;
   /** Classification: real user activity vs Nakiros-internal sandbox run. */
   kind: ConversationIngestSessionKind;
+  /** Git branch recorded in the JSONL `gitBranch` field, or null when absent. */
+  gitBranch: string | null;
+  /** Claude Code `version` recorded in the JSONL, or null when absent. */
+  claudeVersion: string | null;
+  /** First user-message text (≤ 200 chars), used as a quick descriptor in lists. */
+  summary: string;
+  /** Distinct tool names invoked across the session (de-duplicated). */
+  toolsUsed: string[];
 }
 
 /**

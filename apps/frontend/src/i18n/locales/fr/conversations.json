@@ -19,6 +19,8 @@
     "cacheWaste": "Avec gaspillage cache",
     "toolErrors": "Avec erreurs outils"
   },
+  "showSynthetic": "Afficher synthétiques ({{count}})",
+  "showSyntheticTitle": "Runs sandbox / fix-temp / éval (interne Nakiros)",
   "health": {
     "healthy": "saine",
     "watch": "à surveiller",

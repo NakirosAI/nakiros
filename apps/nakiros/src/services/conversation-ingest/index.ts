@@ -16,6 +16,7 @@ export {
 } from './hook-installer.js';
 export {
   drainQueue,
+  ensureProjectIndexed,
   fullScan,
   ingestSession,
   getQueueLength,
@@ -27,6 +28,8 @@ export {
   listSessionsForProject,
   listAllSessions,
   purgeIngestData,
+  readSessionBody,
+  toProjectConversation,
 } from './project-store.js';
 export {
   getIngestHookScriptPath,

@@ -9,6 +9,12 @@ import {
 import { listConversations, getConversationMessages } from '../../services/conversation-parser.js';
 import { getOrComputeAnalysis } from '../../services/conversation-analysis-cache.js';
 import {
+  ensureProjectIndexed,
+  listSessionsForProject,
+  readSessionBody,
+  toProjectConversation,
+} from '../../services/conversation-ingest/index.js';
+import {
   loadProjectAggregate,
   refreshProjectAggregate,
 } from '../../services/project-aggregate-cache.js';
@@ -64,15 +70,31 @@ export const projectHandlers: HandlerRegistry = {
   'project:getStats': createTypedHandler(() => null),
   'project:getGlobalStats': createTypedHandler(() => null),
 
+  // listConversations / getConversationMessages now route through the
+  // conversation-ingest store (single source of truth for the UI). We
+  // ensure the project is up-to-date in the store before reading, so users
+  // who haven't opted in to the Stop hook still get fresh data on every
+  // project open. The conversation analyzers continue to read the raw JSONL
+  // through `providerProjectDir` because they need cache/token/header data
+  // that's not preserved in our parsed body files.
   'project:listConversations': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
+    ensureProjectIndexed(project.providerProjectDir);
+    const sessions = listSessionsForProject(project.projectPath);
+    if (sessions.length > 0) return sessions.map((s) => toProjectConversation(s, projectId));
+    // Fallback: project hasn't been indexed (e.g. fresh after purge or the
+    // ingest dir was wiped manually) — read the live JSONL.
     return listConversations(project.providerProjectDir, projectId);
   }),
 
   'project:getConversationMessages': createTypedHandler((projectId: string, sessionId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
+    ensureProjectIndexed(project.providerProjectDir);
+    const body = readSessionBody(project.projectPath, sessionId);
+    if (body) return body.messages;
+    // Fallback when the session was just deleted from the ingest store.
     return getConversationMessages(project.providerProjectDir, sessionId);
   }),
 
@@ -85,9 +107,21 @@ export const projectHandlers: HandlerRegistry = {
   'project:listConversationsWithAnalysis': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
-    const convs = listConversations(project.providerProjectDir, projectId);
+    ensureProjectIndexed(project.providerProjectDir);
+    const sessions = listSessionsForProject(project.projectPath);
+    const convs =
+      sessions.length > 0
+        ? sessions.map((s) => toProjectConversation(s, projectId))
+        : listConversations(project.providerProjectDir, projectId);
+    // Carry the `kind` tag from the ingest store onto each analysis so the
+    // ConversationsScreen can hide synthetic runs by default without a
+    // second IPC round-trip.
     return convs
-      .map((c) => getOrComputeAnalysis(project.providerProjectDir, c.sessionId, projectId))
+      .map((c) => {
+        const analysis = getOrComputeAnalysis(project.providerProjectDir, c.sessionId, projectId);
+        if (!analysis) return null;
+        return c.kind ? { ...analysis, kind: c.kind } : analysis;
+      })
       .filter((x): x is NonNullable<typeof x> => x !== null);
   }),
 

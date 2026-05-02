@@ -55,6 +55,13 @@ export interface ProjectConversation {
   cwd: string;
   claudeVersion: string | null;
   summary: string;
+  /**
+   * Real user activity (`'user'`) vs Nakiros-internal sandbox run
+   * (`'synthetic'`: fix-temp / eval iterations / `~/.nakiros/` workdirs).
+   * Optional for backward compatibility with callers that build the type
+   * outside the conversation-ingest pipeline.
+   */
+  kind?: 'user' | 'synthetic';
 }
 
 /** Normalized message extracted from a Claude Code JSONL entry. */
@@ -199,6 +206,13 @@ export interface ConversationAnalysis {
   messageCount: number;
   summary: string;
   gitBranch: string | null;
+  /**
+   * Real user activity (`'user'`) vs Nakiros-internal sandbox run
+   * (`'synthetic'`). Decorated by the project handler from the conversation-
+   * ingest store when available. Optional for backward compatibility with
+   * cached analyses produced before the V2 ingest landed.
+   */
+  kind?: 'user' | 'synthetic';
 
   // --- Context health ---
   compactions: ConversationCompaction[];

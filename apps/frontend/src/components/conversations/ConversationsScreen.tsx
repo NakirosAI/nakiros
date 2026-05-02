@@ -50,7 +50,21 @@ export default function ConversationsScreen({ project }: Props) {
   const loading = fetched === null;
 
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [showSynthetic, setShowSynthetic] = useState(false);
   const [open, setOpen] = useState<ConversationAnalysis | null>(null);
+
+  // Hide synthetic conversations (sandbox / fix-temp / eval-iteration runs)
+  // by default — they're tagged at ingest time and almost never relevant
+  // when the user is reviewing their actual coding sessions.
+  const userScopedAnalyses = useMemo(
+    () => (showSynthetic ? analyses : analyses.filter((a) => a.kind !== 'synthetic')),
+    [analyses, showSynthetic],
+  );
+
+  const syntheticCount = useMemo(
+    () => analyses.filter((a) => a.kind === 'synthetic').length,
+    [analyses],
+  );
 
   const counts = useMemo(() => {
     const out: Record<FilterKey, number> = {
@@ -62,22 +76,22 @@ export default function ConversationsScreen({ project }: Props) {
       toolErrors: 0,
     };
     for (const f of FILTERS) {
-      out[f.id] = analyses.filter(f.match).length;
+      out[f.id] = userScopedAnalyses.filter(f.match).length;
     }
     return out;
-  }, [analyses]);
+  }, [userScopedAnalyses]);
 
   const visible = useMemo(() => {
     const matcher = FILTERS.find((f) => f.id === filter)!.match;
     // Sort by health (critical first); ties broken by recency.
-    return analyses
+    return userScopedAnalyses
       .filter(matcher)
       .slice()
       .sort((a, b) => {
         if (a.score !== b.score) return a.score - b.score;
         return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
       });
-  }, [analyses, filter]);
+  }, [userScopedAnalyses, filter]);
 
   if (loading) {
     return <LoadingState>{t('loading')}</LoadingState>;
@@ -124,6 +138,20 @@ export default function ConversationsScreen({ project }: Props) {
             </button>
           );
         })}
+        {syntheticCount > 0 && (
+          <label
+            className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11.5px] text-n-muted"
+            title={t('showSyntheticTitle')}
+          >
+            <input
+              type="checkbox"
+              checked={showSynthetic}
+              onChange={() => setShowSynthetic((v) => !v)}
+              className="h-3 w-3 cursor-pointer accent-n-accent-strong"
+            />
+            <span>{t('showSynthetic', { count: syntheticCount })}</span>
+          </label>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">

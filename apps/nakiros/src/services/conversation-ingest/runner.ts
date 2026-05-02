@@ -114,14 +114,24 @@ interface IngestOutcome {
   reason?: string;
 }
 
+interface RawSessionMeta {
+  cwd: string;
+  gitBranch: string | null;
+  claudeVersion: string | null;
+}
+
 /**
- * Extract the real `cwd` from the first JSONL line that carries it. Claude
- * Code records the working directory verbatim on every entry; using that is
- * the only reliable way to recover the project path because the encoded
- * folder name under `~/.claude/projects/<encoded>` collapses both `/` and
- * `.` to `-`.
+ * Extract `cwd`, `gitBranch`, and `version` from the JSONL header lines —
+ * Claude Code records them on every entry. We stop as soon as the three
+ * non-null values have been seen so empty / large transcripts don't pay the
+ * full walk cost.
+ *
+ * The `cwd` value here is the only reliable way to recover the project path:
+ * the encoded folder name under `~/.claude/projects/<encoded>/` collapses
+ * both `/` and `.` to `-`, so reversing it would be ambiguous.
  */
-function readCwdFromTranscript(transcriptPath: string): string {
+function readMetaFromTranscript(transcriptPath: string): RawSessionMeta {
+  const meta: RawSessionMeta = { cwd: '', gitBranch: null, claudeVersion: null };
   try {
     const raw = readFileSync(transcriptPath, 'utf8');
     const lines = raw.split('\n');
@@ -129,8 +139,17 @@ function readCwdFromTranscript(transcriptPath: string): string {
       const trimmed = line.trim();
       if (!trimmed) continue;
       try {
-        const entry = JSON.parse(trimmed) as { cwd?: unknown };
-        if (typeof entry.cwd === 'string' && entry.cwd.length > 0) return entry.cwd;
+        const entry = JSON.parse(trimmed) as Record<string, unknown>;
+        if (!meta.cwd && typeof entry.cwd === 'string' && entry.cwd.length > 0) {
+          meta.cwd = entry.cwd;
+        }
+        if (meta.gitBranch === null && typeof entry.gitBranch === 'string' && entry.gitBranch.length > 0) {
+          meta.gitBranch = entry.gitBranch;
+        }
+        if (meta.claudeVersion === null && typeof entry.version === 'string' && entry.version.length > 0) {
+          meta.claudeVersion = entry.version;
+        }
+        if (meta.cwd && meta.gitBranch && meta.claudeVersion) break;
       } catch {
         // skip malformed line
       }
@@ -138,7 +157,33 @@ function readCwdFromTranscript(transcriptPath: string): string {
   } catch {
     // ignore
   }
-  return '';
+  return meta;
+}
+
+/**
+ * Build the `summary` (first user-message text, truncated) and `toolsUsed`
+ * (de-duplicated set of tool names) from already-parsed messages — no extra
+ * file IO. Mirrors the legacy `services/conversation-parser.ts:listConversations`
+ * heuristics for parity.
+ */
+function buildSessionSummaryAndTools(messages: ConversationMessage[]): {
+  summary: string;
+  toolsUsed: string[];
+} {
+  let summary = '';
+  const tools = new Set<string>();
+  for (const msg of messages) {
+    if (msg.type === 'user' && !summary && msg.content) {
+      // Skip slash-command / local-command wrappers — they're noise as a list label.
+      if (!msg.content.includes('<command-name>') && !msg.content.includes('<local-command-')) {
+        summary = msg.content.slice(0, 200);
+      }
+    }
+    if (msg.toolUse && msg.toolUse.length > 0) {
+      for (const t of msg.toolUse) tools.add(t.name);
+    }
+  }
+  return { summary, toolsUsed: Array.from(tools) };
 }
 
 function writeAtomic(path: string, content: string): void {
@@ -175,19 +220,19 @@ export function ingestSession(sessionId: string, transcriptPath: string, cwdHint
     return { sessionId, ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
 
-  // Resolve the real project path. Prefer the JSONL-recorded value; fall back
-  // to the caller hint (from the queue payload) for empty transcripts.
-  const recordedCwd = readCwdFromTranscript(transcriptPath);
-  const projectPath = recordedCwd || cwdHint;
+  // Resolve project path + raw header metadata in a single transcript pass.
+  const rawMeta = readMetaFromTranscript(transcriptPath);
+  const projectPath = rawMeta.cwd || cwdHint;
   if (!projectPath) {
     return { sessionId, ok: false, reason: 'project-path-unresolved' };
   }
 
   const kind = classifySessionKind(projectPath);
+  const transcriptMtime = isoFromStat(transcriptPath, 'mtime');
   const startedAt = messages[0]?.timestamp || isoFromStat(transcriptPath, 'birth');
-  const lastTurnAt =
-    messages[messages.length - 1]?.timestamp || isoFromStat(transcriptPath, 'mtime');
+  const lastTurnAt = messages[messages.length - 1]?.timestamp || transcriptMtime;
   const ingestedAt = new Date().toISOString();
+  const { summary, toolsUsed } = buildSessionSummaryAndTools(messages);
 
   // Persist parsed body — overwrite on re-ingest.
   const sessionFile = join(getProjectSessionsDir(projectPath), `${sessionId}.json`);
@@ -209,11 +254,16 @@ export function ingestSession(sessionId: string, transcriptPath: string, cwdHint
     sessionId,
     projectPath,
     transcriptPath,
+    transcriptMtime,
     ingestedAt,
     turnCount: messages.length,
     startedAt,
     lastTurnAt,
     kind,
+    gitBranch: rawMeta.gitBranch,
+    claudeVersion: rawMeta.claudeVersion,
+    summary,
+    toolsUsed,
   };
   upsertSession(meta);
   return { sessionId, ok: true };
@@ -344,7 +394,7 @@ export function fullScan(): { scanned: number; ingested: number; skipped: number
   let processed = 0;
   for (const file of allFiles) {
     const indexed = indexBySessionId.get(file.sessionId);
-    if (indexed && indexed.lastTurnAt === file.mtimeIso) {
+    if (indexed && indexed.transcriptMtime === file.mtimeIso) {
       skipped++;
       processed++;
       continue;
@@ -367,6 +417,54 @@ export function fullScan(): { scanned: number; ingested: number; skipped: number
     phase: 'done',
   });
   return { scanned: allFiles.length, ingested, skipped };
+}
+
+/**
+ * Lazy per-project indexer: scan a single project's `~/.claude/projects/<encoded>/`
+ * folder, ingest sessions that are missing or stale, and skip the rest.
+ * Called by the project handlers on every read so the ingest store stays
+ * fresh without requiring the user to opt in to the Stop hook. Cheap when
+ * everything is up-to-date (one `readdirSync` + N `statSync` calls).
+ */
+export function ensureProjectIndexed(
+  providerProjectDir: string,
+): { ingested: number; total: number } {
+  if (!existsSync(providerProjectDir)) return { ingested: 0, total: 0 };
+
+  let files: string[];
+  try {
+    files = readdirSync(providerProjectDir).filter((f) => f.endsWith('.jsonl'));
+  } catch {
+    return { ingested: 0, total: 0 };
+  }
+
+  // Build a sessionId → indexed entry map across the whole index. We can't
+  // narrow by projectPath here because we don't yet know which project the
+  // sessions belong to (the path encoding is one-way).
+  const index = readIndex();
+  const indexBySessionId = new Map<string, ConversationIngestSession>();
+  for (const project of Object.values(index.projects)) {
+    for (const session of Object.values(project.sessions)) {
+      indexBySessionId.set(session.sessionId, session);
+    }
+  }
+
+  let ingested = 0;
+  for (const f of files) {
+    const sessionId = f.replace(/\.jsonl$/, '');
+    const path = join(providerProjectDir, f);
+    let mtimeIso: string;
+    try {
+      mtimeIso = statSync(path).mtime.toISOString();
+    } catch {
+      continue;
+    }
+    const indexed = indexBySessionId.get(sessionId);
+    if (indexed && indexed.transcriptMtime === mtimeIso) continue;
+    const outcome = ingestSession(sessionId, path, '');
+    if (outcome.ok) ingested++;
+  }
+  return { ingested, total: files.length };
 }
 
 export { aggregateStats };

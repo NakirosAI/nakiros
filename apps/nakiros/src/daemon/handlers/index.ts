@@ -23,6 +23,7 @@ import { claudeOutputStylesHandlers } from './claude-output-styles.js';
 import { claudePermissionsHandlers } from './claude-permissions.js';
 import { claudeMcpHandlers } from './claude-mcp.js';
 import { claudeHooksHandlers } from './claude-hooks.js';
+import { claudeMdHandlers } from './claude-md.js';
 
 /** Signature every IPC handler must implement — takes an arg array, returns a value or promise. */
 export type IpcHandler = (args: unknown[]) => Promise<unknown> | unknown;
@@ -65,5 +66,6 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...claudePermissionsHandlers,
     ...claudeMcpHandlers,
     ...claudeHooksHandlers,
+    ...claudeMdHandlers,
   };
 }

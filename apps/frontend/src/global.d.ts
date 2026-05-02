@@ -86,6 +86,11 @@ import type {
   HooksFileContent,
   HooksMutationResult,
   SaveHooksRequest,
+  ClaudeMdFileContent,
+  ClaudeMdListResult,
+  ClaudeMdMutationResult,
+  ClaudeMdScope,
+  SaveClaudeMdRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -388,6 +393,21 @@ declare global {
         projectId: string,
         request: SaveHooksRequest,
       ): Promise<HooksMutationResult>;
+
+      // CLAUDE.md editor (Module 7 V2)
+      listClaudeMd(projectId: string): Promise<ClaudeMdListResult>;
+      readClaudeMd(
+        projectId: string,
+        scope: ClaudeMdScope,
+      ): Promise<ClaudeMdFileContent | null>;
+      saveClaudeMdFile(
+        projectId: string,
+        request: SaveClaudeMdRequest,
+      ): Promise<ClaudeMdMutationResult>;
+      deleteClaudeMd(
+        projectId: string,
+        scope: ClaudeMdScope,
+      ): Promise<ClaudeMdMutationResult>;
     };
   }
 }

@@ -208,6 +208,12 @@ export const IPC_CHANNELS = {
   'claudeHooks:read': 'claudeHooks:read',
   'claudeHooks:save': 'claudeHooks:save',
 
+  // CLAUDE.md editor (Module 7 V2)
+  'claudeMd:list': 'claudeMd:list',
+  'claudeMd:read': 'claudeMd:read',
+  'claudeMd:save': 'claudeMd:save',
+  'claudeMd:delete': 'claudeMd:delete',
+
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',
   'analyzeConvo:stopRun': 'analyzeConvo:stopRun',

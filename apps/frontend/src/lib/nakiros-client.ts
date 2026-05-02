@@ -501,6 +501,17 @@ const client = {
     },
   ) => invoke(C['claudeHooks:save'], projectId, request),
 
+  // CLAUDE.md editor (Module 7 V2)
+  listClaudeMd: (projectId: string) => invoke(C['claudeMd:list'], projectId),
+  readClaudeMd: (projectId: string, scope: 'root' | 'claude-dir' | 'local') =>
+    invoke(C['claudeMd:read'], projectId, scope),
+  saveClaudeMdFile: (
+    projectId: string,
+    request: { scope: 'root' | 'claude-dir' | 'local'; body: string; mtimeAtRead: string },
+  ) => invoke(C['claudeMd:save'], projectId, request),
+  deleteClaudeMd: (projectId: string, scope: 'root' | 'claude-dir' | 'local') =>
+    invoke(C['claudeMd:delete'], projectId, scope),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

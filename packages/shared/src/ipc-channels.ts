@@ -204,6 +204,10 @@ export const IPC_CHANNELS = {
   'claudeMcp:save': 'claudeMcp:save',
   'claudeMcp:delete': 'claudeMcp:delete',
 
+  // .claude/settings.json hooks editor (Module 6 V2)
+  'claudeHooks:read': 'claudeHooks:read',
+  'claudeHooks:save': 'claudeHooks:save',
+
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',
   'analyzeConvo:stopRun': 'analyzeConvo:stopRun',

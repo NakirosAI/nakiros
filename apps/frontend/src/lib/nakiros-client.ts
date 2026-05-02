@@ -477,6 +477,30 @@ const client = {
   deleteClaudeMcpServer: (projectId: string, name: string, mtimeAtRead: string) =>
     invoke(C['claudeMcp:delete'], projectId, name, mtimeAtRead),
 
+  // .claude/settings.json hooks editor (Module 6 V2)
+  readClaudeHooks: (projectId: string, scope: 'project' | 'local') =>
+    invoke(C['claudeHooks:read'], projectId, scope),
+  saveClaudeHooks: (
+    projectId: string,
+    request: {
+      scope: 'project' | 'local';
+      events: Array<{
+        event:
+          | 'SessionStart'
+          | 'UserPromptSubmit'
+          | 'PreToolUse'
+          | 'PostToolUse'
+          | 'Notification'
+          | 'Stop'
+          | 'SubagentStop'
+          | 'SessionEnd';
+        entries: Array<{ matcher: string; command: string; timeout: number | null }>;
+      }>;
+      preservedJson: string;
+      mtimeAtRead: string;
+    },
+  ) => invoke(C['claudeHooks:save'], projectId, request),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

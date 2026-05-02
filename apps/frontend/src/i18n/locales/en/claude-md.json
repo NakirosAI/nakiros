@@ -1,0 +1,51 @@
+{
+  "title": "CLAUDE.md",
+  "subtitle": "Project instructions Claude reads at the start of every session. Three locations: the project root, `.claude/CLAUDE.md`, and a private `CLAUDE.local.md` (gitignored). Loaded into context together — keep each one focused.",
+  "loading": "Loading CLAUDE.md…",
+  "errorTitle": "Could not load CLAUDE.md",
+  "retry": "Retry",
+  "save": "Save",
+  "delete": "Delete",
+  "reload": "Reload from disk",
+  "confirmDelete": "Delete this file? {{path}}",
+  "bodyLabel": "Body (markdown)",
+  "bodyPlaceholder": "# Project conventions\n\n- Build: `npm run build`\n- Tests: `npm test`\n…",
+  "previewBody": "Preview",
+  "editBody": "Edit",
+  "tabs": {
+    "root": "./CLAUDE.md",
+    "claude-dir": "./.claude/CLAUDE.md",
+    "local": "./CLAUDE.local.md",
+    "missing": "missing"
+  },
+  "badges": {
+    "root": "shared (project)",
+    "claude-dir": "shared (.claude/)",
+    "local": "gitignored",
+    "missing": "file does not exist yet — saving will create it"
+  },
+  "sidebar": {
+    "size": "Size",
+    "lines": "Lines",
+    "chars": "Chars",
+    "tokens": "Tokens",
+    "sections": "Sections",
+    "linesWarning": "Over {{threshold}} lines reduces adherence. Consider splitting into `.claude/rules/` files scoped by paths.",
+    "headings": "Top-level sections",
+    "imports": "@-imports",
+    "importsEmpty": "No `@<path>` imports detected.",
+    "importAgentsMd": "Add @AGENTS.md import",
+    "htmlComments": "HTML comments",
+    "htmlCommentsHelp": "<!-- block comments --> are stripped from Claude's context — useful for maintainer notes that don't waste tokens."
+  },
+  "errors": {
+    "notFound": "This file does not exist on disk.",
+    "notFoundTitle": "Not found",
+    "conflict": "This file was modified outside Nakiros. Reload to see the latest version.",
+    "conflictTitle": "External edit detected",
+    "writeFailed": "Could not write to disk.",
+    "writeFailedTitle": "Write failed",
+    "projectNotFound": "Project not found.",
+    "projectNotFoundTitle": "Unknown project"
+  }
+}

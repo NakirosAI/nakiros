@@ -57,7 +57,7 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
     },
     {
       items: [
-        { id: 'claudeMd', label: 'CLAUDE.md', icon: <FileText size={18} strokeWidth={2} />, disabled: true, comingIn: 'Module 7' },
+        { id: 'claudeMd', label: 'CLAUDE.md', icon: <FileText size={18} strokeWidth={2} />, disabled: false },
         { id: 'rules', label: 'Rules', icon: <Layers size={18} strokeWidth={2} />, disabled: false },
         { id: 'subagents', label: 'Subagents', icon: <Bot size={18} strokeWidth={2} />, disabled: false },
         { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false },

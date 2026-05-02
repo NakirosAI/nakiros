@@ -458,6 +458,69 @@ export type HooksMutationErrorCode =
   | 'project-not-found'
   | 'write-failed';
 
+// ── CLAUDE.md editor (Module 7 — V2 edit) ──────────────────────────────────-
+/**
+ * Where a CLAUDE.md file can live, scoped to the project (we don't edit
+ * the user-global `~/.claude/CLAUDE.md` in V2).
+ *
+ * - `root`       — `./CLAUDE.md`, the canonical project file
+ * - `claude-dir` — `./.claude/CLAUDE.md`, the alternative project file
+ * - `local`      — `./CLAUDE.local.md`, your gitignored personal overlay
+ */
+export type ClaudeMdScope = 'root' | 'claude-dir' | 'local';
+
+export interface ClaudeMdSummary {
+  scope: ClaudeMdScope;
+  /** Absolute path on disk, reported even when missing. */
+  path: string;
+  exists: boolean;
+  /** ISO timestamp of last modification, or null when missing. */
+  lastModified: string | null;
+  lines: number;
+  chars: number;
+  /** Approx tokens (chars / 4). */
+  tokens: number;
+  headings: string[];
+  /** Detected `@<path>` imports in document order. */
+  imports: string[];
+  /** True when an HTML block-level comment is present (stripped from
+   *  context but useful for human notes). */
+  hasHtmlComments: boolean;
+}
+
+export interface ClaudeMdListResult {
+  /** Per-scope summary, ordered root → claude-dir → local. */
+  files: ClaudeMdSummary[];
+  /** True when an `AGENTS.md` exists at the project root. */
+  agentsMdAtRoot: boolean;
+  /** Absolute path of the project root (used for relative path display). */
+  projectPath: string;
+}
+
+export interface ClaudeMdFileContent extends ClaudeMdSummary {
+  /** Full file content (markdown body). */
+  body: string;
+  /** ISO mtime captured at read time, used as the optimistic-lock token. */
+  mtime: string;
+}
+
+export interface SaveClaudeMdRequest {
+  scope: ClaudeMdScope;
+  body: string;
+  /** mtime at read time; ignored when the file didn't exist. */
+  mtimeAtRead: string;
+}
+
+export type ClaudeMdMutationResult =
+  | { ok: true; file: ClaudeMdFileContent }
+  | { ok: false; code: ClaudeMdMutationErrorCode; message: string; currentMtime?: string };
+
+export type ClaudeMdMutationErrorCode =
+  | 'not-found'
+  | 'conflict'
+  | 'project-not-found'
+  | 'write-failed';
+
 // ── skills (gateway only) ──────────────────────────────────────────────────
 export interface SkillsGatewayInfo {
   present: boolean;

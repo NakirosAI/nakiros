@@ -13,6 +13,7 @@ import SubagentsScreen from '../../views/SubagentsScreen';
 import OutputStylesScreen from '../../views/OutputStylesScreen';
 import PermissionsScreen from '../../views/PermissionsScreen';
 import McpScreen from '../../views/McpScreen';
+import HooksScreen from '../../views/HooksScreen';
 import MarketplaceScreen from '../../views/MarketplaceScreen';
 import RunScreen from '../../views/RunScreen';
 import SettingsScreen from '../../views/SettingsScreen';
@@ -201,6 +202,9 @@ export default function NewShell({
                   {view === 'mcp' && (
                     <McpScreen key={project.id} project={project} />
                   )}
+                  {view === 'hooks' && (
+                    <HooksScreen key={project.id} project={project} />
+                  )}
                   {view === 'settings' && <SettingsScreen />}
                   {view !== 'overview' &&
                     view !== 'skills' &&
@@ -210,6 +214,7 @@ export default function NewShell({
                     view !== 'outputStyles' &&
                     view !== 'permissions' &&
                     view !== 'mcp' &&
+                    view !== 'hooks' &&
                     view !== 'settings' && (
                       <ComingSoon view={view} onBack={() => setView('overview')} />
                     )}

@@ -1,0 +1,45 @@
+{
+  "title": "Hooks",
+  "subtitle": "Commandes shell que Claude Code exécute à des événements précis du cycle de vie. Utilise-les pour filtrer, logger, formater ou réagir aux actions de l'agent. Stockés dans `.claude/settings.json` et `.claude/settings.local.json`.",
+  "loading": "Chargement des hooks…",
+  "errorTitle": "Impossible de charger les hooks",
+  "retry": "Réessayer",
+  "save": "Enregistrer",
+  "reload": "Recharger depuis le disque",
+  "addHook": "Ajouter un hook",
+  "removeRow": "Retirer",
+  "badgeProject": "settings.json (partagé)",
+  "badgeLocal": "settings.local.json (gitignored)",
+  "badgeMissing": "fichier inexistant — l'enregistrer le créera",
+  "parseErrorTitle": "Fichier de paramètres mal formé",
+  "parseErrorBody": "Impossible de parser le JSON — corrige manuellement d'abord, ou enregistre ici pour écraser (seul le bloc hooks sera préservé) : {{error}}",
+  "rowMatcherPlaceholder": "Bash",
+  "rowCommandPlaceholder": "./scripts/log-bash.sh",
+  "rowTimeoutPlaceholder": "30s",
+  "rowTimeoutTooltip": "Timeout optionnel en secondes",
+  "rowHelp": "Matcher est une regex (ou vide pour toujours matcher). La commande s'exécute dans un shell depuis la racine du projet. Timeout en secondes.",
+  "scope": {
+    "project": "projet",
+    "local": "local",
+    "projectTooltip": "settings.json — partagé avec ton équipe via git",
+    "localTooltip": "settings.local.json — ton override personnel, gitignored"
+  },
+  "events": {
+    "SessionStart": "S'exécute une fois au démarrage d'une session.",
+    "UserPromptSubmit": "S'exécute quand l'utilisateur envoie un message. Utile pour ajouter du contexte ou refuser.",
+    "PreToolUse": "S'exécute avant chaque appel d'outil. Utile pour filtrer, logger ou préparer.",
+    "PostToolUse": "S'exécute après un outil réussi. Utile pour formater, linter ou réagir aux effets de bord.",
+    "Notification": "S'exécute quand Claude Code veut afficher une notification.",
+    "Stop": "S'exécute quand l'agent termine son tour.",
+    "SubagentStop": "S'exécute quand un sous-agent termine.",
+    "SessionEnd": "S'exécute une fois à la fin d'une session."
+  },
+  "errors": {
+    "conflict": "Ce fichier de paramètres a été modifié en dehors de Nakiros. Recharge pour voir la dernière version.",
+    "conflictTitle": "Modification externe détectée",
+    "writeFailed": "Impossible d'écrire sur le disque.",
+    "writeFailedTitle": "Écriture échouée",
+    "projectNotFound": "Projet introuvable.",
+    "projectNotFoundTitle": "Projet inconnu"
+  }
+}

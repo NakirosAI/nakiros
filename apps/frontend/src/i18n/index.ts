@@ -37,6 +37,7 @@ import frSubagents from './locales/fr/subagents.json';
 import frOutputStyles from './locales/fr/output-styles.json';
 import frPermissions from './locales/fr/permissions.json';
 import frMcp from './locales/fr/mcp.json';
+import frHooks from './locales/fr/hooks.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -74,6 +75,7 @@ import enSubagents from './locales/en/subagents.json';
 import enOutputStyles from './locales/en/output-styles.json';
 import enPermissions from './locales/en/permissions.json';
 import enMcp from './locales/en/mcp.json';
+import enHooks from './locales/en/hooks.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -115,6 +117,7 @@ const resources = {
     'output-styles': frOutputStyles,
     permissions: frPermissions,
     mcp: frMcp,
+    hooks: frHooks,
   },
   en: {
     common: enCommon,
@@ -153,6 +156,7 @@ const resources = {
     'output-styles': enOutputStyles,
     permissions: enPermissions,
     mcp: enMcp,
+    hooks: enHooks,
   },
 };
 

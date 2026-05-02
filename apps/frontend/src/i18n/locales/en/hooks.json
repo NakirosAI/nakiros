@@ -1,0 +1,45 @@
+{
+  "title": "Hooks",
+  "subtitle": "Shell commands Claude Code runs at specific lifecycle events. Use them to gate, log, format, or react to the agent's actions. Stored in `.claude/settings.json` and `.claude/settings.local.json`.",
+  "loading": "Loading hooks…",
+  "errorTitle": "Could not load hooks",
+  "retry": "Retry",
+  "save": "Save",
+  "reload": "Reload from disk",
+  "addHook": "Add hook",
+  "removeRow": "Remove",
+  "badgeProject": "settings.json (shared)",
+  "badgeLocal": "settings.local.json (gitignored)",
+  "badgeMissing": "file does not exist yet — saving will create it",
+  "parseErrorTitle": "Settings file is malformed",
+  "parseErrorBody": "Could not parse JSON — fix it manually first, or save here to overwrite (will preserve only the hooks block): {{error}}",
+  "rowMatcherPlaceholder": "Bash",
+  "rowCommandPlaceholder": "./scripts/log-bash.sh",
+  "rowTimeoutPlaceholder": "30s",
+  "rowTimeoutTooltip": "Optional timeout in seconds",
+  "rowHelp": "Matcher is a regex (or empty for always). Command runs in a shell from the project root. Timeout is in seconds.",
+  "scope": {
+    "project": "project",
+    "local": "local",
+    "projectTooltip": "settings.json — shared with your team via git",
+    "localTooltip": "settings.local.json — your personal override, gitignored"
+  },
+  "events": {
+    "SessionStart": "Runs once at the start of a session.",
+    "UserPromptSubmit": "Runs when the user sends a message. Use to add context or refuse.",
+    "PreToolUse": "Runs before any tool the agent calls. Use to gate, log, or prepare.",
+    "PostToolUse": "Runs after a tool succeeds. Use to format, lint, or react to side effects.",
+    "Notification": "Runs when Claude Code wants to surface a notification.",
+    "Stop": "Runs when the agent finishes a turn.",
+    "SubagentStop": "Runs when a subagent finishes.",
+    "SessionEnd": "Runs once at the end of a session."
+  },
+  "errors": {
+    "conflict": "This settings file was modified outside Nakiros. Reload to see the latest version.",
+    "conflictTitle": "External edit detected",
+    "writeFailed": "Could not write to disk.",
+    "writeFailedTitle": "Write failed",
+    "projectNotFound": "Project not found.",
+    "projectNotFoundTitle": "Unknown project"
+  }
+}

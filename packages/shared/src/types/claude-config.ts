@@ -413,6 +413,51 @@ export type McpMutationErrorCode =
   | 'project-not-found'
   | 'write-failed';
 
+// ── Hooks editor (Module 6 — V2 edit) ──────────────────────────────────────-
+/** Editor view of a single hook entry. Matcher is empty for "always-match"
+ *  rules; an entry is invalid (silently dropped at save) when both matcher
+ *  and command are empty. */
+export interface HookEditEntry {
+  matcher: string;
+  command: string;
+  /** Optional shell timeout in seconds (Claude Code accepts `timeout`). */
+  timeout: number | null;
+}
+
+export interface HookEditEvent {
+  event: HookEventName;
+  entries: HookEditEntry[];
+}
+
+export interface HooksFileContent {
+  scope: PermissionsScope;
+  path: string;
+  exists: boolean;
+  mtime: string;
+  events: HookEditEvent[];
+  /** Opaque JSON of everything except `hooks` (permissions, model, env,
+   *  mcpServers, outputStyle, …) — round-tripped at save so unrelated
+   *  config survives. Empty string when nothing applies. */
+  preservedJson: string;
+  parseError?: string;
+}
+
+export interface SaveHooksRequest {
+  scope: PermissionsScope;
+  events: HookEditEvent[];
+  preservedJson: string;
+  mtimeAtRead: string;
+}
+
+export type HooksMutationResult =
+  | { ok: true; file: HooksFileContent }
+  | { ok: false; code: HooksMutationErrorCode; message: string; currentMtime?: string };
+
+export type HooksMutationErrorCode =
+  | 'conflict'
+  | 'project-not-found'
+  | 'write-failed';
+
 // ── skills (gateway only) ──────────────────────────────────────────────────
 export interface SkillsGatewayInfo {
   present: boolean;

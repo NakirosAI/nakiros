@@ -83,6 +83,9 @@ import type {
   McpMutationResult,
   McpServerForEditor,
   SaveMcpServerRequest,
+  HooksFileContent,
+  HooksMutationResult,
+  SaveHooksRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -375,6 +378,16 @@ declare global {
         name: string,
         mtimeAtRead: string,
       ): Promise<McpMutationResult>;
+
+      // .claude/settings.json hooks editor (Module 6 V2)
+      readClaudeHooks(
+        projectId: string,
+        scope: PermissionsScope,
+      ): Promise<HooksFileContent | null>;
+      saveClaudeHooks(
+        projectId: string,
+        request: SaveHooksRequest,
+      ): Promise<HooksMutationResult>;
     };
   }
 }

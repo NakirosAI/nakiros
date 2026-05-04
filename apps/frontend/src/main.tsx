@@ -11,6 +11,9 @@ import '@fontsource/geist/700.css';
 import '@fontsource/geist-mono/400.css';
 import '@fontsource/geist-mono/500.css';
 import './styles/globals.css';
+// Vendored Milkdown Crepe theme — loaded globally so MarkdownEditor can be
+// rendered anywhere without duplicating the import.
+import './styles/milkdown-crepe.css';
 import { i18nReady } from './i18n/index';
 
 // Dev escape hatch: `?dev=tokens` renders the new-design token sandbox

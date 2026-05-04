@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
@@ -12,17 +12,13 @@ import {
   Wrench,
 } from 'lucide-react';
 import type { ClaudeMdAuditHistoryEntry, ClaudeMdRunMode, Project } from '@nakiros/shared';
-import { Crepe } from '@milkdown/crepe';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import type { GenericAuditEntry } from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
 import ScoreRing from '../components/viz/ScoreRing';
+import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
 import { launchClaudemd, type OpenRunTabCallback } from '../lib/run-launcher';
 import { useClaudeMdFile, useClaudeMdList } from './claude-md/useClaudeMd';
-
-// Vendored Milkdown Crepe theme variables — see styles/milkdown-crepe.css.
-// Cannot import via @milkdown/crepe/lib/... because CSS is not in package exports.
-import '../styles/milkdown-crepe.css';
 
 interface ClaudeMdScreenProps {
   project: Project;
@@ -57,7 +53,6 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
 
   const [tab, setTab] = useState<ScreenTab>('edit');
   const [body, setBody] = useState('');
-  const [useWysiwyg, setUseWysiwyg] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [launchingMode, setLaunchingMode] = useState<ClaudeMdRunMode | null>(null);
   const [errorBanner, setErrorBanner] = useState<{
@@ -374,8 +369,6 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
             setBody={setBody}
             dirty={dirty}
             submitting={submitting}
-            useWysiwyg={useWysiwyg}
-            setUseWysiwyg={setUseWysiwyg}
             agentsMdAtRoot={list.agentsMdAtRoot}
             hasAgentsMdImport={hasAgentsMdImport}
             onSave={handleSave}
@@ -459,8 +452,6 @@ interface EditTabProps {
   setBody(b: string): void;
   dirty: boolean;
   submitting: boolean;
-  useWysiwyg: boolean;
-  setUseWysiwyg(v: boolean): void;
   agentsMdAtRoot: boolean;
   hasAgentsMdImport: boolean;
   onSave(): void;
@@ -475,8 +466,6 @@ function EditTab({
   setBody,
   dirty,
   submitting,
-  useWysiwyg,
-  setUseWysiwyg,
   agentsMdAtRoot,
   hasAgentsMdImport,
   onSave,
@@ -488,67 +477,33 @@ function EditTab({
     <div className="flex flex-1 overflow-hidden" style={{ height: '100%' }}>
       {/* Main editor area */}
       <div className="flex flex-1 flex-col gap-1.5 overflow-auto px-7 pb-8 pt-4">
-        <div className="flex items-center justify-between">
-          {/* Mode toggle */}
-          <div className="flex items-center rounded-n-sm border border-n-border-subtle bg-n-canvas p-0.5">
+        {/* Save / delete toolbar */}
+        <div className="flex items-center justify-end gap-1.5">
+          {file.exists && (
             <button
               type="button"
-              onClick={() => setUseWysiwyg(true)}
-              className={
-                'rounded-n-xs px-2.5 py-1 font-n-mono text-[11px] transition-colors ' +
-                (useWysiwyg
-                  ? 'bg-n-raised text-n-fg shadow-sm'
-                  : 'text-n-muted hover:text-n-fg')
-              }
+              onClick={onDelete}
+              disabled={submitting}
+              className="inline-flex items-center gap-1.5 rounded-n-sm border border-[oklch(0.74_0.16_25_/_0.4)] bg-transparent px-3 py-1.5 font-n-mono text-[11.5px] text-[oklch(0.50_0.16_25)] hover:bg-[oklch(0.74_0.16_25_/_0.08)] disabled:opacity-50"
             >
-              {t('editTab.modeWysiwyg')}
+              {t('delete')}
             </button>
-            <button
-              type="button"
-              onClick={() => setUseWysiwyg(false)}
-              className={
-                'rounded-n-xs px-2.5 py-1 font-n-mono text-[11px] transition-colors ' +
-                (!useWysiwyg
-                  ? 'bg-n-raised text-n-fg shadow-sm'
-                  : 'text-n-muted hover:text-n-fg')
-              }
-            >
-              {t('editTab.modeRaw')}
-            </button>
-          </div>
-          {/* Save / delete */}
-          <div className="flex items-center gap-1.5">
-            {file.exists && (
-              <button
-                type="button"
-                onClick={onDelete}
-                disabled={submitting}
-                className="inline-flex items-center gap-1.5 rounded-n-sm border border-[oklch(0.74_0.16_25_/_0.4)] bg-transparent px-3 py-1.5 font-n-mono text-[11.5px] text-[oklch(0.50_0.16_25)] hover:bg-[oklch(0.74_0.16_25_/_0.08)] disabled:opacity-50"
-              >
-                {t('delete')}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={!dirty || submitting}
-              className="inline-flex items-center gap-1.5 rounded-n-md border border-n-accent-line bg-n-accent-soft px-3 py-2 font-n-mono text-[12px] text-n-accent-strong hover:bg-n-accent-soft/80 disabled:opacity-50"
-            >
-              {t('save')}
-            </button>
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={!dirty || submitting}
+            className="inline-flex items-center gap-1.5 rounded-n-md border border-n-accent-line bg-n-accent-soft px-3 py-2 font-n-mono text-[12px] text-n-accent-strong hover:bg-n-accent-soft/80 disabled:opacity-50"
+          >
+            {t('save')}
+          </button>
         </div>
 
-        {useWysiwyg ? (
-          <MilkdownEditor value={body} onChange={setBody} />
-        ) : (
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder={t('editTab.bodyPlaceholder')}
-            className="min-h-[480px] flex-1 resize-none rounded-n-md border border-n-border-subtle bg-n-canvas px-3 py-2.5 font-n-mono text-[12px] leading-relaxed text-n-fg placeholder:text-n-faint focus:border-n-accent-line focus:outline-none"
-          />
-        )}
+        <MarkdownEditor
+          value={body}
+          onChange={setBody}
+          placeholder={t('editTab.bodyPlaceholder')}
+        />
       </div>
 
       {/* Sidebar */}
@@ -561,83 +516,6 @@ function EditTab({
         t={t}
       />
     </div>
-  );
-}
-
-// ── Milkdown WYSIWYG editor ────────────────────────────────────────────────
-
-interface MilkdownEditorProps {
-  value: string;
-  onChange(markdown: string): void;
-}
-
-/**
- * Thin wrapper around Milkdown Crepe. The editor is mounted imperatively
- * inside a div ref; `value` changes from outside are applied via
- * `getMarkdown` / listener. The `onChange` callback fires on every Crepe
- * markdown update so the parent body state stays in sync.
- */
-function MilkdownEditor({ value, onChange }: MilkdownEditorProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const crepeRef = useRef<Crepe | null>(null);
-  // Track last value written to Crepe to avoid infinite update loops.
-  const lastSyncedValueRef = useRef<string>(value);
-
-  useEffect(() => {
-    if (!rootRef.current) return;
-
-    const crepe = new Crepe({
-      root: rootRef.current,
-      defaultValue: value,
-    });
-
-    // Listen for markdown changes and bubble them up.
-    crepe.on((api) => {
-      api.markdownUpdated((_ctx, markdown) => {
-        lastSyncedValueRef.current = markdown;
-        onChange(markdown);
-      });
-    });
-
-    crepeRef.current = crepe;
-    void crepe.create();
-
-    return () => {
-      void crepe.destroy().catch(() => {/* ignore on unmount */});
-      crepeRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Sync external value changes (e.g. after a successful save that resets
-  // the body) only when they differ from what Crepe last reported to us.
-  // Crepe doesn't expose a public setMarkdown API, so we destroy + re-create
-  // the editor with the new value when an external reset is detected.
-  useEffect(() => {
-    if (value === lastSyncedValueRef.current) return;
-    const crepe = crepeRef.current;
-    if (!crepe || !rootRef.current) return;
-    lastSyncedValueRef.current = value;
-    // Destroy and re-create with the new default value.
-    void crepe.destroy().then(() => {
-      if (!rootRef.current) return;
-      const next = new Crepe({ root: rootRef.current, defaultValue: value });
-      next.on((api) => {
-        api.markdownUpdated((_ctx, md) => {
-          lastSyncedValueRef.current = md;
-          onChange(md);
-        });
-      });
-      crepeRef.current = next;
-      void next.create();
-    }).catch(() => { /* ignore on unmount race */ });
-  }, [value, onChange]);
-
-  return (
-    <div
-      ref={rootRef}
-      className="milkdown-crepe-wrap min-h-[480px] flex-1 rounded-n-md border border-n-border-subtle bg-n-canvas"
-    />
   );
 }
 

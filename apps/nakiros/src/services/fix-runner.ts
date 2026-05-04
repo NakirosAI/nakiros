@@ -56,12 +56,14 @@ import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
 import { rulesAuditArchiveDir } from './rules-audit-history.js';
 import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
 import { hooksAuditArchiveDir } from './hooks-audit-history.js';
+import { permissionsAuditArchiveDir } from './permissions-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
 const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
 const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
+const PERMISSIONS_EXPERT_SKILL_NAME = 'nakiros-permissions-expert';
 
 /**
  * Two flavors of skill-factory-driven runs:
@@ -472,7 +474,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
   },
 
   prepareWorkdir(req, runId) {
-    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget && !req.hooksTarget) {
+    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget && !req.hooksTarget && !req.permissionsTarget) {
       throw new Error(
         `Cannot create skill "${req.skillName}": target directory already exists (${req.skillDir}). ` +
           `Pick a different name or run "fix" on the existing skill instead.`,
@@ -500,7 +502,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     let latestAuditFile: string | null = null;
     let latestIteration: number | null = null;
 
-    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget) {
+    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget || req.permissionsTarget) {
       // For CLAUDE.md, rules, subagents, and hooks runs we don't copy the bundled
       // expert into the workdir — it's immutable. We only symlink it under
       // `.claude/skills/<name>` so the slash-command resolves from cwd. The agent
@@ -597,6 +599,25 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       }
     }
 
+    // For permissions fix/create runs, write the cross-entity snapshot so the
+    // expert agent can reason about the permissions block in context of the
+    // full .claude/ configuration (CLAUDE.md, hooks, other settings, etc.).
+    if (req.permissionsTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.permissionsTarget.projectId,
+          projectPath: req.permissionsTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for permissions: ${(err as Error).message}`);
+      }
+    }
+
     return {
       workdir,
       extras: {
@@ -690,6 +711,27 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       ].join('\n');
     }
 
+    if (req.permissionsTarget) {
+      const pt = req.permissionsTarget;
+      const scope = pt.scope ?? 'project';
+      const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
+      const settingsPath = join(pt.projectPath, '.claude', filename);
+      const exists = existsSync(settingsPath);
+      const command = req.mode === 'fix' ? 'fix' : 'create';
+      return [
+        `/${PERMISSIONS_EXPERT_SKILL_NAME} ${command}`,
+        '',
+        languageLine,
+        `- Operate on the permissions block of the project settings.`,
+        `- Project root: ${pt.projectPath}`,
+        `- Scope: ${scope}`,
+        `- Settings file: ${settingsPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `- You may edit the settings file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+      ].join('\n');
+    }
+
     if (req.mode === 'fix') {
       const auditLine = extras.latestAuditFile
         ? `- Latest audit was copied to \`./audits/${extras.latestAuditFile}\` — read it first.`
@@ -748,6 +790,7 @@ ${languageLine}
       rulesTarget: req.rulesTarget,
       subagentsTarget: req.subagentsTarget,
       hooksTarget: req.hooksTarget,
+      permissionsTarget: req.permissionsTarget,
     };
   },
 
@@ -814,9 +857,9 @@ ${languageLine}
       `[fix-runner] finish start runId=${run.runId} mode=${extras.mode} realSkillDir=${extras.realSkillDir} workdir=${run.workdir}`,
     );
 
-    // CLAUDE.md, rules, subagents, and hooks runs edit the target file directly
-    // — no sandbox sync-back required. Just transition to completed.
-    if (run.claudemdTarget || run.rulesTarget || run.subagentsTarget || run.hooksTarget) {
+    // CLAUDE.md, rules, subagents, hooks, and permissions runs edit the target
+    // file directly — no sandbox sync-back required. Just transition to completed.
+    if (run.claudemdTarget || run.rulesTarget || run.subagentsTarget || run.hooksTarget || run.permissionsTarget) {
       run.status = 'completed';
       run.finishedAt = new Date().toISOString();
       run.error = null;
@@ -893,6 +936,15 @@ ${languageLine}
       if (req.hooksTarget || run.hooksTarget) {
         if (!req.hooksTarget || !run.hooksTarget) continue;
         if (req.hooksTarget.projectId !== run.hooksTarget.projectId) continue;
+      }
+      // Permissions runs: one per (projectId, scope) — a project fix and a local
+      // fix may run concurrently.
+      if (req.permissionsTarget || run.permissionsTarget) {
+        if (!req.permissionsTarget || !run.permissionsTarget) continue;
+        if (req.permissionsTarget.projectId !== run.permissionsTarget.projectId) continue;
+        const reqScope = req.permissionsTarget.scope ?? 'project';
+        const runScope = run.permissionsTarget.scope ?? 'project';
+        if (reqScope !== runScope) continue;
       }
       if (isActiveRunStatus(run.status)) return entry;
     }
@@ -983,6 +1035,7 @@ ${languageLine}
       rulesTarget: blob.rulesTarget,
       subagentsTarget: blob.subagentsTarget,
       hooksTarget: blob.hooksTarget,
+      permissionsTarget: blob.permissionsTarget,
     };
 
     console.log(

@@ -801,3 +801,54 @@ export interface HooksAuditHistoryEntry {
   /** File size in bytes. */
   sizeBytes: number;
 }
+
+// ── Permissions expert (nakiros-permissions-expert) — singleton read/save ──
+
+/**
+ * Result of `permissions:read`. Returns the `permissions` block of the
+ * project's `.claude/settings.json` as a pretty-printed JSON string. Other
+ * settings keys (hooks, env, model, etc.) are NOT included — this is a
+ * permissions-only view.
+ */
+export interface PermissionsReadResult {
+  /**
+   * JSON-stringified content of the `permissions` block from settings.json
+   * (pretty-printed). Empty object string `"{}"` when no permissions block
+   * exists.
+   */
+  content: string;
+  /** Settings.json mtime at read time (optimistic-lock token for save). */
+  mtime: string;
+  /** Whether `.claude/settings.json` exists. */
+  exists: boolean;
+  /** Absolute path to .claude/settings.json. */
+  path: string;
+}
+
+/**
+ * Result of `permissions:save` (expert channel). Writes the permissions block
+ * back into settings.json while preserving all other keys.
+ *
+ * NOTE: distinct from {@link PermissionsMutationResult} (Module 4 V2 form
+ * editor) which has a richer discriminated-union shape.
+ */
+export interface PermissionsExpertMutationResult {
+  ok: boolean;
+  code?: 'conflict' | 'invalid-json' | 'project-not-found' | 'fs-error' | string;
+  message?: string;
+}
+
+/**
+ * One archived permissions audit produced by the audit-runner when the run
+ * carries a `permissionsTarget`. Stored under
+ * `~/.nakiros/<projectId>/permissions-audits/audit-<ISO>.md`. Singleton — no
+ * sub-folder per target name. The list IPC returns these sorted newest-first.
+ */
+export interface PermissionsAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+}

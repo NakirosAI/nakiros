@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "Template for .claude/settings.json permissions section.",
+    "Remove this _comment key before writing to production.",
+    "",
+    "Structure: permissions.{ allow, ask, deny, defaultMode, additionalDirectories, ... }",
+    "Rule format: Tool or Tool(specifier).",
+    "Evaluation order: deny → ask → allow (deny always wins).",
+    "NEVER set defaultMode to bypassPermissions — it disables ALL safety checks."
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(pnpm run *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(tsc *)",
+      "Bash(node *)"
+    ],
+    "_comment_allow": "Narrow allow rules per your project toolchain. Prefer specific patterns over bare 'Bash'.",
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git commit *)"
+    ],
+    "_comment_ask": "Commands that should always require human confirmation. Good for destructive or network operations.",
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(sudo *)",
+      "Read(./.env*)",
+      "Edit(./.env*)",
+      "Read(./.git/**)",
+      "Edit(./.git/**)"
+    ],
+    "_comment_deny": "Always deny dangerous Bash + secret files. Deny wins over allow.",
+    "defaultMode": "default",
+    "_comment_defaultMode": "Use 'default' (prompt once per session) or 'acceptEdits' (auto-accept file edits). Never 'bypassPermissions'.",
+    "disableBypassPermissionsMode": "disable",
+    "_comment_disable": "Prevents the agent from activating bypassPermissions mode interactively."
+  }
+}

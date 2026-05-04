@@ -40,7 +40,7 @@ export interface RunDisplayContext {
   /** Bare action verb localised for the current run kind. */
   actionVerb: 'Audit' | 'Fix' | 'Create' | 'Eval' | 'Analyze' | 'Classify';
   /** What the run operates on, in user-facing prose. */
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions';
   /**
    * `true` when this run targets a CLAUDE.md via the bundled expert. UI
    * surfaces use this to hide skill-only actions (eval, sync-back, etc.).
@@ -65,7 +65,13 @@ export interface RunDisplayContext {
    * (eval, sync-back, etc.).
    */
   isHooks: boolean;
-  /** Always `'CLAUDE.md'` when isClaudemd, rule/subagent filename when isRules/isSubagents, `'hooks'` when isHooks, otherwise null. */
+  /**
+   * `true` when this run targets the permissions block via the bundled
+   * `nakiros-permissions-expert`. UI surfaces use this to hide skill-only
+   * actions (eval, sync-back, etc.).
+   */
+  isPermissions: boolean;
+  /** Always `'CLAUDE.md'` when isClaudemd, rule/subagent filename when isRules/isSubagents, `'hooks'` when isHooks, `'permissions'` when isPermissions, otherwise null. */
   scopeLabel: string | null;
 }
 
@@ -97,6 +103,7 @@ export function runDisplayContext(
       isRules: false,
       isSubagents: false,
       isHooks: false,
+      isPermissions: false,
       scopeLabel: 'CLAUDE.md',
     };
   }
@@ -114,6 +121,7 @@ export function runDisplayContext(
       isRules: true,
       isSubagents: false,
       isHooks: false,
+      isPermissions: false,
       scopeLabel: rt.ruleName,
     };
   }
@@ -131,6 +139,7 @@ export function runDisplayContext(
       isRules: false,
       isSubagents: true,
       isHooks: false,
+      isPermissions: false,
       scopeLabel: st.subagentName,
     };
   }
@@ -146,7 +155,27 @@ export function runDisplayContext(
       isRules: false,
       isSubagents: false,
       isHooks: true,
+      isPermissions: false,
       scopeLabel: 'hooks',
+    };
+  }
+
+  // Permissions target — applies to audit / fix / create with permissionsTarget.
+  // Include the scope in the title when 'local' for disambiguation.
+  if ('permissionsTarget' in run && run.permissionsTarget) {
+    const ptScope = (run.permissionsTarget as { scope?: string }).scope ?? 'project';
+    const scopeSuffix = ptScope === 'local' ? ' (local)' : '';
+    return {
+      title: `${actionVerb} · Permissions${scopeSuffix}`,
+      kindLabel: `${actionVerb} permissions${scopeSuffix}`,
+      actionVerb,
+      targetNoun: 'permissions',
+      isClaudemd: false,
+      isRules: false,
+      isSubagents: false,
+      isHooks: false,
+      isPermissions: true,
+      scopeLabel: ptScope === 'local' ? 'permissions (local)' : 'permissions',
     };
   }
 
@@ -162,6 +191,7 @@ export function runDisplayContext(
       isRules: false,
       isSubagents: false,
       isHooks: false,
+      isPermissions: false,
       scopeLabel: null,
     };
   }
@@ -178,6 +208,7 @@ export function runDisplayContext(
     isRules: false,
     isSubagents: false,
     isHooks: false,
+    isPermissions: false,
     scopeLabel: null,
   };
 }

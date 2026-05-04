@@ -49,9 +49,9 @@ export default function AuditCompletedReport({
   const { t } = useTranslation('runs');
   const stats = useMemo(() => computeStats(run), [run]);
   const findings = useMemo(() => computeFindings(run), [run]);
-  const { isClaudemd, isRules, isSubagents, isHooks } = runDisplayContext('audit', run);
-  // Runs targeting a CLAUDE.md, a rule file, a subagent, or hooks have no eval suite concept.
-  const hideEval = isClaudemd || isRules || isSubagents || isHooks;
+  const { isClaudemd, isRules, isSubagents, isHooks, isPermissions } = runDisplayContext('audit', run);
+  // Runs targeting a CLAUDE.md, a rule file, a subagent, hooks, or permissions have no eval suite concept.
+  const hideEval = isClaudemd || isRules || isSubagents || isHooks || isPermissions;
 
   // Fetch the skill record once we know the audit is over — drives the
   // "Évaluer le skill" button (enabled iff `skill.hasEvals`). Skipped for
@@ -218,8 +218,8 @@ export default function AuditCompletedReport({
             disabledReason={
               activeFix
                 ? hideEval
-                  ? t('audit.nextSteps.fixActiveClaudemd', {
-                      defaultValue: 'Un Fix run est déjà en cours pour ce CLAUDE.md.',
+                  ? t('audit.nextSteps.fixActiveGeneric', {
+                      defaultValue: 'Un Fix run est déjà en cours sur cette cible.',
                     })
                   : t('audit.nextSteps.fixActive', {
                       defaultValue: 'Un Fix run est déjà en cours pour ce skill.',
@@ -487,26 +487,29 @@ function summaryLine(
   t: ReturnType<typeof useTranslation<'runs'>>['t'],
   hideEval: boolean,
 ): string {
+  // `hideEval` is true for any target that is not a skill (CLAUDE.md, rule,
+  // subagent, hooks, permissions, ...). Generic copy avoids gender/number
+  // agreement headaches across the half-dozen target nouns.
   if (stats.critical > 0) {
     return hideEval
-      ? t('audit.completed.summaryCriticalClaudemd', {
+      ? t('audit.completed.summaryCriticalGeneric', {
           findings: stats.failed,
           critical: stats.critical,
           defaultValue:
-            '{{findings}} findings, {{critical}} critique. CLAUDE.md nécessite des corrections avant déploiement.',
+            '{{findings}} findings, dont {{critical}} critique. Corrections requises avant déploiement.',
         })
       : t('audit.completed.summaryCritical', {
           findings: stats.failed,
           critical: stats.critical,
           defaultValue:
-            '{{findings}} findings, {{critical}} critique. Le skill nécessite des corrections avant déploiement.',
+            '{{findings}} findings, dont {{critical}} critique. Le skill nécessite des corrections avant déploiement.',
         });
   }
   if (stats.failed > 0) {
     return hideEval
-      ? t('audit.completed.summaryWarnClaudemd', {
+      ? t('audit.completed.summaryWarnGeneric', {
           findings: stats.failed,
-          defaultValue: '{{findings}} findings. CLAUDE.md est utilisable mais peut être amélioré.',
+          defaultValue: '{{findings}} findings. Améliorations possibles.',
         })
       : t('audit.completed.summaryWarn', {
           findings: stats.failed,
@@ -514,8 +517,8 @@ function summaryLine(
         });
   }
   return hideEval
-    ? t('audit.completed.summaryHealthyClaudemd', {
-        defaultValue: 'Tous les checks sont passés. CLAUDE.md respecte les bonnes pratiques.',
+    ? t('audit.completed.summaryHealthyGeneric', {
+        defaultValue: 'Tous les checks sont passés. Bonnes pratiques respectées.',
       })
     : t('audit.completed.summaryHealthy', {
         defaultValue: 'Tous les checks sont passés. Le skill respecte les bonnes pratiques.',

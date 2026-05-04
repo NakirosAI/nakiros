@@ -6,6 +6,10 @@ import type {
   HooksReadResult,
   HooksExpertMutationResult,
   HooksAuditHistoryEntry,
+  PermissionsReadResult,
+  PermissionsExpertMutationResult,
+  PermissionsAuditHistoryEntry,
+  PermissionsExpertScope,
   AppPreferences,
   AgentInstallStatus,
   AgentInstallRequest,
@@ -486,6 +490,16 @@ declare global {
       saveHooks(projectId: string, content: string, mtimeAtRead: string): Promise<HooksExpertMutationResult>;
       listHooksAudits(projectId: string): Promise<HooksAuditHistoryEntry[]>;
       readHooksAudit(path: string): Promise<string | null>;
+
+      // Permissions expert (nakiros-permissions-expert) — read/save the
+      // permissions block + audit history. NOTE: distinct from the Module 4 V2
+      // form-based editor (claudePermissions:* channels).
+      // All methods accept a `scope` to target either settings.json (project)
+      // or settings.local.json (local).
+      readPermissions(projectId: string, scope: PermissionsExpertScope): Promise<PermissionsReadResult>;
+      savePermissions(projectId: string, scope: PermissionsExpertScope, content: string, mtimeAtRead: string): Promise<PermissionsExpertMutationResult>;
+      listPermissionsAudits(projectId: string, scope: PermissionsExpertScope): Promise<PermissionsAuditHistoryEntry[]>;
+      readPermissionsAudit(path: string): Promise<string | null>;
 
       // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
       getConversationIngestStatus(): Promise<ConversationIngestStatus>;

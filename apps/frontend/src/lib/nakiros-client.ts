@@ -583,6 +583,18 @@ const client = {
   listHooksAudits: (projectId: string) => invoke(C['hooks:listAudits'], projectId),
   readHooksAudit: (path: string) => invoke(C['hooks:readAudit'], path),
 
+  // Permissions expert (nakiros-permissions-expert) — read/save the permissions
+  // block + audit history. Distinct from Module 4 V2 claudePermissions:* editor.
+  // All methods now accept a `scope` ('project' | 'local') to target either
+  // settings.json or settings.local.json.
+  readPermissions: (projectId: string, scope: string) =>
+    invoke(C['permissions:read'], projectId, scope),
+  savePermissions: (projectId: string, scope: string, content: string, mtimeAtRead: string) =>
+    invoke(C['permissions:save'], projectId, scope, content, mtimeAtRead),
+  listPermissionsAudits: (projectId: string, scope: string) =>
+    invoke(C['permissions:listAudits'], projectId, scope),
+  readPermissionsAudit: (path: string) => invoke(C['permissions:readAudit'], path),
+
   // Conversation friction-classifier runner (classify-convo)
   startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),
   stopClassifyConvo: (runId: string) => invoke(C['classifyConvo:stopRun'], runId),

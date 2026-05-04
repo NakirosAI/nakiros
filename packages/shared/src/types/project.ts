@@ -855,6 +855,13 @@ export interface AuditRun {
    * `subagentsTarget`. Stable across rehydrate.
    */
   hooksTarget?: HooksTargetContext;
+  /**
+   * Set when this run targets the `.claude/settings.json` permissions block via
+   * the bundled `nakiros-permissions-expert`. Singleton per project — no
+   * sub-target name. Mutually exclusive with the other `*Target` fields. Stable
+   * across rehydrate.
+   */
+  permissionsTarget?: PermissionsTargetContext;
 }
 
 /**
@@ -1103,6 +1110,12 @@ export interface StartAuditRequest {
    * exclusive with `claudemdTarget`, `rulesTarget`, and `subagentsTarget`.
    */
   hooksTarget?: HooksTargetContext;
+  /**
+   * Optional descriptor for runs that target the `.claude/settings.json` permissions
+   * block via the bundled `nakiros-permissions-expert`. Singleton — no name field.
+   * Mutually exclusive with the other `*Target` fields.
+   */
+  permissionsTarget?: PermissionsTargetContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -1242,6 +1255,36 @@ export interface HooksTargetContext {
   projectPath: string;
   /** Run mode — drives the slash-command suffix. */
   mode: HooksRunMode;
+}
+
+/**
+ * Run mode for the `nakiros-permissions-expert` bundled skill. Mirrors the
+ * three entry-point commands.
+ */
+export type PermissionsRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Which settings file the `nakiros-permissions-expert` targets.
+ *
+ * - `'project'` → `.claude/settings.json` (committed, shared by the team)
+ * - `'local'`   → `.claude/settings.local.json` (gitignored, per-developer;
+ *                  typical home for "Yes, don't ask again" approvals)
+ */
+export type PermissionsExpertScope = 'project' | 'local';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * the project's `.claude/settings.json` or `.claude/settings.local.json`
+ * permissions block via the bundled `nakiros-permissions-expert`. No `name`
+ * field — scoped only by `scope` (project vs local).
+ */
+export interface PermissionsTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Which settings file to target. Defaults to `'project'` when omitted. */
+  scope: PermissionsExpertScope;
+  /** Run mode — drives the slash-command suffix. */
+  mode: PermissionsRunMode;
 }
 
 /**

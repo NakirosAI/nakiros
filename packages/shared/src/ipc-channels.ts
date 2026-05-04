@@ -249,6 +249,15 @@ export const IPC_CHANNELS = {
   'hooks:listAudits': 'hooks:listAudits',
   'hooks:readAudit': 'hooks:readAudit',
 
+  // Permissions expert — singleton read/save (permissions block only) + audit
+  // history. NOTE: 'permissions:*' is distinct from 'claudePermissions:*'
+  // (Module 4 V2) which is the structured form-based permissions editor.
+  // These four channels are for the `nakiros-permissions-expert` audit/fix/create flow.
+  'permissions:read': 'permissions:read',
+  'permissions:save': 'permissions:save',
+  'permissions:listAudits': 'permissions:listAudits',
+  'permissions:readAudit': 'permissions:readAudit',
+
   // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
   'conversationIngest:status': 'conversationIngest:status',
   'conversationIngest:previewHookDiff': 'conversationIngest:previewHookDiff',

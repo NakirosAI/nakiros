@@ -185,6 +185,36 @@ function auditLikeToAgentRun(
     };
   }
 
+  // Runs that target the permissions block (via `nakiros-permissions-expert`)
+  // surface with a permissions-focused title and a `permissions` target type.
+  // Include the scope label in the title when it's 'local' so the user can
+  // distinguish a project run from a local run at a glance.
+  if (run.permissionsTarget) {
+    const pt = run.permissionsTarget;
+    const scopeSuffix = (pt.scope ?? 'project') === 'local' ? ' (local)' : '';
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · Permissions${scopeSuffix}`,
+      target: {
+        type: 'permissions',
+        projectId: pt.projectId,
+        projectPath: pt.projectPath,
+        scope: pt.scope ?? 'project',
+        mode: pt.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
   return {
     id: run.runId,
     kind,

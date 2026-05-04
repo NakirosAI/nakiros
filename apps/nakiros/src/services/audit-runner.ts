@@ -31,12 +31,14 @@ import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
 import { rulesAuditArchiveDir } from './rules-audit-history.js';
 import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
 import { hooksAuditArchiveDir } from './hooks-audit-history.js';
+import { permissionsAuditArchiveDir } from './permissions-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
 const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
 const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
+const PERMISSIONS_EXPERT_SKILL_NAME = 'nakiros-permissions-expert';
 const KIND = 'audit';
 
 
@@ -279,6 +281,22 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
     }
   }
 
+  // Permissions audits archive under
+  // `~/.nakiros/<projectId>/permissions-audits/<scope>/`.
+  // Sub-folder per scope so project and local histories stay independent.
+  if (entry.run.permissionsTarget) {
+    const pt = entry.run.permissionsTarget;
+    const archiveDir = permissionsAuditArchiveDir(pt.projectId, pt.scope ?? 'project');
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive permissions audit: ${(err as Error).message}` };
+    }
+  }
+
   const auditsDir = join(entry.extras.skillDir, 'audits');
   mkdirSync(auditsDir, { recursive: true });
   const dest = join(auditsDir, `audit-${isoSafeTimestamp()}.md`);
@@ -372,6 +390,25 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       }
     }
 
+    // For permissions audits, write the cross-entity snapshot so the expert
+    // agent can reason about the permissions block in the context of the full
+    // .claude/ configuration (CLAUDE.md, hooks, other settings, etc.).
+    if (req.permissionsTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.permissionsTarget.projectId,
+          projectPath: req.permissionsTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for permissions: ${(err as Error).message}`);
+      }
+    }
+
     return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
   },
 
@@ -432,6 +469,23 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
       ].join('\n');
     }
+    if (req.permissionsTarget) {
+      const pt = req.permissionsTarget;
+      const scope = pt.scope ?? 'project';
+      const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
+      const settingsPath = join(pt.projectPath, '.claude', filename);
+      const exists = existsSync(settingsPath);
+      return [
+        `/${PERMISSIONS_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the permissions block of the project settings.`,
+        `Project root: ${pt.projectPath}`,
+        `Scope: ${scope}`,
+        `Settings file: ${settingsPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
     return `/${FACTORY_SKILL_NAME} audit ${req.skillName}`;
   },
 
@@ -459,6 +513,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       rulesTarget: req.rulesTarget,
       subagentsTarget: req.subagentsTarget,
       hooksTarget: req.hooksTarget,
+      permissionsTarget: req.permissionsTarget,
     };
   },
 
@@ -530,6 +585,15 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         if (!req.hooksTarget || !run.hooksTarget) continue;
         if (req.hooksTarget.projectId !== run.hooksTarget.projectId) continue;
       }
+      // Permissions audits: one per (projectId, scope) — a project audit and a
+      // local audit may run concurrently.
+      if (req.permissionsTarget || run.permissionsTarget) {
+        if (!req.permissionsTarget || !run.permissionsTarget) continue;
+        if (req.permissionsTarget.projectId !== run.permissionsTarget.projectId) continue;
+        const reqScope = req.permissionsTarget.scope ?? 'project';
+        const runScope = run.permissionsTarget.scope ?? 'project';
+        if (reqScope !== runScope) continue;
+      }
       if (isActiveRunStatus(run.status)) return entry;
     }
     return null;
@@ -598,6 +662,9 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       // Restore the hooks target so the run keeps surfacing the right
       // hooks context across reboots.
       hooksTarget: blob.hooksTarget,
+      // Restore the permissions target so the run keeps surfacing the right
+      // permissions context across reboots.
+      permissionsTarget: blob.permissionsTarget,
       // Restore live audit state — sidebar resumes where it left off without
       // re-reading the workdir until the next turn (which re-syncs anyway).
       manifest: blob.manifest ?? null,

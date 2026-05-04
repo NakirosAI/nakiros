@@ -1,4 +1,4 @@
-import type { AuditRun, ClaudeMdRunMode, HooksRunMode, RulesRunMode, SubagentsRunMode } from '@nakiros/shared';
+import type { AuditRun, ClaudeMdRunMode, HooksRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import { computeEvalRunId } from './eval-batch-key';
 
@@ -229,6 +229,43 @@ export async function launchHooks(
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · Hooks' });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets the `.claude/settings.json`
+ * permissions block via the bundled `nakiros-permissions-expert`. Singleton
+ * per project — no `name` field (unlike rules or subagents). Reuses the same
+ * `startAudit` / `startFix` IPC channels as skill runs — only the request
+ * carries an extra `permissionsTarget` so the runner switches its slash-command
+ * and the frontend store displays a permissions-focused title.
+ */
+export async function launchPermissions(
+  request: { projectId: string; projectPath: string; scope: PermissionsExpertScope; mode: PermissionsRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const scopeSuffix = request.scope === 'local' ? ' (local)' : '';
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-permissions-expert',
+    projectId: request.projectId,
+    permissionsTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      scope: request.scope,
+      mode: request.mode,
+    },
+  };
+
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · Permissions${scopeSuffix}` });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · Permissions${scopeSuffix}` });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · Permissions${scopeSuffix}` });
   }
 }
 

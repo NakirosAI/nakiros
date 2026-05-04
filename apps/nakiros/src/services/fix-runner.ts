@@ -53,9 +53,11 @@ import {
   writeExecutionSettings,
 } from './runner-core/index.js';
 import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
+import { rulesAuditArchiveDir } from './rules-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
+const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
 
 /**
  * Two flavors of skill-factory-driven runs:
@@ -466,7 +468,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
   },
 
   prepareWorkdir(req, runId) {
-    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget) {
+    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget) {
       throw new Error(
         `Cannot create skill "${req.skillName}": target directory already exists (${req.skillDir}). ` +
           `Pick a different name or run "fix" on the existing skill instead.`,
@@ -494,12 +496,11 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     let latestAuditFile: string | null = null;
     let latestIteration: number | null = null;
 
-    if (req.claudemdTarget) {
-      // For CLAUDE.md runs we don't copy the bundled expert into the workdir —
-      // it's immutable. We only symlink it under `.claude/skills/<name>` so the
-      // slash-command `/nakiros-claudemd-expert` resolves from cwd. The agent
-      // edits the user's CLAUDE.md directly via Write/Edit at the absolute path
-      // (projectPath/CLAUDE.md) injected in the first prompt.
+    if (req.claudemdTarget || req.rulesTarget) {
+      // For CLAUDE.md and rules runs we don't copy the bundled expert into the
+      // workdir — it's immutable. We only symlink it under `.claude/skills/<name>`
+      // so the slash-command resolves from cwd. The agent edits the target file
+      // directly via Write/Edit at the absolute path injected in the first prompt.
       const claudeSkillsDir = join(workdir, '.claude', 'skills');
       mkdirSync(claudeSkillsDir, { recursive: true });
       const linkPath = join(claudeSkillsDir, req.skillName);
@@ -536,6 +537,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       }
     }
 
+    // For rules fix/create runs, write the same cross-entity snapshot so the
+    // expert agent can reason about rule coherence in context.
+    if (req.rulesTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.rulesTarget.projectId,
+          projectPath: req.rulesTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for rules: ${(err as Error).message}`);
+      }
+    }
+
     return {
       workdir,
       extras: {
@@ -569,6 +588,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         `- Operate on the project root CLAUDE.md.`,
         `- Project root: ${ct.projectPath}`,
         `- Target file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+      ].join('\n');
+    }
+
+    if (req.rulesTarget) {
+      const rt = req.rulesTarget;
+      const targetPath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
+      const exists = existsSync(targetPath);
+      const command = req.mode === 'fix' ? 'fix' : 'create';
+      return [
+        `/${RULES_EXPERT_SKILL_NAME} ${command}`,
+        '',
+        languageLine,
+        `- Operate on the rule file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `- Project root: ${rt.projectPath}`,
+        `- Rule name (relative to .claude/rules/): ${rt.ruleName}`,
         '',
         `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
         `- Follow the procedure for the "${command}" command in your SKILL.md.`,
@@ -630,6 +667,7 @@ ${languageLine}
       targets: [],
       findings: [],
       claudemdTarget: req.claudemdTarget,
+      rulesTarget: req.rulesTarget,
     };
   },
 
@@ -696,6 +734,18 @@ ${languageLine}
       `[fix-runner] finish start runId=${run.runId} mode=${extras.mode} realSkillDir=${extras.realSkillDir} workdir=${run.workdir}`,
     );
 
+    // CLAUDE.md and rules runs edit the target file directly — no sandbox
+    // sync-back required. Just transition to completed.
+    if (run.claudemdTarget || run.rulesTarget) {
+      run.status = 'completed';
+      run.finishedAt = new Date().toISOString();
+      run.error = null;
+      console.log(`[skill-agent-runner] ${extras.mode} ${run.runId} completed (direct edit — no sync-back)`);
+      opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
+      opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+      return;
+    }
+
     if (extras.mode === 'create' && existsSync(extras.realSkillDir)) {
       run.status = 'failed';
       run.error = `Cannot finalize create: "${extras.realSkillDir}" already exists. Discard this run and pick a different skill name.`;
@@ -747,6 +797,11 @@ ${languageLine}
       if (req.claudemdTarget || run.claudemdTarget) {
         if (!req.claudemdTarget || !run.claudemdTarget) continue;
         if (req.claudemdTarget.projectPath !== run.claudemdTarget.projectPath) continue;
+      }
+      if (req.rulesTarget || run.rulesTarget) {
+        if (!req.rulesTarget || !run.rulesTarget) continue;
+        if (req.rulesTarget.projectId !== run.rulesTarget.projectId) continue;
+        if (req.rulesTarget.ruleName !== run.rulesTarget.ruleName) continue;
       }
       if (isActiveRunStatus(run.status)) return entry;
     }
@@ -834,6 +889,7 @@ ${languageLine}
       targets: Array.isArray(blob.targets) ? blob.targets : [],
       findings: Array.isArray(blob.findings) ? blob.findings : [],
       claudemdTarget: blob.claudemdTarget,
+      rulesTarget: blob.rulesTarget,
     };
 
     console.log(

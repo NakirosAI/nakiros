@@ -49,14 +49,16 @@ export default function AuditCompletedReport({
   const { t } = useTranslation('runs');
   const stats = useMemo(() => computeStats(run), [run]);
   const findings = useMemo(() => computeFindings(run), [run]);
-  const isClaudemd = runDisplayContext('audit', run).isClaudemd;
+  const { isClaudemd, isRules } = runDisplayContext('audit', run);
+  // Runs targeting a CLAUDE.md or a rule file have no eval suite concept.
+  const hideEval = isClaudemd || isRules;
 
   // Fetch the skill record once we know the audit is over — drives the
   // "Évaluer le skill" button (enabled iff `skill.hasEvals`). Skipped for
-  // CLAUDE.md targets (no eval suite concept).
+  // CLAUDE.md / rules targets (no eval suite concept).
   const [skill, setSkill] = useState<Skill | null>(null);
   useEffect(() => {
-    if (isClaudemd) return;
+    if (hideEval) return;
     let cancelled = false;
     void fetchSkillForRun(run).then((s) => {
       if (!cancelled) setSkill(s);
@@ -64,7 +66,7 @@ export default function AuditCompletedReport({
     return () => {
       cancelled = true;
     };
-  }, [run, isClaudemd]);
+  }, [run, hideEval]);
   const [isLaunchingEval, setIsLaunchingEval] = useState(false);
   const [isLaunchingFix, setIsLaunchingFix] = useState(false);
 
@@ -144,7 +146,7 @@ export default function AuditCompletedReport({
               })}
             </span>
             <span className="text-[12.5px] leading-snug text-n-muted">
-              {summaryLine(stats, t, isClaudemd)}
+              {summaryLine(stats, t, hideEval)}
             </span>
           </div>
         </div>
@@ -215,7 +217,7 @@ export default function AuditCompletedReport({
             disabled={!canLaunchFix}
             disabledReason={
               activeFix
-                ? isClaudemd
+                ? hideEval
                   ? t('audit.nextSteps.fixActiveClaudemd', {
                       defaultValue: 'Un Fix run est déjà en cours pour ce CLAUDE.md.',
                     })
@@ -225,7 +227,7 @@ export default function AuditCompletedReport({
                 : undefined
             }
           />
-          {!isClaudemd && (
+          {!hideEval && (
             <NextStepRow
               icon={FlaskConical}
               label={
@@ -483,10 +485,10 @@ function computeFindings(run: AuditRun): FindingRowData[] {
 function summaryLine(
   stats: AuditStats,
   t: ReturnType<typeof useTranslation<'runs'>>['t'],
-  isClaudemd: boolean,
+  hideEval: boolean,
 ): string {
   if (stats.critical > 0) {
-    return isClaudemd
+    return hideEval
       ? t('audit.completed.summaryCriticalClaudemd', {
           findings: stats.failed,
           critical: stats.critical,
@@ -501,7 +503,7 @@ function summaryLine(
         });
   }
   if (stats.failed > 0) {
-    return isClaudemd
+    return hideEval
       ? t('audit.completed.summaryWarnClaudemd', {
           findings: stats.failed,
           defaultValue: '{{findings}} findings. CLAUDE.md est utilisable mais peut être amélioré.',
@@ -511,7 +513,7 @@ function summaryLine(
           defaultValue: '{{findings}} findings. Le skill est utilisable mais peut être amélioré.',
         });
   }
-  return isClaudemd
+  return hideEval
     ? t('audit.completed.summaryHealthyClaudemd', {
         defaultValue: 'Tous les checks sont passés. CLAUDE.md respecte les bonnes pratiques.',
       })

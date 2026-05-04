@@ -96,6 +96,10 @@ import type {
   ClaudeMdMutationResult,
   ClaudeMdAuditHistoryEntry,
   SaveClaudeMdRequest,
+  RulesListResult,
+  RulesReadResult,
+  RulesMutationResult,
+  RulesAuditHistoryEntry,
   ConversationIngestStatus,
   ConversationIngestHookDiff,
   ConversationIngestMutationResult,
@@ -435,6 +439,22 @@ declare global {
       // request carried `claudemdTarget`.
       listClaudemdAudits(projectId: string): Promise<ClaudeMdAuditHistoryEntry[]>;
       readClaudemdAudit(path: string): Promise<string | null>;
+
+      // Rules CRUD — recursive discovery under .claude/rules/
+      listRules(projectId: string): Promise<RulesListResult>;
+      readRule(projectId: string, ruleName: string): Promise<RulesReadResult | null>;
+      saveRule(
+        projectId: string,
+        ruleName: string,
+        content: string,
+        mtimeAtRead: string,
+      ): Promise<RulesMutationResult>;
+      deleteRule(projectId: string, ruleName: string): Promise<RulesMutationResult>;
+      // Rules audit history — archived reports under
+      // ~/.nakiros/<projectId>/rules-audits/<ruleName>/, populated by audit
+      // runs whose request carried `rulesTarget`.
+      listRulesAudits(projectId: string, ruleName: string): Promise<RulesAuditHistoryEntry[]>;
+      readRulesAudit(path: string): Promise<string | null>;
 
       // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
       getConversationIngestStatus(): Promise<ConversationIngestStatus>;

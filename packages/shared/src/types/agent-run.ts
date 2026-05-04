@@ -1,6 +1,7 @@
-import type { ClaudeMdRunMode, SkillScope } from './project.js';
+import type { ClaudeMdRunMode, RulesRunMode, SkillScope } from './project.js';
 
 export type { ClaudeMdRunMode } from './project.js';
+export type { RulesRunMode } from './project.js';
 
 /**
  * The discriminator of an agent run. Each kind has its own backing runner on
@@ -71,10 +72,25 @@ export interface ClaudeMdRunTarget {
 }
 
 /**
+ * A rules-bound target — used when an audit / fix / create run targets a
+ * specific `.claude/rules/<ruleName>` file via `nakiros-rules-expert`.
+ * The `ruleName` is the relative path from `.claude/rules/` (e.g.
+ * `"i18n.md"` or `"frontend/styling.md"`).
+ */
+export interface RulesRunTarget {
+  type: 'rules';
+  projectId: string;
+  projectPath: string;
+  /** ".claude/rules/<ruleName>" — relative path from .claude/rules/ */
+  ruleName: string;
+  mode: RulesRunMode;
+}
+
+/**
  * Discriminated union of every supported target shape. New target kinds
  * extend this union when their corresponding agent-run kind ships.
  */
-export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget;
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget;
 
 /**
  * Kind-specific opaque payload riding alongside an `AgentRun`. The store

@@ -40,13 +40,20 @@ export interface RunDisplayContext {
   /** Bare action verb localised for the current run kind. */
   actionVerb: 'Audit' | 'Fix' | 'Create' | 'Eval' | 'Analyze' | 'Classify';
   /** What the run operates on, in user-facing prose. */
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule';
   /**
    * `true` when this run targets a CLAUDE.md via the bundled expert. UI
    * surfaces use this to hide skill-only actions (eval, sync-back, etc.).
    */
   isClaudemd: boolean;
-  /** Always `'CLAUDE.md'` when isClaudemd, otherwise null. */
+  /**
+   * `true` when this run targets a rule file via the bundled
+   * `nakiros-rules-expert`. UI surfaces use this to hide skill-only actions
+   * (eval, sync-back, etc.). Use `hasEvalSuite = !isClaudemd && !isRules` to
+   * conditionally show the eval button.
+   */
+  isRules: boolean;
+  /** Always `'CLAUDE.md'` when isClaudemd, rule filename when isRules, otherwise null. */
   scopeLabel: string | null;
 }
 
@@ -75,7 +82,23 @@ export function runDisplayContext(
       actionVerb,
       targetNoun: 'CLAUDE.md',
       isClaudemd: true,
+      isRules: false,
       scopeLabel: 'CLAUDE.md',
+    };
+  }
+
+  // Rules target — applies to audit / fix / create with rulesTarget.
+  if ('rulesTarget' in run && run.rulesTarget) {
+    const rt = run.rulesTarget;
+    const shortName = rt.ruleName.replace(/\.md$/i, '');
+    return {
+      title: `${actionVerb} · ${shortName}`,
+      kindLabel: `${actionVerb} rule`,
+      actionVerb,
+      targetNoun: 'rule',
+      isClaudemd: false,
+      isRules: true,
+      scopeLabel: rt.ruleName,
     };
   }
 
@@ -88,6 +111,7 @@ export function runDisplayContext(
       actionVerb,
       targetNoun: 'conversation',
       isClaudemd: false,
+      isRules: false,
       scopeLabel: null,
     };
   }
@@ -101,6 +125,7 @@ export function runDisplayContext(
     actionVerb,
     targetNoun: 'skill',
     isClaudemd: false,
+    isRules: false,
     scopeLabel: null,
   };
 }

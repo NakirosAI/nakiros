@@ -102,6 +102,34 @@ function auditLikeToAgentRun(
       tokensUsed: run.tokensUsed,
     };
   }
+
+  // Runs that target a rules file (via `nakiros-rules-expert`) surface with
+  // a rules-focused title and a `rules` target type.
+  if (run.rulesTarget) {
+    const rt = run.rulesTarget;
+    const shortName = rt.ruleName.replace(/\.md$/i, '');
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · ${shortName}`,
+      target: {
+        type: 'rules',
+        projectId: rt.projectId,
+        projectPath: rt.projectPath,
+        ruleName: rt.ruleName,
+        mode: rt.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
   return {
     id: run.runId,
     kind,

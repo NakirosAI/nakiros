@@ -222,6 +222,15 @@ export const IPC_CHANNELS = {
   'claudeMd:listAudits': 'claudeMd:listAudits',
   'claudeMd:readAudit': 'claudeMd:readAudit',
 
+  // Rules CRUD — project-scoped, recursive discovery under .claude/rules/
+  'rules:list': 'rules:list',
+  'rules:read': 'rules:read',
+  'rules:save': 'rules:save',
+  'rules:delete': 'rules:delete',
+  // Rules audit history (archived from audit-runner when rulesTarget present)
+  'rules:listAudits': 'rules:listAudits',
+  'rules:readAudit': 'rules:readAudit',
+
   // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
   'conversationIngest:status': 'conversationIngest:status',
   'conversationIngest:previewHookDiff': 'conversationIngest:previewHookDiff',

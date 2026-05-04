@@ -1,4 +1,4 @@
-import type { AuditRun, ClaudeMdRunMode } from '@nakiros/shared';
+import type { AuditRun, ClaudeMdRunMode, RulesRunMode } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import { computeEvalRunId } from './eval-batch-key';
 
@@ -122,6 +122,42 @@ export async function launchClaudemd(
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · CLAUDE.md' });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets a specific `.claude/rules/<ruleName>`
+ * via the bundled `nakiros-rules-expert`. Reuses the same `startAudit` /
+ * `startFix` IPC channels as skill runs — only the request carries an extra
+ * `rulesTarget` so the runner switches its slash-command and the frontend store
+ * displays a rules-focused title.
+ */
+export async function launchRules(
+  request: { projectId: string; projectPath: string; ruleName: string; mode: RulesRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-rules-expert',
+    projectId: request.projectId,
+    rulesTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      ruleName: request.ruleName,
+      mode: request.mode,
+    },
+  };
+
+  const shortName = request.ruleName.replace(/\.md$/i, '');
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · ${shortName}` });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${shortName}` });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${shortName}` });
   }
 }
 

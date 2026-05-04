@@ -1,16 +1,18 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   Brain,
   FlaskConical,
   Plus,
   ShieldCheck,
   Sparkles,
+  Square,
   Wrench,
   X,
   Zap,
 } from 'lucide-react';
 import type { AgentRun, AgentRunKind, AgentRunStatus, Project } from '@nakiros/shared';
 import { agentRunStore, isTerminal } from '../../lib/agent-run-store';
+import { getRunAPI } from '../../lib/run-api';
 
 interface RunDockProps {
   /** Called when the user activates a run row — open it in a new tab. */
@@ -210,6 +212,22 @@ function DockRunRow({ run, projects, onOpen, onDismiss }: DockRunRowProps) {
   const tone = statusTone(run.status);
   const targetLabel = resolveTargetLabel(run, projects);
   const dismissable = isTerminal(run.status);
+  const stoppable = !isTerminal(run.status) && getRunAPI(run.kind) !== null;
+  const [isStopping, setIsStopping] = useState(false);
+
+  const handleStop = async (e: ReactMouseEvent) => {
+    e.stopPropagation();
+    if (isStopping) return;
+    setIsStopping(true);
+    try {
+      const api = getRunAPI(run.kind);
+      if (api) await api.actions.stop(run.id);
+    } catch (err) {
+      console.error('[run-dock] stop failed', err);
+    } finally {
+      setIsStopping(false);
+    }
+  };
 
   return (
     <div
@@ -256,6 +274,18 @@ function DockRunRow({ run, projects, onOpen, onDismiss }: DockRunRowProps) {
           )}
           {tone.label}
         </span>
+        {stoppable && (
+          <button
+            type="button"
+            aria-label="Stop run"
+            title="Stop this run"
+            onClick={handleStop}
+            disabled={isStopping}
+            className="inline-flex h-4 w-4 items-center justify-center rounded-n-xs text-n-subtle opacity-0 transition-opacity hover:bg-n-canvas hover:text-n-critical group-hover:opacity-100 disabled:cursor-wait disabled:opacity-30"
+          >
+            <Square size={9} strokeWidth={2.5} fill="currentColor" />
+          </button>
+        )}
         {dismissable && (
           <button
             type="button"
@@ -307,6 +337,8 @@ function kindVisual(kind: AgentRunKind): { Icon: typeof ShieldCheck; color: stri
       return { Icon: Plus, color: 'var(--n-healthy)' };
     case 'analyze-convo':
       return { Icon: Brain, color: 'var(--n-watch)' };
+    case 'classify-convo':
+      return { Icon: Sparkles, color: 'var(--n-watch)' };
     default:
       return { Icon: Sparkles, color: 'var(--n-fg-muted)' };
   }
@@ -337,6 +369,12 @@ function statusTone(status: AgentRunStatus): { color: string; label: string } {
 function resolveTargetLabel(run: AgentRun, projects: Project[]): string {
   const target = run.target;
   if (target.type === 'conversation') {
+    return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
+  }
+  if (target.type === 'claudemd') {
+    return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
+  }
+  if (target.type === 'rules') {
     return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
   }
   switch (target.scope) {

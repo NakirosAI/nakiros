@@ -544,6 +544,19 @@ const client = {
     invoke(C['claudeMd:listAudits'], projectId),
   readClaudemdAudit: (path: string) => invoke(C['claudeMd:readAudit'], path),
 
+  // Rules CRUD — project-scoped, recursive discovery under .claude/rules/
+  listRules: (projectId: string) => invoke(C['rules:list'], projectId),
+  readRule: (projectId: string, ruleName: string) =>
+    invoke(C['rules:read'], projectId, ruleName),
+  saveRule: (projectId: string, ruleName: string, content: string, mtimeAtRead: string) =>
+    invoke(C['rules:save'], projectId, ruleName, content, mtimeAtRead),
+  deleteRule: (projectId: string, ruleName: string) =>
+    invoke(C['rules:delete'], projectId, ruleName),
+  // Rules audit history — archived runs under ~/.nakiros/<projectId>/rules-audits/
+  listRulesAudits: (projectId: string, ruleName: string) =>
+    invoke(C['rules:listAudits'], projectId, ruleName),
+  readRulesAudit: (path: string) => invoke(C['rules:readAudit'], path),
+
   // Conversation friction-classifier runner (classify-convo)
   startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),
   stopClassifyConvo: (runId: string) => invoke(C['classifyConvo:stopRun'], runId),

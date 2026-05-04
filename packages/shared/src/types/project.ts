@@ -836,6 +836,12 @@ export interface AuditRun {
    * label without changing the kind. Stable across rehydrate.
    */
   claudemdTarget?: ClaudeMdTargetContext;
+  /**
+   * Set when this run targets a specific `.claude/rules/<ruleName>` file via
+   * the bundled `nakiros-rules-expert` instead of a skill. Mutually exclusive
+   * with `claudemdTarget`. Stable across rehydrate.
+   */
+  rulesTarget?: RulesTargetContext;
 }
 
 /**
@@ -1064,6 +1070,13 @@ export interface StartAuditRequest {
    * `scope` / `skillName` still resolve to the bundled expert directory.
    */
   claudemdTarget?: ClaudeMdTargetContext;
+  /**
+   * Optional descriptor for runs that target a specific `.claude/rules/<ruleName>`
+   * file via the bundled `nakiros-rules-expert`. When present, the runner switches
+   * its slash-command and archives the report under the rules history. Mutually
+   * exclusive with `claudemdTarget`.
+   */
+  rulesTarget?: RulesTargetContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -1149,6 +1162,35 @@ export interface AuditHistoryEntry {
   /** ISO timestamp parsed from the filename (or fs mtime as fallback). */
   timestamp: string;
   sizeBytes: number;
+}
+
+// ---------------------------------------------------------------------------
+// Rules run target — when an audit / fix run targets a specific rule file
+// under .claude/rules/ via the bundled `nakiros-rules-expert`.
+// ---------------------------------------------------------------------------
+
+/**
+ * Mode of a rules run. The bundled `nakiros-rules-expert` skill exposes
+ * three entry-point commands.
+ */
+export type RulesRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * a specific `.claude/rules/<ruleName>` file via the bundled
+ * `nakiros-rules-expert`. When present on `StartAuditRequest`, the runner's
+ * `buildFirstPrompt` switches to a `/nakiros-rules-expert` invocation; when
+ * absent, the runner targets a skill via `nakiros-skill-factory`.
+ *
+ * The `ruleName` is the **relative path from `.claude/rules/`** (e.g.
+ * `"i18n.md"` or `"frontend/styling.md"`). Sub-folder notation is supported.
+ */
+export interface RulesTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Filename of the rule under .claude/rules/ (e.g. "i18n.md", "frontend/styling.md"). */
+  ruleName: string;
+  mode: RulesRunMode;
 }
 
 /** Per-project stats tile: total sessions, messages, tool frequency, top skills. */

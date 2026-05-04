@@ -28,9 +28,11 @@ import {
   writeExecutionSettings,
 } from './runner-core/index.js';
 import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
+import { rulesAuditArchiveDir } from './rules-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
+const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
 const KIND = 'audit';
 
 
@@ -226,6 +228,21 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
       return { ok: false, error: `Failed to archive CLAUDE.md audit: ${(err as Error).message}` };
     }
   }
+
+  // Rules audits archive under `~/.nakiros/<projectId>/rules-audits/<ruleName>/`.
+  // Sub-folders per rule keep the history organised when a project has many rules.
+  if (entry.run.rulesTarget) {
+    const rt = entry.run.rulesTarget;
+    const archiveDir = rulesAuditArchiveDir(rt.projectId, rt.ruleName);
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive rules audit: ${(err as Error).message}` };
+    }
+  }
   const auditsDir = join(entry.extras.skillDir, 'audits');
   mkdirSync(auditsDir, { recursive: true });
   const dest = join(auditsDir, `audit-${isoSafeTimestamp()}.md`);
@@ -262,6 +279,25 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       }
     }
 
+    // For rules audits, write the same cross-entity snapshot so the expert
+    // agent can reason about rule coherence in the context of the full
+    // .claude/ configuration (other rules, CLAUDE.md, hooks, etc.).
+    if (req.rulesTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.rulesTarget.projectId,
+          projectPath: req.rulesTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for rules: ${(err as Error).message}`);
+      }
+    }
+
     return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
   },
 
@@ -276,6 +312,20 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         `Operate on the project root CLAUDE.md.`,
         `Project root: ${ct.projectPath}`,
         `Target file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
+    if (req.rulesTarget) {
+      const rt = req.rulesTarget;
+      const targetPath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
+      const exists = existsSync(targetPath);
+      return [
+        `/${RULES_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the rule file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `Project root: ${rt.projectPath}`,
+        `Rule name (relative to .claude/rules/): ${rt.ruleName}`,
         '',
         `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
       ].join('\n');
@@ -304,6 +354,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       manifest: null,
       checkResults: [],
       claudemdTarget: req.claudemdTarget,
+      rulesTarget: req.rulesTarget,
     };
   },
 
@@ -357,6 +408,12 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       if (req.claudemdTarget || run.claudemdTarget) {
         if (!req.claudemdTarget || !run.claudemdTarget) continue;
         if (req.claudemdTarget.projectPath !== run.claudemdTarget.projectPath) continue;
+      }
+      // Rules audits disambiguate by projectId + ruleName.
+      if (req.rulesTarget || run.rulesTarget) {
+        if (!req.rulesTarget || !run.rulesTarget) continue;
+        if (req.rulesTarget.projectId !== run.rulesTarget.projectId) continue;
+        if (req.rulesTarget.ruleName !== run.rulesTarget.ruleName) continue;
       }
       if (isActiveRunStatus(run.status)) return entry;
     }
@@ -417,6 +474,9 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       // Restore the claudemd target so the run keeps surfacing the right
       // CLAUDE.md context across reboots.
       claudemdTarget: blob.claudemdTarget,
+      // Restore the rules target so the run keeps surfacing the right
+      // rule context across reboots.
+      rulesTarget: blob.rulesTarget,
       // Restore live audit state — sidebar resumes where it left off without
       // re-reading the workdir until the next turn (which re-syncs anyway).
       manifest: blob.manifest ?? null,

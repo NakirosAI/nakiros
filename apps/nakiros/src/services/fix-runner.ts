@@ -57,6 +57,7 @@ import { rulesAuditArchiveDir } from './rules-audit-history.js';
 import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
 import { hooksAuditArchiveDir } from './hooks-audit-history.js';
 import { permissionsAuditArchiveDir } from './permissions-audit-history.js';
+import { mcpAuditArchiveDir } from './mcp-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
@@ -64,6 +65,7 @@ const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
 const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
 const PERMISSIONS_EXPERT_SKILL_NAME = 'nakiros-permissions-expert';
+const MCP_EXPERT_SKILL_NAME = 'nakiros-mcp-expert';
 
 /**
  * Two flavors of skill-factory-driven runs:
@@ -474,7 +476,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
   },
 
   prepareWorkdir(req, runId) {
-    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget && !req.hooksTarget && !req.permissionsTarget) {
+    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget && !req.hooksTarget && !req.permissionsTarget && !req.mcpTarget) {
       throw new Error(
         `Cannot create skill "${req.skillName}": target directory already exists (${req.skillDir}). ` +
           `Pick a different name or run "fix" on the existing skill instead.`,
@@ -502,12 +504,12 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     let latestAuditFile: string | null = null;
     let latestIteration: number | null = null;
 
-    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget || req.permissionsTarget) {
-      // For CLAUDE.md, rules, subagents, and hooks runs we don't copy the bundled
-      // expert into the workdir — it's immutable. We only symlink it under
-      // `.claude/skills/<name>` so the slash-command resolves from cwd. The agent
-      // edits the target file directly via Write/Edit at the absolute path
-      // injected in the first prompt.
+    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget || req.permissionsTarget || req.mcpTarget) {
+      // For CLAUDE.md, rules, subagents, hooks, permissions, and mcp runs we
+      // don't copy the bundled expert into the workdir — it's immutable. We only
+      // symlink it under `.claude/skills/<name>` so the slash-command resolves
+      // from cwd. The agent edits the target file directly via Write/Edit at
+      // the absolute path injected in the first prompt.
       const claudeSkillsDir = join(workdir, '.claude', 'skills');
       mkdirSync(claudeSkillsDir, { recursive: true });
       const linkPath = join(claudeSkillsDir, req.skillName);
@@ -615,6 +617,25 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         );
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for permissions: ${(err as Error).message}`);
+      }
+    }
+
+    // For MCP fix/create runs, write the cross-entity snapshot so the expert
+    // agent can reason about .mcp.json in context of the full .claude/
+    // configuration (CLAUDE.md, hooks, other settings, etc.).
+    if (req.mcpTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.mcpTarget.projectId,
+          projectPath: req.mcpTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for mcp: ${(err as Error).message}`);
       }
     }
 
@@ -732,6 +753,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       ].join('\n');
     }
 
+    if (req.mcpTarget) {
+      const mt = req.mcpTarget;
+      const mcpPath = join(mt.projectPath, '.mcp.json');
+      const exists = existsSync(mcpPath);
+      const command = req.mode === 'fix' ? 'fix' : 'create';
+      return [
+        `/${MCP_EXPERT_SKILL_NAME} ${command}`,
+        '',
+        languageLine,
+        `- Operate on the project MCP configuration file.`,
+        `- Project root: ${mt.projectPath}`,
+        `- Target file: ${mcpPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+      ].join('\n');
+    }
+
     if (req.mode === 'fix') {
       const auditLine = extras.latestAuditFile
         ? `- Latest audit was copied to \`./audits/${extras.latestAuditFile}\` — read it first.`
@@ -791,6 +830,7 @@ ${languageLine}
       subagentsTarget: req.subagentsTarget,
       hooksTarget: req.hooksTarget,
       permissionsTarget: req.permissionsTarget,
+      mcpTarget: req.mcpTarget,
     };
   },
 
@@ -857,9 +897,10 @@ ${languageLine}
       `[fix-runner] finish start runId=${run.runId} mode=${extras.mode} realSkillDir=${extras.realSkillDir} workdir=${run.workdir}`,
     );
 
-    // CLAUDE.md, rules, subagents, hooks, and permissions runs edit the target
-    // file directly — no sandbox sync-back required. Just transition to completed.
-    if (run.claudemdTarget || run.rulesTarget || run.subagentsTarget || run.hooksTarget || run.permissionsTarget) {
+    // CLAUDE.md, rules, subagents, hooks, permissions, and mcp runs edit the
+    // target file directly — no sandbox sync-back required. Just transition
+    // to completed.
+    if (run.claudemdTarget || run.rulesTarget || run.subagentsTarget || run.hooksTarget || run.permissionsTarget || run.mcpTarget) {
       run.status = 'completed';
       run.finishedAt = new Date().toISOString();
       run.error = null;
@@ -1036,6 +1077,7 @@ ${languageLine}
       subagentsTarget: blob.subagentsTarget,
       hooksTarget: blob.hooksTarget,
       permissionsTarget: blob.permissionsTarget,
+      mcpTarget: blob.mcpTarget,
     };
 
     console.log(

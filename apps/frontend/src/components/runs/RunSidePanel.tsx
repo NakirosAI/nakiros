@@ -70,7 +70,7 @@ interface RunSidePanelProps {
    * buttons so a CLAUDE.md or rules fix run doesn't display "Apply & deploy".
    * Defaults to `'skill'`.
    */
-  targetNoun?: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions';
+  targetNoun?: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp';
 }
 
 /**
@@ -364,7 +364,7 @@ function FixPanel({
   onSelectDiffFile?(relativePath: string | null): void;
   onLaunchEval?: () => void;
   isLaunchingEval?: boolean;
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp';
 }) {
   const { t } = useTranslation('runs');
   const [diff, setDiff] = useState<SkillDiffEntry[] | null>(null);

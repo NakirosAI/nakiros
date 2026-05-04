@@ -852,3 +852,53 @@ export interface PermissionsAuditHistoryEntry {
   /** File size in bytes. */
   sizeBytes: number;
 }
+
+// ── MCP expert (nakiros-mcp-expert) — singleton read/save ──────────────────
+
+/**
+ * Result of `mcp:read`. Returns the full content of the project-root
+ * `.mcp.json` file as a pretty-printed JSON string. Unlike the hooks/permissions
+ * experts (which extract a sub-block from settings.json), this reads the entire
+ * `.mcp.json` file — MCP configuration is a standalone file, not a sub-key.
+ */
+export interface McpReadResult {
+  /**
+   * Full content of `.mcp.json` (pretty-printed via JSON.stringify(…, null, 2)).
+   * Empty object string `"{}"` when the file does not exist.
+   */
+  content: string;
+  /** ISO mtime of `.mcp.json` at read time. Empty string when file doesn't exist. */
+  mtime: string;
+  /** Whether `.mcp.json` exists. */
+  exists: boolean;
+  /** Absolute path to `.mcp.json` (resolved even when not existing). */
+  path: string;
+}
+
+/**
+ * Result of `mcp:save`. Writes the entire `.mcp.json` file (no merge with
+ * other keys — it is the complete file).
+ *
+ * NOTE: named `McpExpertMutationResult` (not just `McpMutationResult`) to
+ * avoid collision with the Module 5 V2 editor's {@link McpMutationResult}.
+ */
+export interface McpExpertMutationResult {
+  ok: boolean;
+  code?: 'conflict' | 'invalid-json' | 'project-not-found' | 'fs-error' | string;
+  message?: string;
+}
+
+/**
+ * One archived MCP audit produced by the audit-runner when the run carries a
+ * `mcpTarget`. Stored under `~/.nakiros/<projectId>/mcp-audits/audit-<ISO>.md`.
+ * Singleton — no sub-folder per target name. The list IPC returns these sorted
+ * newest-first.
+ */
+export interface McpAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+}

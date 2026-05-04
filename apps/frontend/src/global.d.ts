@@ -10,6 +10,9 @@ import type {
   PermissionsExpertMutationResult,
   PermissionsAuditHistoryEntry,
   PermissionsExpertScope,
+  McpReadResult,
+  McpExpertMutationResult,
+  McpAuditHistoryEntry,
   AppPreferences,
   AgentInstallStatus,
   AgentInstallRequest,
@@ -500,6 +503,14 @@ declare global {
       savePermissions(projectId: string, scope: PermissionsExpertScope, content: string, mtimeAtRead: string): Promise<PermissionsExpertMutationResult>;
       listPermissionsAudits(projectId: string, scope: PermissionsExpertScope): Promise<PermissionsAuditHistoryEntry[]>;
       readPermissionsAudit(path: string): Promise<string | null>;
+
+      // MCP expert (nakiros-mcp-expert) — read/save the entire .mcp.json file
+      // + audit history. NOTE: distinct from the Module 5 V2 form-based editor
+      // (claudeMcp:* channels) which manages individual MCP servers.
+      readMcp(projectId: string): Promise<McpReadResult>;
+      saveMcp(projectId: string, content: string, mtimeAtRead: string): Promise<McpExpertMutationResult>;
+      listMcpAudits(projectId: string): Promise<McpAuditHistoryEntry[]>;
+      readMcpAudit(path: string): Promise<string | null>;
 
       // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
       getConversationIngestStatus(): Promise<ConversationIngestStatus>;

@@ -1,4 +1,4 @@
-import type { ClaudeMdRunMode, RulesRunMode, SubagentsRunMode, HooksRunMode, PermissionsRunMode, PermissionsExpertScope, SkillScope } from './project.js';
+import type { ClaudeMdRunMode, RulesRunMode, SubagentsRunMode, HooksRunMode, PermissionsRunMode, PermissionsExpertScope, McpRunMode, SkillScope } from './project.js';
 
 export type { ClaudeMdRunMode } from './project.js';
 export type { RulesRunMode } from './project.js';
@@ -6,6 +6,7 @@ export type { SubagentsRunMode } from './project.js';
 export type { HooksRunMode } from './project.js';
 export type { PermissionsRunMode } from './project.js';
 export type { PermissionsExpertScope } from './project.js';
+export type { McpRunMode } from './project.js';
 
 /**
  * The discriminator of an agent run. Each kind has its own backing runner on
@@ -133,10 +134,22 @@ export interface PermissionsRunTarget {
 }
 
 /**
+ * A mcp-bound target — used when an audit / fix / create run targets the
+ * project-root `.mcp.json` file via `nakiros-mcp-expert`. Singleton per
+ * project — no `name` field (unlike rules or subagents).
+ */
+export interface McpRunTarget {
+  type: 'mcp';
+  projectId: string;
+  projectPath: string;
+  mode: McpRunMode;
+}
+
+/**
  * Discriminated union of every supported target shape. New target kinds
  * extend this union when their corresponding agent-run kind ships.
  */
-export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget | PermissionsRunTarget;
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget | PermissionsRunTarget | McpRunTarget;
 
 /**
  * Kind-specific opaque payload riding alongside an `AgentRun`. The store

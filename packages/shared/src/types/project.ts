@@ -862,6 +862,12 @@ export interface AuditRun {
    * across rehydrate.
    */
   permissionsTarget?: PermissionsTargetContext;
+  /**
+   * Set when this run targets the project-root `.mcp.json` file via the bundled
+   * `nakiros-mcp-expert`. Singleton per project — no sub-target name. Mutually
+   * exclusive with the other `*Target` fields. Stable across rehydrate.
+   */
+  mcpTarget?: McpTargetContext;
 }
 
 /**
@@ -1116,6 +1122,12 @@ export interface StartAuditRequest {
    * Mutually exclusive with the other `*Target` fields.
    */
   permissionsTarget?: PermissionsTargetContext;
+  /**
+   * Optional descriptor for runs that target the project-root `.mcp.json` file
+   * via the bundled `nakiros-mcp-expert`. Singleton — no name field. Mutually
+   * exclusive with the other `*Target` fields.
+   */
+  mcpTarget?: McpTargetContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -1285,6 +1297,25 @@ export interface PermissionsTargetContext {
   scope: PermissionsExpertScope;
   /** Run mode — drives the slash-command suffix. */
   mode: PermissionsRunMode;
+}
+
+/**
+ * Mode of an mcp run. The bundled `nakiros-mcp-expert` skill exposes
+ * three entry-point commands.
+ */
+export type McpRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * the project-root `.mcp.json` file via the bundled `nakiros-mcp-expert`.
+ * Singleton per project — no `name` field (unlike rules or subagents). Project
+ * scope only (V1 — local/user scopes deferred).
+ */
+export interface McpTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Run mode — drives the slash-command suffix. */
+  mode: McpRunMode;
 }
 
 /**

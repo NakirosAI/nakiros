@@ -1,4 +1,4 @@
-import type { AuditRun, ClaudeMdRunMode, HooksRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode } from '@nakiros/shared';
+import type { AuditRun, ClaudeMdRunMode, HooksRunMode, McpRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import { computeEvalRunId } from './eval-batch-key';
 
@@ -266,6 +266,41 @@ export async function launchPermissions(
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: `Create · Permissions${scopeSuffix}` });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets the project-root `.mcp.json`
+ * file via the bundled `nakiros-mcp-expert`. Singleton per project — no `name`
+ * field (unlike rules or subagents). Reuses the same `startAudit` / `startFix`
+ * IPC channels as skill runs — only the request carries an extra `mcpTarget` so
+ * the runner switches its slash-command and the frontend store displays an
+ * mcp-focused title.
+ */
+export async function launchMcp(
+  request: { projectId: string; projectPath: string; mode: McpRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-mcp-expert',
+    projectId: request.projectId,
+    mcpTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      mode: request.mode,
+    },
+  };
+
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: 'Audit · MCP' });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · MCP' });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · MCP' });
   }
 }
 

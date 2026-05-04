@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "skillName": "nakiros-mcp-expert",
+  "totalChecks": 14,
+  "sections": [
+    { "id": "structure",  "label": "Structure",      "checks": ["structure.valid_json", "structure.mcp_servers_object", "structure.no_unknown_server_keys"] },
+    { "id": "server",     "label": "Server Config",  "checks": ["server.type_valid", "server.required_fields", "server.no_deprecated_sse", "server.env_no_plain_secrets"] },
+    { "id": "security",   "label": "Security",       "checks": ["security.https_for_remote_servers", "security.no_alwaysLoad_overuse", "security.oauth_or_auth_documented"] },
+    { "id": "crossref",   "label": "Cross-entity",   "checks": ["crossref.referenced_in_hooks", "crossref.referenced_in_subagents", "crossref.referenced_in_permissions", "crossref.unused_servers"] }
+  ],
+  "checks": [
+    { "id": "structure.valid_json",               "section": "structure",  "label": ".mcp.json is valid parseable JSON",                                                   "severityIfFail": "critical", "findingCode": "INVALID_JSON" },
+    { "id": "structure.mcp_servers_object",       "section": "structure",  "label": "mcpServers key present and is an object",                                            "severityIfFail": "warn",     "findingCode": "MCP_SERVERS_MISSING_OR_INVALID" },
+    { "id": "structure.no_unknown_server_keys",   "section": "structure",  "label": "Each server only has recognised keys",                                               "severityIfFail": "warn",     "findingCode": "UNKNOWN_SERVER_KEY" },
+
+    { "id": "server.type_valid",                  "section": "server",     "label": "Each server has type ∈ {http, sse, stdio}",                                          "severityIfFail": "warn",     "findingCode": "INVALID_SERVER_TYPE" },
+    { "id": "server.required_fields",             "section": "server",     "label": "url for http/sse, command for stdio — present and non-empty",                        "severityIfFail": "warn",     "findingCode": "MISSING_REQUIRED_SERVER_FIELD" },
+    { "id": "server.no_deprecated_sse",           "section": "server",     "label": "No SSE transport (deprecated by Anthropic — migrate to HTTP)",                       "severityIfFail": "info",     "findingCode": "SSE_DEPRECATED" },
+    { "id": "server.env_no_plain_secrets",        "section": "server",     "label": "Secrets in env/headers use ${VAR} interpolation, not plain text",                   "severityIfFail": "warn",     "findingCode": "PLAIN_SECRET_IN_ENV" },
+
+    { "id": "security.https_for_remote_servers",  "section": "security",   "label": "http/sse server URLs start with https://",                                           "severityIfFail": "critical", "findingCode": "HTTP_NOT_HTTPS" },
+    { "id": "security.no_alwaysLoad_overuse",     "section": "security",   "label": "At most 1-2 servers with alwaysLoad: true",                                          "severityIfFail": "info",     "findingCode": "ALWAYS_LOAD_OVERUSE" },
+    { "id": "security.oauth_or_auth_documented",  "section": "security",   "label": "http/sse servers have auth configured (OAuth, Authorization header, or headersHelper)", "severityIfFail": "warn",     "findingCode": "NO_AUTH_CONFIGURED" },
+
+    { "id": "crossref.referenced_in_hooks",       "section": "crossref",   "label": "mcp_tool hooks reference servers that exist in mcpServers",                          "severityIfFail": "warn",     "findingCode": "HOOK_REFS_MISSING_SERVER" },
+    { "id": "crossref.referenced_in_subagents",   "section": "crossref",   "label": "mcpServers listed in subagent frontmatter exist in .mcp.json",                      "severityIfFail": "warn",     "findingCode": "SUBAGENT_REFS_MISSING_SERVER" },
+    { "id": "crossref.referenced_in_permissions", "section": "crossref",   "label": "mcp__server__* permission rules reference real servers in .mcp.json",               "severityIfFail": "warn",     "findingCode": "PERMISSION_REFS_MISSING_SERVER" },
+    { "id": "crossref.unused_servers",            "section": "crossref",   "label": "No servers configured but never referenced elsewhere (dead config)",                 "severityIfFail": "info",     "findingCode": "UNUSED_SERVER" }
+  ]
+}

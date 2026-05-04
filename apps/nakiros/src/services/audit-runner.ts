@@ -32,6 +32,7 @@ import { rulesAuditArchiveDir } from './rules-audit-history.js';
 import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
 import { hooksAuditArchiveDir } from './hooks-audit-history.js';
 import { permissionsAuditArchiveDir } from './permissions-audit-history.js';
+import { mcpAuditArchiveDir } from './mcp-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
@@ -39,6 +40,7 @@ const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
 const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
 const PERMISSIONS_EXPERT_SKILL_NAME = 'nakiros-permissions-expert';
+const MCP_EXPERT_SKILL_NAME = 'nakiros-mcp-expert';
 const KIND = 'audit';
 
 
@@ -297,6 +299,21 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
     }
   }
 
+  // MCP audits archive under `~/.nakiros/<projectId>/mcp-audits/`.
+  // Singleton — no sub-folder per target name.
+  if (entry.run.mcpTarget) {
+    const mt = entry.run.mcpTarget;
+    const archiveDir = mcpAuditArchiveDir(mt.projectId);
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive MCP audit: ${(err as Error).message}` };
+    }
+  }
+
   const auditsDir = join(entry.extras.skillDir, 'audits');
   mkdirSync(auditsDir, { recursive: true });
   const dest = join(auditsDir, `audit-${isoSafeTimestamp()}.md`);
@@ -409,6 +426,25 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       }
     }
 
+    // For MCP audits, write the cross-entity snapshot so the expert agent
+    // can reason about .mcp.json in the context of the full .claude/
+    // configuration (CLAUDE.md, hooks, other settings, etc.).
+    if (req.mcpTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.mcpTarget.projectId,
+          projectPath: req.mcpTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for mcp: ${(err as Error).message}`);
+      }
+    }
+
     return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
   },
 
@@ -486,6 +522,20 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
       ].join('\n');
     }
+    if (req.mcpTarget) {
+      const mt = req.mcpTarget;
+      const mcpPath = join(mt.projectPath, '.mcp.json');
+      const exists = existsSync(mcpPath);
+      return [
+        `/${MCP_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the project MCP configuration file.`,
+        `Project root: ${mt.projectPath}`,
+        `Target file: ${mcpPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
     return `/${FACTORY_SKILL_NAME} audit ${req.skillName}`;
   },
 
@@ -514,6 +564,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       subagentsTarget: req.subagentsTarget,
       hooksTarget: req.hooksTarget,
       permissionsTarget: req.permissionsTarget,
+      mcpTarget: req.mcpTarget,
     };
   },
 
@@ -594,6 +645,11 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         const runScope = run.permissionsTarget.scope ?? 'project';
         if (reqScope !== runScope) continue;
       }
+      // MCP audits: singleton per project — disambiguate by projectId only.
+      if (req.mcpTarget || run.mcpTarget) {
+        if (!req.mcpTarget || !run.mcpTarget) continue;
+        if (req.mcpTarget.projectId !== run.mcpTarget.projectId) continue;
+      }
       if (isActiveRunStatus(run.status)) return entry;
     }
     return null;
@@ -665,6 +721,9 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       // Restore the permissions target so the run keeps surfacing the right
       // permissions context across reboots.
       permissionsTarget: blob.permissionsTarget,
+      // Restore the MCP target so the run keeps surfacing the right
+      // .mcp.json context across reboots.
+      mcpTarget: blob.mcpTarget,
       // Restore live audit state — sidebar resumes where it left off without
       // re-reading the workdir until the next turn (which re-syncs anyway).
       manifest: blob.manifest ?? null,

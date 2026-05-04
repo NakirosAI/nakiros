@@ -595,6 +595,14 @@ const client = {
     invoke(C['permissions:listAudits'], projectId, scope),
   readPermissionsAudit: (path: string) => invoke(C['permissions:readAudit'], path),
 
+  // MCP expert (nakiros-mcp-expert) — read/save the entire .mcp.json file +
+  // audit history. Distinct from Module 5 V2 claudeMcp:* editor.
+  readMcp: (projectId: string) => invoke(C['mcp:read'], projectId),
+  saveMcp: (projectId: string, content: string, mtimeAtRead: string) =>
+    invoke(C['mcp:save'], projectId, content, mtimeAtRead),
+  listMcpAudits: (projectId: string) => invoke(C['mcp:listAudits'], projectId),
+  readMcpAudit: (path: string) => invoke(C['mcp:readAudit'], path),
+
   // Conversation friction-classifier runner (classify-convo)
   startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),
   stopClassifyConvo: (runId: string) => invoke(C['classifyConvo:stopRun'], runId),

@@ -40,7 +40,7 @@ export interface RunDisplayContext {
   /** Bare action verb localised for the current run kind. */
   actionVerb: 'Audit' | 'Fix' | 'Create' | 'Eval' | 'Analyze' | 'Classify';
   /** What the run operates on, in user-facing prose. */
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp';
   /**
    * `true` when this run targets a CLAUDE.md via the bundled expert. UI
    * surfaces use this to hide skill-only actions (eval, sync-back, etc.).
@@ -71,7 +71,13 @@ export interface RunDisplayContext {
    * actions (eval, sync-back, etc.).
    */
   isPermissions: boolean;
-  /** Always `'CLAUDE.md'` when isClaudemd, rule/subagent filename when isRules/isSubagents, `'hooks'` when isHooks, `'permissions'` when isPermissions, otherwise null. */
+  /**
+   * `true` when this run targets the `.mcp.json` file via the bundled
+   * `nakiros-mcp-expert`. UI surfaces use this to hide skill-only actions
+   * (eval, sync-back, etc.).
+   */
+  isMcp: boolean;
+  /** Always `'CLAUDE.md'` when isClaudemd, rule/subagent filename when isRules/isSubagents, `'hooks'` when isHooks, `'permissions'` when isPermissions, `'mcp'` when isMcp, otherwise null. */
   scopeLabel: string | null;
 }
 
@@ -104,6 +110,7 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: false,
       isPermissions: false,
+      isMcp: false,
       scopeLabel: 'CLAUDE.md',
     };
   }
@@ -122,6 +129,7 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: false,
       isPermissions: false,
+      isMcp: false,
       scopeLabel: rt.ruleName,
     };
   }
@@ -140,6 +148,7 @@ export function runDisplayContext(
       isSubagents: true,
       isHooks: false,
       isPermissions: false,
+      isMcp: false,
       scopeLabel: st.subagentName,
     };
   }
@@ -156,6 +165,7 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: true,
       isPermissions: false,
+      isMcp: false,
       scopeLabel: 'hooks',
     };
   }
@@ -175,7 +185,25 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: false,
       isPermissions: true,
+      isMcp: false,
       scopeLabel: ptScope === 'local' ? 'permissions (local)' : 'permissions',
+    };
+  }
+
+  // MCP target — applies to audit / fix / create with mcpTarget. Singleton.
+  if ('mcpTarget' in run && run.mcpTarget) {
+    return {
+      title: `${actionVerb} · MCP`,
+      kindLabel: `${actionVerb} mcp`,
+      actionVerb,
+      targetNoun: 'mcp',
+      isClaudemd: false,
+      isRules: false,
+      isSubagents: false,
+      isHooks: false,
+      isPermissions: false,
+      isMcp: true,
+      scopeLabel: 'mcp',
     };
   }
 
@@ -192,6 +220,7 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: false,
       isPermissions: false,
+      isMcp: false,
       scopeLabel: null,
     };
   }
@@ -209,6 +238,7 @@ export function runDisplayContext(
     isSubagents: false,
     isHooks: false,
     isPermissions: false,
+    isMcp: false,
     scopeLabel: null,
   };
 }

@@ -215,6 +215,32 @@ function auditLikeToAgentRun(
     };
   }
 
+  // Runs that target the .mcp.json file (via `nakiros-mcp-expert`) surface
+  // with an mcp-focused title and an `mcp` target type. Singleton — no sub-name.
+  if (run.mcpTarget) {
+    const mt = run.mcpTarget;
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · MCP`,
+      target: {
+        type: 'mcp',
+        projectId: mt.projectId,
+        projectPath: mt.projectPath,
+        mode: mt.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
   return {
     id: run.runId,
     kind,

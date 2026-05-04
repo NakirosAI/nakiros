@@ -258,6 +258,15 @@ export const IPC_CHANNELS = {
   'permissions:listAudits': 'permissions:listAudits',
   'permissions:readAudit': 'permissions:readAudit',
 
+  // MCP expert — singleton read/save (entire .mcp.json file) + audit history.
+  // NOTE: 'mcp:*' is distinct from 'claudeMcp:*' (Module 5 V2) which is the
+  // structured form-based MCP server editor. These four channels are for the
+  // `nakiros-mcp-expert` audit/fix/create flow.
+  'mcp:read': 'mcp:read',
+  'mcp:save': 'mcp:save',
+  'mcp:listAudits': 'mcp:listAudits',
+  'mcp:readAudit': 'mcp:readAudit',
+
   // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
   'conversationIngest:status': 'conversationIngest:status',
   'conversationIngest:previewHookDiff': 'conversationIngest:previewHookDiff',

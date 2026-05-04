@@ -130,3 +130,138 @@ export type ConversationIngestErrorCode =
   | 'not-enabled'
   | 'purge-failed'
   | 'scan-failed';
+
+// ---------------------------------------------------------------------------
+// Conversation digest — V1.1 semantic classification produced by the
+// `nakiros-conversation-classifier` skill (Haiku 4.5). Persisted under
+// `~/.nakiros/ingest/projects/<encoded>/digests/<sid>.json` so future
+// cross-conversation aggregation (V1.2 propose-engine) can read it without
+// re-running the LLM.
+// ---------------------------------------------------------------------------
+
+/** Seven semantic friction kinds — see SKILL.md `references/friction-kinds.md`. */
+export type ConversationFrictionKind =
+  | 'miscomprehension'
+  | 'rework'
+  | 'user_takeover'
+  | 'convention_violation'
+  | 'scope_drift'
+  | 'missing_documented_context'
+  | 'wrong_abstraction_level';
+
+/** Severity of a friction — drives downstream prioritization. */
+export type ConversationFrictionSeverity = 'low' | 'med' | 'high';
+
+/** Whether a rule is project-specific, cross-project, or non-generalizable. */
+export type ConversationRuleScope = 'project' | 'global' | 'none';
+
+/**
+ * Best-guess routing target for a rule candidate. The V1.3 propose-engine
+ * uses this to decide which `.claude/` editor to surface.
+ */
+export type ConversationRuleTargetModule =
+  | 'rules'
+  | 'claude_md'
+  | 'subagent'
+  | 'skill'
+  | 'output_style';
+
+/** Phase of the conversation as segmented by the classifier. */
+export interface ConversationDigestPhase {
+  /** Stable id within the digest, e.g. `p1`, `p2`. */
+  id: string;
+  /** Free-form snake_case label — `setup`, `implementation`, `debugging`, … */
+  label: string;
+  /** 1-indexed turn number where the phase begins (inclusive). */
+  fromTurn: number;
+  /** 1-indexed turn number where the phase ends (inclusive). */
+  toTurn: number;
+  /** One-sentence description of what the phase attempted (≤ 25 words). */
+  summary: string;
+}
+
+/** A single semantic friction observed in the conversation. */
+export interface ConversationDigestFriction {
+  /** References a phase id from `phases[]`. */
+  phaseId: string;
+  kind: ConversationFrictionKind;
+  severity: ConversationFrictionSeverity;
+  /** 1-indexed turn numbers backing this friction (ascending). */
+  evidenceTurns: number[];
+  /** Factual narrative of what went wrong, in the conversation language. */
+  whatHappened: string;
+  /** Rule that would have prevented or shortened this friction. `null` if too situational. */
+  ruleCandidate: string | null;
+  scope: ConversationRuleScope;
+  /** Confidence in `[0, 1]`. Below 0.5 the classifier is asked to drop the entry. */
+  confidence: number;
+}
+
+/** A normalized rule extracted from one or more frictions in this session. */
+export interface ConversationDigestRule {
+  /** Short prescriptive sentence ("Place HTTP routes under routes/, not server.ts"). */
+  rule: string;
+  /** Why this rule helps — references the concrete behavior in this session. */
+  why: string;
+  /** Most representative phase id where this rule would have helped. */
+  phaseId: string;
+  targetModule: ConversationRuleTargetModule;
+  scope: 'project' | 'global';
+  confidence: number;
+}
+
+/**
+ * Persisted output of the classifier for a single session. Top-level fields
+ * mirror the JSON the skill emits (camelCased on the daemon side).
+ */
+export interface ConversationDigest {
+  sessionId: string;
+  /** Original cwd of the conversation (mirrors `ConversationIngestSession.projectPath`). */
+  projectPath: string;
+  /** ISO mtime of the source `.jsonl` at the time the digest was produced. */
+  transcriptMtime: string;
+  /** Which Claude model produced this digest. */
+  model: 'haiku' | 'sonnet';
+  /** Approximate input tokens sent to the model — helps surface cost. */
+  inputTokens: number;
+  /** Approximate output tokens billed for this run. */
+  outputTokens: number;
+  /** ISO timestamp when the classifier finished. */
+  generatedAt: string;
+  /** Detected dominant language of user turns. */
+  language: 'fr' | 'en';
+  /** One- or two-sentence narrative summary in the conversation language. */
+  sessionSummary: string;
+  phases: ConversationDigestPhase[];
+  frictions: ConversationDigestFriction[];
+  extractedRules: ConversationDigestRule[];
+}
+
+/** Lifecycle of a digest as exposed to the UI. */
+export type ConversationDigestStatus = 'absent' | 'running' | 'ready' | 'failed';
+
+/** Compact metadata returned by `project:listConversationDigests`. */
+export interface ConversationDigestSummary {
+  sessionId: string;
+  status: ConversationDigestStatus;
+  generatedAt: string | null;
+  model: 'haiku' | 'sonnet' | null;
+  /** Friction count, surfaced in lists for at-a-glance triage. */
+  frictionCount: number;
+  /** Extracted-rule count, surfaced alongside `frictionCount`. */
+  ruleCount: number;
+  /** When `status === 'failed'`, the human-readable error. */
+  error: string | null;
+}
+
+/** Request payload for `project:classifyConversation`. */
+export interface ClassifyConversationRequest {
+  /** Original cwd of the project (used to look up the encoded ingest dir). */
+  projectPath: string;
+  sessionId: string;
+}
+
+/** Result of `project:classifyConversation`. */
+export type ClassifyConversationResult =
+  | { ok: true; digest: ConversationDigest }
+  | { ok: false; error: string };

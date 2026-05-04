@@ -9,6 +9,8 @@ import { ConvDrawer } from './ConvDrawer';
 interface Props {
   /** Project whose JSONL conversation analyses are shown. */
   project: Project;
+  /** Threaded down from `NewShell` so the drawer's Frictions tab can open run tabs. */
+  onOpenRunTab?: import('../../lib/run-launcher').OpenRunTabCallback;
 }
 
 type FilterKey =
@@ -43,7 +45,7 @@ const FILTERS: FilterDef[] = [
  * health-first rows. Clicking a row opens the {@link ConvDrawer}, whose
  * Diagnostic tab is the only one shipped in this PR.
  */
-export default function ConversationsScreen({ project }: Props) {
+export default function ConversationsScreen({ project, onOpenRunTab }: Props) {
   const { t } = useTranslation('conversations');
   const fetched = useConversationAnalyses(project.id);
   const analyses = fetched ?? [];
@@ -168,7 +170,13 @@ export default function ConversationsScreen({ project }: Props) {
         )}
       </div>
 
-      {open && <ConvDrawer analysis={open} onClose={() => setOpen(null)} />}
+      {open && (
+        <ConvDrawer
+          analysis={open}
+          onClose={() => setOpen(null)}
+          onOpenRunTab={onOpenRunTab}
+        />
+      )}
     </div>
   );
 }

@@ -35,3 +35,13 @@ export {
   getIngestHookScriptPath,
   getClaudeGlobalSettingsPath,
 } from './paths.js';
+export {
+  loadDigest,
+  listDigestsForProject,
+  persistDigest,
+} from './classifier.js';
+export {
+  buildConversationDigest,
+  estimateDigestTokens,
+} from './digest-builder.js';
+export { parseClassifierJson } from './classifier-parser.js';

@@ -55,7 +55,8 @@
     "tabs": {
       "diagnostic": "Diagnostic",
       "timeline": "Timeline",
-      "transcript": "Transcript"
+      "transcript": "Transcript",
+      "frictions": "Frictions"
     },
     "markers": "Événements",
     "readingGuide": "Lecture",

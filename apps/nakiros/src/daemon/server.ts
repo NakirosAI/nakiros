@@ -18,6 +18,10 @@ import {
   restoreOrCleanupAnalyzeConvoWorkdirs,
 } from '../services/analyze-convo-runner.js';
 import {
+  listAllClassifyConvoRuns,
+  restoreOrCleanupClassifyConvoWorkdirs,
+} from '../services/classify-convo-runner.js';
+import {
   getResumableSandboxPaths,
   listRuns as listAllEvalRuns,
   restoreEvalRunsForSkillDirs,
@@ -88,6 +92,9 @@ function collectLiveProjectEntryNames(): Set<string> {
     if (isActiveRunStatus(run.status)) add(run.workdir);
   }
   for (const run of listAllAnalyzeConvoRuns()) {
+    if (isActiveRunStatus(run.status)) add(run.workdir);
+  }
+  for (const run of listAllClassifyConvoRuns()) {
     if (isActiveRunStatus(run.status)) add(run.workdir);
   }
   for (const run of listAllEvalRuns()) {
@@ -167,6 +174,7 @@ export function bootstrapDaemonRuntime(): void {
   restoreOrCleanupTempWorkdirs();
   restoreOrCleanupAuditWorkdirs();
   restoreOrCleanupAnalyzeConvoWorkdirs();
+  restoreOrCleanupClassifyConvoWorkdirs();
   // Eval runs persist per-skill (`{skillDir}/evals/workspace/iteration-N/…`),
   // not under a flat `~/.nakiros/runs/eval/`. To surface them in the
   // runs-center on first paint we walk every known skill source and replay

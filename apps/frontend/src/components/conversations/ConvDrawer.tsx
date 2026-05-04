@@ -5,13 +5,16 @@ import { X } from 'lucide-react';
 import { DiagnosticTab } from './DiagnosticTab';
 import { TimelineTab } from './TimelineTab';
 import { TranscriptTab } from './TranscriptTab';
+import { FrictionsTab } from './FrictionsTab';
 
 interface Props {
   analysis: ConversationAnalysis;
   onClose(): void;
+  /** Threaded down from `NewShell` so the Frictions tab can open run tabs. */
+  onOpenRunTab?: import('../../lib/run-launcher').OpenRunTabCallback;
 }
 
-type DrawerTab = 'diagnostic' | 'timeline' | 'transcript';
+type DrawerTab = 'diagnostic' | 'timeline' | 'transcript' | 'frictions';
 
 interface TabDef {
   id: DrawerTab;
@@ -22,6 +25,7 @@ const TABS: TabDef[] = [
   { id: 'diagnostic', labelKey: 'drawer.tabs.diagnostic' },
   { id: 'timeline', labelKey: 'drawer.tabs.timeline' },
   { id: 'transcript', labelKey: 'drawer.tabs.transcript' },
+  { id: 'frictions', labelKey: 'drawer.tabs.frictions' },
 ];
 
 /**
@@ -32,7 +36,7 @@ const TABS: TabDef[] = [
  * are wired; the Export tab from the mockup is deferred (no MD/PDF/Slack
  * export endpoint exists yet).
  */
-export function ConvDrawer({ analysis, onClose }: Props) {
+export function ConvDrawer({ analysis, onClose, onOpenRunTab }: Props) {
   const { t } = useTranslation('conversations');
   const tone = toneFor(analysis.healthZone);
   const [tab, setTab] = useState<DrawerTab>('diagnostic');
@@ -131,6 +135,13 @@ export function ConvDrawer({ analysis, onClose }: Props) {
           {tab === 'diagnostic' && <DiagnosticTab analysis={analysis} />}
           {tab === 'timeline' && <TimelineTab analysis={analysis} />}
           {tab === 'transcript' && <TranscriptTab analysis={analysis} />}
+          {tab === 'frictions' && (
+            <FrictionsTab
+              projectId={analysis.projectId}
+              sessionId={analysis.sessionId}
+              onOpenRunTab={onOpenRunTab}
+            />
+          )}
         </div>
       </aside>
     </div>

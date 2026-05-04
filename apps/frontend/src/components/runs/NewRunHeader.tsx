@@ -19,6 +19,12 @@ interface NewRunHeaderProps {
   status: AgentRunStatus;
   /** Display title — typically `run.title` or "Audit · skillName". */
   title: string;
+  /**
+   * Override for the small kind chip label. When omitted, the chip shows the
+   * default kindVisual label (ex "Audit"). Used to surface "Audit CLAUDE.md"
+   * for runs that target a CLAUDE.md via `claudemdTarget`.
+   */
+  kindLabelOverride?: string;
   /** Optional sub-line stats shown right of the title. */
   stats?: Array<{ label: string; value: string }>;
   /** Closes the run tab — wired by the parent. */
@@ -54,6 +60,7 @@ export default function NewRunHeader({
   kind,
   status,
   title,
+  kindLabelOverride,
   stats = [],
   onBack,
   onStop,
@@ -104,7 +111,7 @@ export default function NewRunHeader({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-n-mono text-[11px] uppercase tracking-[0.6px] text-n-subtle">
-              {kindMeta.label}
+              {kindLabelOverride ?? kindMeta.label}
             </span>
             <span
               className="inline-flex items-center gap-1.5 font-n-mono text-[11px]"

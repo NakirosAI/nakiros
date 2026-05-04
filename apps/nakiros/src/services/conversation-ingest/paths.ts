@@ -27,6 +27,7 @@ export const INGEST_DIR_NAME = 'ingest';
 export const INGEST_QUEUE_SUBDIR = 'queue';
 export const INGEST_PROJECTS_SUBDIR = 'projects';
 export const INGEST_PROJECT_SESSIONS_SUBDIR = 'sessions';
+export const INGEST_PROJECT_DIGESTS_SUBDIR = 'digests';
 export const INGEST_INDEX_FILENAME = 'index.json';
 export const INGEST_HOOK_SCRIPT_FILENAME = 'hook-stop.cjs';
 
@@ -110,6 +111,22 @@ export function getProjectSessionsDir(projectPath: string): string {
   const dir = join(getProjectDir(projectPath), INGEST_PROJECT_SESSIONS_SUBDIR);
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+/**
+ * Per-project digests/ folder where the V1.1 friction classifier persists
+ * `<sessionId>.json` outputs. Created on demand the first time a digest is
+ * generated for the project.
+ */
+export function getProjectDigestsDir(projectPath: string): string {
+  const dir = join(getProjectDir(projectPath), 'digests');
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** Path of a single digest file. Convention: `<sessionId>.json`. */
+export function getDigestPath(projectPath: string, sessionId: string): string {
+  return join(getProjectDigestsDir(projectPath), `${sessionId}.json`);
 }
 
 /**

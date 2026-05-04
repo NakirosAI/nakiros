@@ -10,7 +10,9 @@ import { listConversations, getConversationMessages } from '../../services/conve
 import { getOrComputeAnalysis } from '../../services/conversation-analysis-cache.js';
 import {
   ensureProjectIndexed,
+  listDigestsForProject,
   listSessionsForProject,
+  loadDigest,
   readSessionBody,
   toProjectConversation,
 } from '../../services/conversation-ingest/index.js';
@@ -144,6 +146,24 @@ export const projectHandlers: HandlerRegistry = {
       return runDeepAnalysis(project.providerProjectDir, sessionId, projectId);
     },
   ),
+
+  // V1.1 friction classifier — lazy-load helpers around the persisted output
+  // of the streaming `classifyConvo:*` runner. The actual classification is
+  // started/stopped/streamed via that family; these channels only read what
+  // is already on disk and never trigger a model call.
+  'project:getConversationDigest': createTypedHandler(
+    (projectId: string, sessionId: string) => {
+      const project = getProject(projectId);
+      if (!project) return null;
+      return loadDigest(project.projectPath, sessionId);
+    },
+  ),
+
+  'project:listConversationDigests': createTypedHandler((projectId: string) => {
+    const project = getProject(projectId);
+    if (!project) return [];
+    return listDigestsForProject(project.projectPath);
+  }),
 
   'project:listSkills': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);

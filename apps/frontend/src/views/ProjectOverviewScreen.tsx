@@ -7,6 +7,7 @@ import {
   FileCode2,
   Layers,
   MessageSquare,
+  ShieldCheck,
   Sparkles,
   Wrench,
   Zap,
@@ -135,6 +136,49 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     };
   }, [project.id]);
 
+  // Permissions rules count — combined total from both project (settings.json)
+  // and local (settings.local.json) scopes. Displayed as "X project · Y local"
+  // when both are non-zero, otherwise just the total.
+  const [permissionsCount, setPermissionsCount] = useState<number | null>(null);
+  const [permissionsCountBreakdown, setPermissionsCountBreakdown] = useState<{
+    project: number;
+    local: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+
+    function countRules(content: string | undefined | null): number {
+      if (!content) return 0;
+      try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        const allow = Array.isArray(parsed['allow']) ? (parsed['allow'] as unknown[]).length : 0;
+        const ask = Array.isArray(parsed['ask']) ? (parsed['ask'] as unknown[]).length : 0;
+        const deny = Array.isArray(parsed['deny']) ? (parsed['deny'] as unknown[]).length : 0;
+        return allow + ask + deny;
+      } catch {
+        return 0;
+      }
+    }
+
+    Promise.all([
+      window.nakiros.readPermissions(project.id, 'project').catch(() => null),
+      window.nakiros.readPermissions(project.id, 'local').catch(() => null),
+    ]).then(([projectResult, localResult]) => {
+      if (cancelled) return;
+      const projectCount = countRules(projectResult?.content);
+      const localCount = countRules(localResult?.content);
+      setPermissionsCount(projectCount + localCount);
+      setPermissionsCountBreakdown({ project: projectCount, local: localCount });
+    }).catch(() => {
+      if (cancelled) return;
+      setPermissionsCount(null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
   const windowed = useMemo(() => {
     if (!analyses) return [];
     // Overview shows the project's own conversations — synthetic runs
@@ -252,6 +296,18 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
                 label={t('config.hooks')}
                 count={hooksCount}
                 onClick={() => onNavigate('hooks')}
+              />
+              <ConfigCard
+                icon={<ShieldCheck size={14} strokeWidth={2} />}
+                label={t('config.permissions')}
+                count={permissionsCount}
+                subtitle={
+                  permissionsCountBreakdown &&
+                  (permissionsCountBreakdown.project > 0 || permissionsCountBreakdown.local > 0)
+                    ? `${permissionsCountBreakdown.project} project · ${permissionsCountBreakdown.local} local`
+                    : undefined
+                }
+                onClick={() => onNavigate('permissions')}
               />
             </div>
           </div>
@@ -733,11 +789,14 @@ function ConfigCard({
   icon,
   label,
   count,
+  subtitle,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
   count: number | null;
+  /** Optional secondary line shown below the count, e.g. "X project · Y local". */
+  subtitle?: string;
   onClick(): void;
 }) {
   return (
@@ -752,6 +811,11 @@ function ConfigCard({
         {count !== null && (
           <span className="block font-n-mono text-[10.5px] text-n-faint tabular-nums">
             {count}
+          </span>
+        )}
+        {subtitle && (
+          <span className="block font-n-mono text-[10px] text-n-faint/70 tabular-nums">
+            {subtitle}
           </span>
         )}
       </span>

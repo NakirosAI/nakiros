@@ -1,0 +1,85 @@
+{
+  "loading": "Chargement des permissions…",
+  "errorTitle": "Impossible de charger les permissions",
+  "scope": {
+    "project": "Projet (settings.json)",
+    "local": "Local (settings.local.json)"
+  },
+  "scopeTooltip": {
+    "project": "Partagé dans toute l'équipe, commité dans git",
+    "local": "Par développeur, ignoré par git — là où vivent habituellement les approbations «Oui, ne plus demander»"
+  },
+  "retry": "Réessayer",
+  "reload": "Recharger depuis le disque",
+  "back": "Projet",
+  "missingBanner": "Aucune permission configurée pour ce projet.",
+  "missingBannerCta": "Créer avec l'expert",
+  "runAudit": "Audit",
+  "runAuditTitle": "Lancer nakiros-permissions-expert en mode audit sur les permissions de ce projet",
+  "runFix": "Fix",
+  "runFixTitle": "Lancer nakiros-permissions-expert en mode fix (consomme les résultats d'audit)",
+  "runCreate": "Créer",
+  "runCreateTitle": "Générer une configuration permissions pour ce projet via nakiros-permissions-expert",
+  "runLaunching": "Lancement…",
+  "tabs": {
+    "edit": "Édition",
+    "audit": "Audit",
+    "fix": "Fix"
+  },
+  "editTab": {
+    "save": "Enregistrer",
+    "reset": "Réinitialiser",
+    "validJson": "JSON valide",
+    "invalidJson": "JSON invalide",
+    "form": "Formulaire",
+    "json": "JSON",
+    "formDisabledTooltip": "Corrige la syntaxe JSON d'abord pour utiliser l'éditeur formulaire",
+    "formCannotRenderInvalid": "Impossible d'afficher le formulaire : JSON invalide. Passe en vue JSON pour corriger.",
+    "placeholder": "{\n  \"allow\": [\"Bash(pnpm *)\", \"Read\", \"Edit\"],\n  \"deny\": [\"Bash(rm -rf *)\"],\n  \"ask\": [\"Bash(git push *)\"]\n}",
+    "newFileHint": "L'enregistrement créera ou mettra à jour le bloc permissions dans .claude/settings.json.",
+    "allow": "Autoriser",
+    "ask": "Demander",
+    "deny": "Refuser",
+    "defaultMode": "Mode par défaut",
+    "defaultModeNone": "— (non défini)",
+    "additionalDirectories": "Répertoires supplémentaires",
+    "addRule": "Ajouter une règle",
+    "removeRule": "Supprimer",
+    "addDirectory": "Ajouter un chemin",
+    "directoryPlaceholder": "/chemin/vers/rep",
+    "sidebarEmpty": "JSON invalide — corrige pour voir les métriques",
+    "rulesCount": "Règles",
+    "allowCount": "Autoriser",
+    "askCount": "Demander",
+    "denyCount": "Refuser",
+    "defaultModeLabel": "Mode par défaut",
+    "additionalDirsCount": "Répertoires supplémentaires",
+    "warnings": {
+      "bypassMode": "Le mode par défaut est bypassPermissions — toutes les vérifications de permissions sont désactivées",
+      "noDeny": "Pas de règles deny pour les commandes dangereuses (rm -rf, curl, etc.)",
+      "bypassNotLocked": "Le mode bypass n'est pas verrouillé (disableBypassPermissionsMode n'est pas 'disable')"
+    }
+  },
+  "auditTab": {
+    "empty": "Aucun audit des permissions n'a encore été enregistré.",
+    "loading": "Chargement…",
+    "emptyReport": "Ce rapport d'audit est vide.",
+    "fixFromAudit": "Corriger depuis cet audit"
+  },
+  "fixTab": {
+    "title": "Lancer un Fix sur les Permissions",
+    "lead": "Le fix s'appuie sur les résultats du dernier audit. Il modifie le bloc permissions dans .claude/settings.json en suivant les recommandations de l'expert.",
+    "cta": "Lancer le fix",
+    "cantFixWithoutAudit": "Lance un audit d'abord — le fix a besoin d'au moins un rapport."
+  },
+  "errors": {
+    "conflict": "Ce fichier de paramètres a été modifié en dehors de Nakiros. Recharge pour voir la dernière version.",
+    "conflictTitle": "Modification externe détectée",
+    "writeFailed": "Impossible d'écrire sur le disque.",
+    "writeFailedTitle": "Écriture échouée",
+    "invalid-json": "Le contenu n'est pas du JSON valide.",
+    "invalid-jsonTitle": "JSON invalide",
+    "projectNotFound": "Projet introuvable.",
+    "projectNotFoundTitle": "Projet inconnu"
+  }
+}

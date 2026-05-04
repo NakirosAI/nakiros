@@ -198,7 +198,11 @@ export default function NewShell({
                     <OutputStylesScreen key={project.id} project={project} />
                   )}
                   {view === 'permissions' && (
-                    <PermissionsScreen key={project.id} project={project} />
+                    <PermissionsScreen
+                      key={project.id}
+                      project={project}
+                      onOpenRunTab={handleOpenRunByIds}
+                    />
                   )}
                   {view === 'mcp' && (
                     <McpScreen key={project.id} project={project} />

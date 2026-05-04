@@ -54,7 +54,8 @@
   "config": {
     "rules": "Règles",
     "subagents": "Sous-agents",
-    "hooks": "Hooks"
+    "hooks": "Hooks",
+    "permissions": "Permissions"
   },
   "empty.tips": "Pas de conseil récurrent",
   "empty.tools": "Aucun outil en échec",

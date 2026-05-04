@@ -39,6 +39,7 @@ import frPermissions from './locales/fr/permissions.json';
 import frMcp from './locales/fr/mcp.json';
 import frHooks from './locales/fr/hooks.json';
 import frHooksRunner from './locales/fr/hooks-runner.json';
+import frPermissionsRunner from './locales/fr/permissions-runner.json';
 import frClaudeMd from './locales/fr/claude-md.json';
 import frConversationIngest from './locales/fr/conversation-ingest.json';
 
@@ -80,6 +81,7 @@ import enPermissions from './locales/en/permissions.json';
 import enMcp from './locales/en/mcp.json';
 import enHooks from './locales/en/hooks.json';
 import enHooksRunner from './locales/en/hooks-runner.json';
+import enPermissionsRunner from './locales/en/permissions-runner.json';
 import enClaudeMd from './locales/en/claude-md.json';
 import enConversationIngest from './locales/en/conversation-ingest.json';
 import { resolveLanguage } from '../utils/language';
@@ -125,6 +127,7 @@ const resources = {
     mcp: frMcp,
     hooks: frHooks,
     'hooks-runner': frHooksRunner,
+    'permissions-runner': frPermissionsRunner,
     'claude-md': frClaudeMd,
     'conversation-ingest': frConversationIngest,
   },
@@ -167,6 +170,7 @@ const resources = {
     mcp: enMcp,
     hooks: enHooks,
     'hooks-runner': enHooksRunner,
+    'permissions-runner': enPermissionsRunner,
     'claude-md': enClaudeMd,
     'conversation-ingest': enConversationIngest,
   },

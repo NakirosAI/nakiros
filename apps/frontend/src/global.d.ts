@@ -3,6 +3,9 @@ import type {
   SubagentsReadResult,
   SubagentsMutationResult,
   SubagentsAuditHistoryEntry,
+  HooksReadResult,
+  HooksExpertMutationResult,
+  HooksAuditHistoryEntry,
   AppPreferences,
   AgentInstallStatus,
   AgentInstallRequest,
@@ -475,6 +478,14 @@ declare global {
       // audit runs whose request carried `subagentsTarget`.
       listSubagentsAudits(projectId: string, subagentName: string): Promise<SubagentsAuditHistoryEntry[]>;
       readSubagentsAudit(path: string): Promise<string | null>;
+
+      // Hooks expert (nakiros-hooks-expert) — read/save the hooks block + audit
+      // history. NOTE: distinct from readClaudeHooks/saveClaudeHooks (Module 6
+      // V2 editor) which expose a structured view per scope.
+      readHooks(projectId: string): Promise<HooksReadResult>;
+      saveHooks(projectId: string, content: string, mtimeAtRead: string): Promise<HooksExpertMutationResult>;
+      listHooksAudits(projectId: string): Promise<HooksAuditHistoryEntry[]>;
+      readHooksAudit(path: string): Promise<string | null>;
 
       // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
       getConversationIngestStatus(): Promise<ConversationIngestStatus>;

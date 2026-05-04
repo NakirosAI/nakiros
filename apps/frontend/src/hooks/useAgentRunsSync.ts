@@ -159,6 +159,32 @@ function auditLikeToAgentRun(
     };
   }
 
+  // Runs that target the hooks block (via `nakiros-hooks-expert`) surface with
+  // a hooks-focused title and a `hooks` target type. Singleton — no sub-name.
+  if (run.hooksTarget) {
+    const ht = run.hooksTarget;
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · Hooks`,
+      target: {
+        type: 'hooks',
+        projectId: ht.projectId,
+        projectPath: ht.projectPath,
+        mode: ht.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
   return {
     id: run.runId,
     kind,

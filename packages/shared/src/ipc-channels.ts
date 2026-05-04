@@ -240,6 +240,15 @@ export const IPC_CHANNELS = {
   'subagents:listAudits': 'subagents:listAudits',
   'subagents:readAudit': 'subagents:readAudit',
 
+  // Hooks expert — singleton read/save (hooks block only) + audit history.
+  // NOTE: 'hooks:*' is distinct from the editor channels 'claudeHooks:*'
+  // (Module 6 V2) which edit the full hooks structure per scope. These four
+  // channels are for the `nakiros-hooks-expert` audit/fix/create flow.
+  'hooks:read': 'hooks:read',
+  'hooks:save': 'hooks:save',
+  'hooks:listAudits': 'hooks:listAudits',
+  'hooks:readAudit': 'hooks:readAudit',
+
   // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
   'conversationIngest:status': 'conversationIngest:status',
   'conversationIngest:previewHookDiff': 'conversationIngest:previewHookDiff',

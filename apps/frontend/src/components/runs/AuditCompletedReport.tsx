@@ -49,9 +49,9 @@ export default function AuditCompletedReport({
   const { t } = useTranslation('runs');
   const stats = useMemo(() => computeStats(run), [run]);
   const findings = useMemo(() => computeFindings(run), [run]);
-  const { isClaudemd, isRules, isSubagents } = runDisplayContext('audit', run);
-  // Runs targeting a CLAUDE.md, a rule file, or a subagent have no eval suite concept.
-  const hideEval = isClaudemd || isRules || isSubagents;
+  const { isClaudemd, isRules, isSubagents, isHooks } = runDisplayContext('audit', run);
+  // Runs targeting a CLAUDE.md, a rule file, a subagent, or hooks have no eval suite concept.
+  const hideEval = isClaudemd || isRules || isSubagents || isHooks;
 
   // Fetch the skill record once we know the audit is over — drives the
   // "Évaluer le skill" button (enabled iff `skill.hasEvals`). Skipped for

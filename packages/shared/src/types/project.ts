@@ -848,6 +848,13 @@ export interface AuditRun {
    * exclusive with `claudemdTarget` and `rulesTarget`. Stable across rehydrate.
    */
   subagentsTarget?: SubagentsTargetContext;
+  /**
+   * Set when this run targets the `.claude/settings.json` hooks block via the
+   * bundled `nakiros-hooks-expert`. Singleton per project — no sub-target name.
+   * Mutually exclusive with `claudemdTarget`, `rulesTarget`, and
+   * `subagentsTarget`. Stable across rehydrate.
+   */
+  hooksTarget?: HooksTargetContext;
 }
 
 /**
@@ -1090,6 +1097,12 @@ export interface StartAuditRequest {
    * exclusive with `claudemdTarget` and `rulesTarget`.
    */
   subagentsTarget?: SubagentsTargetContext;
+  /**
+   * Optional descriptor for runs that target the `.claude/settings.json` hooks block
+   * via the bundled `nakiros-hooks-expert`. Singleton — no name field. Mutually
+   * exclusive with `claudemdTarget`, `rulesTarget`, and `subagentsTarget`.
+   */
+  hooksTarget?: HooksTargetContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -1211,6 +1224,25 @@ export interface RulesTargetContext {
  * exposes three entry-point commands.
  */
 export type SubagentsRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Mode of a hooks run. The bundled `nakiros-hooks-expert` skill exposes
+ * three entry-point commands.
+ */
+export type HooksRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * the project's `.claude/settings.json` `hooks` block via the bundled
+ * `nakiros-hooks-expert`. Singleton per project — no `name` field (unlike rules
+ * or subagents). Project scope only.
+ */
+export interface HooksTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Run mode — drives the slash-command suffix. */
+  mode: HooksRunMode;
+}
 
 /**
  * Optional target descriptor for an audit / fix / create run that operates on

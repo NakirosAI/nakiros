@@ -40,7 +40,7 @@ export interface RunDisplayContext {
   /** Bare action verb localised for the current run kind. */
   actionVerb: 'Audit' | 'Fix' | 'Create' | 'Eval' | 'Analyze' | 'Classify';
   /** What the run operates on, in user-facing prose. */
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks';
   /**
    * `true` when this run targets a CLAUDE.md via the bundled expert. UI
    * surfaces use this to hide skill-only actions (eval, sync-back, etc.).
@@ -59,7 +59,13 @@ export interface RunDisplayContext {
    * (eval, sync-back, etc.).
    */
   isSubagents: boolean;
-  /** Always `'CLAUDE.md'` when isClaudemd, rule/subagent filename when isRules/isSubagents, otherwise null. */
+  /**
+   * `true` when this run targets the hooks block via the bundled
+   * `nakiros-hooks-expert`. UI surfaces use this to hide skill-only actions
+   * (eval, sync-back, etc.).
+   */
+  isHooks: boolean;
+  /** Always `'CLAUDE.md'` when isClaudemd, rule/subagent filename when isRules/isSubagents, `'hooks'` when isHooks, otherwise null. */
   scopeLabel: string | null;
 }
 
@@ -90,6 +96,7 @@ export function runDisplayContext(
       isClaudemd: true,
       isRules: false,
       isSubagents: false,
+      isHooks: false,
       scopeLabel: 'CLAUDE.md',
     };
   }
@@ -106,6 +113,7 @@ export function runDisplayContext(
       isClaudemd: false,
       isRules: true,
       isSubagents: false,
+      isHooks: false,
       scopeLabel: rt.ruleName,
     };
   }
@@ -122,7 +130,23 @@ export function runDisplayContext(
       isClaudemd: false,
       isRules: false,
       isSubagents: true,
+      isHooks: false,
       scopeLabel: st.subagentName,
+    };
+  }
+
+  // Hooks target — applies to audit / fix / create with hooksTarget. Singleton.
+  if ('hooksTarget' in run && run.hooksTarget) {
+    return {
+      title: `${actionVerb} · Hooks`,
+      kindLabel: `${actionVerb} hooks`,
+      actionVerb,
+      targetNoun: 'hooks',
+      isClaudemd: false,
+      isRules: false,
+      isSubagents: false,
+      isHooks: true,
+      scopeLabel: 'hooks',
     };
   }
 
@@ -137,6 +161,7 @@ export function runDisplayContext(
       isClaudemd: false,
       isRules: false,
       isSubagents: false,
+      isHooks: false,
       scopeLabel: null,
     };
   }
@@ -152,6 +177,7 @@ export function runDisplayContext(
     isClaudemd: false,
     isRules: false,
     isSubagents: false,
+    isHooks: false,
     scopeLabel: null,
   };
 }

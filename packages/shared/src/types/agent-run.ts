@@ -1,8 +1,9 @@
-import type { ClaudeMdRunMode, RulesRunMode, SubagentsRunMode, SkillScope } from './project.js';
+import type { ClaudeMdRunMode, RulesRunMode, SubagentsRunMode, HooksRunMode, SkillScope } from './project.js';
 
 export type { ClaudeMdRunMode } from './project.js';
 export type { RulesRunMode } from './project.js';
 export type { SubagentsRunMode } from './project.js';
+export type { HooksRunMode } from './project.js';
 
 /**
  * The discriminator of an agent run. Each kind has its own backing runner on
@@ -103,10 +104,22 @@ export interface SubagentsRunTarget {
 }
 
 /**
+ * A hooks-bound target — used when an audit / fix / create run targets the
+ * `.claude/settings.json` hooks block via `nakiros-hooks-expert`. Singleton
+ * per project — no `name` field (unlike rules or subagents).
+ */
+export interface HooksRunTarget {
+  type: 'hooks';
+  projectId: string;
+  projectPath: string;
+  mode: HooksRunMode;
+}
+
+/**
  * Discriminated union of every supported target shape. New target kinds
  * extend this union when their corresponding agent-run kind ships.
  */
-export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget;
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget;
 
 /**
  * Kind-specific opaque payload riding alongside an `AgentRun`. The store

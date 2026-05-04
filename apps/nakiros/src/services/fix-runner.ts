@@ -55,11 +55,13 @@ import {
 import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
 import { rulesAuditArchiveDir } from './rules-audit-history.js';
 import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
+import { hooksAuditArchiveDir } from './hooks-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
 const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
 const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
+const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
 
 /**
  * Two flavors of skill-factory-driven runs:
@@ -470,7 +472,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
   },
 
   prepareWorkdir(req, runId) {
-    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget) {
+    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget && !req.hooksTarget) {
       throw new Error(
         `Cannot create skill "${req.skillName}": target directory already exists (${req.skillDir}). ` +
           `Pick a different name or run "fix" on the existing skill instead.`,
@@ -498,9 +500,9 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     let latestAuditFile: string | null = null;
     let latestIteration: number | null = null;
 
-    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget) {
-      // For CLAUDE.md, rules, and subagents runs we don't copy the bundled expert
-      // into the workdir — it's immutable. We only symlink it under
+    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget) {
+      // For CLAUDE.md, rules, subagents, and hooks runs we don't copy the bundled
+      // expert into the workdir — it's immutable. We only symlink it under
       // `.claude/skills/<name>` so the slash-command resolves from cwd. The agent
       // edits the target file directly via Write/Edit at the absolute path
       // injected in the first prompt.
@@ -573,6 +575,25 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         );
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for subagents: ${(err as Error).message}`);
+      }
+    }
+
+    // For hooks fix/create runs, write the cross-entity snapshot so the expert
+    // agent can reason about the hooks block in context of the full .claude/
+    // configuration.
+    if (req.hooksTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.hooksTarget.projectId,
+          projectPath: req.hooksTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for hooks: ${(err as Error).message}`);
       }
     }
 
@@ -651,6 +672,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       ].join('\n');
     }
 
+    if (req.hooksTarget) {
+      const ht = req.hooksTarget;
+      const settingsPath = join(ht.projectPath, '.claude', 'settings.json');
+      const exists = existsSync(settingsPath);
+      const command = req.mode === 'fix' ? 'fix' : 'create';
+      return [
+        `/${HOOKS_EXPERT_SKILL_NAME} ${command}`,
+        '',
+        languageLine,
+        `- Operate on the hooks block of the project settings.`,
+        `- Project root: ${ht.projectPath}`,
+        `- Settings file: ${settingsPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `- You may edit the settings file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+      ].join('\n');
+    }
+
     if (req.mode === 'fix') {
       const auditLine = extras.latestAuditFile
         ? `- Latest audit was copied to \`./audits/${extras.latestAuditFile}\` — read it first.`
@@ -708,6 +747,7 @@ ${languageLine}
       claudemdTarget: req.claudemdTarget,
       rulesTarget: req.rulesTarget,
       subagentsTarget: req.subagentsTarget,
+      hooksTarget: req.hooksTarget,
     };
   },
 
@@ -774,9 +814,9 @@ ${languageLine}
       `[fix-runner] finish start runId=${run.runId} mode=${extras.mode} realSkillDir=${extras.realSkillDir} workdir=${run.workdir}`,
     );
 
-    // CLAUDE.md, rules, and subagents runs edit the target file directly — no
-    // sandbox sync-back required. Just transition to completed.
-    if (run.claudemdTarget || run.rulesTarget || run.subagentsTarget) {
+    // CLAUDE.md, rules, subagents, and hooks runs edit the target file directly
+    // — no sandbox sync-back required. Just transition to completed.
+    if (run.claudemdTarget || run.rulesTarget || run.subagentsTarget || run.hooksTarget) {
       run.status = 'completed';
       run.finishedAt = new Date().toISOString();
       run.error = null;
@@ -848,6 +888,11 @@ ${languageLine}
         if (!req.subagentsTarget || !run.subagentsTarget) continue;
         if (req.subagentsTarget.projectId !== run.subagentsTarget.projectId) continue;
         if (req.subagentsTarget.subagentName !== run.subagentsTarget.subagentName) continue;
+      }
+      // Hooks runs: singleton per project — disambiguate by projectId only.
+      if (req.hooksTarget || run.hooksTarget) {
+        if (!req.hooksTarget || !run.hooksTarget) continue;
+        if (req.hooksTarget.projectId !== run.hooksTarget.projectId) continue;
       }
       if (isActiveRunStatus(run.status)) return entry;
     }
@@ -937,6 +982,7 @@ ${languageLine}
       claudemdTarget: blob.claudemdTarget,
       rulesTarget: blob.rulesTarget,
       subagentsTarget: blob.subagentsTarget,
+      hooksTarget: blob.hooksTarget,
     };
 
     console.log(

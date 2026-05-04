@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "Template for .claude/settings.json hooks section.",
+    "Remove this _comment key before writing to production.",
+    "",
+    "Structure: hooks.<HookEvent>[].{ matcher, hooks: [handler] }",
+    "Handler types: command | http | mcp_tool | prompt | agent",
+    "Use $CLAUDE_PROJECT_DIR for script paths (absolute, cwd-independent).",
+    "Use 'exit 2' in shell scripts to block the associated action.",
+    "Set timeout explicitly — default 600s is too long for most hooks."
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "_comment": "Fires before every Bash tool call. Use 'if' to narrow further.",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-bash-guard.sh",
+            "if": "Bash(rm *)",
+            "_comment_if": "Only spawn process when the tool input matches this pattern",
+            "timeout": 10,
+            "statusMessage": "Checking bash command"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "_comment": "Fires after any file-writing tool. Good for linting or formatting.",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lint-changed.sh",
+            "timeout": 30,
+            "statusMessage": "Linting changed files"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "_comment": "Fires when Claude Code stops. Use async:true for background work.",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/on-stop.sh",
+            "async": true,
+            "timeout": 120,
+            "statusMessage": "Running post-stop checks"
+          }
+        ]
+      }
+    ]
+  }
+}

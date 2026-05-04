@@ -380,6 +380,9 @@ function resolveTargetLabel(run: AgentRun, projects: Project[]): string {
   if (target.type === 'subagents') {
     return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
   }
+  if (target.type === 'hooks') {
+    return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
+  }
   switch (target.scope) {
     case 'project':
       return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId ?? '';

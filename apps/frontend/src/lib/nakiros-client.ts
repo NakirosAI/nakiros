@@ -575,6 +575,14 @@ const client = {
     invoke(C['subagents:listAudits'], projectId, subagentName),
   readSubagentsAudit: (path: string) => invoke(C['subagents:readAudit'], path),
 
+  // Hooks expert (nakiros-hooks-expert) — read/save the hooks block + audit
+  // history. Distinct from readClaudeHooks/saveClaudeHooks (Module 6 V2 editor).
+  readHooks: (projectId: string) => invoke(C['hooks:read'], projectId),
+  saveHooks: (projectId: string, content: string, mtimeAtRead: string) =>
+    invoke(C['hooks:save'], projectId, content, mtimeAtRead),
+  listHooksAudits: (projectId: string) => invoke(C['hooks:listAudits'], projectId),
+  readHooksAudit: (path: string) => invoke(C['hooks:readAudit'], path),
+
   // Conversation friction-classifier runner (classify-convo)
   startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),
   stopClassifyConvo: (runId: string) => invoke(C['classifyConvo:stopRun'], runId),

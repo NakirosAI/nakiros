@@ -43,6 +43,11 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 
 - [dot-claude-snapshot-builder.ts](./dot-claude-snapshot-builder.md) — Synchronous builder for `DotClaudeSnapshot`; serialised to `dot-claude-snapshot.json` in the expert's workdir before each CLAUDE.md audit/fix run.
 
+## `.claude/` expert I/O services
+
+- [hooks-writer.ts](./hooks-writer.md) — Read/merge-write the `hooks` block of `.claude/settings.json` with optimistic-lock conflict detection; never touches other settings keys.
+- [hooks-audit-history.ts](./hooks-audit-history.md) — Singleton archive of hooks audit reports at `~/.nakiros/<projectId>/hooks-audits/`; list and read helpers for the IPC layer.
+
 ## App-level + identity
 
 - [agent-cli.ts](./agent-cli.md) — Detect `claude` / `codex` / `cursor-agent` binaries and version.

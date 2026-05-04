@@ -754,3 +754,50 @@ export interface SubagentsAuditHistoryEntry {
   /** "X/Y" score scraped from the markdown header — `null` when absent. */
   score: string | null;
 }
+
+// ── Hooks expert — read/save + audit history types ─────────────────────────
+
+/**
+ * Result of `hooks:read`. Returns the `hooks` block of the project's
+ * `.claude/settings.json` as a pretty-printed JSON string. Other settings
+ * keys (permissions, env, model, etc.) are NOT included — this is a
+ * hooks-only view. Use the permissions editor for the rest.
+ */
+export interface HooksReadResult {
+  /**
+   * JSON-stringified content of the `hooks` block from settings.json
+   * (pretty-printed). Empty object string `"{}"` when no hooks block exists.
+   */
+  content: string;
+  /** Settings.json mtime at read time (optimistic-lock token for save). */
+  mtime: string;
+  /** Whether `.claude/settings.json` exists. The hooks block may be empty even when settings.json exists. */
+  exists: boolean;
+  /** Absolute path to .claude/settings.json. */
+  path: string;
+}
+
+/**
+ * Result of `hooks:save`. Writes the hooks block back into settings.json
+ * while preserving all other keys.
+ */
+export interface HooksExpertMutationResult {
+  ok: boolean;
+  code?: 'conflict' | 'invalid-json' | 'project-not-found' | 'fs-error' | string;
+  message?: string;
+}
+
+/**
+ * One archived hooks audit produced by the audit-runner when the run carries
+ * a `hooksTarget`. Stored under
+ * `~/.nakiros/<projectId>/hooks-audits/audit-<ISO>.md`. Singleton — no
+ * sub-folder per target name. The list IPC returns these sorted newest-first.
+ */
+export interface HooksAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+}

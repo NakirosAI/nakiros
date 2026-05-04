@@ -217,7 +217,14 @@
     "apps/nakiros/src/daemon/handlers/analyze-convo.ts": "18c97f1a64a61ad50b663faa92d01abb2c0da3826c49c785046e313a6b4a370a",
     "apps/nakiros/src/services/analyze-convo-runner.ts": "ed4ed8ee798d85c17219aaeaf8ddeea3e49f3537b63ceae5e21a7fd2383f1e8f",
     "packages/shared/src/types/dot-claude-snapshot.ts": "86845dc88d2661f6aa2dbbd82bde941e6b4c7797e18b0abe523bdd5fae8884bf",
-    "apps/nakiros/src/services/dot-claude-snapshot-builder.ts": "b93aef69fd90322527284506d88043abbccaa963b8fb3aac1d65b519e6c597b5"
+    "apps/nakiros/src/services/dot-claude-snapshot-builder.ts": "b93aef69fd90322527284506d88043abbccaa963b8fb3aac1d65b519e6c597b5",
+    "apps/frontend/src/components/markdown/MarkdownEditor.tsx": "5528d4d69bb0992c06d89453a2517e7e2213eb9351d8ebfc1e660b1997860bae",
+    "apps/nakiros/src/services/hooks-writer.ts": "bd783d58af693c3adb9dadafa793e62bda61a8005b24433c2d91e00787873d75",
+    "apps/nakiros/src/services/hooks-audit-history.ts": "28e1088c6139d2f6bbb7685cc858efd85d4e3f18c75f87462ee8b39a163d9447",
+    "apps/nakiros/src/daemon/handlers/hooks.ts": "08376b8c30778efdebd2167970c324f045fcb43d43e3e4d320809984222f0afc",
+    "apps/nakiros/src/services/mcp-writer.ts": "744b98205e5935e9316825b3ce10d984409131654dedcb78f22aa29cf6ccb2d8",
+    "apps/nakiros/src/services/mcp-audit-history.ts": "6d3c398687488b6c3d45775b82532a32bd82aec8867889a3ff9d69a386297c35",
+    "apps/nakiros/src/daemon/handlers/mcp.ts": "4a8a2b198f5d7510d48de57e9aca84f6d235ca8e40979c87f4c54b1fbab838e2"
   },
-  "updated_at": "2026-05-04T09:42:04.529Z"
+  "updated_at": "2026-05-04T19:59:58.878Z"
 }

@@ -47,6 +47,8 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 
 - [hooks-writer.ts](./hooks-writer.md) — Read/merge-write the `hooks` block of `.claude/settings.json` with optimistic-lock conflict detection; never touches other settings keys.
 - [hooks-audit-history.ts](./hooks-audit-history.md) — Singleton archive of hooks audit reports at `~/.nakiros/<projectId>/hooks-audits/`; list and read helpers for the IPC layer.
+- [mcp-writer.ts](./mcp-writer.md) — Read/write the entire `.mcp.json` project-root file with mtime optimistic-lock; deletes the file when content becomes empty.
+- [mcp-audit-history.ts](./mcp-audit-history.md) — Singleton archive of MCP audit reports at `~/.nakiros/<projectId>/mcp-audits/`; list and read helpers for the IPC layer.
 
 ## App-level + identity
 

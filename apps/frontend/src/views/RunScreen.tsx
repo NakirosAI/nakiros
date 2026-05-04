@@ -6,6 +6,7 @@ import type {
   AuditRun,
   AuditRunEvent,
   ChatTimelineEntry,
+  ConversationDigest,
   EvalMatrix,
   FixEvalResult,
   FixTimelineEntry,
@@ -18,7 +19,9 @@ import type {
 import { useRunState } from '../hooks/useRunState';
 import { useElapsedTimer } from '../hooks/useElapsedTimer';
 import { agentRunStore } from '../lib/agent-run-store';
-import { getRunAPI } from '../lib/run-api';
+import { getRunAPI, type AuditLikeRun, type AuditLikeEvent } from '../lib/run-api';
+import { runDisplayContext } from '../lib/run-display';
+import { DigestView } from '../components/conversations/DigestView';
 import {
   HumanInteractionPanel,
   RunErrorBanner,
@@ -103,7 +106,7 @@ function AuditLikeRunScreen({ runId, runKind, onClose, onOpenRunTab }: RunScreen
 
   const initialFromStore = agentRunStore.get(runId);
 
-  const [bootedRun, setBootedRun] = useState<AuditRun | null>(null);
+  const [bootedRun, setBootedRun] = useState<AuditLikeRun | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
 
   // Fetch the initial AuditRun once on mount — `useRunState` then
@@ -194,7 +197,7 @@ function RunScreenBody({
   onOpenRunTab,
 }: {
   runKind: AgentRunKind;
-  bootedRun: AuditRun;
+  bootedRun: AuditLikeRun;
   api: NonNullable<ReturnType<typeof getRunAPI>>;
   onClose(): void;
   onOpenRunTab?: import('../lib/run-launcher').OpenRunTabCallback;
@@ -223,7 +226,7 @@ function RunScreenBody({
   // the runId so two parallel fix tabs never share the cache.
   const diffCacheScope = `fix:${bootedRun.runId}`;
 
-  const { run, setRun, liveEvents, liveScrollRef, handlerError } = useRunState<AuditRun, AuditRunEvent['event']>(
+  const { run, setRun, liveEvents, liveScrollRef, handlerError } = useRunState<AuditLikeRun, AuditLikeEvent>(
     bootedRun.runId,
     bootedRun,
     api.state,
@@ -252,11 +255,12 @@ function RunScreenBody({
         const outcome = (inner as { outcome: NonNullable<AuditRun['checkResults']>[number] }).outcome;
         if (!outcome) return;
         setRun((r) => {
-          const existing = r.checkResults ?? [];
+          const auditR = r as AuditRun;
+          const existing = auditR.checkResults ?? [];
           // Daemon already dedupes by checkId, but a remount + replay could
           // surface the same line twice — defend at the boundary.
-          if (existing.some((o) => o.checkId === outcome.checkId)) return r;
-          return { ...r, checkResults: [...existing, outcome] };
+          if (existing.some((o: NonNullable<AuditRun['checkResults']>[number]) => o.checkId === outcome.checkId)) return r;
+          return { ...auditR, checkResults: [...existing, outcome] };
         });
         return;
       }
@@ -299,13 +303,43 @@ function RunScreenBody({
   );
 
   // Backfill the report on tab re-open if the run is already terminal.
+  // classify-convo runs ship a structured `ConversationDigest`, not a
+  // markdown report — they go through the digest-loading effect below.
   useEffect(() => {
     if (!api.readReport) return;
-    if (run.status !== 'completed' || !run.reportPath || reportContent) return;
-    void api.readReport(run.reportPath).then((content) => {
+    if (runKind === 'classify-convo') return;
+    const auditRun = run as AuditRun;
+    if (run.status !== 'completed' || !auditRun.reportPath || reportContent) return;
+    void api.readReport(auditRun.reportPath).then((content) => {
       if (content !== null) setReportContent(content);
     });
-  }, [api, run.status, run.reportPath, reportContent]);
+  }, [api, run, runKind, reportContent]);
+
+  // V1.1 friction classifier — load the persisted ConversationDigest once
+  // the run completes (or on tab re-open if already terminal). The digest
+  // is the structured equivalent of audit's markdown report.
+  const [digest, setDigest] = useState<ConversationDigest | null>(null);
+  useEffect(() => {
+    if (runKind !== 'classify-convo') return;
+    if (run.status !== 'completed') return;
+    if (digest) return;
+    const classifyRun = run as import('@nakiros/shared').ClassifyConvoRun;
+    let cancelled = false;
+    void window.nakiros
+      // sourceSessionId = the conv we classified. `sessionId` would be the
+      // sub-run's Claude Code session id (overwritten by runner-core) and the
+      // digest isn't persisted under that path.
+      .getConversationDigest(classifyRun.projectId, classifyRun.sourceSessionId)
+      .then((fresh) => {
+        if (!cancelled) setDigest(fresh);
+      })
+      .catch(() => {
+        // best-effort — DigestView falls back to a "loading" line if null
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runKind, run, digest]);
 
   // Fetch the unified timeline from Claude Code's session jsonl. Sole
   // source of truth for the chat view of fix + audit runs — every entry
@@ -358,6 +392,7 @@ function RunScreenBody({
   const isWaiting = run.status === 'waiting_for_input';
   const isCompleted = run.status === 'completed';
   const isTerminal = isCompleted || run.status === 'failed' || run.status === 'stopped';
+  const display = useMemo(() => runDisplayContext(runKind, run), [runKind, run]);
 
   // Fix + audit: pull the billed-equivalent token total + agent-active timer
   // from the Claude Code session JSONL. Bypasses the runner's own token
@@ -411,14 +446,15 @@ function RunScreenBody({
 
   const fixDiffIdentity = useMemo<RunScreenIdentity | null>(() => {
     if (runKind !== 'fix' && runKind !== 'create') return null;
+    const auditRun = run as AuditRun;
     return {
-      scope: run.scope,
-      skillName: run.skillName,
-      projectId: run.projectId,
-      pluginName: run.pluginName,
-      marketplaceName: run.marketplaceName,
+      scope: auditRun.scope,
+      skillName: auditRun.skillName,
+      projectId: auditRun.projectId,
+      pluginName: auditRun.pluginName,
+      marketplaceName: auditRun.marketplaceName,
     };
-  }, [runKind, run.scope, run.skillName, run.projectId, run.pluginName, run.marketplaceName]);
+  }, [runKind, run]);
 
   // Lazy-fetch the matrix the first time the diff overlay is opened.
   // Fetches BOTH the prod matrix and this fix session's `.fix-temp/`
@@ -496,10 +532,11 @@ function RunScreenBody({
     if (isLaunchingEval || !onOpenRunTab) return;
     setIsLaunchingEval(true);
     try {
+      const auditRun = run as AuditRun;
       if (runKind === 'create') {
-        await launchCreateEval(run, onOpenRunTab);
+        await launchCreateEval(auditRun, onOpenRunTab);
       } else {
-        await launchFixEval(run, onOpenRunTab);
+        await launchFixEval(auditRun, onOpenRunTab);
       }
     } catch (err) {
       console.error('[run] launch eval failed', err);
@@ -516,16 +553,30 @@ function RunScreenBody({
 
   async function handleReject() {
     if (isRejecting) return;
-    const message =
-      runKind === 'create'
-        ? t('prompts.rejectCreate', {
-            defaultValue:
-              'Discard the sandbox? The skill draft will be thrown away.',
-          })
-        : t('prompts.rejectFix', {
-            defaultValue:
-              'Discard the sandbox? The pending changes will be thrown away.',
-          });
+    let message: string;
+    if (display.isClaudemd || display.isRules) {
+      message =
+        runKind === 'create'
+          ? t('prompts.rejectCreateClaudemd', {
+              defaultValue:
+                'Stopper la création de ce CLAUDE.md ? Le fichier déjà écrit reste en place — c\'est un arrêt, pas un rollback.',
+            })
+          : t('prompts.rejectFixClaudemd', {
+              defaultValue:
+                'Stopper le fix ? Les modifications déjà appliquées au CLAUDE.md restent — c\'est un arrêt, pas un rollback.',
+            });
+    } else {
+      message =
+        runKind === 'create'
+          ? t('prompts.rejectCreate', {
+              defaultValue:
+                'Discard the sandbox? The skill draft will be thrown away.',
+            })
+          : t('prompts.rejectFix', {
+              defaultValue:
+                'Discard the sandbox? The pending changes will be thrown away.',
+            });
+    }
     if (!window.confirm(message)) return;
     setIsRejecting(true);
     try {
@@ -570,25 +621,30 @@ function RunScreenBody({
   // Audit progress — drives the "step X/Y" caption in the header. We only
   // know the total once the manifest has been emitted; until then the bar
   // stays hidden (no fake percentage).
+  const auditRunForProgress = runKind === 'audit' ? (run as AuditRun) : null;
   const auditStepTotal =
-    runKind === 'audit' && run.manifest ? run.manifest.totalChecks : undefined;
+    auditRunForProgress && auditRunForProgress.manifest ? auditRunForProgress.manifest.totalChecks : undefined;
   const auditStepDone =
-    runKind === 'audit' && run.manifest ? run.checkResults?.length ?? 0 : undefined;
+    auditRunForProgress && auditRunForProgress.manifest ? auditRunForProgress.checkResults?.length ?? 0 : undefined;
 
   // Audit gets a dedicated completion screen (hero card + KPIs + findings +
   // next steps). Fix / create keep the markdown viewer fallback.
   const showAuditCompleted = runKind === 'audit' && isCompleted;
+  // classify-convo gets a structured digest view in place of the markdown
+  // report when the run has completed and the digest has loaded.
+  const showClassifyConvoDigest = runKind === 'classify-convo' && isCompleted;
 
   return (
     <div className="flex h-full flex-1 flex-col overflow-hidden font-n-sans">
       <NewRunHeader
         kind={runKind}
         status={status}
-        title={composeTitle(runKind, run, t)}
+        title={display.title}
+        kindLabelOverride={display.kindLabel}
         stats={stats}
         onBack={onClose}
-        onStop={isRunning ? handleStop : undefined}
-        onFinish={isCompleted ? handleFinish : undefined}
+        onStop={isRunning || isWaiting ? handleStop : undefined}
+        onFinish={isTerminal ? handleFinish : undefined}
         isStopping={isStopping}
         stepTotal={auditStepTotal}
         stepDone={auditStepDone}
@@ -596,13 +652,25 @@ function RunScreenBody({
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden bg-n-canvas">
-          {showAuditCompleted ? (
+          {showClassifyConvoDigest ? (
+            digest ? (
+              <div className="flex-1 overflow-y-auto px-6 py-6">
+                <div className="mx-auto max-w-[920px] rounded-n-lg border border-n-border-subtle bg-n-surface">
+                  <DigestView digest={digest} />
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto px-6 py-6 font-n-mono text-[12px] text-n-muted">
+                {t('common:loading', { defaultValue: 'Loading digest…' })}
+              </div>
+            )
+          ) : showAuditCompleted ? (
             <AuditCompletedReport
-              run={run}
+              run={run as AuditRun}
               reportContent={reportContent}
               onOpenReport={
-                run.reportPath
-                  ? () => void window.nakiros.openPath(run.reportPath as string)
+                (run as AuditRun).reportPath
+                  ? () => void window.nakiros.openPath((run as AuditRun).reportPath as string)
                   : undefined
               }
               onOpenRunTab={onOpenRunTab}
@@ -631,7 +699,11 @@ function RunScreenBody({
                   : undefined
               }
               onOpenEvalDiff={runKind === 'fix' ? setEvalDiffResult : undefined}
-              skillName={runKind === 'fix' || runKind === 'create' ? run.skillName : undefined}
+              skillName={
+                runKind === 'fix' || runKind === 'create'
+                  ? (run as AuditRun).skillName
+                  : undefined
+              }
             />
           )}
 
@@ -641,7 +713,7 @@ function RunScreenBody({
 
         <RunSidePanel
           kind={runKind}
-          run={run}
+          run={run as AuditRun}
           reportContent={reportContent}
           onReject={runKind === 'fix' || runKind === 'create' ? handleReject : undefined}
           isRejecting={isRejecting}
@@ -660,12 +732,16 @@ function RunScreenBody({
           onSelectDiffFile={
             runKind === 'fix' || runKind === 'create' ? setSelectedDiffFile : undefined
           }
+          // CLAUDE.md and rules runs don't have a skill-eval suite — hide
+          // the "Run evals" button entirely. The bundled expert isn't
+          // graded here, the user's CLAUDE.md / rule file is.
           onLaunchEval={
-            (runKind === 'fix' || runKind === 'create') && onOpenRunTab
+            (runKind === 'fix' || runKind === 'create') && onOpenRunTab && !display.isClaudemd && !display.isRules
               ? handleLaunchEval
               : undefined
           }
           isLaunchingEval={isLaunchingEval}
+          targetNoun={display.targetNoun}
         />
       </div>
 
@@ -1788,15 +1864,24 @@ function mapAuditStatus(status: AuditRun['status']): import('@nakiros/shared').A
   }
 }
 
-function composeTitle(kind: AgentRunKind, run: AuditRun, t: ReturnType<typeof useTranslation>['t']): string {
+function composeTitle(kind: AgentRunKind, run: AuditLikeRun, t: ReturnType<typeof useTranslation>['t']): string {
   const labelByKind: Record<string, string> = {
     audit: t('titles.audit', { defaultValue: 'Audit' }),
     fix: t('titles.fix', { defaultValue: 'Fix' }),
     create: t('titles.create', { defaultValue: 'Create skill' }),
+    'classify-convo': t('titles.classifyConvo', { defaultValue: 'Classify' }),
   };
   const prefix = labelByKind[kind] ?? kind;
-  if ('skillName' in run && typeof run.skillName === 'string') {
-    return `${prefix} · ${run.skillName}`;
+  if (kind === 'classify-convo') {
+    // Use sourceSessionId — `sessionId` is overwritten with the spawned
+    // sub-run's Claude Code session id and would mislabel the tab.
+    const sid =
+      (run as import('@nakiros/shared').ClassifyConvoRun).sourceSessionId ?? '';
+    return `${prefix} · ${sid.slice(0, 8)}`;
+  }
+  const auditRun = run as AuditRun;
+  if ('skillName' in auditRun && typeof auditRun.skillName === 'string') {
+    return `${prefix} · ${auditRun.skillName}`;
   }
   return prefix;
 }

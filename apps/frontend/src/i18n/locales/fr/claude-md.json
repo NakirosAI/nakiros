@@ -1,6 +1,6 @@
 {
   "title": "CLAUDE.md",
-  "subtitle": "Instructions du projet que Claude lit au démarrage de chaque session. Trois emplacements : la racine du projet, `.claude/CLAUDE.md`, et un `CLAUDE.local.md` privé (gitignored). Chargés ensemble dans le contexte — garde chaque fichier concis.",
+  "subtitle": "Instructions du projet que Claude lit au démarrage de chaque session. Garde-le concis — les fichiers longs réduisent l'adhérence.",
   "loading": "Chargement de CLAUDE.md…",
   "errorTitle": "Impossible de charger CLAUDE.md",
   "retry": "Réessayer",
@@ -8,30 +8,47 @@
   "delete": "Supprimer",
   "reload": "Recharger depuis le disque",
   "confirmDelete": "Supprimer ce fichier ? {{path}}",
-  "bodyLabel": "Contenu (markdown)",
-  "bodyPlaceholder": "# Conventions du projet\n\n- Build : `npm run build`\n- Tests : `npm test`\n…",
-  "previewBody": "Aperçu",
-  "editBody": "Édition",
+  "back": "Projet",
+  "missingBanner": "CLAUDE.md est absent pour ce projet.",
+  "missingBannerCta": "Créer avec l'expert",
+  "runAudit": "Audit",
+  "runAuditTitle": "Lancer nakiros-claudemd-expert en mode audit sur ce CLAUDE.md",
+  "runFix": "Fix",
+  "runFixTitle": "Lancer nakiros-claudemd-expert en mode fix (utilise les findings d'audit + frictions du projet)",
+  "runCreate": "Créer",
+  "runCreateTitle": "Bootstrapper un CLAUDE.md adapté à ce projet via nakiros-claudemd-expert",
+  "runLaunching": "Lancement…",
   "tabs": {
-    "root": "./CLAUDE.md",
-    "claude-dir": "./.claude/CLAUDE.md",
-    "local": "./CLAUDE.local.md",
-    "missing": "absent"
+    "edit": "Édition",
+    "audit": "Audit",
+    "fix": "Fix"
   },
-  "badges": {
-    "root": "partagé (projet)",
-    "claude-dir": "partagé (.claude/)",
-    "local": "gitignored",
-    "missing": "fichier inexistant — l'enregistrer le créera"
+  "editTab": {
+    "modeWysiwyg": "WYSIWYG",
+    "modeRaw": "Markdown brut",
+    "bodyPlaceholder": "# Conventions du projet\n\n- Build : `npm run build`\n- Tests : `npm test`\n…"
+  },
+  "auditTab": {
+    "empty": "Aucun audit n'a encore été enregistré pour ce CLAUDE.md.",
+    "loading": "Chargement…",
+    "emptyReport": "Ce rapport d'audit est vide.",
+    "running": "Un audit est en cours — voir RunScreen pour le suivi en direct.",
+    "openRun": "Ouvrir le run",
+    "fixFromAudit": "Fixer depuis cet audit"
+  },
+  "fixTab": {
+    "title": "Lancer un Fix sur CLAUDE.md",
+    "intro": "Le fix s'appuie sur le dernier audit et les frictions du projet. Il travaille sur une copie de ton CLAUDE.md,",
+    "introCont": "itère, et déploie au finish.",
+    "run": "Lancer le fix",
+    "noAudit": "Lance d'abord un audit — le fix a besoin d'au moins un rapport.",
+    "fixRunning": "Fix en cours"
   },
   "sidebar": {
-    "size": "Taille",
-    "lines": "Lignes",
+    "size": "Métriques",
     "chars": "Caractères",
     "tokens": "Tokens",
     "sections": "Sections",
-    "linesWarning": "Au-delà de {{threshold}} lignes, l'adhérence baisse. Pense à découper en fichiers `.claude/rules/` scopés par paths.",
-    "headings": "Sections de premier niveau",
     "imports": "Imports @",
     "importsEmpty": "Aucun import `@<path>` détecté.",
     "importAgentsMd": "Importer @AGENTS.md",

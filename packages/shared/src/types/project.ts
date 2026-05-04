@@ -55,6 +55,13 @@ export interface ProjectConversation {
   cwd: string;
   claudeVersion: string | null;
   summary: string;
+  /**
+   * Real user activity (`'user'`) vs Nakiros-internal sandbox run
+   * (`'synthetic'`: fix-temp / eval iterations / `~/.nakiros/` workdirs).
+   * Optional for backward compatibility with callers that build the type
+   * outside the conversation-ingest pipeline.
+   */
+  kind?: 'user' | 'synthetic';
 }
 
 /** Normalized message extracted from a Claude Code JSONL entry. */
@@ -199,6 +206,13 @@ export interface ConversationAnalysis {
   messageCount: number;
   summary: string;
   gitBranch: string | null;
+  /**
+   * Real user activity (`'user'`) vs Nakiros-internal sandbox run
+   * (`'synthetic'`). Decorated by the project handler from the conversation-
+   * ingest store when available. Optional for backward compatibility with
+   * cached analyses produced before the V2 ingest landed.
+   */
+  kind?: 'user' | 'synthetic';
 
   // --- Context health ---
   compactions: ConversationCompaction[];
@@ -816,6 +830,51 @@ export interface AuditRun {
    * (`outputs/fix-findings.jsonl`). Only populated for fix runs.
    */
   findings?: FixFinding[];
+  /**
+   * Set when this run targets a CLAUDE.md file (via `nakiros-claudemd-expert`)
+   * instead of a skill. The frontend uses it to swap the run's title /
+   * label without changing the kind. Stable across rehydrate.
+   */
+  claudemdTarget?: ClaudeMdTargetContext;
+  /**
+   * Set when this run targets a specific `.claude/rules/<ruleName>` file via
+   * the bundled `nakiros-rules-expert` instead of a skill. Mutually exclusive
+   * with `claudemdTarget`. Stable across rehydrate.
+   */
+  rulesTarget?: RulesTargetContext;
+  /**
+   * Set when this run targets a specific `.claude/agents/<subagentName>` file
+   * via the bundled `nakiros-subagents-expert` instead of a skill. Mutually
+   * exclusive with `claudemdTarget` and `rulesTarget`. Stable across rehydrate.
+   */
+  subagentsTarget?: SubagentsTargetContext;
+  /**
+   * Set when this run targets the `.claude/settings.json` hooks block via the
+   * bundled `nakiros-hooks-expert`. Singleton per project — no sub-target name.
+   * Mutually exclusive with `claudemdTarget`, `rulesTarget`, and
+   * `subagentsTarget`. Stable across rehydrate.
+   */
+  hooksTarget?: HooksTargetContext;
+  /**
+   * Set when this run targets the `.claude/settings.json` permissions block via
+   * the bundled `nakiros-permissions-expert`. Singleton per project — no
+   * sub-target name. Mutually exclusive with the other `*Target` fields. Stable
+   * across rehydrate.
+   */
+  permissionsTarget?: PermissionsTargetContext;
+  /**
+   * Set when this run targets the project-root `.mcp.json` file via the bundled
+   * `nakiros-mcp-expert`. Singleton per project — no sub-target name. Mutually
+   * exclusive with the other `*Target` fields. Stable across rehydrate.
+   */
+  mcpTarget?: McpTargetContext;
+  /**
+   * Set when this run targets a specific `.claude/output-styles/<styleName>`
+   * file via the bundled `nakiros-output-styles-expert`. Collection — one entry
+   * per style file, same as rules/subagents. Mutually exclusive with the other
+   * `*Target` fields. Stable across rehydrate.
+   */
+  outputStylesTarget?: OutputStylesTargetContext;
 }
 
 /**
@@ -876,6 +935,109 @@ export interface StartAnalyzeConvoRequest {
   sessionId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Classify-convo runner — V1.1 friction classifier (Haiku 4.5) emits a
+// structured JSON digest instead of a markdown report. Reuses the same runner
+// pattern as analyze-convo so multiple sessions can be classified in parallel,
+// runs survive reboots, and the UI gets live token/tool/text streaming.
+// ---------------------------------------------------------------------------
+
+export type ClassifyConvoRunStatus =
+  | 'starting'
+  | 'running'
+  | 'waiting_for_input'
+  | 'completed'
+  | 'failed'
+  | 'stopped';
+
+/** Full in-memory state of a friction-classification run. */
+export interface ClassifyConvoRun {
+  runId: string;
+  projectId: string;
+  /**
+   * Claude Code session id of the **sub-agent run** spawned by `claude --print`
+   * to produce the digest. Inherited from `BaseRun.sessionId` and overwritten
+   * by runner-core's `onSession` handler the moment the sub-run emits its
+   * first event. **Never use this to identify the source conversation** —
+   * use {@link sourceSessionId}.
+   */
+  sessionId: string;
+  /**
+   * Claude Code session id of the **source conversation** being classified
+   * (passed in `StartClassifyConvoRequest.sessionId`). Stable across the run's
+   * lifetime; the digest is persisted under this id so the UI can look it up
+   * from the conversation drawer.
+   */
+  sourceSessionId: string;
+  status: ClassifyConvoRunStatus;
+  sessionClaudeId: string | null;
+  workdir: string;
+  /** `claude --model` id pinned at start (haiku for ≤170k digest, sonnet above). */
+  model: string;
+  /** Estimated input tokens of the digest+prompt — used for cost transparency. */
+  estimatedInputTokens: number;
+  /** Path of the persisted digest JSON under `~/.nakiros/ingest/projects/<encoded>/digests/`. */
+  digestPath: string | null;
+  turns: AuditRunTurn[];
+  tokensUsed: number;
+  durationMs: number;
+  startedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+  interruptedByReboot?: boolean;
+}
+
+/** Event broadcast on `classifyConvo:event` while a classify-convo run is alive. */
+export interface ClassifyConvoRunEvent {
+  runId: string;
+  event:
+    | { type: 'status'; status: ClassifyConvoRunStatus }
+    | { type: 'text'; text: string; ts?: string }
+    | { type: 'tool'; name: string; display: string; ts?: string }
+    | { type: 'tokens'; tokensUsed: number }
+    | { type: 'waiting_for_input'; lastAssistantText: string }
+    | { type: 'done'; exitCode: number; error?: string; digestPath?: string }
+    | { type: 'error'; error: string };
+}
+
+/** Request payload for `classifyConvo:start`. */
+export interface StartClassifyConvoRequest {
+  projectId: string;
+  sessionId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Claudemd target — when an audit / fix / create run targets a CLAUDE.md file
+// instead of a skill, this carries the resolution context so the runner's
+// buildFirstPrompt can invoke `nakiros-claudemd-expert` with the correct file
+// path. The kind stays `audit` / `fix` / `create` so the entire RunScreen UI
+// (AuditCompletedReport, sidebar, header progress) reuses unchanged.
+// ---------------------------------------------------------------------------
+
+/**
+ * Mode of a claudemd run. The bundled `nakiros-claudemd-expert` skill exposes
+ * four entry-point commands; only the first three are launched as Nakiros
+ * runs (improve is interactive and stays inside an existing run).
+ */
+export type ClaudeMdRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * the project-root `./CLAUDE.md` via the bundled `nakiros-claudemd-expert`.
+ * When present, the runner's buildFirstPrompt switches to a
+ * `/nakiros-claudemd-expert` invocation; when absent, the runner targets a
+ * skill via `nakiros-skill-factory`.
+ *
+ * Only the root CLAUDE.md is supported — multi-scope variants
+ * (`.claude/CLAUDE.md`, `CLAUDE.local.md`) have been removed.
+ */
+export interface ClaudeMdTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Run mode — drives the slash-command suffix. */
+  mode: ClaudeMdRunMode;
+}
+
 /** Event broadcast on `audit:event` while an audit run is alive. */
 export interface AuditRunEvent {
   runId: string;
@@ -934,6 +1096,51 @@ export interface StartAuditRequest {
   marketplaceName?: string;
   projectId?: string;
   skillName: string;
+  /**
+   * Optional descriptor for runs that target a CLAUDE.md file via the
+   * bundled `nakiros-claudemd-expert`. When present, the runner switches its
+   * slash-command and skips the skill-bound archive step. The standard
+   * `scope` / `skillName` still resolve to the bundled expert directory.
+   */
+  claudemdTarget?: ClaudeMdTargetContext;
+  /**
+   * Optional descriptor for runs that target a specific `.claude/rules/<ruleName>`
+   * file via the bundled `nakiros-rules-expert`. When present, the runner switches
+   * its slash-command and archives the report under the rules history. Mutually
+   * exclusive with `claudemdTarget`.
+   */
+  rulesTarget?: RulesTargetContext;
+  /**
+   * Optional descriptor for runs that target a specific `.claude/agents/<subagentName>`
+   * file via the bundled `nakiros-subagents-expert`. When present, the runner switches
+   * its slash-command and archives the report under the subagents history. Mutually
+   * exclusive with `claudemdTarget` and `rulesTarget`.
+   */
+  subagentsTarget?: SubagentsTargetContext;
+  /**
+   * Optional descriptor for runs that target the `.claude/settings.json` hooks block
+   * via the bundled `nakiros-hooks-expert`. Singleton — no name field. Mutually
+   * exclusive with `claudemdTarget`, `rulesTarget`, and `subagentsTarget`.
+   */
+  hooksTarget?: HooksTargetContext;
+  /**
+   * Optional descriptor for runs that target the `.claude/settings.json` permissions
+   * block via the bundled `nakiros-permissions-expert`. Singleton — no name field.
+   * Mutually exclusive with the other `*Target` fields.
+   */
+  permissionsTarget?: PermissionsTargetContext;
+  /**
+   * Optional descriptor for runs that target the project-root `.mcp.json` file
+   * via the bundled `nakiros-mcp-expert`. Singleton — no name field. Mutually
+   * exclusive with the other `*Target` fields.
+   */
+  mcpTarget?: McpTargetContext;
+  /**
+   * Optional descriptor for runs that target a specific `.claude/output-styles/<styleName>`
+   * file via the bundled `nakiros-output-styles-expert`. Collection — one entry
+   * per style file. Mutually exclusive with the other `*Target` fields.
+   */
+  outputStylesTarget?: OutputStylesTargetContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -1019,6 +1226,153 @@ export interface AuditHistoryEntry {
   /** ISO timestamp parsed from the filename (or fs mtime as fallback). */
   timestamp: string;
   sizeBytes: number;
+}
+
+// ---------------------------------------------------------------------------
+// Rules run target — when an audit / fix run targets a specific rule file
+// under .claude/rules/ via the bundled `nakiros-rules-expert`.
+// ---------------------------------------------------------------------------
+
+/**
+ * Mode of a rules run. The bundled `nakiros-rules-expert` skill exposes
+ * three entry-point commands.
+ */
+export type RulesRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * a specific `.claude/rules/<ruleName>` file via the bundled
+ * `nakiros-rules-expert`. When present on `StartAuditRequest`, the runner's
+ * `buildFirstPrompt` switches to a `/nakiros-rules-expert` invocation; when
+ * absent, the runner targets a skill via `nakiros-skill-factory`.
+ *
+ * The `ruleName` is the **relative path from `.claude/rules/`** (e.g.
+ * `"i18n.md"` or `"frontend/styling.md"`). Sub-folder notation is supported.
+ */
+export interface RulesTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Filename of the rule under .claude/rules/ (e.g. "i18n.md", "frontend/styling.md"). */
+  ruleName: string;
+  mode: RulesRunMode;
+}
+
+/**
+ * Mode of a subagents run. The bundled `nakiros-subagents-expert` skill
+ * exposes three entry-point commands.
+ */
+export type SubagentsRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Mode of a hooks run. The bundled `nakiros-hooks-expert` skill exposes
+ * three entry-point commands.
+ */
+export type HooksRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * the project's `.claude/settings.json` `hooks` block via the bundled
+ * `nakiros-hooks-expert`. Singleton per project — no `name` field (unlike rules
+ * or subagents). Project scope only.
+ */
+export interface HooksTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Run mode — drives the slash-command suffix. */
+  mode: HooksRunMode;
+}
+
+/**
+ * Run mode for the `nakiros-permissions-expert` bundled skill. Mirrors the
+ * three entry-point commands.
+ */
+export type PermissionsRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Which settings file the `nakiros-permissions-expert` targets.
+ *
+ * - `'project'` → `.claude/settings.json` (committed, shared by the team)
+ * - `'local'`   → `.claude/settings.local.json` (gitignored, per-developer;
+ *                  typical home for "Yes, don't ask again" approvals)
+ */
+export type PermissionsExpertScope = 'project' | 'local';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * the project's `.claude/settings.json` or `.claude/settings.local.json`
+ * permissions block via the bundled `nakiros-permissions-expert`. No `name`
+ * field — scoped only by `scope` (project vs local).
+ */
+export interface PermissionsTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Which settings file to target. Defaults to `'project'` when omitted. */
+  scope: PermissionsExpertScope;
+  /** Run mode — drives the slash-command suffix. */
+  mode: PermissionsRunMode;
+}
+
+/**
+ * Mode of an mcp run. The bundled `nakiros-mcp-expert` skill exposes
+ * three entry-point commands.
+ */
+export type McpRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * the project-root `.mcp.json` file via the bundled `nakiros-mcp-expert`.
+ * Singleton per project — no `name` field (unlike rules or subagents). Project
+ * scope only (V1 — local/user scopes deferred).
+ */
+export interface McpTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Run mode — drives the slash-command suffix. */
+  mode: McpRunMode;
+}
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * a specific `.claude/agents/<subagentName>` file via the bundled
+ * `nakiros-subagents-expert`. When present on `StartAuditRequest`, the runner's
+ * `buildFirstPrompt` switches to a `/nakiros-subagents-expert` invocation; when
+ * absent, the runner targets a skill via `nakiros-skill-factory`.
+ *
+ * The `subagentName` is the **relative filename from `.claude/agents/`** (e.g.
+ * `"backend.md"` or `"team/reviewer.md"`). Sub-folder notation is supported.
+ */
+export interface SubagentsTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Filename of the subagent under .claude/agents/ (e.g. "backend.md", "team/reviewer.md"). */
+  subagentName: string;
+  mode: SubagentsRunMode;
+}
+
+/**
+ * Mode of an output-styles run. The bundled `nakiros-output-styles-expert`
+ * skill exposes three entry-point commands.
+ */
+export type OutputStylesRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * a specific `.claude/output-styles/<styleName>` file via the bundled
+ * `nakiros-output-styles-expert`. When present on `StartAuditRequest`, the
+ * runner's `buildFirstPrompt` switches to a `/nakiros-output-styles-expert`
+ * invocation; when absent, the runner targets a skill via
+ * `nakiros-skill-factory`.
+ *
+ * The `styleName` is the **relative filename from `.claude/output-styles/`**
+ * (e.g. `"minimal.md"` or `"subdir/explanatory.md"`). Sub-folder notation is
+ * supported.
+ */
+export interface OutputStylesTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Filename of the style under .claude/output-styles/ (e.g. "minimal.md", "subdir/explanatory.md"). */
+  styleName: string;
+  mode: OutputStylesRunMode;
 }
 
 /** Per-project stats tile: total sessions, messages, tool frequency, top skills. */

@@ -1,4 +1,4 @@
-import type { AuditRun } from '@nakiros/shared';
+import type { AuditRun, ClaudeMdRunMode, HooksRunMode, McpRunMode, OutputStylesRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import { computeEvalRunId } from './eval-batch-key';
 
@@ -21,7 +21,7 @@ import { computeEvalRunId } from './eval-batch-key';
 /** Callback fired with the resolved run identity once the start succeeds. */
 export type OpenRunTabCallback = (params: {
   runId: string;
-  runKind: 'audit' | 'fix' | 'create' | 'eval';
+  runKind: 'audit' | 'fix' | 'create' | 'eval' | 'classify-convo';
   label: string;
 }) => void;
 
@@ -88,6 +88,277 @@ export async function launchCreate(
     runId: run.runId,
     runKind: 'create',
     label: `Create · ${identity.skillName}`,
+  });
+}
+
+/**
+ * Start an audit / fix / create run that targets the project-root `./CLAUDE.md`
+ * via the bundled `nakiros-claudemd-expert`. Reuses the same `startAudit` /
+ * `startFix` / `startCreate` IPC channels as skill runs — only the request
+ * carries an extra `claudemdTarget` so the runner switches its slash-command
+ * and the frontend store displays a CLAUDE.md-focused title.
+ */
+export async function launchClaudemd(
+  request: { projectId: string; projectPath: string; mode: ClaudeMdRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-claudemd-expert',
+    projectId: request.projectId,
+    claudemdTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      mode: request.mode,
+    },
+  };
+
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: 'Audit · CLAUDE.md' });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · CLAUDE.md' });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · CLAUDE.md' });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets a specific `.claude/rules/<ruleName>`
+ * via the bundled `nakiros-rules-expert`. Reuses the same `startAudit` /
+ * `startFix` IPC channels as skill runs — only the request carries an extra
+ * `rulesTarget` so the runner switches its slash-command and the frontend store
+ * displays a rules-focused title.
+ */
+export async function launchRules(
+  request: { projectId: string; projectPath: string; ruleName: string; mode: RulesRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-rules-expert',
+    projectId: request.projectId,
+    rulesTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      ruleName: request.ruleName,
+      mode: request.mode,
+    },
+  };
+
+  const shortName = request.ruleName.replace(/\.md$/i, '');
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · ${shortName}` });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${shortName}` });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${shortName}` });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets a specific `.claude/agents/<subagentName>`
+ * via the bundled `nakiros-subagents-expert`. Reuses the same `startAudit` /
+ * `startFix` IPC channels as skill runs — only the request carries an extra
+ * `subagentsTarget` so the runner switches its slash-command and the frontend
+ * store displays a subagents-focused title.
+ */
+export async function launchSubagents(
+  request: { projectId: string; projectPath: string; subagentName: string; mode: SubagentsRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-subagents-expert',
+    projectId: request.projectId,
+    subagentsTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      subagentName: request.subagentName,
+      mode: request.mode,
+    },
+  };
+
+  const shortName = request.subagentName.replace(/\.md$/i, '');
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · ${shortName}` });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${shortName}` });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${shortName}` });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets the `.claude/settings.json`
+ * hooks block via the bundled `nakiros-hooks-expert`. Singleton per project —
+ * no `name` field (unlike rules or subagents). Reuses the same `startAudit` /
+ * `startFix` IPC channels as skill runs — only the request carries an extra
+ * `hooksTarget` so the runner switches its slash-command and the frontend store
+ * displays a hooks-focused title.
+ */
+export async function launchHooks(
+  request: { projectId: string; projectPath: string; mode: HooksRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-hooks-expert',
+    projectId: request.projectId,
+    hooksTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      mode: request.mode,
+    },
+  };
+
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: 'Audit · Hooks' });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · Hooks' });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · Hooks' });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets the `.claude/settings.json`
+ * permissions block via the bundled `nakiros-permissions-expert`. Singleton
+ * per project — no `name` field (unlike rules or subagents). Reuses the same
+ * `startAudit` / `startFix` IPC channels as skill runs — only the request
+ * carries an extra `permissionsTarget` so the runner switches its slash-command
+ * and the frontend store displays a permissions-focused title.
+ */
+export async function launchPermissions(
+  request: { projectId: string; projectPath: string; scope: PermissionsExpertScope; mode: PermissionsRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const scopeSuffix = request.scope === 'local' ? ' (local)' : '';
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-permissions-expert',
+    projectId: request.projectId,
+    permissionsTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      scope: request.scope,
+      mode: request.mode,
+    },
+  };
+
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · Permissions${scopeSuffix}` });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · Permissions${scopeSuffix}` });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · Permissions${scopeSuffix}` });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets the project-root `.mcp.json`
+ * file via the bundled `nakiros-mcp-expert`. Singleton per project — no `name`
+ * field (unlike rules or subagents). Reuses the same `startAudit` / `startFix`
+ * IPC channels as skill runs — only the request carries an extra `mcpTarget` so
+ * the runner switches its slash-command and the frontend store displays an
+ * mcp-focused title.
+ */
+export async function launchMcp(
+  request: { projectId: string; projectPath: string; mode: McpRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-mcp-expert',
+    projectId: request.projectId,
+    mcpTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      mode: request.mode,
+    },
+  };
+
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: 'Audit · MCP' });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · MCP' });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · MCP' });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets a specific
+ * `.claude/output-styles/<styleName>` file via the bundled
+ * `nakiros-output-styles-expert`. Reuses the same `startAudit` / `startFix`
+ * IPC channels as skill runs — only the request carries an extra
+ * `outputStylesTarget` so the runner switches its slash-command and the
+ * frontend store displays an output-styles-focused title.
+ */
+export async function launchOutputStyles(
+  request: {
+    projectId: string;
+    projectPath: string;
+    styleName: string;
+    mode: OutputStylesRunMode;
+  },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-output-styles-expert',
+    projectId: request.projectId,
+    outputStylesTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      styleName: request.styleName,
+      mode: request.mode,
+    },
+  };
+
+  const shortName = request.styleName.replace(/\.md$/i, '');
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · ${shortName}` });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${shortName}` });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${shortName}` });
+  }
+}
+
+/**
+ * Start a `classify-convo` run on a Claude Code conversation and open its
+ * dedicated RunScreen tab. Used by the conversations drawer's "Frictions" tab.
+ */
+export async function launchClassifyConvo(
+  request: { projectId: string; sessionId: string },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const run = await window.nakiros.startClassifyConvo(request);
+  openRunTab({
+    runId: run.runId,
+    runKind: 'classify-convo',
+    label: `Classify · ${request.sessionId.slice(0, 8)}`,
   });
 }
 

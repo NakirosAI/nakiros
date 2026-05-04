@@ -10,6 +10,7 @@ Shared TypeScript types consumed by the daemon, the frontend, and the landing. E
 - [artifact-review.ts](./artifact-review.md) — Types for the artifact-review flow (agent-proposed doc/backlog edits with diff/yolo modes).
 - [bundled-skill-conflict.ts](./bundled-skill-conflict.md) — Conflict descriptors between the bundled Nakiros skill ROM and a user's locally-edited copy.
 - [collab.ts](./collab.md) — Multi-agent collaboration thread primitives: `CollabMessage` and `CollabSession`.
+- [dot-claude-snapshot.ts](./dot-claude-snapshot.md) — Read-only snapshot of a project's `.claude/` ecosystem consumed by `.claude/` expert agents for cross-entity coherence checks.
 - [conversation.ts](./conversation.md) — Chat-scope and conversation-state primitives: participants, stored conversations and tabs, agent run requests.
 - [electron.ts](./electron.md) — Skill-command installer status + request types driving the `agents:*` IPC channels (not Electron-specific).
 - [eval-comparison.ts](./eval-comparison.md) — Types for the A/B/C eval comparison view across Haiku / Sonnet / Opus for a single skill snapshot.

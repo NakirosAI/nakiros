@@ -16,6 +16,7 @@ import { fixHandlers } from './fix.js';
 import { createHandlers } from './create.js';
 import { skillAgentHandlers } from './skill-agent.js';
 import { analyzeConvoHandlers } from './analyze-convo.js';
+import { classifyConvoHandlers } from './classify-convo.js';
 import { claudeConfigHandlers } from './claude-config.js';
 import { claudeRulesHandlers } from './claude-rules.js';
 import { claudeAgentsHandlers } from './claude-agents.js';
@@ -24,6 +25,13 @@ import { claudePermissionsHandlers } from './claude-permissions.js';
 import { claudeMcpHandlers } from './claude-mcp.js';
 import { claudeHooksHandlers } from './claude-hooks.js';
 import { claudeMdHandlers } from './claude-md.js';
+import { rulesHandlers } from './rules.js';
+import { subagentsHandlers } from './subagents.js';
+import { hooksHandlers } from './hooks.js';
+import { permissionsHandlers } from './permissions.js';
+import { mcpHandlers } from './mcp.js';
+import { outputStylesHandlers } from './output-styles.js';
+import { conversationIngestHandlers } from './conversation-ingest.js';
 
 /** Signature every IPC handler must implement — takes an arg array, returns a value or promise. */
 export type IpcHandler = (args: unknown[]) => Promise<unknown> | unknown;
@@ -59,6 +67,7 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...createHandlers,
     ...skillAgentHandlers,
     ...analyzeConvoHandlers,
+    ...classifyConvoHandlers,
     ...claudeConfigHandlers,
     ...claudeRulesHandlers,
     ...claudeAgentsHandlers,
@@ -67,5 +76,12 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...claudeMcpHandlers,
     ...claudeHooksHandlers,
     ...claudeMdHandlers,
+    ...rulesHandlers,
+    ...subagentsHandlers,
+    ...hooksHandlers,
+    ...permissionsHandlers,
+    ...mcpHandlers,
+    ...outputStylesHandlers,
+    ...conversationIngestHandlers,
   };
 }

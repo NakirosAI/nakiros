@@ -14,33 +14,22 @@ import type {
   ClaudeMdListResult,
   ClaudeMdMutationErrorCode,
   ClaudeMdMutationResult,
-  ClaudeMdScope,
   ClaudeMdSummary,
   SaveClaudeMdRequest,
 } from '@nakiros/shared';
 
 /**
- * Read / save / delete the project's CLAUDE.md across its three project-
- * scoped locations (`root`, `claude-dir`, `local`). Each save is atomic
+ * Read / save / delete the project-root `./CLAUDE.md`. Each save is atomic
  * with an mtime guard. Reads also extract metadata used by the editor's
  * sidebar: line count, approx token cost, top-level headings, `@<path>`
  * imports and HTML-comment presence.
  *
- * The user-global `~/.claude/CLAUDE.md` is intentionally out of scope —
- * V2 stays project-only (cf. phase 2 memory).
+ * Only the root CLAUDE.md is supported — multi-scope variants
+ * (`.claude/CLAUDE.md`, `CLAUDE.local.md`) have been removed.
  */
 
-const SCOPES: ClaudeMdScope[] = ['root', 'claude-dir', 'local'];
-
-function pathFor(projectPath: string, scope: ClaudeMdScope): string {
-  switch (scope) {
-    case 'root':
-      return join(projectPath, 'CLAUDE.md');
-    case 'claude-dir':
-      return join(projectPath, '.claude', 'CLAUDE.md');
-    case 'local':
-      return join(projectPath, 'CLAUDE.local.md');
-  }
+function claudeMdPath(projectPath: string): string {
+  return join(projectPath, 'CLAUDE.md');
 }
 
 function err(
@@ -52,22 +41,18 @@ function err(
 }
 
 export function listClaudeMd(projectPath: string): ClaudeMdListResult {
-  const files: ClaudeMdSummary[] = SCOPES.map((scope) => buildSummary(projectPath, scope));
   return {
-    files,
+    file: buildSummary(projectPath),
     agentsMdAtRoot: existsSync(join(projectPath, 'AGENTS.md')),
     projectPath,
   };
 }
 
-export function readClaudeMd(
-  projectPath: string,
-  scope: ClaudeMdScope,
-): ClaudeMdFileContent | null {
-  const path = pathFor(projectPath, scope);
+export function readClaudeMd(projectPath: string): ClaudeMdFileContent | null {
+  const path = claudeMdPath(projectPath);
   if (!existsSync(path)) {
     return {
-      ...buildEmptySummary(projectPath, scope),
+      ...buildEmptySummary(projectPath),
       body: '',
       mtime: '',
     };
@@ -80,7 +65,7 @@ export function readClaudeMd(
   } catch {
     return null;
   }
-  const summary = buildSummaryFromContent(projectPath, scope, body, mtime);
+  const summary = buildSummaryFromContent(projectPath, body, mtime);
   return { ...summary, body, mtime };
 }
 
@@ -88,8 +73,8 @@ export function saveClaudeMd(
   projectPath: string,
   request: SaveClaudeMdRequest,
 ): ClaudeMdMutationResult {
-  const { scope, body, mtimeAtRead } = request;
-  const path = pathFor(projectPath, scope);
+  const { body, mtimeAtRead } = request;
+  const path = claudeMdPath(projectPath);
 
   if (mtimeAtRead && existsSync(path)) {
     let currentMtime: string;
@@ -114,18 +99,15 @@ export function saveClaudeMd(
     return err('write-failed', e instanceof Error ? e.message : String(e));
   }
 
-  const file = readClaudeMd(projectPath, scope);
+  const file = readClaudeMd(projectPath);
   if (!file) {
     return err('write-failed', 'Could not re-read file after save.');
   }
   return { ok: true, file };
 }
 
-export function deleteClaudeMd(
-  projectPath: string,
-  scope: ClaudeMdScope,
-): ClaudeMdMutationResult {
-  const path = pathFor(projectPath, scope);
+export function deleteClaudeMd(projectPath: string): ClaudeMdMutationResult {
+  const path = claudeMdPath(projectPath);
   if (!existsSync(path)) {
     return err('not-found', 'This file does not exist.');
   }
@@ -137,7 +119,7 @@ export function deleteClaudeMd(
   return {
     ok: true,
     file: {
-      ...buildEmptySummary(projectPath, scope),
+      ...buildEmptySummary(projectPath),
       body: '',
       mtime: '',
     },
@@ -146,10 +128,9 @@ export function deleteClaudeMd(
 
 // ── Summary helpers ──────────────────────────────────────────────────────-
 
-function buildEmptySummary(projectPath: string, scope: ClaudeMdScope): ClaudeMdSummary {
+function buildEmptySummary(projectPath: string): ClaudeMdSummary {
   return {
-    scope,
-    path: pathFor(projectPath, scope),
+    path: claudeMdPath(projectPath),
     exists: false,
     lastModified: null,
     lines: 0,
@@ -161,31 +142,29 @@ function buildEmptySummary(projectPath: string, scope: ClaudeMdScope): ClaudeMdS
   };
 }
 
-function buildSummary(projectPath: string, scope: ClaudeMdScope): ClaudeMdSummary {
-  const path = pathFor(projectPath, scope);
-  if (!existsSync(path)) return buildEmptySummary(projectPath, scope);
+function buildSummary(projectPath: string): ClaudeMdSummary {
+  const path = claudeMdPath(projectPath);
+  if (!existsSync(path)) return buildEmptySummary(projectPath);
   let body = '';
   let mtime = '';
   try {
     body = readFileSync(path, 'utf8');
     mtime = statSync(path).mtime.toISOString();
   } catch {
-    return buildEmptySummary(projectPath, scope);
+    return buildEmptySummary(projectPath);
   }
-  return buildSummaryFromContent(projectPath, scope, body, mtime);
+  return buildSummaryFromContent(projectPath, body, mtime);
 }
 
 function buildSummaryFromContent(
   projectPath: string,
-  scope: ClaudeMdScope,
   body: string,
   mtime: string,
 ): ClaudeMdSummary {
   const chars = body.length;
   const lines = body === '' ? 0 : body.split(/\r?\n/).length;
   return {
-    scope,
-    path: pathFor(projectPath, scope),
+    path: claudeMdPath(projectPath),
     exists: true,
     lastModified: mtime || null,
     lines,

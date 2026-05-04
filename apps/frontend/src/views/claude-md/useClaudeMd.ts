@@ -3,7 +3,6 @@ import type {
   ClaudeMdFileContent,
   ClaudeMdListResult,
   ClaudeMdMutationResult,
-  ClaudeMdScope,
   SaveClaudeMdRequest,
 } from '@nakiros/shared';
 
@@ -14,7 +13,7 @@ interface UseClaudeMdListApi {
   refresh(): void;
 }
 
-/** Loads the per-scope summary for the project's CLAUDE.md files. */
+/** Loads the summary for the project's root CLAUDE.md. */
 export function useClaudeMdList(projectId: string): UseClaudeMdListApi {
   const [list, setList] = useState<ClaudeMdListResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,11 +56,10 @@ interface UseClaudeMdFileApi {
   remove(): Promise<ClaudeMdMutationResult>;
 }
 
-/** Loads a single CLAUDE.md scope's full content + metadata, with save /
+/** Loads the root CLAUDE.md's full content + metadata, with save /
  *  delete helpers that auto-refresh on success. */
 export function useClaudeMdFile(
   projectId: string,
-  scope: ClaudeMdScope,
   onListChange: () => void,
 ): UseClaudeMdFileApi {
   const [file, setFile] = useState<ClaudeMdFileContent | null>(null);
@@ -74,7 +72,7 @@ export function useClaudeMdFile(
     setLoading(true);
     setError(null);
     window.nakiros
-      .readClaudeMd(projectId, scope)
+      .readClaudeMd(projectId)
       .then((result) => {
         if (cancelled) return;
         setFile((result as ClaudeMdFileContent | null) ?? null);
@@ -90,7 +88,7 @@ export function useClaudeMdFile(
     return () => {
       cancelled = true;
     };
-  }, [projectId, scope, reloadKey]);
+  }, [projectId, reloadKey]);
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -107,13 +105,13 @@ export function useClaudeMdFile(
   );
 
   const remove = useCallback(async (): Promise<ClaudeMdMutationResult> => {
-    const result = await window.nakiros.deleteClaudeMd(projectId, scope);
+    const result = await window.nakiros.deleteClaudeMd(projectId);
     if (result.ok) {
       refresh();
       onListChange();
     }
     return result;
-  }, [projectId, scope, refresh, onListChange]);
+  }, [projectId, refresh, onListChange]);
 
   return { file, loading, error, refresh, save, remove };
 }

@@ -1,0 +1,41 @@
+{
+  "mcpServers": {},
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/scripts/lint-changed.mjs",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{ pnpm -F @nakiros/frontend build && node apps/nakiros/scripts/copy-frontend.mjs; } > /tmp/nakiros-frontend-build.log 2>&1",
+            "async": true,
+            "timeout": 120,
+            "statusMessage": "Rebuilding frontend bundle"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{ pnpm -F nakiros exec tsc --noEmit && pnpm -F @nakiros/frontend exec tsc --noEmit && pnpm -F @nakiros/landing exec tsc --noEmit; } > /tmp/nakiros-tsc.log 2>&1",
+            "async": true,
+            "timeout": 120,
+            "statusMessage": "Typecheck (daemon + frontend + landing)"
+          }
+        ]
+      }
+    ]
+  }
+}

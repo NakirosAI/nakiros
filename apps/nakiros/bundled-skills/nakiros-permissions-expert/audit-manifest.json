@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "skillName": "nakiros-permissions-expert",
+  "totalChecks": 14,
+  "sections": [
+    { "id": "structure",  "label": "Structure",      "checks": ["structure.valid_json", "structure.permissions_keys_known", "structure.rule_format"] },
+    { "id": "syntax",     "label": "Rule Syntax",    "checks": ["syntax.allow_rules_valid", "syntax.ask_rules_valid", "syntax.deny_rules_valid", "syntax.default_mode_valid"] },
+    { "id": "security",   "label": "Security",       "checks": ["security.default_mode_not_bypass", "security.dangerous_bash_denied", "security.dotclaude_writes_denied", "security.env_files_denied"] },
+    { "id": "crossref",   "label": "Cross-entity",   "checks": ["crossref.agent_rules_match_subagents", "crossref.mcp_rules_match_servers", "crossref.no_useless_deny_for_undefined_tools"] }
+  ],
+  "checks": [
+    { "id": "structure.valid_json",                         "section": "structure", "label": "settings.json is valid JSON",                                               "severityIfFail": "critical", "findingCode": "INVALID_JSON" },
+    { "id": "structure.permissions_keys_known",             "section": "structure", "label": "Only known keys in the permissions block",                                  "severityIfFail": "warn",     "findingCode": "UNKNOWN_PERMISSIONS_KEY" },
+    { "id": "structure.rule_format",                        "section": "structure", "label": "Every rule in allow/ask/deny matches expected format",                      "severityIfFail": "warn",     "findingCode": "INVALID_RULE_FORMAT" },
+
+    { "id": "syntax.allow_rules_valid",                     "section": "syntax",    "label": "Each rule in allow parses correctly",                                       "severityIfFail": "warn",     "findingCode": "ALLOW_RULE_SYNTAX_ERROR" },
+    { "id": "syntax.ask_rules_valid",                       "section": "syntax",    "label": "Each rule in ask parses correctly",                                         "severityIfFail": "warn",     "findingCode": "ASK_RULE_SYNTAX_ERROR" },
+    { "id": "syntax.deny_rules_valid",                      "section": "syntax",    "label": "Each rule in deny parses correctly",                                        "severityIfFail": "warn",     "findingCode": "DENY_RULE_SYNTAX_ERROR" },
+    { "id": "syntax.default_mode_valid",                    "section": "syntax",    "label": "defaultMode is a recognised permission mode",                               "severityIfFail": "warn",     "findingCode": "INVALID_DEFAULT_MODE" },
+
+    { "id": "security.default_mode_not_bypass",             "section": "security",  "label": "defaultMode is not bypassPermissions",                                      "severityIfFail": "critical", "findingCode": "BYPASS_PERMISSIONS_ENABLED" },
+    { "id": "security.dangerous_bash_denied",               "section": "security",  "label": "At least one deny rule covers dangerous Bash patterns",                     "severityIfFail": "info",     "findingCode": "DANGEROUS_BASH_NOT_DENIED" },
+    { "id": "security.dotclaude_writes_denied",             "section": "security",  "label": "No allow rule contradicts .claude/** write protection",                     "severityIfFail": "warn",     "findingCode": "DOTCLAUDE_WRITE_ALLOWED" },
+    { "id": "security.env_files_denied",                    "section": "security",  "label": "Read/Edit of .env files is in deny (secret protection)",                   "severityIfFail": "warn",     "findingCode": "ENV_FILES_NOT_DENIED" },
+
+    { "id": "crossref.agent_rules_match_subagents",         "section": "crossref",  "label": "Agent(X) rules reference existing subagents in snapshot",                  "severityIfFail": "warn",     "findingCode": "AGENT_RULE_REF_NOT_FOUND" },
+    { "id": "crossref.mcp_rules_match_servers",             "section": "crossref",  "label": "mcp__<server> rules reference existing MCP servers in snapshot",           "severityIfFail": "warn",     "findingCode": "MCP_RULE_REF_NOT_FOUND" },
+    { "id": "crossref.no_useless_deny_for_undefined_tools", "section": "crossref",  "label": "No deny rules for tools/MCP/subagents that don't exist (cleanup signal)",  "severityIfFail": "info",     "findingCode": "DENY_FOR_UNDEFINED_TOOL" }
+  ]
+}

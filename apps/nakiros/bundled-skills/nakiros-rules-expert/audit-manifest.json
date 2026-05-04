@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "skillName": "nakiros-rules-expert",
+  "totalChecks": 15,
+  "sections": [
+    { "id": "frontmatter", "label": "Frontmatter",    "checks": ["frontmatter.present", "frontmatter.paths_field", "frontmatter.description_present", "frontmatter.no_unknown_keys"] },
+    { "id": "structure",   "label": "Structure",      "checks": ["structure.line_count", "structure.heading_hierarchy", "structure.section_size"] },
+    { "id": "tone",        "label": "Tone",           "checks": ["tone.imperative_mood", "tone.no_fluff", "tone.actionable"] },
+    { "id": "content",     "label": "Content",        "checks": ["content.single_topic", "content.has_examples", "content.no_obvious_restatement"] },
+    { "id": "crossref",    "label": "Cross-entity",   "checks": ["crossref.paths_match_files", "crossref.no_path_overlap"] }
+  ],
+  "checks": [
+    { "id": "frontmatter.present",             "section": "frontmatter", "label": "Valid YAML frontmatter present",              "severityIfFail": "critical", "findingCode": "FRONTMATTER_MISSING" },
+    { "id": "frontmatter.paths_field",         "section": "frontmatter", "label": "paths: field present with array of globs",    "severityIfFail": "critical", "findingCode": "PATHS_FIELD_MISSING" },
+    { "id": "frontmatter.description_present", "section": "frontmatter", "label": "Description or H1 summarises the topic",      "severityIfFail": "warn",     "findingCode": "DESCRIPTION_MISSING" },
+    { "id": "frontmatter.no_unknown_keys",     "section": "frontmatter", "label": "No unknown frontmatter keys",                 "severityIfFail": "warn",     "findingCode": "UNKNOWN_FRONTMATTER_KEYS" },
+
+    { "id": "structure.line_count",            "section": "structure",   "label": "File <= 150 lines",                          "severityIfFail": "warn",     "findingCode": "LINE_COUNT_EXCEEDED" },
+    { "id": "structure.heading_hierarchy",     "section": "structure",   "label": "H1 unique title, no skipped heading levels", "severityIfFail": "warn",     "findingCode": "HEADING_HIERARCHY_WRONG" },
+    { "id": "structure.section_size",          "section": "structure",   "label": "No section > 40 lines",                      "severityIfFail": "warn",     "findingCode": "SECTION_TOO_LONG" },
+
+    { "id": "tone.imperative_mood",            "section": "tone",        "label": "Imperative mood (must/always/never/use/avoid)", "severityIfFail": "warn",   "findingCode": "TONE_NOT_IMPERATIVE" },
+    { "id": "tone.no_fluff",                   "section": "tone",        "label": "No marketing/fluff tokens",                   "severityIfFail": "info",    "findingCode": "FLUFF_TOKENS_FOUND" },
+    { "id": "tone.actionable",                 "section": "tone",        "label": "Each bullet is actionable (no consider/ideally)", "severityIfFail": "warn", "findingCode": "VAGUE_BULLETS_FOUND" },
+
+    { "id": "content.single_topic",            "section": "content",     "label": "Rule covers one focused topic",               "severityIfFail": "warn",     "findingCode": "TOPIC_TOO_BROAD" },
+    { "id": "content.has_examples",            "section": "content",     "label": "At least one code block or example present",  "severityIfFail": "warn",     "findingCode": "NO_EXAMPLES_FOUND" },
+    { "id": "content.no_obvious_restatement",  "section": "content",     "label": "Does not restate obvious code conventions",   "severityIfFail": "info",     "findingCode": "OBVIOUS_RESTATEMENT_FOUND" },
+
+    { "id": "crossref.paths_match_files",      "section": "crossref",    "label": "Each paths: glob matches >= 1 real file",     "severityIfFail": "warn",     "findingCode": "PATHS_MATCH_NO_FILES" },
+    { "id": "crossref.no_path_overlap",        "section": "crossref",    "label": "No significant paths: overlap with other rules", "severityIfFail": "info",  "findingCode": "PATH_OVERLAP_DETECTED" }
+  ]
+}

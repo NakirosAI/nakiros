@@ -1,0 +1,73 @@
+{
+  "back": "Output styles",
+  "loading": "Chargement du style…",
+  "errorTitle": "Impossible de charger le style",
+  "retry": "Réessayer",
+  "reload": "Recharger depuis le disque",
+  "confirmDeleteTitle": "Supprimer le style ?",
+  "confirmDelete": "Supprimer le style « {{name}} » ? Action irréversible.",
+  "delete": "Supprimer",
+  "deleting": "Suppression…",
+  "cancel": "Annuler",
+  "runAudit": "Audit",
+  "runAuditTitle": "Lancer un audit sur ce style de sortie",
+  "runFix": "Fix",
+  "runFixTitle": "Lancer un fix sur ce style de sortie",
+  "runCreate": "Créer",
+  "runCreateTitle": "Générer ce style de sortie avec l'IA",
+  "runLaunching": "Lancement…",
+  "missingBanner": "Ce fichier de style n'existe pas encore. Génère-le avec l'IA ou crée-le manuellement.",
+  "missingBannerCta": "Générer avec l'IA",
+  "createNamePrompt": "Nom du fichier (ex. concis.md)",
+  "modal": {
+    "title": "Nouveau style de sortie",
+    "hint": "Choisis un nom court (lettres, chiffres, tirets, .md). Tu peux ensuite l'écrire toi-même ou laisser l'agent le générer pour toi.",
+    "placeholder": "concis.md",
+    "cancel": "Annuler",
+    "ai": "Génère avec l'IA",
+    "launching": "Lancement…",
+    "errorEmptyName": "Le nom ne peut pas être vide.",
+    "aiUnavailable": "Indisponible — pas de tab de run disponible."
+  },
+  "tabs": {
+    "edit": "Édition",
+    "audit": "Audit",
+    "fix": "Fix"
+  },
+  "editTab": {
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "bodyPlaceholder": "---\nname: Mon style\ndescription: Une description concise.\n---\n\nTu es…",
+    "sidebarSize": "Taille",
+    "tokens": "Tokens",
+    "lines": "Lignes",
+    "sections": "Sections",
+    "name": "Nom",
+    "description": "Description",
+    "keepCodingInstructions": "keep-coding-instructions",
+    "hasRole": "Rôle explicite défini",
+    "noRole": "Aucun rôle défini",
+    "descriptionTooShort": "Description trop courte",
+    "bodyTooShort": "Corps trop court"
+  },
+  "auditTab": {
+    "empty": "Aucun audit pour ce style. Lance un audit pour commencer.",
+    "loading": "Chargement du rapport d'audit…",
+    "emptyReport": "Le rapport d'audit est vide.",
+    "fixFromAudit": "Fix depuis l'audit"
+  },
+  "fixTab": {
+    "title": "Corriger ce style",
+    "lead": "Applique les corrections suggérées par l'IA basées sur le dernier rapport d'audit.",
+    "cta": "Lancer le Fix",
+    "cantFixWithoutAudit": "Lance d'abord un audit pour que l'agent Fix sache quoi améliorer."
+  },
+  "errors": {
+    "conflictTitle": "Modification externe détectée",
+    "write-failedTitle": "Écriture échouée",
+    "project-not-foundTitle": "Projet introuvable",
+    "invalid-pathTitle": "Chemin invalide",
+    "not-foundTitle": "Introuvable",
+    "launch-failedTitle": "Lancement échoué"
+  }
+}

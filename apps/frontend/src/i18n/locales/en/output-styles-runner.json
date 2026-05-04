@@ -1,0 +1,73 @@
+{
+  "back": "Output styles",
+  "loading": "Loading style…",
+  "errorTitle": "Could not load style",
+  "retry": "Retry",
+  "reload": "Reload from disk",
+  "confirmDeleteTitle": "Delete style?",
+  "confirmDelete": "Delete style \"{{name}}\"? This cannot be undone.",
+  "delete": "Delete",
+  "deleting": "Deleting…",
+  "cancel": "Cancel",
+  "runAudit": "Audit",
+  "runAuditTitle": "Run an audit on this output style",
+  "runFix": "Fix",
+  "runFixTitle": "Run a fix pass on this output style",
+  "runCreate": "Create",
+  "runCreateTitle": "Generate this output style with AI",
+  "runLaunching": "Launching…",
+  "missingBanner": "This style file does not exist yet. Generate it with AI or create it manually.",
+  "missingBannerCta": "Generate with AI",
+  "createNamePrompt": "File name (e.g. concise.md)",
+  "modal": {
+    "title": "New output style",
+    "hint": "Pick a short name (letters, digits, dashes, .md). You can then write it yourself or let the agent generate it for you.",
+    "placeholder": "concise.md",
+    "cancel": "Cancel",
+    "ai": "Generate with AI",
+    "launching": "Launching…",
+    "errorEmptyName": "Name cannot be empty.",
+    "aiUnavailable": "Unavailable — no run tab to open."
+  },
+  "tabs": {
+    "edit": "Edit",
+    "audit": "Audit",
+    "fix": "Fix"
+  },
+  "editTab": {
+    "save": "Save",
+    "delete": "Delete",
+    "bodyPlaceholder": "---\nname: My Style\ndescription: A concise description.\n---\n\nYou are a…",
+    "sidebarSize": "Size",
+    "tokens": "Tokens",
+    "lines": "Lines",
+    "sections": "Sections",
+    "name": "Name",
+    "description": "Description",
+    "keepCodingInstructions": "keep-coding-instructions",
+    "hasRole": "Has explicit role",
+    "noRole": "No role defined",
+    "descriptionTooShort": "Description too short",
+    "bodyTooShort": "Body too short"
+  },
+  "auditTab": {
+    "empty": "No audits yet for this style. Launch an audit to get started.",
+    "loading": "Loading audit report…",
+    "emptyReport": "Audit report is empty.",
+    "fixFromAudit": "Fix from audit"
+  },
+  "fixTab": {
+    "title": "Fix this style",
+    "lead": "Apply AI-suggested fixes to this output style based on the latest audit report.",
+    "cta": "Run Fix",
+    "cantFixWithoutAudit": "Run an audit first so the Fix agent knows what to improve."
+  },
+  "errors": {
+    "conflictTitle": "External edit detected",
+    "write-failedTitle": "Write failed",
+    "project-not-foundTitle": "Project not found",
+    "invalid-pathTitle": "Invalid path",
+    "not-foundTitle": "Not found",
+    "launch-failedTitle": "Launch failed"
+  }
+}

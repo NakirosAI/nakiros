@@ -1,4 +1,80 @@
 {
+  "detail": {
+    "back": "Sous-agents",
+    "loading": "Chargement du sous-agent…",
+    "errorTitle": "Impossible de charger le sous-agent",
+    "retry": "Réessayer",
+    "reload": "Recharger depuis le disque",
+    "confirmDeleteTitle": "Supprimer le sous-agent ?",
+    "confirmDelete": "Supprimer le sous-agent « {{name}} » ? Action irréversible.",
+    "delete": "Supprimer",
+    "deleting": "Suppression…",
+    "cancel": "Annuler",
+    "runAudit": "Audit",
+    "runAuditTitle": "Lancer un audit sur ce sous-agent",
+    "runFix": "Fix",
+    "runFixTitle": "Lancer un fix sur ce sous-agent",
+    "runCreate": "Créer",
+    "runCreateTitle": "Générer ce sous-agent avec l'IA",
+    "runLaunching": "Lancement…",
+    "missingBanner": "Ce fichier de sous-agent n'existe pas encore. Génère-le avec l'IA ou crée-le manuellement.",
+    "missingBannerCta": "Générer avec l'IA",
+    "tabs": {
+      "edit": "Édition",
+      "audit": "Audit",
+      "fix": "Fix"
+    },
+    "editTab": {
+      "save": "Enregistrer",
+      "delete": "Supprimer",
+      "bodyPlaceholder": "Tu es un sous-agent spécialisé…",
+      "sidebarSize": "Taille",
+      "tokens": "Tokens",
+      "sections": "Sections",
+      "lines": "Lignes",
+      "subagentName": "Sous-agent",
+      "sidebarFrontmatter": "Frontmatter",
+      "model": "Modèle",
+      "tools": "Outils",
+      "description": "Description",
+      "permissionMode": "Mode de permissions",
+      "skills": "Skills",
+      "mcpServers": "Serveurs MCP",
+      "hooks": "Hooks",
+      "bypassWarning": "Mode bypass activé — ce sous-agent peut effectuer toute action sans demande de confirmation.",
+      "inheritsAllToolsWarning": "Aucune restriction d'outils — ce sous-agent hérite de tous les outils de la session principale."
+    },
+    "auditTab": {
+      "empty": "Aucun audit pour ce sous-agent. Lance un audit pour commencer.",
+      "loading": "Chargement du rapport d'audit…",
+      "emptyReport": "Le rapport d'audit est vide.",
+      "fixFromAudit": "Fix depuis l'audit"
+    },
+    "fixTab": {
+      "title": "Corriger ce sous-agent",
+      "lead": "Applique les corrections suggérées par l'IA basées sur le dernier rapport d'audit.",
+      "cta": "Lancer le Fix",
+      "cantFixWithoutAudit": "Lance d'abord un audit pour que l'agent Fix sache quoi améliorer."
+    },
+    "errors": {
+      "conflictTitle": "Modification externe détectée",
+      "write-failedTitle": "Écriture échouée",
+      "project-not-foundTitle": "Projet introuvable",
+      "invalid-pathTitle": "Chemin invalide",
+      "not-foundTitle": "Introuvable",
+      "launch-failedTitle": "Lancement échoué"
+    }
+  },
+  "modal": {
+    "title": "Nouveau sous-agent",
+    "hint": "Choisis un nom court (lettres, chiffres, tirets, .md). L'agent va générer le sous-agent pour toi en fonction du nom.",
+    "placeholder": "code-reviewer.md",
+    "cancel": "Annuler",
+    "ai": "Génère avec l'IA",
+    "launching": "Lancement…",
+    "errorEmptyName": "Le nom ne peut pas être vide.",
+    "aiUnavailable": "Indisponible — pas de tab de run disponible."
+  },
   "list": {
     "title": "Sous-agents",
     "subtitle": "Agents spécialisés auxquels Claude peut déléguer. Chacun tourne dans son propre contexte avec un system prompt et des restrictions d'outils dédiés.",

@@ -1,48 +1,52 @@
-# Nakiros — Claude Entry Point
+# Nakiros — Entry Point
 
-Canonical project memory is `ARCHITECTURE.md` at the repo root. Read it
-first for layout, runtime, and IPC contract.
+Project memory: [`ARCHITECTURE.md`](ARCHITECTURE.md) (root). Technical docs:
+[`docs/technical/`](docs/technical/README.md) — TSDoc mirror with one leaf per
+source file, folder indexes ≤ 200 lines.
 
-## Technical documentation (read before coding)
+## Routing — when to delegate
 
-Full TSDoc mirror lives under [`docs/technical/`](docs/technical/README.md).
-Each source file has a leaf markdown documenting its exported symbols, and
-each folder has an index (≤ 200 lines) listing children.
+This is a large monorepo. Use the right subagent so context stays focused:
 
-**Before implementing a new function, helper, hook, component, runner, or
-IPC handler, browse the relevant index** (`apps/nakiros/`, `apps/frontend/`,
-`packages/shared/`) to check if the capability already exists. Reuse over
-duplication. If you add or change exported symbols, refresh both the TSDoc
-and its mirrored markdown via the `code-documentation` skill.
+- Touching `apps/nakiros/**` (daemon, runners, IPC handlers, services, bundled
+  skills) → use **`@backend`**.
+- Touching `apps/frontend/**` (React, Tailwind, i18n, screens, hooks, UI) →
+  use **`@frontend`**.
+- Touching `apps/landing/**` or `packages/shared/**` or pure root config → main
+  agent OK. For `packages/shared/**`, see `.claude/rules/ipc-contract.md`.
 
-## Mandatory constraints
+Each subagent has its own embedded context and persistent memory under
+`.claude/agent-memory/<name>/`.
 
-- Use `IPC_CHANNELS` from `@nakiros/shared` everywhere. **No hardcoded
-  channel name strings** in handlers, registry, client, or d.ts.
-- Any IPC change must stay aligned across these 4 files:
-  1. `packages/shared/src/ipc-channels.ts`
-  2. `apps/nakiros/src/daemon/handlers/index.ts` + the `<domain>.ts`
-     implementation
-  3. `apps/frontend/src/lib/nakiros-client.ts`
-  4. `apps/frontend/src/global.d.ts`
-- Tailwind-first styling. No inline `style={{...}}` unless unavoidable and
-  documented.
-- i18n via `useTranslation(namespace)` only. No `isFr` / FR-EN ternaries.
-- Reuse `apps/frontend/src/components/ui/*`, `constants/*`, `utils/*`,
-  `hooks/*` before adding new abstractions.
-- Local-first: no network calls, no telemetry, no secrets in code. Anything
-  the user persists goes under `~/.nakiros/`.
-- Do not edit generated outputs in `dist/` directories.
+## Universal constraints (every scope)
 
-## Quick pointers
+- **Reuse over duplication.** Before adding a function, helper, hook,
+  component, runner, screen, or IPC handler, browse the relevant
+  `docs/technical/` index and grep for similar work. 80% identical = reuse +
+  parameterise; do **not** copy-paste.
+- **Cohérence UX.** New screens for a `.claude/` entity (claudemd, rules,
+  subagents, hooks, permissions, mcp, output-styles) MUST mirror the existing
+  **Skill** screen (tab structure, audit/fix/eval lifecycle, layout). It is
+  the canonical pattern — diverge only with explicit user agreement.
+- **Local-first.** No network calls, no telemetry, no secrets in code.
+  User-persisted data goes under `~/.nakiros/`.
+- **Never edit `dist/`** (generated outputs).
+- **Communication**: French with the user; English in code, commits, and PRs.
 
-- Runners live in `apps/nakiros/src/services/{audit,eval,fix}-runner.ts`. The
-  tmp_skill pattern (eval/fix/create isolated from the real skill) is
-  load-bearing — do not bypass it.
-- Event broadcasts from runners use `eventBus.broadcast(channel, payload)`
-  from `src/daemon/event-bus.ts`. Never import from `electron`; it's gone.
-- The daemon is a plain Node ESM bundle (tsup). Don't use `require()` — use
-  static `import` from `'fs'`, `'node:fs'`, etc.
+## Rules — auto-attached by file path
+
+Each `.claude/rules/*.md` declares a `paths:` glob in its frontmatter and is
+auto-attached when you edit a matching file. You don't need to remember to
+read them — Claude Code surfaces the relevant rule for the file at hand.
+
+| Rule | Auto-attaches when touching |
+|------|-----------------------------|
+| `.claude/rules/ipc-contract.md` | IPC channels, handlers, `nakiros-client.ts`, `global.d.ts`, shared types |
+| `.claude/rules/i18n.md` | Any `.tsx` in `apps/frontend/**` or i18n bundles |
+| `.claude/rules/ui-kit.md` | Any component or view in `apps/frontend/src/{components,views}/**` |
+| `.claude/rules/token-accounting.md` | session-jsonl/usage helpers, run/viz components, run-display lib |
+| `.claude/rules/runners.md` | `apps/nakiros/src/services/*runner*.ts` and `runner-core/**` |
+| `.claude/rules/markdown-rendering.md` | `MarkdownViewer.tsx` and screens that render markdown |
 
 ## Validation before closing
 

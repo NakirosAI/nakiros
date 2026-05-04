@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "Template for .mcp.json — project-scope MCP server configuration.",
+    "Remove this _comment key before writing to production.",
+    "",
+    "Transport types: http (recommended) | sse (DEPRECATED) | stdio (local)",
+    "Secrets MUST use ${ENV_VAR} interpolation — never hardcode tokens.",
+    "Limit alwaysLoad:true to 1-2 servers. Others are deferred until needed.",
+    "Place this file at the project root, NOT inside .claude/"
+  ],
+  "mcpServers": {
+    "example-cloud-api": {
+      "_comment": "Remote HTTP server using OAuth authentication (recommended for cloud APIs).",
+      "type": "http",
+      "url": "https://api.example.com/mcp",
+      "oauth": {
+        "clientId": "${MCP_OAUTH_CLIENT_ID}",
+        "callbackPort": 8080,
+        "scopes": "read write"
+      }
+    },
+    "example-local-tools": {
+      "_comment": "Local stdio server. Uses env vars for secrets. alwaysLoad:true only if needed every session.",
+      "type": "stdio",
+      "command": "${CLAUDE_PROJECT_DIR}/.claude/mcp-servers/local-tools.sh",
+      "args": ["--project-dir", "${CLAUDE_PROJECT_DIR}"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL:-sqlite:///.nakiros/local.db}",
+        "LOG_LEVEL": "info"
+      },
+      "alwaysLoad": true
+    }
+  }
+}

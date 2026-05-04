@@ -18,6 +18,10 @@ import {
   restoreOrCleanupAnalyzeConvoWorkdirs,
 } from '../services/analyze-convo-runner.js';
 import {
+  listAllClassifyConvoRuns,
+  restoreOrCleanupClassifyConvoWorkdirs,
+} from '../services/classify-convo-runner.js';
+import {
   getResumableSandboxPaths,
   listRuns as listAllEvalRuns,
   restoreEvalRunsForSkillDirs,
@@ -35,6 +39,10 @@ import {
   sweepOrphanNakirosProjectEntries,
   sweepOrphanSandboxes,
 } from '../services/runner-core/index.js';
+import {
+  isHookInstalled as isConversationIngestHookInstalled,
+  startWatcher as startConversationIngestWatcher,
+} from '../services/conversation-ingest/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -84,6 +92,9 @@ function collectLiveProjectEntryNames(): Set<string> {
     if (isActiveRunStatus(run.status)) add(run.workdir);
   }
   for (const run of listAllAnalyzeConvoRuns()) {
+    if (isActiveRunStatus(run.status)) add(run.workdir);
+  }
+  for (const run of listAllClassifyConvoRuns()) {
     if (isActiveRunStatus(run.status)) add(run.workdir);
   }
   for (const run of listAllEvalRuns()) {
@@ -163,6 +174,7 @@ export function bootstrapDaemonRuntime(): void {
   restoreOrCleanupTempWorkdirs();
   restoreOrCleanupAuditWorkdirs();
   restoreOrCleanupAnalyzeConvoWorkdirs();
+  restoreOrCleanupClassifyConvoWorkdirs();
   // Eval runs persist per-skill (`{skillDir}/evals/workspace/iteration-N/…`),
   // not under a flat `~/.nakiros/runs/eval/`. To surface them in the
   // runs-center on first paint we walk every known skill source and replay
@@ -216,6 +228,20 @@ export function bootstrapDaemonRuntime(): void {
   const sandboxes = sweepOrphanSandboxes(getResumableSandboxPaths());
   if (sandboxes.deleted > 0) {
     console.log(`[nakiros] Swept ${sandboxes.deleted} orphan eval sandbox${sandboxes.deleted === 1 ? '' : 'es'}.`);
+  }
+
+  // Conversation ingest — only auto-start the watcher when the user has
+  // already opted in (the Stop hook is present in their settings.json). For
+  // first-time users the panel is dormant until they explicitly enable it.
+  try {
+    if (isConversationIngestHookInstalled()) {
+      startConversationIngestWatcher();
+    }
+  } catch (err) {
+    console.warn(
+      '[nakiros] conversation-ingest watcher boot failed:',
+      err instanceof Error ? err.message : err,
+    );
   }
 }
 

@@ -1,4 +1,23 @@
 import type {
+  SubagentsListResult,
+  SubagentsReadResult,
+  SubagentsMutationResult,
+  SubagentsAuditHistoryEntry,
+  HooksReadResult,
+  HooksExpertMutationResult,
+  HooksAuditHistoryEntry,
+  PermissionsReadResult,
+  PermissionsExpertMutationResult,
+  PermissionsAuditHistoryEntry,
+  PermissionsExpertScope,
+  McpReadResult,
+  McpExpertMutationResult,
+  McpAuditHistoryEntry,
+  OutputStyleSummary,
+  OutputStylesExpertListResult,
+  OutputStylesReadResult,
+  OutputStylesExpertMutationResult,
+  OutputStylesAuditHistoryEntry,
   AppPreferences,
   AgentInstallStatus,
   AgentInstallRequest,
@@ -22,6 +41,11 @@ import type {
   ConversationMessage,
   ConversationAnalysis,
   ConversationDeepAnalysis,
+  ConversationDigest,
+  ConversationDigestSummary,
+  ClassifyConvoRun,
+  ClassifyConvoRunEvent,
+  StartClassifyConvoRequest,
   Skill,
   SkillScope,
   ScanProgress,
@@ -89,8 +113,18 @@ import type {
   ClaudeMdFileContent,
   ClaudeMdListResult,
   ClaudeMdMutationResult,
-  ClaudeMdScope,
+  ClaudeMdAuditHistoryEntry,
   SaveClaudeMdRequest,
+  RulesListResult,
+  RulesReadResult,
+  RulesMutationResult,
+  RulesAuditHistoryEntry,
+  ConversationIngestStatus,
+  ConversationIngestHookDiff,
+  ConversationIngestMutationResult,
+  ConversationIngestProject,
+  ConversationIngestSession,
+  ConversationIngestProgressEvent,
 } from '@nakiros/shared';
 
 declare global {
@@ -172,6 +206,23 @@ declare global {
       loadConversationDeepAnalysis(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis | null>;
       /** @deprecated kept for backward compat — prefer the streaming analyzeConvo:* family. */
       deepAnalyzeConversation(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis>;
+
+      // V1.1 friction classifier — lazy-load helpers around the persisted
+      // output of the streaming `classifyConvo:*` runner. They never trigger
+      // a model call.
+      getConversationDigest(projectId: string, sessionId: string): Promise<ConversationDigest | null>;
+      listConversationDigests(projectId: string): Promise<ConversationDigestSummary[]>;
+
+      // Conversation friction-classifier runner (classify-convo Run kind, V1.1)
+      startClassifyConvo(request: StartClassifyConvoRequest): Promise<ClassifyConvoRun>;
+      stopClassifyConvo(runId: string): Promise<void>;
+      getClassifyConvoRun(runId: string): Promise<ClassifyConvoRun | null>;
+      sendClassifyConvoUserMessage(runId: string, message: string): Promise<void>;
+      finishClassifyConvo(runId: string): Promise<void>;
+      listActiveClassifyConvoRuns(): Promise<ClassifyConvoRun[]>;
+      listAllClassifyConvoRuns(): Promise<ClassifyConvoRun[]>;
+      getClassifyConvoBufferedEvents(runId: string): Promise<ClassifyConvoRunEvent['event'][]>;
+      onClassifyConvoEvent(cb: (event: ClassifyConvoRunEvent) => void): () => void;
 
       // Conversation deep-analysis runner (analyze-convo Run kind)
       startAnalyzeConvo(request: { projectId: string; sessionId: string }): Promise<AnalyzeConvoRun>;
@@ -394,20 +445,111 @@ declare global {
         request: SaveHooksRequest,
       ): Promise<HooksMutationResult>;
 
-      // CLAUDE.md editor (Module 7 V2)
+      // CLAUDE.md editor (Module 7 V2) — root CLAUDE.md only
       listClaudeMd(projectId: string): Promise<ClaudeMdListResult>;
-      readClaudeMd(
-        projectId: string,
-        scope: ClaudeMdScope,
-      ): Promise<ClaudeMdFileContent | null>;
+      readClaudeMd(projectId: string): Promise<ClaudeMdFileContent | null>;
       saveClaudeMdFile(
         projectId: string,
         request: SaveClaudeMdRequest,
       ): Promise<ClaudeMdMutationResult>;
-      deleteClaudeMd(
+      deleteClaudeMd(projectId: string): Promise<ClaudeMdMutationResult>;
+      // CLAUDE.md audit history — archived reports under
+      // ~/.nakiros/<projectId>/claudemd/audit/, populated by audit runs whose
+      // request carried `claudemdTarget`.
+      listClaudemdAudits(projectId: string): Promise<ClaudeMdAuditHistoryEntry[]>;
+      readClaudemdAudit(path: string): Promise<string | null>;
+
+      // Rules CRUD — recursive discovery under .claude/rules/
+      listRules(projectId: string): Promise<RulesListResult>;
+      readRule(projectId: string, ruleName: string): Promise<RulesReadResult | null>;
+      saveRule(
         projectId: string,
-        scope: ClaudeMdScope,
-      ): Promise<ClaudeMdMutationResult>;
+        ruleName: string,
+        content: string,
+        mtimeAtRead: string,
+      ): Promise<RulesMutationResult>;
+      deleteRule(projectId: string, ruleName: string): Promise<RulesMutationResult>;
+      // Rules audit history — archived reports under
+      // ~/.nakiros/<projectId>/rules-audits/<ruleName>/, populated by audit
+      // runs whose request carried `rulesTarget`.
+      listRulesAudits(projectId: string, ruleName: string): Promise<RulesAuditHistoryEntry[]>;
+      readRulesAudit(path: string): Promise<string | null>;
+
+      // Subagents CRUD — recursive discovery under .claude/agents/
+      listSubagents(projectId: string): Promise<SubagentsListResult>;
+      readSubagent(projectId: string, subagentName: string): Promise<SubagentsReadResult | null>;
+      saveSubagent(
+        projectId: string,
+        subagentName: string,
+        content: string,
+        mtimeAtRead: string,
+      ): Promise<SubagentsMutationResult>;
+      deleteSubagent(projectId: string, subagentName: string): Promise<SubagentsMutationResult>;
+      // Subagents audit history — archived reports under
+      // ~/.nakiros/<projectId>/subagents-audits/<subagentName>/, populated by
+      // audit runs whose request carried `subagentsTarget`.
+      listSubagentsAudits(projectId: string, subagentName: string): Promise<SubagentsAuditHistoryEntry[]>;
+      readSubagentsAudit(path: string): Promise<string | null>;
+
+      // Hooks expert (nakiros-hooks-expert) — read/save the hooks block + audit
+      // history. NOTE: distinct from readClaudeHooks/saveClaudeHooks (Module 6
+      // V2 editor) which expose a structured view per scope.
+      readHooks(projectId: string): Promise<HooksReadResult>;
+      saveHooks(projectId: string, content: string, mtimeAtRead: string): Promise<HooksExpertMutationResult>;
+      listHooksAudits(projectId: string): Promise<HooksAuditHistoryEntry[]>;
+      readHooksAudit(path: string): Promise<string | null>;
+
+      // Permissions expert (nakiros-permissions-expert) — read/save the
+      // permissions block + audit history. NOTE: distinct from the Module 4 V2
+      // form-based editor (claudePermissions:* channels).
+      // All methods accept a `scope` to target either settings.json (project)
+      // or settings.local.json (local).
+      readPermissions(projectId: string, scope: PermissionsExpertScope): Promise<PermissionsReadResult>;
+      savePermissions(projectId: string, scope: PermissionsExpertScope, content: string, mtimeAtRead: string): Promise<PermissionsExpertMutationResult>;
+      listPermissionsAudits(projectId: string, scope: PermissionsExpertScope): Promise<PermissionsAuditHistoryEntry[]>;
+      readPermissionsAudit(path: string): Promise<string | null>;
+
+      // MCP expert (nakiros-mcp-expert) — read/save the entire .mcp.json file
+      // + audit history. NOTE: distinct from the Module 5 V2 form-based editor
+      // (claudeMcp:* channels) which manages individual MCP servers.
+      readMcp(projectId: string): Promise<McpReadResult>;
+      saveMcp(projectId: string, content: string, mtimeAtRead: string): Promise<McpExpertMutationResult>;
+      listMcpAudits(projectId: string): Promise<McpAuditHistoryEntry[]>;
+      readMcpAudit(path: string): Promise<string | null>;
+
+      // Output styles expert (nakiros-output-styles-expert) — CRUD on
+      // .claude/output-styles/ files + audit history. NOTE: distinct from the
+      // Module 3 V2 form-based editor (claudeOutputStyles:* channels).
+      listOutputStyles(projectId: string): Promise<OutputStylesExpertListResult>;
+      readOutputStyle(projectId: string, styleName: string): Promise<OutputStylesReadResult | null>;
+      saveOutputStyle(
+        projectId: string,
+        styleName: string,
+        content: string,
+        mtimeAtRead: string,
+      ): Promise<OutputStylesExpertMutationResult>;
+      deleteOutputStyle(projectId: string, styleName: string): Promise<OutputStylesExpertMutationResult>;
+      // Output-styles audit history — archived reports under
+      // ~/.nakiros/<projectId>/output-styles-audits/<styleName>/, populated by
+      // audit runs whose request carried `outputStylesTarget`.
+      listOutputStylesAudits(
+        projectId: string,
+        styleName: string,
+      ): Promise<OutputStylesAuditHistoryEntry[]>;
+      readOutputStylesAudit(path: string): Promise<string | null>;
+
+      // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
+      getConversationIngestStatus(): Promise<ConversationIngestStatus>;
+      previewConversationIngestHookDiff(): Promise<ConversationIngestHookDiff>;
+      enableConversationIngest(): Promise<ConversationIngestMutationResult>;
+      disableConversationIngest(): Promise<ConversationIngestMutationResult>;
+      purgeConversationIngest(): Promise<ConversationIngestMutationResult>;
+      runNowConversationIngest(): Promise<ConversationIngestMutationResult>;
+      listConversationIngestProjects(): Promise<ConversationIngestProject[]>;
+      listConversationIngestSessions(projectPath?: string): Promise<ConversationIngestSession[]>;
+      onConversationIngestProgress(
+        cb: (event: ConversationIngestProgressEvent) => void,
+      ): () => void;
     };
   }
 }

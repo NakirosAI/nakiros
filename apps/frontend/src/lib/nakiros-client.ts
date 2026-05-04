@@ -219,6 +219,10 @@ const client = {
     invoke(C['project:loadDeepAnalysis'], projectId, sessionId),
   deepAnalyzeConversation: (projectId: string, sessionId: string) =>
     invoke(C['project:deepAnalyzeConversation'], projectId, sessionId),
+  getConversationDigest: (projectId: string, sessionId: string) =>
+    invoke(C['project:getConversationDigest'], projectId, sessionId),
+  listConversationDigests: (projectId: string) =>
+    invoke(C['project:listConversationDigests'], projectId),
   listProjectSkills: (projectId: string) => invoke(C['project:listSkills'], projectId),
   getProjectSkill: (projectId: string, skillName: string) => invoke(C['project:getSkill'], projectId, skillName),
   saveProjectSkill: (projectId: string, skillName: string, content: string) =>
@@ -501,16 +505,27 @@ const client = {
     },
   ) => invoke(C['claudeHooks:save'], projectId, request),
 
-  // CLAUDE.md editor (Module 7 V2)
+  // CLAUDE.md editor (Module 7 V2) — root CLAUDE.md only
   listClaudeMd: (projectId: string) => invoke(C['claudeMd:list'], projectId),
-  readClaudeMd: (projectId: string, scope: 'root' | 'claude-dir' | 'local') =>
-    invoke(C['claudeMd:read'], projectId, scope),
+  readClaudeMd: (projectId: string) => invoke(C['claudeMd:read'], projectId),
   saveClaudeMdFile: (
     projectId: string,
-    request: { scope: 'root' | 'claude-dir' | 'local'; body: string; mtimeAtRead: string },
+    request: { body: string; mtimeAtRead: string },
   ) => invoke(C['claudeMd:save'], projectId, request),
-  deleteClaudeMd: (projectId: string, scope: 'root' | 'claude-dir' | 'local') =>
-    invoke(C['claudeMd:delete'], projectId, scope),
+  deleteClaudeMd: (projectId: string) => invoke(C['claudeMd:delete'], projectId),
+
+  // Conversation ingest (Phase A V1)
+  getConversationIngestStatus: () => invoke(C['conversationIngest:status']),
+  previewConversationIngestHookDiff: () => invoke(C['conversationIngest:previewHookDiff']),
+  enableConversationIngest: () => invoke(C['conversationIngest:enable']),
+  disableConversationIngest: () => invoke(C['conversationIngest:disable']),
+  purgeConversationIngest: () => invoke(C['conversationIngest:purge']),
+  runNowConversationIngest: () => invoke(C['conversationIngest:runNow']),
+  listConversationIngestProjects: () => invoke(C['conversationIngest:listProjects']),
+  listConversationIngestSessions: (projectPath?: string) =>
+    invoke(C['conversationIngest:listSessions'], projectPath),
+  onConversationIngestProgress: (cb: (event: unknown) => void) =>
+    subscribe(C['conversationIngest:progress'], cb),
 
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
@@ -523,6 +538,101 @@ const client = {
   listAllAnalyzeConvoRuns: () => invoke(C['analyzeConvo:listAll']),
   getAnalyzeConvoBufferedEvents: (runId: string) => invoke(C['analyzeConvo:getBufferedEvents'], runId),
   onAnalyzeConvoEvent: (cb: (event: unknown) => void) => subscribe(C['analyzeConvo:event'], cb),
+
+  // CLAUDE.md audit history — archived runs under ~/.nakiros/<projectId>/claudemd/audit/
+  listClaudemdAudits: (projectId: string) =>
+    invoke(C['claudeMd:listAudits'], projectId),
+  readClaudemdAudit: (path: string) => invoke(C['claudeMd:readAudit'], path),
+
+  // Rules CRUD — project-scoped, recursive discovery under .claude/rules/
+  listRules: (projectId: string) => invoke(C['rules:list'], projectId),
+  readRule: (projectId: string, ruleName: string) =>
+    invoke(C['rules:read'], projectId, ruleName),
+  saveRule: (projectId: string, ruleName: string, content: string, mtimeAtRead: string) =>
+    invoke(C['rules:save'], projectId, ruleName, content, mtimeAtRead),
+  deleteRule: (projectId: string, ruleName: string) =>
+    invoke(C['rules:delete'], projectId, ruleName),
+  // Rules audit history — archived runs under ~/.nakiros/<projectId>/rules-audits/
+  listRulesAudits: (projectId: string, ruleName: string) =>
+    invoke(C['rules:listAudits'], projectId, ruleName),
+  readRulesAudit: (path: string) => invoke(C['rules:readAudit'], path),
+
+  // Subagents CRUD — project-scoped, recursive discovery under .claude/agents/
+  listSubagents: (projectId: string) => invoke(C['subagents:list'], projectId),
+  readSubagent: (projectId: string, subagentName: string) =>
+    invoke(C['subagents:read'], projectId, subagentName),
+  saveSubagent: (
+    projectId: string,
+    subagentName: string,
+    content: string,
+    mtimeAtRead: string,
+  ) => invoke(C['subagents:save'], projectId, subagentName, content, mtimeAtRead),
+  deleteSubagent: (projectId: string, subagentName: string) =>
+    invoke(C['subagents:delete'], projectId, subagentName),
+  // Subagents audit history — archived runs under
+  // ~/.nakiros/<projectId>/subagents-audits/
+  listSubagentsAudits: (projectId: string, subagentName: string) =>
+    invoke(C['subagents:listAudits'], projectId, subagentName),
+  readSubagentsAudit: (path: string) => invoke(C['subagents:readAudit'], path),
+
+  // Hooks expert (nakiros-hooks-expert) — read/save the hooks block + audit
+  // history. Distinct from readClaudeHooks/saveClaudeHooks (Module 6 V2 editor).
+  readHooks: (projectId: string) => invoke(C['hooks:read'], projectId),
+  saveHooks: (projectId: string, content: string, mtimeAtRead: string) =>
+    invoke(C['hooks:save'], projectId, content, mtimeAtRead),
+  listHooksAudits: (projectId: string) => invoke(C['hooks:listAudits'], projectId),
+  readHooksAudit: (path: string) => invoke(C['hooks:readAudit'], path),
+
+  // Permissions expert (nakiros-permissions-expert) — read/save the permissions
+  // block + audit history. Distinct from Module 4 V2 claudePermissions:* editor.
+  // All methods now accept a `scope` ('project' | 'local') to target either
+  // settings.json or settings.local.json.
+  readPermissions: (projectId: string, scope: string) =>
+    invoke(C['permissions:read'], projectId, scope),
+  savePermissions: (projectId: string, scope: string, content: string, mtimeAtRead: string) =>
+    invoke(C['permissions:save'], projectId, scope, content, mtimeAtRead),
+  listPermissionsAudits: (projectId: string, scope: string) =>
+    invoke(C['permissions:listAudits'], projectId, scope),
+  readPermissionsAudit: (path: string) => invoke(C['permissions:readAudit'], path),
+
+  // MCP expert (nakiros-mcp-expert) — read/save the entire .mcp.json file +
+  // audit history. Distinct from Module 5 V2 claudeMcp:* editor.
+  readMcp: (projectId: string) => invoke(C['mcp:read'], projectId),
+  saveMcp: (projectId: string, content: string, mtimeAtRead: string) =>
+    invoke(C['mcp:save'], projectId, content, mtimeAtRead),
+  listMcpAudits: (projectId: string) => invoke(C['mcp:listAudits'], projectId),
+  readMcpAudit: (path: string) => invoke(C['mcp:readAudit'], path),
+
+  // Output styles expert (nakiros-output-styles-expert) — CRUD on
+  // .claude/output-styles/ files + audit history. Distinct from Module 3 V2
+  // claudeOutputStyles:* editor.
+  listOutputStyles: (projectId: string) => invoke(C['outputStyles:list'], projectId),
+  readOutputStyle: (projectId: string, styleName: string) =>
+    invoke(C['outputStyles:read'], projectId, styleName),
+  saveOutputStyle: (
+    projectId: string,
+    styleName: string,
+    content: string,
+    mtimeAtRead: string,
+  ) => invoke(C['outputStyles:save'], projectId, styleName, content, mtimeAtRead),
+  deleteOutputStyle: (projectId: string, styleName: string) =>
+    invoke(C['outputStyles:delete'], projectId, styleName),
+  listOutputStylesAudits: (projectId: string, styleName: string) =>
+    invoke(C['outputStyles:listAudits'], projectId, styleName),
+  readOutputStylesAudit: (path: string) => invoke(C['outputStyles:readAudit'], path),
+
+  // Conversation friction-classifier runner (classify-convo)
+  startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),
+  stopClassifyConvo: (runId: string) => invoke(C['classifyConvo:stopRun'], runId),
+  getClassifyConvoRun: (runId: string) => invoke(C['classifyConvo:getRun'], runId),
+  sendClassifyConvoUserMessage: (runId: string, message: string) =>
+    invoke(C['classifyConvo:sendUserMessage'], runId, message),
+  finishClassifyConvo: (runId: string) => invoke(C['classifyConvo:finish'], runId),
+  listActiveClassifyConvoRuns: () => invoke(C['classifyConvo:listActive']),
+  listAllClassifyConvoRuns: () => invoke(C['classifyConvo:listAll']),
+  getClassifyConvoBufferedEvents: (runId: string) =>
+    invoke(C['classifyConvo:getBufferedEvents'], runId),
+  onClassifyConvoEvent: (cb: (event: unknown) => void) => subscribe(C['classifyConvo:event'], cb),
 };
 
 // Install on window. We cast via `unknown` because the full type surface in

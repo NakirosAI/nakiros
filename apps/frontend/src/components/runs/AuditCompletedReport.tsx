@@ -14,6 +14,7 @@ import type { AuditCheckSeverity, AuditRun, Skill } from '@nakiros/shared';
 import { launchEvalBatch, launchFix, type OpenRunTabCallback } from '../../lib/run-launcher';
 import { useActiveFixForSkill } from '../../hooks/useAgentRun';
 import type { SkillTabIdentity } from '../../hooks/useTabs';
+import { runDisplayContext } from '../../lib/run-display';
 
 interface AuditCompletedReportProps {
   /** Completed audit run — we read `manifest`, `checkResults`, `tokensUsed`, `durationMs`. */
@@ -48,13 +49,16 @@ export default function AuditCompletedReport({
   const { t } = useTranslation('runs');
   const stats = useMemo(() => computeStats(run), [run]);
   const findings = useMemo(() => computeFindings(run), [run]);
+  const { isClaudemd, isRules, isSubagents, isHooks, isPermissions, isMcp, isOutputStyles } = runDisplayContext('audit', run);
+  // Runs targeting a CLAUDE.md, a rule file, a subagent, hooks, permissions, mcp, or an output style have no eval suite concept.
+  const hideEval = isClaudemd || isRules || isSubagents || isHooks || isPermissions || isMcp || isOutputStyles;
 
   // Fetch the skill record once we know the audit is over — drives the
-  // "Évaluer le skill" button (enabled iff `skill.hasEvals`). Failure modes
-  // (skill deleted between the audit and now, scope mismatch) leave the
-  // button disabled rather than crash.
+  // "Évaluer le skill" button (enabled iff `skill.hasEvals`). Skipped for
+  // CLAUDE.md / rules targets (no eval suite concept).
   const [skill, setSkill] = useState<Skill | null>(null);
   useEffect(() => {
+    if (hideEval) return;
     let cancelled = false;
     void fetchSkillForRun(run).then((s) => {
       if (!cancelled) setSkill(s);
@@ -62,7 +66,7 @@ export default function AuditCompletedReport({
     return () => {
       cancelled = true;
     };
-  }, [run]);
+  }, [run, hideEval]);
   const [isLaunchingEval, setIsLaunchingEval] = useState(false);
   const [isLaunchingFix, setIsLaunchingFix] = useState(false);
 
@@ -142,7 +146,7 @@ export default function AuditCompletedReport({
               })}
             </span>
             <span className="text-[12.5px] leading-snug text-n-muted">
-              {summaryLine(stats, t)}
+              {summaryLine(stats, t, hideEval)}
             </span>
           </div>
         </div>
@@ -213,34 +217,40 @@ export default function AuditCompletedReport({
             disabled={!canLaunchFix}
             disabledReason={
               activeFix
-                ? t('audit.nextSteps.fixActive', {
-                    defaultValue: 'Un Fix run est déjà en cours pour ce skill.',
-                  })
+                ? hideEval
+                  ? t('audit.nextSteps.fixActiveGeneric', {
+                      defaultValue: 'Un Fix run est déjà en cours sur cette cible.',
+                    })
+                  : t('audit.nextSteps.fixActive', {
+                      defaultValue: 'Un Fix run est déjà en cours pour ce skill.',
+                    })
                 : undefined
             }
           />
-          <NextStepRow
-            icon={FlaskConical}
-            label={
-              skill && !skill.hasEvals
-                ? t('audit.nextSteps.evalNoSuite', {
-                    defaultValue: 'Évaluer le skill — aucune eval définie',
-                  })
-                : t('audit.nextSteps.eval', {
-                    defaultValue: 'Évaluer le skill tel quel sur les fixtures',
-                  })
-            }
-            onClick={canLaunchEval ? handleLaunchEval : undefined}
-            disabled={!canLaunchEval}
-            disabledReason={
-              skill && !skill.hasEvals
-                ? t('audit.nextSteps.evalNoSuiteHint', {
-                    defaultValue:
-                      'Crée une suite d\'évals pour ce skill avant de pouvoir l\'évaluer.',
-                  })
-                : undefined
-            }
-          />
+          {!hideEval && (
+            <NextStepRow
+              icon={FlaskConical}
+              label={
+                skill && !skill.hasEvals
+                  ? t('audit.nextSteps.evalNoSuite', {
+                      defaultValue: 'Évaluer le skill — aucune eval définie',
+                    })
+                  : t('audit.nextSteps.eval', {
+                      defaultValue: 'Évaluer le skill tel quel sur les fixtures',
+                    })
+              }
+              onClick={canLaunchEval ? handleLaunchEval : undefined}
+              disabled={!canLaunchEval}
+              disabledReason={
+                skill && !skill.hasEvals
+                  ? t('audit.nextSteps.evalNoSuiteHint', {
+                      defaultValue:
+                        'Crée une suite d\'évals pour ce skill avant de pouvoir l\'évaluer.',
+                    })
+                  : undefined
+              }
+            />
+          )}
           <NextStepRow
             icon={FileText}
             label={t('audit.nextSteps.export', {
@@ -475,24 +485,44 @@ function computeFindings(run: AuditRun): FindingRowData[] {
 function summaryLine(
   stats: AuditStats,
   t: ReturnType<typeof useTranslation<'runs'>>['t'],
+  hideEval: boolean,
 ): string {
+  // `hideEval` is true for any target that is not a skill (CLAUDE.md, rule,
+  // subagent, hooks, permissions, ...). Generic copy avoids gender/number
+  // agreement headaches across the half-dozen target nouns.
   if (stats.critical > 0) {
-    return t('audit.completed.summaryCritical', {
-      findings: stats.failed,
-      critical: stats.critical,
-      defaultValue:
-        '{{findings}} findings, {{critical}} critique. Le skill nécessite des corrections avant déploiement.',
-    });
+    return hideEval
+      ? t('audit.completed.summaryCriticalGeneric', {
+          findings: stats.failed,
+          critical: stats.critical,
+          defaultValue:
+            '{{findings}} findings, dont {{critical}} critique. Corrections requises avant déploiement.',
+        })
+      : t('audit.completed.summaryCritical', {
+          findings: stats.failed,
+          critical: stats.critical,
+          defaultValue:
+            '{{findings}} findings, dont {{critical}} critique. Le skill nécessite des corrections avant déploiement.',
+        });
   }
   if (stats.failed > 0) {
-    return t('audit.completed.summaryWarn', {
-      findings: stats.failed,
-      defaultValue: '{{findings}} findings. Le skill est utilisable mais peut être amélioré.',
-    });
+    return hideEval
+      ? t('audit.completed.summaryWarnGeneric', {
+          findings: stats.failed,
+          defaultValue: '{{findings}} findings. Améliorations possibles.',
+        })
+      : t('audit.completed.summaryWarn', {
+          findings: stats.failed,
+          defaultValue: '{{findings}} findings. Le skill est utilisable mais peut être amélioré.',
+        });
   }
-  return t('audit.completed.summaryHealthy', {
-    defaultValue: 'Tous les checks sont passés. Le skill respecte les bonnes pratiques.',
-  });
+  return hideEval
+    ? t('audit.completed.summaryHealthyGeneric', {
+        defaultValue: 'Tous les checks sont passés. Bonnes pratiques respectées.',
+      })
+    : t('audit.completed.summaryHealthy', {
+        defaultValue: 'Tous les checks sont passés. Le skill respecte les bonnes pratiques.',
+      });
 }
 
 // ── Skill resolution ──────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'fs';
 import { join, basename, relative } from 'path';
 import { homedir } from 'os';
 
@@ -27,9 +27,24 @@ import {
   type RunnerSpec,
   writeExecutionSettings,
 } from './runner-core/index.js';
+import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
+import { rulesAuditArchiveDir } from './rules-audit-history.js';
+import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
+import { hooksAuditArchiveDir } from './hooks-audit-history.js';
+import { permissionsAuditArchiveDir } from './permissions-audit-history.js';
+import { mcpAuditArchiveDir } from './mcp-audit-history.js';
+import { outputStylesAuditArchiveDir } from './output-styles-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
+const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
+const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
+const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
+const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
+const PERMISSIONS_EXPERT_SKILL_NAME = 'nakiros-permissions-expert';
+const MCP_EXPERT_SKILL_NAME = 'nakiros-mcp-expert';
+const OUTPUT_STYLES_EXPERT_SKILL_NAME = 'nakiros-output-styles-expert';
 const KIND = 'audit';
+
 
 interface AuditEntryExtras {
   /** Absolute path to the real skill directory — used to archive the audit report. */
@@ -209,6 +224,114 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
   if (!existsSync(reportSrc)) {
     return { ok: false, error: 'No audit-report.md was produced' };
   }
+  // CLAUDE.md audits archive under `~/.nakiros/<projectId>/claudemd/audit/`.
+  // The bundled expert is immutable so we never write into the skill dir.
+  if (entry.run.claudemdTarget) {
+    const ct = entry.run.claudemdTarget;
+    const archiveDir = join(homedir(), '.nakiros', ct.projectId, 'claudemd', 'audit');
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive CLAUDE.md audit: ${(err as Error).message}` };
+    }
+  }
+
+  // Rules audits archive under `~/.nakiros/<projectId>/rules-audits/<ruleName>/`.
+  // Sub-folders per rule keep the history organised when a project has many rules.
+  if (entry.run.rulesTarget) {
+    const rt = entry.run.rulesTarget;
+    const archiveDir = rulesAuditArchiveDir(rt.projectId, rt.ruleName);
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive rules audit: ${(err as Error).message}` };
+    }
+  }
+
+  // Subagents audits archive under
+  // `~/.nakiros/<projectId>/subagents-audits/<subagentName>/`.
+  // Sub-folders per subagent keep the history organised.
+  if (entry.run.subagentsTarget) {
+    const st = entry.run.subagentsTarget;
+    const archiveDir = subagentsAuditArchiveDir(st.projectId, st.subagentName);
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive subagents audit: ${(err as Error).message}` };
+    }
+  }
+
+  // Hooks audits archive under `~/.nakiros/<projectId>/hooks-audits/`.
+  // Singleton — no sub-folder per target name.
+  if (entry.run.hooksTarget) {
+    const ht = entry.run.hooksTarget;
+    const archiveDir = hooksAuditArchiveDir(ht.projectId);
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive hooks audit: ${(err as Error).message}` };
+    }
+  }
+
+  // Permissions audits archive under
+  // `~/.nakiros/<projectId>/permissions-audits/<scope>/`.
+  // Sub-folder per scope so project and local histories stay independent.
+  if (entry.run.permissionsTarget) {
+    const pt = entry.run.permissionsTarget;
+    const archiveDir = permissionsAuditArchiveDir(pt.projectId, pt.scope ?? 'project');
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive permissions audit: ${(err as Error).message}` };
+    }
+  }
+
+  // MCP audits archive under `~/.nakiros/<projectId>/mcp-audits/`.
+  // Singleton — no sub-folder per target name.
+  if (entry.run.mcpTarget) {
+    const mt = entry.run.mcpTarget;
+    const archiveDir = mcpAuditArchiveDir(mt.projectId);
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive MCP audit: ${(err as Error).message}` };
+    }
+  }
+
+  // Output-styles audits archive under
+  // `~/.nakiros/<projectId>/output-styles-audits/<styleName>/`.
+  // Sub-folders per style keep the history organised when a project has many styles.
+  if (entry.run.outputStylesTarget) {
+    const ost = entry.run.outputStylesTarget;
+    const archiveDir = outputStylesAuditArchiveDir(ost.projectId, ost.styleName);
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive output-styles audit: ${(err as Error).message}` };
+    }
+  }
+
   const auditsDir = join(entry.extras.skillDir, 'audits');
   mkdirSync(auditsDir, { recursive: true });
   const dest = join(auditsDir, `audit-${isoSafeTimestamp()}.md`);
@@ -226,10 +349,244 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
 
   prepareWorkdir(req, runId) {
     const workdir = prepareWorkdir(req.skillDir, req.skillName, runId);
+
+    // For CLAUDE.md audits, write a cross-entity snapshot so the expert agent
+    // can detect coherence issues across the full .claude/ configuration.
+    if (req.claudemdTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.claudemdTarget.projectId,
+          projectPath: req.claudemdTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json: ${(err as Error).message}`);
+      }
+    }
+
+    // For rules audits, write the same cross-entity snapshot so the expert
+    // agent can reason about rule coherence in the context of the full
+    // .claude/ configuration (other rules, CLAUDE.md, hooks, etc.).
+    if (req.rulesTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.rulesTarget.projectId,
+          projectPath: req.rulesTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for rules: ${(err as Error).message}`);
+      }
+    }
+
+    // For subagents audits, write the cross-entity snapshot so the expert
+    // agent can reason about the subagent in the context of the full
+    // .claude/ configuration (CLAUDE.md, tools, other subagents, etc.).
+    if (req.subagentsTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.subagentsTarget.projectId,
+          projectPath: req.subagentsTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for subagents: ${(err as Error).message}`);
+      }
+    }
+
+    // For hooks audits, write the cross-entity snapshot so the expert agent
+    // can reason about the hooks block in the context of the full .claude/
+    // configuration (CLAUDE.md, other settings, subagents, etc.).
+    if (req.hooksTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.hooksTarget.projectId,
+          projectPath: req.hooksTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for hooks: ${(err as Error).message}`);
+      }
+    }
+
+    // For permissions audits, write the cross-entity snapshot so the expert
+    // agent can reason about the permissions block in the context of the full
+    // .claude/ configuration (CLAUDE.md, hooks, other settings, etc.).
+    if (req.permissionsTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.permissionsTarget.projectId,
+          projectPath: req.permissionsTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for permissions: ${(err as Error).message}`);
+      }
+    }
+
+    // For MCP audits, write the cross-entity snapshot so the expert agent
+    // can reason about .mcp.json in the context of the full .claude/
+    // configuration (CLAUDE.md, hooks, other settings, etc.).
+    if (req.mcpTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.mcpTarget.projectId,
+          projectPath: req.mcpTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for mcp: ${(err as Error).message}`);
+      }
+    }
+
+    // For output-styles audits, write the cross-entity snapshot so the expert
+    // agent can reason about the style in the context of the full .claude/
+    // configuration (CLAUDE.md, rules, other styles, etc.).
+    if (req.outputStylesTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.outputStylesTarget.projectId,
+          projectPath: req.outputStylesTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for output-styles: ${(err as Error).message}`);
+      }
+    }
+
     return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
   },
 
   buildFirstPrompt(req) {
+    if (req.claudemdTarget) {
+      const ct = req.claudemdTarget;
+      const targetPath = join(ct.projectPath, 'CLAUDE.md');
+      const exists = existsSync(targetPath);
+      return [
+        `/${CLAUDEMD_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the project root CLAUDE.md.`,
+        `Project root: ${ct.projectPath}`,
+        `Target file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
+    if (req.rulesTarget) {
+      const rt = req.rulesTarget;
+      const targetPath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
+      const exists = existsSync(targetPath);
+      return [
+        `/${RULES_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the rule file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `Project root: ${rt.projectPath}`,
+        `Rule name (relative to .claude/rules/): ${rt.ruleName}`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
+    if (req.subagentsTarget) {
+      const st = req.subagentsTarget;
+      const targetPath = join(st.projectPath, '.claude', 'agents', st.subagentName);
+      const exists = existsSync(targetPath);
+      return [
+        `/${SUBAGENTS_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the subagent file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `Project root: ${st.projectPath}`,
+        `Subagent name (relative to .claude/agents/): ${st.subagentName}`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
+    if (req.hooksTarget) {
+      const ht = req.hooksTarget;
+      const settingsPath = join(ht.projectPath, '.claude', 'settings.json');
+      const exists = existsSync(settingsPath);
+      return [
+        `/${HOOKS_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the hooks block of the project settings.`,
+        `Project root: ${ht.projectPath}`,
+        `Settings file: ${settingsPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
+    if (req.permissionsTarget) {
+      const pt = req.permissionsTarget;
+      const scope = pt.scope ?? 'project';
+      const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
+      const settingsPath = join(pt.projectPath, '.claude', filename);
+      const exists = existsSync(settingsPath);
+      return [
+        `/${PERMISSIONS_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the permissions block of the project settings.`,
+        `Project root: ${pt.projectPath}`,
+        `Scope: ${scope}`,
+        `Settings file: ${settingsPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
+    if (req.mcpTarget) {
+      const mt = req.mcpTarget;
+      const mcpPath = join(mt.projectPath, '.mcp.json');
+      const exists = existsSync(mcpPath);
+      return [
+        `/${MCP_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the project MCP configuration file.`,
+        `Project root: ${mt.projectPath}`,
+        `Target file: ${mcpPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
+    if (req.outputStylesTarget) {
+      const ost = req.outputStylesTarget;
+      const targetPath = join(ost.projectPath, '.claude', 'output-styles', ost.styleName);
+      const exists = existsSync(targetPath);
+      return [
+        `/${OUTPUT_STYLES_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the output style file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `Project root: ${ost.projectPath}`,
+        `Style name (relative to .claude/output-styles/): ${ost.styleName}`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
     return `/${FACTORY_SKILL_NAME} audit ${req.skillName}`;
   },
 
@@ -253,6 +610,13 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       error: null,
       manifest: null,
       checkResults: [],
+      claudemdTarget: req.claudemdTarget,
+      rulesTarget: req.rulesTarget,
+      subagentsTarget: req.subagentsTarget,
+      hooksTarget: req.hooksTarget,
+      permissionsTarget: req.permissionsTarget,
+      mcpTarget: req.mcpTarget,
+      outputStylesTarget: req.outputStylesTarget,
     };
   },
 
@@ -301,6 +665,49 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       if (run.scope !== req.scope) continue;
       if (run.projectId !== req.projectId) continue;
       if (run.skillName !== req.skillName) continue;
+      // CLAUDE.md audits disambiguate by projectPath so two projects with the
+      // same skill name don't collapse onto a single run.
+      if (req.claudemdTarget || run.claudemdTarget) {
+        if (!req.claudemdTarget || !run.claudemdTarget) continue;
+        if (req.claudemdTarget.projectPath !== run.claudemdTarget.projectPath) continue;
+      }
+      // Rules audits disambiguate by projectId + ruleName.
+      if (req.rulesTarget || run.rulesTarget) {
+        if (!req.rulesTarget || !run.rulesTarget) continue;
+        if (req.rulesTarget.projectId !== run.rulesTarget.projectId) continue;
+        if (req.rulesTarget.ruleName !== run.rulesTarget.ruleName) continue;
+      }
+      // Subagents audits disambiguate by projectId + subagentName.
+      if (req.subagentsTarget || run.subagentsTarget) {
+        if (!req.subagentsTarget || !run.subagentsTarget) continue;
+        if (req.subagentsTarget.projectId !== run.subagentsTarget.projectId) continue;
+        if (req.subagentsTarget.subagentName !== run.subagentsTarget.subagentName) continue;
+      }
+      // Hooks audits: singleton per project — disambiguate by projectId only.
+      if (req.hooksTarget || run.hooksTarget) {
+        if (!req.hooksTarget || !run.hooksTarget) continue;
+        if (req.hooksTarget.projectId !== run.hooksTarget.projectId) continue;
+      }
+      // Permissions audits: one per (projectId, scope) — a project audit and a
+      // local audit may run concurrently.
+      if (req.permissionsTarget || run.permissionsTarget) {
+        if (!req.permissionsTarget || !run.permissionsTarget) continue;
+        if (req.permissionsTarget.projectId !== run.permissionsTarget.projectId) continue;
+        const reqScope = req.permissionsTarget.scope ?? 'project';
+        const runScope = run.permissionsTarget.scope ?? 'project';
+        if (reqScope !== runScope) continue;
+      }
+      // MCP audits: singleton per project — disambiguate by projectId only.
+      if (req.mcpTarget || run.mcpTarget) {
+        if (!req.mcpTarget || !run.mcpTarget) continue;
+        if (req.mcpTarget.projectId !== run.mcpTarget.projectId) continue;
+      }
+      // Output-styles audits disambiguate by projectId + styleName.
+      if (req.outputStylesTarget || run.outputStylesTarget) {
+        if (!req.outputStylesTarget || !run.outputStylesTarget) continue;
+        if (req.outputStylesTarget.projectId !== run.outputStylesTarget.projectId) continue;
+        if (req.outputStylesTarget.styleName !== run.outputStylesTarget.styleName) continue;
+      }
       if (isActiveRunStatus(run.status)) return entry;
     }
     return null;
@@ -357,6 +764,27 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         restoredStatus === 'waiting_for_input' && wasActive
           ? true
           : blob.interruptedByReboot,
+      // Restore the claudemd target so the run keeps surfacing the right
+      // CLAUDE.md context across reboots.
+      claudemdTarget: blob.claudemdTarget,
+      // Restore the rules target so the run keeps surfacing the right
+      // rule context across reboots.
+      rulesTarget: blob.rulesTarget,
+      // Restore the subagents target so the run keeps surfacing the right
+      // subagent context across reboots.
+      subagentsTarget: blob.subagentsTarget,
+      // Restore the hooks target so the run keeps surfacing the right
+      // hooks context across reboots.
+      hooksTarget: blob.hooksTarget,
+      // Restore the permissions target so the run keeps surfacing the right
+      // permissions context across reboots.
+      permissionsTarget: blob.permissionsTarget,
+      // Restore the MCP target so the run keeps surfacing the right
+      // .mcp.json context across reboots.
+      mcpTarget: blob.mcpTarget,
+      // Restore the output-styles target so the run keeps surfacing the right
+      // style context across reboots.
+      outputStylesTarget: blob.outputStylesTarget,
       // Restore live audit state — sidebar resumes where it left off without
       // re-reading the workdir until the next turn (which re-syncs anyway).
       manifest: blob.manifest ?? null,

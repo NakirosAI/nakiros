@@ -7,6 +7,7 @@ React components consumed by the views layer. Top-level files are app-shell piec
 ## Subfolders
 
 - [conversations/](./conversations/README.md) — Components powering the per-conversation diagnostic panel and the project-scoped Insights aggregation.
+- [markdown/](./markdown/README.md) — Reusable markdown authoring components (MarkdownEditor: Milkdown Crepe WYSIWYG + Raw toggle).
 - [dashboard/](./dashboard/README.md) — Shell-level pieces of the project dashboard (error boundary, router).
 - [diff/](./diff/README.md) — Reusable side-by-side file-diff component used by fix and create review flows.
 - [eval-matrix/](./eval-matrix/README.md) — Components composing the Evolution view and the Models comparison tab.

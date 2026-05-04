@@ -1,140 +1,232 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, ArrowRight, Save, ShieldCheck } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  FileText,
+  Play,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Wrench,
+} from 'lucide-react';
 import type {
-  PermissionsDefaultMode,
-  PermissionsFileContent,
-  PermissionsScope,
+  PermissionsAuditHistoryEntry,
+  PermissionsExpertScope,
+  PermissionsRunMode,
   Project,
 } from '@nakiros/shared';
-import { usePermissions } from './permissions/usePermissions';
-import ChipPicker from './permissions/ChipPicker';
+import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
+import type { GenericAuditEntry } from '../components/skill/AuditHistoryPicker';
+import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
+import ScoreRing from '../components/viz/ScoreRing';
+import { launchPermissions, type OpenRunTabCallback } from '../lib/run-launcher';
+import { usePermissionsFile } from './permissions/usePermissionsFile';
+import PermissionsFormEditor from './permissions/PermissionsFormEditor';
 
 interface PermissionsScreenProps {
   project: Project;
+  onBack?(): void;
+  onOpenRunTab?: OpenRunTabCallback;
 }
 
-const DEFAULT_MODES: PermissionsDefaultMode[] = [
-  'default',
-  'acceptEdits',
-  'auto',
-  'dontAsk',
-  'bypassPermissions',
-  'plan',
-];
+type ScreenTab = 'edit' | 'audit' | 'fix';
+type EditMode = 'form' | 'json';
 
-const ALLOW_SUGGESTIONS = [
-  'Bash(pnpm *)',
-  'Bash(npm *)',
-  'Bash(git status)',
-  'Bash(git diff *)',
-  'Read',
-  'Edit',
-  'Write',
-  'WebFetch',
-];
-
-const DENY_SUGGESTIONS = [
-  'Bash(rm -rf *)',
-  'Bash(curl *)',
-  'Bash(npm publish *)',
-  'WebFetch',
-];
-
-const ASK_SUGGESTIONS = ['Bash(git push *)', 'Bash(*)'];
+interface AuditScore {
+  value: number;
+  max: number;
+}
 
 /**
- * Editor for `.claude/settings.json` and `.claude/settings.local.json`,
- * focused on the `permissions` block (allow / deny / ask + defaultMode).
- * Other top-level keys (model, env, hooks, apiKeyHelper, …) survive saves
- * via the round-tripped `rest` JSON field, exposed in a "Other settings"
- * raw textarea so power users can still tweak them.
+ * Singleton Permissions screen — mirrors `HooksScreen` exactly.
+ *
+ * Displays and edits the `permissions` block of `.claude/settings.json` with
+ * a Form editor (chip-list allow/ask/deny) or raw JSON. Three tabs:
+ *
+ * 1. **Edit** — Form editor or `<textarea>` JSON editor + live validation + sidebar metrics.
+ * 2. **Audit** — `AuditHistoryPicker` + `AuditMarkdownViewer` + `ScoreRing`.
+ * 3. **Fix** — Simple CTA landing.
+ *
+ * Uses `permissions:read` / `permissions:save` / `permissions:listAudits` /
+ * `permissions:readAudit` IPC — distinct from the Module-4 form editor
+ * (`claudePermissions:*` channels).
  */
-export default function PermissionsScreen({ project }: PermissionsScreenProps) {
-  const { t } = useTranslation('permissions');
-  const [scope, setScope] = useState<PermissionsScope>('project');
-  const { file, loading, error, refresh, save } = usePermissions(project.id, scope);
+export default function PermissionsScreen({
+  project,
+  onBack,
+  onOpenRunTab,
+}: PermissionsScreenProps) {
+  const { t } = useTranslation('permissions-runner');
 
-  // Editor state derived from `file`; reset when file changes (scope switch
-  // or external reload).
-  const [allow, setAllow] = useState<string[]>([]);
-  const [deny, setDeny] = useState<string[]>([]);
-  const [ask, setAsk] = useState<string[]>([]);
-  const [defaultMode, setDefaultMode] = useState<PermissionsDefaultMode | null>(null);
-  const [rest, setRest] = useState('');
-  // Opaque round-trip blob — fields managed in other tabs (hooks,
-  // outputStyle) that we preserve verbatim when saving here.
-  const [preservedJson, setPreservedJson] = useState('');
+  // Scope toggle — 'project' targets settings.json, 'local' targets settings.local.json
+  const [scope, setScope] = useState<PermissionsExpertScope>('project');
+
+  // Audit list ─────────────────────────────────────────────────────────────
+  const [audits, setAudits] = useState<PermissionsAuditHistoryEntry[]>([]);
+  const [selectedAudit, setSelectedAudit] = useState<GenericAuditEntry | null>(
+    null,
+  );
+  const [auditContent, setAuditContent] = useState<string | null>(null);
+  const [auditContentError, setAuditContentError] = useState<string | null>(
+    null,
+  );
+
+  const loadAudits = useCallback(async () => {
+    try {
+      const result = await window.nakiros.listPermissionsAudits(project.id, scope);
+      setAudits(result ?? []);
+      if (result && result.length > 0 && !selectedAudit) {
+        setSelectedAudit(result[0] ?? null);
+      }
+    } catch {
+      setAudits([]);
+    }
+  }, [project.id, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { file, loading, error, refresh, save } = usePermissionsFile(
+    project.id,
+    scope,
+    loadAudits,
+  );
+
+  useEffect(() => {
+    void loadAudits();
+  }, [loadAudits]);
+
+  // Read audit report when selection changes ───────────────────────────────
+  useEffect(() => {
+    if (!selectedAudit) {
+      setAuditContent(null);
+      return;
+    }
+    let cancelled = false;
+    setAuditContent(null);
+    setAuditContentError(null);
+    window.nakiros
+      .readPermissionsAudit(selectedAudit.path)
+      .then((md) => {
+        if (cancelled) return;
+        setAuditContent(md ?? '');
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setAuditContentError(
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAudit]);
+
+  const [tab, setTab] = useState<ScreenTab>('edit');
+  const [editMode, setEditMode] = useState<EditMode>('form');
+  const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [launchingMode, setLaunchingMode] =
+    useState<PermissionsRunMode | null>(null);
   const [errorBanner, setErrorBanner] = useState<{
     code: string;
     message: string;
     showReload?: boolean;
   } | null>(null);
 
+  // Body sync ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!file) return;
-    setAllow(file.allow);
-    setDeny(file.deny);
-    setAsk(file.ask);
-    setDefaultMode(file.defaultMode);
-    setRest(file.rest);
-    setPreservedJson(file.preservedJson);
+    setBody(file.content);
     setErrorBanner(null);
   }, [file]);
 
   const dirty = useMemo(() => {
     if (!file) return false;
-    return (
-      !arrayEq(file.allow, allow) ||
-      !arrayEq(file.deny, deny) ||
-      !arrayEq(file.ask, ask) ||
-      file.defaultMode !== defaultMode ||
-      file.rest !== rest
-    );
-  }, [file, allow, deny, ask, defaultMode, rest]);
+    return body !== file.content;
+  }, [file, body]);
 
+  // JSON validation ────────────────────────────────────────────────────────
+  const jsonValidation = useMemo((): { valid: boolean; message?: string } => {
+    if (body.trim() === '' || body.trim() === '{}') return { valid: true };
+    try {
+      JSON.parse(body);
+      return { valid: true };
+    } catch (err) {
+      return {
+        valid: false,
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }, [body]);
+
+  // Actions ───────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!file) return;
+    if (!file || !jsonValidation.valid) return;
     setErrorBanner(null);
     setSubmitting(true);
-    const result = await save({
-      scope,
-      allow,
-      deny,
-      ask,
-      defaultMode,
-      rest,
-      preservedJson,
-      mtimeAtRead: file.mtime,
-    });
+    const result = await save(body, file.mtime);
     setSubmitting(false);
     if (!result.ok) {
       setErrorBanner({
-        code: result.code,
-        message: result.message,
+        code: result.code ?? 'unknown',
+        message: result.message ?? t('errors.writeFailed'),
         showReload: result.code === 'conflict',
       });
     }
   };
 
-  const handleReloadAfterConflict = () => {
+  const handleReset = () => {
+    if (!file) return;
+    setBody(file.content);
     setErrorBanner(null);
-    refresh();
   };
 
+  const handleLaunchRun = async (mode: PermissionsRunMode) => {
+    if (!onOpenRunTab || !file) return;
+    setErrorBanner(null);
+    setLaunchingMode(mode);
+    try {
+      await launchPermissions(
+        { projectId: project.id, projectPath: project.projectPath, scope, mode },
+        onOpenRunTab,
+      );
+    } catch (err) {
+      setErrorBanner({
+        code: 'launch-failed',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setLaunchingMode(null);
+    }
+  };
+
+  const handleScopeChange = (newScope: PermissionsExpertScope) => {
+    if (newScope === scope) return;
+    setScope(newScope);
+    setSelectedAudit(null);
+    setAuditContent(null);
+    setAuditContentError(null);
+    setErrorBanner(null);
+  };
+
+  // ── Loading / error states ─────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="grid flex-1 place-items-center text-n-muted">{t('loading')}</div>
+      <div className="grid flex-1 place-items-center text-n-muted">
+        {t('loading')}
+      </div>
     );
   }
   if (error || !file) {
     return (
       <div className="grid flex-1 place-items-center">
         <div className="rounded-n-lg border border-n-border-default bg-n-surface px-7 py-7 text-center">
-          <h3 className="text-[14px] font-semibold text-n-fg">{t('errorTitle')}</h3>
+          <h3 className="text-[14px] font-semibold text-n-fg">
+            {t('errorTitle')}
+          </h3>
           {error && (
-            <p className="mt-1 break-all font-n-mono text-[11.5px] text-n-muted">{error}</p>
+            <p className="mt-1 break-all font-n-mono text-[11.5px] text-n-muted">
+              {error}
+            </p>
           )}
           <button
             type="button"
@@ -148,62 +240,159 @@ export default function PermissionsScreen({ project }: PermissionsScreenProps) {
     );
   }
 
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Header */}
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-n-border-subtle px-7 py-5">
-        <div>
-          <h1 className="m-0 flex items-center gap-2 text-[20px] font-semibold tracking-tight">
-            <ShieldCheck size={18} className="text-n-accent-strong" />
-            {t('title')}
-          </h1>
-          <p className="m-0 mt-1 max-w-2xl text-pretty text-[13px] leading-relaxed text-n-muted">
-            {t('subtitle')}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ScopeToggle scope={scope} onChange={setScope} fileExists={file.exists} />
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!dirty || submitting}
-            className="inline-flex items-center gap-1.5 rounded-n-md border border-n-accent-line bg-n-accent-soft px-3 py-2 font-n-mono text-[12px] text-n-accent-strong hover:bg-n-accent-soft/80 disabled:opacity-50"
-          >
-            <Save size={13} /> {t('save')}
-          </button>
-        </div>
-      </header>
+  const auditScore = parseAuditScore(auditContent);
 
-      {/* Path + status banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-n-border-subtle bg-n-canvas px-7 py-2.5">
-        <span className="break-all font-n-mono text-[11px] text-n-subtle" title={file.path}>
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden font-n-sans">
+      {/* ── Breadcrumb header ── */}
+      <div className="flex flex-wrap items-center gap-3.5 border-b border-n-border-subtle px-7 py-3.5">
+        {onBack && (
+          <>
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-1.5 bg-transparent text-[12.5px] text-n-muted hover:text-n-fg"
+            >
+              <ArrowLeft size={14} strokeWidth={2} /> {t('back')}
+            </button>
+            <span className="h-3.5 w-px bg-n-border-subtle" />
+          </>
+        )}
+        <ShieldCheck size={16} strokeWidth={2} className="text-n-accent" />
+        <strong className="font-n-mono text-[14px] font-medium text-n-fg">
+          Permissions
+        </strong>
+        {/* ── Scope toggle (project / local) ── */}
+        <div
+          className="inline-flex overflow-hidden rounded-md border border-n-border-default bg-n-raised font-n-mono text-[11px]"
+          title={scope === 'local' ? t('scopeTooltip.local') : t('scopeTooltip.project')}
+        >
+          {(['project', 'local'] as PermissionsExpertScope[]).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => handleScopeChange(s)}
+              className={
+                'px-2.5 py-1 ' +
+                (scope === s
+                  ? 'bg-n-accent text-white'
+                  : 'text-n-muted hover:bg-n-canvas hover:text-n-fg')
+              }
+            >
+              {t(`scope.${s}`)}
+            </button>
+          ))}
+        </div>
+        <span
+          className="truncate font-n-mono text-[11px] text-n-faint"
+          title={file.path}
+        >
           {file.path}
         </span>
-        <span className="font-n-mono text-[10.5px] uppercase tracking-[1px] text-n-subtle">
-          {file.exists
-            ? scope === 'local'
-              ? t('badgeLocal')
-              : t('badgeProject')
-            : t('badgeMissing')}
-        </span>
+        <span className="flex-1" />
+        {/* CTA buttons */}
+        <div className="flex gap-1.5">
+          {onOpenRunTab && file.exists && (
+            <>
+              <button
+                type="button"
+                disabled={launchingMode !== null}
+                onClick={() => void handleLaunchRun('audit')}
+                className={
+                  'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
+                  (launchingMode === null
+                    ? 'hover:bg-n-raised hover:text-n-fg'
+                    : 'opacity-60')
+                }
+                title={t('runAuditTitle')}
+              >
+                {launchingMode === 'audit' ? (
+                  <RefreshCw
+                    size={12}
+                    strokeWidth={2}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <ShieldCheck size={12} strokeWidth={2} />
+                )}
+                {launchingMode === 'audit'
+                  ? t('runLaunching')
+                  : t('runAudit')}
+              </button>
+              <button
+                type="button"
+                disabled={launchingMode !== null}
+                onClick={() => void handleLaunchRun('fix')}
+                className={
+                  'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-2.5 font-n-mono text-[11.5px] text-n-accent ' +
+                  (launchingMode === null
+                    ? 'hover:bg-n-accent-soft'
+                    : 'opacity-60')
+                }
+                title={t('runFixTitle')}
+              >
+                {launchingMode === 'fix' ? (
+                  <RefreshCw
+                    size={12}
+                    strokeWidth={2}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Wrench size={12} strokeWidth={2} />
+                )}
+                {launchingMode === 'fix' ? t('runLaunching') : t('runFix')}
+              </button>
+            </>
+          )}
+          {/* Permissions "Create" via agent removed — rules are mechanical
+              JSON, the Edit tab's form is faster than spinning up an agent.
+              Saving an empty permissions block in the editor creates the file. */}
+        </div>
       </div>
 
-      {/* Error banner */}
+      {/* ── Missing file banner ── */}
+      {!file.exists && (
+        <div className="mx-7 mt-4 flex items-center justify-between gap-3 rounded-n-md border border-dashed border-n-border-default bg-n-surface px-4 py-3">
+          <div className="flex items-center gap-2 text-[12.5px] text-n-muted">
+            <AlertTriangle
+              size={14}
+              className="flex-shrink-0 text-n-watch"
+            />
+            {t('missingBanner')}
+          </div>
+          <button
+            type="button"
+            onClick={() => setTab('edit')}
+            className="inline-flex items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 py-1.5 font-n-mono text-[11.5px] text-n-accent-strong hover:bg-n-accent-soft/80"
+          >
+            {t('missingBannerCta')}
+          </button>
+        </div>
+      )}
+
+      {/* ── Error banner ── */}
       {errorBanner && (
         <div className="mx-7 mt-4 flex items-start justify-between gap-3 rounded-n-md border border-[oklch(0.74_0.16_25_/_0.4)] bg-[oklch(0.74_0.16_25_/_0.08)] px-3 py-2.5">
           <div className="flex items-start gap-2">
-            <AlertTriangle size={14} className="mt-0.5 flex-shrink-0 text-[oklch(0.55_0.16_25)]" />
+            <AlertTriangle
+              size={14}
+              className="mt-0.5 flex-shrink-0 text-[oklch(0.55_0.16_25)]"
+            />
             <div>
               <div className="font-n-mono text-[10.5px] uppercase tracking-[1px] text-[oklch(0.55_0.16_25)]">
-                {t(`errors.${errorBanner.code}Title`, { defaultValue: errorBanner.code })}
+                {t(`errors.${errorBanner.code}Title`, {
+                  defaultValue: errorBanner.code,
+                })}
               </div>
-              <div className="mt-0.5 text-[12px] leading-snug text-n-fg">{errorBanner.message}</div>
+              <div className="mt-0.5 text-[12px] leading-snug text-n-fg">
+                {errorBanner.message}
+              </div>
             </div>
           </div>
           {errorBanner.showReload && (
             <button
               type="button"
-              onClick={handleReloadAfterConflict}
+              onClick={refresh}
               className="flex-shrink-0 rounded-n-sm border border-n-border-default bg-n-surface px-2 py-1 font-n-mono text-[11px] text-n-fg hover:bg-n-canvas"
             >
               {t('reload')}
@@ -212,210 +401,700 @@ export default function PermissionsScreen({ project }: PermissionsScreenProps) {
         </div>
       )}
 
-      {file.parseError && (
-        <div className="mx-7 mt-4 rounded-n-md border border-[oklch(0.74_0.16_25_/_0.4)] bg-[oklch(0.74_0.16_25_/_0.08)] px-3 py-2.5">
-          <div className="font-n-mono text-[10.5px] uppercase tracking-[1px] text-[oklch(0.55_0.16_25)]">
-            {t('parseErrorTitle')}
-          </div>
-          <div className="mt-0.5 text-[12px] leading-snug text-n-fg">
-            {t('parseErrorBody', { error: file.parseError })}
-          </div>
-        </div>
-      )}
+      {/* ── Tab strip ── */}
+      <div className="flex items-center gap-1 border-b border-n-border-subtle px-7">
+        <ScreenTabButton
+          id="edit"
+          label={t('tabs.edit')}
+          icon={<FileText size={13} strokeWidth={2} />}
+          active={tab}
+          setTab={setTab}
+        />
+        <ScreenTabButton
+          id="audit"
+          label={t('tabs.audit')}
+          icon={<ShieldCheck size={13} strokeWidth={2} />}
+          count={audits.length || undefined}
+          active={tab}
+          setTab={setTab}
+        />
+        <ScreenTabButton
+          id="fix"
+          label={t('tabs.fix')}
+          icon={<Wrench size={13} strokeWidth={2} />}
+          active={tab}
+          setTab={setTab}
+        />
+      </div>
 
-      <div className="flex flex-1 flex-col gap-6 overflow-auto px-7 pb-8 pt-5">
-        {/* Allow */}
-        <Section
-          label={t('sections.allow')}
-          help={t('sections.allowHelp')}
-          tone="positive"
-        >
-          <ChipPicker
-            values={allow}
-            suggestions={ALLOW_SUGGESTIONS}
-            placeholder="Bash(pnpm *)"
-            tone="positive"
-            onChange={setAllow}
+      {/* ── Tab body ── */}
+      <div className="flex-1 overflow-y-auto">
+        {tab === 'edit' && (
+          <EditTab
+            file={file}
+            body={body}
+            setBody={setBody}
+            dirty={dirty}
+            submitting={submitting}
+            jsonValidation={jsonValidation}
+            editMode={editMode}
+            setEditMode={setEditMode}
+            onSave={handleSave}
+            onReset={handleReset}
+            t={t}
           />
-        </Section>
-
-        {/* Deny */}
-        <Section
-          label={t('sections.deny')}
-          help={t('sections.denyHelp')}
-          tone="negative"
-        >
-          <ChipPicker
-            values={deny}
-            suggestions={DENY_SUGGESTIONS}
-            placeholder="Bash(rm -rf *)"
-            tone="negative"
-            onChange={setDeny}
+        )}
+        {tab === 'audit' && (
+          <AuditTab
+            audits={audits}
+            selectedAudit={selectedAudit}
+            setSelectedAudit={setSelectedAudit}
+            auditContent={auditContent}
+            auditContentError={auditContentError}
+            auditScore={auditScore}
+            onOpenRunTab={onOpenRunTab}
+            launchingMode={launchingMode}
+            onLaunchFix={() => void handleLaunchRun('fix')}
+            t={t}
           />
-        </Section>
-
-        {/* Ask */}
-        <Section
-          label={t('sections.ask')}
-          help={t('sections.askHelp')}
-          tone="warn"
-        >
-          <ChipPicker
-            values={ask}
-            suggestions={ASK_SUGGESTIONS}
-            placeholder="Bash(git push *)"
-            tone="warn"
-            onChange={setAsk}
+        )}
+        {tab === 'fix' && (
+          <FixTab
+            hasAudit={audits.length > 0}
+            onOpenRunTab={onOpenRunTab}
+            launchingMode={launchingMode}
+            onLaunchFix={() => void handleLaunchRun('fix')}
+            t={t}
           />
-        </Section>
-
-        {/* Default mode */}
-        <div>
-          <label className="mb-1.5 block font-n-mono text-[10.5px] uppercase tracking-[1px] text-n-subtle">
-            {t('sections.defaultMode')}
-          </label>
-          <select
-            value={defaultMode ?? ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              setDefaultMode(v === '' ? null : (v as PermissionsDefaultMode));
-            }}
-            className="w-full rounded-n-md border border-n-border-subtle bg-n-canvas px-3 py-2 font-n-mono text-[12px] text-n-fg focus:border-n-accent-line focus:outline-none"
-          >
-            <option value="">{t('sections.defaultModeNone')}</option>
-            {DEFAULT_MODES.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-pretty text-[11.5px] leading-relaxed text-n-muted">
-            {t('sections.defaultModeHelp')}
-          </p>
-        </div>
-
-        {/* Other settings (raw JSON) */}
-        <div>
-          <label className="mb-1.5 block font-n-mono text-[10.5px] uppercase tracking-[1px] text-n-subtle">
-            {t('sections.rest')}
-          </label>
-          <textarea
-            value={rest}
-            onChange={(e) => setRest(e.target.value)}
-            rows={10}
-            spellCheck={false}
-            placeholder='{"model": "sonnet", "env": {"NODE_ENV": "development"}}'
-            className="w-full resize-y rounded-n-md border border-n-border-subtle bg-n-canvas px-3 py-2 font-n-mono text-[12px] leading-relaxed text-n-fg placeholder:text-n-faint focus:border-n-accent-line focus:outline-none"
-          />
-          <p className="mt-1 text-pretty text-[11.5px] leading-relaxed text-n-muted">
-            {t('sections.restHelp')}
-          </p>
-        </div>
-
-        {/* Cross-tab pointers */}
-        <CrossTabHints />
+        )}
       </div>
     </div>
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────-
+// ── Tab strip button ───────────────────────────────────────────────────────────
 
-function ScopeToggle({
-  scope,
-  onChange,
-  fileExists,
+function ScreenTabButton({
+  id,
+  label,
+  icon,
+  count,
+  active,
+  setTab,
 }: {
-  scope: PermissionsScope;
-  onChange(s: PermissionsScope): void;
-  fileExists: boolean;
+  id: ScreenTab;
+  label: string;
+  icon: React.ReactNode;
+  count?: number;
+  active: ScreenTab;
+  setTab(t: ScreenTab): void;
 }) {
-  const { t } = useTranslation('permissions');
+  const isActive = active === id;
   return (
-    <div className="inline-flex rounded-n-md border border-n-border-subtle bg-n-surface p-0.5">
-      {(['project', 'local'] as PermissionsScope[]).map((s) => {
-        const active = s === scope;
-        return (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onChange(s)}
-            title={s === 'local' ? t('scope.localTooltip') : t('scope.projectTooltip')}
-            className={
-              'rounded-[5px] px-2.5 py-1 font-n-mono text-[11px] transition-colors ' +
-              (active
-                ? 'bg-n-accent-soft text-n-accent-strong'
-                : 'text-n-muted hover:text-n-fg')
-            }
-          >
-            {s === 'project' ? t('scope.project') : t('scope.local')}
-            {active && !fileExists && (
-              <span className="ml-1 text-n-subtle">·</span>
+    <button
+      type="button"
+      onClick={() => setTab(id)}
+      aria-current={isActive ? 'page' : undefined}
+      className={
+        'group -mb-px inline-flex items-center gap-1.5 border-b-2 bg-transparent px-3 py-2.5 text-[12.5px] font-medium transition-colors ' +
+        (isActive
+          ? 'border-n-accent text-n-fg'
+          : 'border-transparent text-n-muted hover:text-n-fg')
+      }
+    >
+      <span className={isActive ? 'text-n-accent' : 'text-n-subtle'}>
+        {icon}
+      </span>
+      {label}
+      {count != null && (
+        <span className="font-n-mono tabular-nums text-[10.5px] text-n-faint">
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// ── Edit tab ───────────────────────────────────────────────────────────────
+
+interface EditTabProps {
+  file: import('@nakiros/shared').PermissionsReadResult;
+  body: string;
+  setBody(b: string): void;
+  dirty: boolean;
+  submitting: boolean;
+  jsonValidation: { valid: boolean; message?: string };
+  editMode: EditMode;
+  setEditMode(m: EditMode): void;
+  onSave(): void;
+  onReset(): void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}
+
+function EditTab({
+  file,
+  body,
+  setBody,
+  dirty,
+  submitting,
+  jsonValidation,
+  editMode,
+  setEditMode,
+  onSave,
+  onReset,
+  t,
+}: EditTabProps) {
+  // If JSON becomes invalid while in form mode, we force JSON mode so the
+  // user can see and fix the syntax error.
+  const effectiveMode: EditMode = !jsonValidation.valid ? 'json' : editMode;
+
+  return (
+    <div className="flex flex-1 overflow-hidden" style={{ height: '100%' }}>
+      {/* Main editor area */}
+      <div className="flex flex-1 flex-col gap-3 overflow-auto px-7 pb-8 pt-4">
+        {/* Top toolbar: validation badge + mode toggle + save/reset */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Left: validation badge + mode toggle */}
+          <div className="flex items-center gap-2">
+            {jsonValidation.valid ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[oklch(0.55_0.18_145_/_0.3)] bg-[oklch(0.55_0.18_145_/_0.08)] px-2.5 py-0.5 font-n-mono text-[11px] text-[oklch(0.42_0.18_145)]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[oklch(0.55_0.18_145)]" />
+                {t('editTab.validJson')}
+              </span>
+            ) : (
+              <span
+                className="inline-flex max-w-[440px] items-start gap-1.5 rounded-full border border-[oklch(0.74_0.16_25_/_0.3)] bg-[oklch(0.74_0.16_25_/_0.08)] px-2.5 py-0.5 font-n-mono text-[11px] text-[oklch(0.50_0.16_25)]"
+                title={jsonValidation.message}
+              >
+                <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[oklch(0.74_0.16_25)]" />
+                <span className="truncate">
+                  {t('editTab.invalidJson')}: {jsonValidation.message}
+                </span>
+              </span>
             )}
-          </button>
-        );
-      })}
+
+            {/* Form / JSON mode toggle */}
+            <div className="inline-flex rounded-n-md border border-n-border-subtle bg-n-surface p-0.5">
+              <button
+                type="button"
+                disabled={!jsonValidation.valid}
+                onClick={() => setEditMode('form')}
+                title={
+                  !jsonValidation.valid
+                    ? t('editTab.formDisabledTooltip')
+                    : undefined
+                }
+                className={
+                  'rounded-[5px] px-2.5 py-1 font-n-mono text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ' +
+                  (effectiveMode === 'form'
+                    ? 'bg-n-accent-soft text-n-accent-strong'
+                    : 'text-n-muted hover:text-n-fg')
+                }
+              >
+                {t('editTab.form')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditMode('json')}
+                className={
+                  'rounded-[5px] px-2.5 py-1 font-n-mono text-[11px] transition-colors ' +
+                  (effectiveMode === 'json'
+                    ? 'bg-n-accent-soft text-n-accent-strong'
+                    : 'text-n-muted hover:text-n-fg')
+                }
+              >
+                {t('editTab.json')}
+              </button>
+            </div>
+          </div>
+
+          {/* Right: Save / Reset toolbar */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={!dirty || submitting}
+              className="inline-flex items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-3 py-1.5 font-n-mono text-[11.5px] text-n-muted hover:bg-n-raised disabled:opacity-50"
+            >
+              {t('editTab.reset')}
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={!dirty || submitting || !jsonValidation.valid}
+              className="inline-flex items-center gap-1.5 rounded-n-md border border-n-accent-line bg-n-accent-soft px-3 py-2 font-n-mono text-[12px] text-n-accent-strong hover:bg-n-accent-soft/80 disabled:opacity-50"
+            >
+              {t('editTab.save')}
+            </button>
+          </div>
+        </div>
+
+        {/* Editor body: Form or JSON */}
+        {effectiveMode === 'form' ? (
+          <PermissionsFormEditor value={body} onChange={setBody} />
+        ) : (
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder={t('editTab.placeholder')}
+            spellCheck={false}
+            className={
+              'w-full flex-1 resize-none rounded-n-md border bg-n-surface p-4 font-n-mono text-[12.5px] leading-relaxed text-n-fg placeholder:text-n-faint focus:outline-none focus:ring-1 ' +
+              (jsonValidation.valid
+                ? 'border-n-border-subtle focus:border-n-accent-line focus:ring-n-accent-line'
+                : 'border-[oklch(0.74_0.16_25_/_0.4)] focus:border-[oklch(0.74_0.16_25_/_0.6)] focus:ring-[oklch(0.74_0.16_25_/_0.3)]')
+            }
+            style={{ minHeight: '60vh' }}
+          />
+        )}
+
+        {!file.exists && (
+          <p className="font-n-mono text-[11px] text-n-faint">
+            {t('editTab.newFileHint')}
+          </p>
+        )}
+      </div>
+
+      {/* Sidebar */}
+      <EditSidebar body={body} jsonValidation={jsonValidation} t={t} />
     </div>
   );
 }
 
-function Section({
+// ── Edit sidebar ───────────────────────────────────────────────────────────────
+
+interface PermissionsMetrics {
+  allowCount: number;
+  askCount: number;
+  denyCount: number;
+  defaultMode: string | null;
+  additionalDirs: string[];
+  disableBypassPermissionsMode: string | undefined;
+}
+
+function parsePermissionsMetrics(body: string): PermissionsMetrics | null {
+  try {
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    return {
+      allowCount: Array.isArray(parsed['allow'])
+        ? (parsed['allow'] as unknown[]).length
+        : 0,
+      askCount: Array.isArray(parsed['ask'])
+        ? (parsed['ask'] as unknown[]).length
+        : 0,
+      denyCount: Array.isArray(parsed['deny'])
+        ? (parsed['deny'] as unknown[]).length
+        : 0,
+      defaultMode:
+        typeof parsed['defaultMode'] === 'string'
+          ? parsed['defaultMode']
+          : null,
+      additionalDirs: Array.isArray(parsed['additionalDirectories'])
+        ? (parsed['additionalDirectories'] as string[]).filter(
+            (s) => typeof s === 'string',
+          )
+        : [],
+      disableBypassPermissionsMode:
+        typeof parsed['disableBypassPermissionsMode'] === 'string'
+          ? (parsed['disableBypassPermissionsMode'] as string)
+          : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const DANGEROUS_DENY_PATTERNS = [
+  /bash\s*\(\s*rm\s+-rf/i,
+  /bash\s*\(\s*curl/i,
+];
+
+function hasDangerousDenyRules(deny: number, body: string): boolean {
+  if (deny > 0) {
+    try {
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      const rules = parsed['deny'];
+      if (!Array.isArray(rules)) return false;
+      return DANGEROUS_DENY_PATTERNS.some((re) =>
+        (rules as string[]).some((r) => re.test(r)),
+      );
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function EditSidebar({
+  body,
+  jsonValidation,
+  t,
+}: {
+  body: string;
+  jsonValidation: { valid: boolean };
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const metrics = useMemo(() => {
+    if (!jsonValidation.valid) return null;
+    return parsePermissionsMetrics(body);
+  }, [body, jsonValidation.valid]);
+
+  const showBypassModeWarning =
+    metrics?.defaultMode === 'bypassPermissions';
+  const showNoDenyWarning =
+    metrics !== null &&
+    metrics.denyCount === 0;
+  const showBypassNotLockedWarning =
+    metrics !== null &&
+    metrics.defaultMode === 'bypassPermissions' &&
+    metrics.disableBypassPermissionsMode !== 'disable';
+  const hasDangerous =
+    metrics !== null && hasDangerousDenyRules(metrics.denyCount, body);
+
+  return (
+    <aside className="hidden w-72 flex-shrink-0 flex-col gap-4 overflow-auto border-l border-n-border-subtle bg-n-surface px-4 py-4 lg:flex">
+      {!jsonValidation.valid || !metrics ? (
+        <div className="rounded-n-sm border border-n-border-subtle bg-n-canvas px-3 py-2.5 font-n-mono text-[11px] text-n-muted">
+          {t('editTab.sidebarEmpty')}
+        </div>
+      ) : (
+        <>
+          <SidebarSection title={t('editTab.rulesCount')}>
+            <div className="flex flex-col gap-1">
+              <CountRow label={t('editTab.allowCount')} count={metrics.allowCount} tone="positive" />
+              <CountRow label={t('editTab.askCount')} count={metrics.askCount} tone="warn" />
+              <CountRow label={t('editTab.denyCount')} count={metrics.denyCount} tone="negative" />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title={t('editTab.defaultModeLabel')}>
+            <div className="rounded-n-sm border border-n-border-subtle bg-n-canvas px-2 py-1.5">
+              <div
+                className={
+                  'font-n-mono text-[12px] ' +
+                  (showBypassModeWarning ? 'text-[oklch(0.50_0.16_25)]' : 'text-n-fg')
+                }
+              >
+                {metrics.defaultMode ?? '—'}
+              </div>
+            </div>
+          </SidebarSection>
+
+          {metrics.additionalDirs.length > 0 && (
+            <SidebarSection title={t('editTab.additionalDirsCount')}>
+              <div className="flex flex-col gap-0.5">
+                {metrics.additionalDirs.slice(0, 3).map((dir) => (
+                  <div
+                    key={dir}
+                    className="rounded-n-sm bg-n-canvas px-2 py-1 font-n-mono text-[10.5px] break-all text-n-muted"
+                  >
+                    {dir}
+                  </div>
+                ))}
+                {metrics.additionalDirs.length > 3 && (
+                  <div className="font-n-mono text-[10px] text-n-faint">
+                    +{metrics.additionalDirs.length - 3} more
+                  </div>
+                )}
+              </div>
+            </SidebarSection>
+          )}
+
+          {(showBypassModeWarning ||
+            (showNoDenyWarning && !hasDangerous) ||
+            showBypassNotLockedWarning) && (
+            <SidebarSection title="Warnings">
+              <div className="flex flex-col gap-1.5">
+                {showBypassModeWarning && (
+                  <WarningBadge
+                    level="critical"
+                    message={t('editTab.warnings.bypassMode')}
+                  />
+                )}
+                {showNoDenyWarning && !hasDangerous && (
+                  <WarningBadge
+                    level="warn"
+                    message={t('editTab.warnings.noDeny')}
+                  />
+                )}
+                {showBypassNotLockedWarning && (
+                  <WarningBadge
+                    level="warn"
+                    message={t('editTab.warnings.bypassNotLocked')}
+                  />
+                )}
+              </div>
+            </SidebarSection>
+          )}
+        </>
+      )}
+    </aside>
+  );
+}
+
+function CountRow({
   label,
-  help,
+  count,
   tone,
-  children,
 }: {
   label: string;
-  help: string;
+  count: number;
   tone: 'positive' | 'negative' | 'warn';
+}) {
+  const accentClass =
+    tone === 'positive'
+      ? 'text-n-accent'
+      : tone === 'negative'
+        ? 'text-[oklch(0.50_0.16_25)]'
+        : 'text-[oklch(0.50_0.13_85)]';
+  return (
+    <div className="flex items-center justify-between rounded-n-sm border border-n-border-subtle bg-n-canvas px-2 py-1">
+      <span className="font-n-mono text-[11px] text-n-fg">{label}</span>
+      <span className={`font-n-mono tabular-nums text-[11px] ${accentClass}`}>
+        {count}
+      </span>
+    </div>
+  );
+}
+
+function WarningBadge({
+  level,
+  message,
+}: {
+  level: 'warn' | 'critical';
+  message: string;
+}) {
+  const isCritical = level === 'critical';
+  return (
+    <div
+      className={
+        'flex items-start gap-1.5 rounded-n-sm border px-2 py-1.5 text-[11px] leading-snug ' +
+        (isCritical
+          ? 'border-[oklch(0.74_0.16_25_/_0.3)] bg-[oklch(0.74_0.16_25_/_0.07)] text-[oklch(0.50_0.16_25)]'
+          : 'border-[oklch(0.74_0.18_60_/_0.3)] bg-[oklch(0.74_0.18_60_/_0.07)] text-[oklch(0.50_0.18_60)]')
+      }
+    >
+      <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+// ── Audit tab ──────────────────────────────────────────────────────────────
+
+function AuditTab({
+  audits,
+  selectedAudit,
+  setSelectedAudit,
+  auditContent,
+  auditContentError,
+  auditScore,
+  onOpenRunTab,
+  launchingMode,
+  onLaunchFix,
+  t,
+}: {
+  audits: PermissionsAuditHistoryEntry[];
+  selectedAudit: GenericAuditEntry | null;
+  setSelectedAudit(e: GenericAuditEntry | null): void;
+  auditContent: string | null;
+  auditContentError: string | null;
+  auditScore: AuditScore | null;
+  onOpenRunTab?: OpenRunTabCallback;
+  launchingMode: PermissionsRunMode | null;
+  onLaunchFix(): void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  if (audits.length === 0) {
+    return (
+      <div className="px-7 py-6">
+        <div className="rounded-n-md border border-dashed border-n-border-default bg-n-surface p-10 text-center">
+          <div className="font-n-mono text-[12.5px] text-n-muted">
+            {t('auditTab.empty')}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-7 py-6">
+      {/* Audit header card */}
+      <div className="mb-4 rounded-n-lg border border-n-border-subtle bg-n-surface p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="mb-2">
+              <AuditHistoryPicker
+                entries={audits}
+                selected={selectedAudit}
+                onSelect={setSelectedAudit}
+              />
+            </div>
+            <div className="font-n-mono text-[18px] text-n-fg">
+              Audit — <span className="text-n-accent">Permissions</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <ScoreRing
+              value={auditScore?.value ?? null}
+              max={auditScore?.max ?? 100}
+              size={64}
+            />
+            {onOpenRunTab && (
+              <button
+                type="button"
+                disabled={launchingMode !== null}
+                onClick={onLaunchFix}
+                className={
+                  'inline-flex h-9 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[12px] text-n-accent ' +
+                  (launchingMode === null
+                    ? 'hover:bg-n-accent-soft'
+                    : 'opacity-60')
+                }
+              >
+                {launchingMode === 'fix' ? (
+                  <RefreshCw
+                    size={13}
+                    strokeWidth={2}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Wrench size={13} strokeWidth={2} />
+                )}
+                {launchingMode === 'fix'
+                  ? t('runLaunching')
+                  : t('auditTab.fixFromAudit')}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Audit body */}
+      {auditContentError && (
+        <div className="rounded-n-md border border-n-critical bg-n-critical-soft px-3 py-2 font-n-mono text-[12px] text-n-critical">
+          {auditContentError}
+        </div>
+      )}
+      {!auditContentError && auditContent === null && (
+        <div className="rounded-n-lg border border-n-border-subtle bg-n-surface p-6 font-n-mono text-[12px] text-n-muted">
+          {t('auditTab.loading')}
+        </div>
+      )}
+      {!auditContentError &&
+        auditContent !== null &&
+        auditContent.trim() === '' && (
+          <div className="rounded-n-lg border border-n-border-subtle bg-n-surface p-6 font-n-mono text-[12px] text-n-muted">
+            {t('auditTab.emptyReport')}
+          </div>
+        )}
+      {!auditContentError &&
+        auditContent !== null &&
+        auditContent.trim() !== '' && (
+          <div className="rounded-n-lg border border-n-border-subtle bg-n-surface px-6 py-5">
+            <AuditMarkdownViewer content={auditContent} />
+          </div>
+        )}
+    </div>
+  );
+}
+
+// ── Fix tab ────────────────────────────────────────────────────────────────
+
+function FixTab({
+  hasAudit,
+  onOpenRunTab,
+  launchingMode,
+  onLaunchFix,
+  t,
+}: {
+  hasAudit: boolean;
+  onOpenRunTab?: OpenRunTabCallback;
+  launchingMode: PermissionsRunMode | null;
+  onLaunchFix(): void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  return (
+    <div className="mx-auto max-w-[760px] px-7 py-10 font-n-sans">
+      <div className="rounded-n-lg border border-n-border-subtle bg-n-surface p-5">
+        <div className="flex items-start gap-4">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-n-md bg-n-violet-soft text-n-violet">
+            <Wrench size={20} strokeWidth={2} />
+          </div>
+          <div className="flex-1">
+            <h3 className="m-0 text-[15px] font-semibold text-n-fg">
+              {t('fixTab.title')}
+            </h3>
+            <p className="mt-1.5 text-[13px] leading-snug text-n-muted">
+              {t('fixTab.lead')}
+            </p>
+            {!hasAudit && (
+              <p className="mt-2 rounded-n-sm border border-n-border-subtle bg-n-sunken px-2 py-1.5 font-n-mono text-[11px] text-n-muted">
+                {t('fixTab.cantFixWithoutAudit')}
+              </p>
+            )}
+            <div className="mt-3.5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!onOpenRunTab || launchingMode !== null || !hasAudit}
+                onClick={onLaunchFix}
+                className={
+                  'inline-flex h-8 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 font-n-mono text-[12px] text-n-accent ' +
+                  (onOpenRunTab && launchingMode === null && hasAudit
+                    ? 'hover:bg-n-accent-soft'
+                    : 'opacity-60')
+                }
+              >
+                {launchingMode === 'fix' ? (
+                  <RefreshCw
+                    size={12}
+                    strokeWidth={2.25}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Play size={12} strokeWidth={2.25} />
+                )}
+                {launchingMode === 'fix'
+                  ? t('runLaunching')
+                  : t('fixTab.cta')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Shared small components ────────────────────────────────────────────────
+
+function SidebarSection({
+  title,
+  children,
+}: {
+  title: string;
   children: React.ReactNode;
 }) {
-  const dotClass =
-    tone === 'positive'
-      ? 'bg-n-accent-strong'
-      : tone === 'negative'
-        ? 'bg-[oklch(0.55_0.16_25)]'
-        : 'bg-[oklch(0.65_0.13_85)]';
   return (
     <div>
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${dotClass}`} />
-        <label className="font-n-mono text-[10.5px] uppercase tracking-[1px] text-n-subtle">
-          {label}
-        </label>
+      <div className="mb-1.5 font-n-mono text-[10.5px] uppercase tracking-[1px] text-n-subtle">
+        {title}
       </div>
       {children}
-      <p className="mt-1 text-pretty text-[11.5px] leading-relaxed text-n-muted">{help}</p>
     </div>
   );
 }
 
-function CrossTabHints() {
-  const { t } = useTranslation('permissions');
-  return (
-    <div className="rounded-n-md border border-dashed border-n-border-default bg-n-canvas px-4 py-3">
-      <div className="mb-2 font-n-mono text-[10.5px] uppercase tracking-[1px] text-n-subtle">
-        {t('crossTab.title')}
-      </div>
-      <ul className="m-0 flex flex-col gap-1.5 p-0 text-[12px] text-n-muted">
-        <li className="flex items-center gap-2">
-          <ArrowRight size={12} className="flex-shrink-0 text-n-subtle" />
-          {t('crossTab.outputStyle')}
-        </li>
-        <li className="flex items-center gap-2">
-          <ArrowRight size={12} className="flex-shrink-0 text-n-subtle" />
-          {t('crossTab.hooks')}
-        </li>
-      </ul>
-    </div>
-  );
-}
+// ── Score extraction ───────────────────────────────────────────────────────
 
-function arrayEq(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
+function parseAuditScore(content: string | null): AuditScore | null {
+  if (!content) return null;
+  const head = content.slice(0, 3000);
+  const match = head.match(/score[^0-9]{0,20}(\d+)\s*\/\s*(\d+)/i);
+  if (!match) return null;
+  const value = Number(match[1]);
+  const max = Number(match[2]);
+  if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0)
+    return null;
+  return { value, max };
 }
-
-// Use this so the i18n-typed import isn't dropped.
-export type { PermissionsFileContent };

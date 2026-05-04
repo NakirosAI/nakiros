@@ -1,11 +1,15 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
+  Bot,
   ChevronRight,
   FileCode2,
   Layers,
   MessageSquare,
+  Plug,
+  Sliders,
+  ShieldCheck,
   Sparkles,
   Wrench,
   Zap,
@@ -22,10 +26,15 @@ import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
 import Sparkline from '../components/viz/Sparkline';
 import HBar from '../components/viz/HBar';
 import { bucketizeForOverview } from '../lib/overview-buckets';
+import type { ProjectTabView } from '../hooks/useTabs';
 
 interface Props {
   /** Project whose conversation analyses are aggregated. */
   project: Project;
+  /** Threaded down from `NewShell` so the drawer's Frictions tab can open run tabs. */
+  onOpenRunTab?: import('../lib/run-launcher').OpenRunTabCallback;
+  /** Navigate to a project sub-view (sidebar). */
+  onNavigate?: (view: ProjectTabView) => void;
 }
 
 type WindowKey = '10' | '30' | '90' | 'all';
@@ -49,15 +58,190 @@ const WINDOW_KEYS: WindowKey[] = ['10', '30', '90', 'all'];
  * Mounted from {@link NewShell} when the active project tab's `view` is
  * `'overview'`.
  */
-export default function ProjectOverviewScreen({ project }: Props) {
+export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigate }: Props) {
   const { t } = useTranslation('overview');
   const analyses = useConversationAnalyses(project.id);
   const [windowKey, setWindowKey] = useState<WindowKey>('30');
   const [selected, setSelected] = useState<ConversationAnalysis | null>(null);
 
+  // Rules count — fetched via the rules-expert IPC channel.
+  const [rulesCount, setRulesCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .listRules(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        setRulesCount(result.rules.length);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRulesCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
+  // Subagents count — fetched via the subagents IPC channel.
+  const [subagentsCount, setSubagentsCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .listSubagents(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        setSubagentsCount(result.subagents.length);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSubagentsCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
+  // MCP server count — fetched via mcp-expert IPC, parsed from .mcp.json.
+  const [mcpCount, setMcpCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .readMcp(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        const mcpResult = result as import('@nakiros/shared').McpReadResult;
+        if (!mcpResult?.content || !mcpResult.exists) {
+          setMcpCount(0);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(mcpResult.content) as Record<string, unknown>;
+          const servers = parsed['mcpServers'];
+          if (typeof servers === 'object' && servers !== null && !Array.isArray(servers)) {
+            setMcpCount(Object.keys(servers).length);
+          } else {
+            setMcpCount(0);
+          }
+        } catch {
+          setMcpCount(0);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMcpCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
+  // Hooks event count — fetched via hooks-expert IPC, parsed from the JSON block.
+  const [hooksCount, setHooksCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .readHooks(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        const hooksResult = result as import('@nakiros/shared').HooksReadResult;
+        if (!hooksResult?.content) {
+          setHooksCount(0);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(hooksResult.content) as Record<string, unknown>;
+          const knownEvents = [
+            'SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse',
+            'Notification', 'Stop', 'SubagentStop', 'SessionEnd',
+          ];
+          const count = knownEvents.filter(
+            (ev) => Array.isArray(parsed[ev]) && (parsed[ev] as unknown[]).length > 0,
+          ).length;
+          setHooksCount(count);
+        } catch {
+          setHooksCount(0);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHooksCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
+  // Permissions rules count — combined total from both project (settings.json)
+  // and local (settings.local.json) scopes. Displayed as "X project · Y local"
+  // when both are non-zero, otherwise just the total.
+  const [permissionsCount, setPermissionsCount] = useState<number | null>(null);
+  const [permissionsCountBreakdown, setPermissionsCountBreakdown] = useState<{
+    project: number;
+    local: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+
+    function countRules(content: string | undefined | null): number {
+      if (!content) return 0;
+      try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        const allow = Array.isArray(parsed['allow']) ? (parsed['allow'] as unknown[]).length : 0;
+        const ask = Array.isArray(parsed['ask']) ? (parsed['ask'] as unknown[]).length : 0;
+        const deny = Array.isArray(parsed['deny']) ? (parsed['deny'] as unknown[]).length : 0;
+        return allow + ask + deny;
+      } catch {
+        return 0;
+      }
+    }
+
+    Promise.all([
+      window.nakiros.readPermissions(project.id, 'project').catch(() => null),
+      window.nakiros.readPermissions(project.id, 'local').catch(() => null),
+    ]).then(([projectResult, localResult]) => {
+      if (cancelled) return;
+      const projectCount = countRules(projectResult?.content);
+      const localCount = countRules(localResult?.content);
+      setPermissionsCount(projectCount + localCount);
+      setPermissionsCountBreakdown({ project: projectCount, local: localCount });
+    }).catch(() => {
+      if (cancelled) return;
+      setPermissionsCount(null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
+  // Output styles count — fetched via the output-styles expert IPC channel.
+  const [outputStylesCount, setOutputStylesCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .listOutputStyles(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        setOutputStylesCount(result.styles.length);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOutputStylesCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
   const windowed = useMemo(() => {
     if (!analyses) return [];
-    const sorted = [...analyses].sort(
+    // Overview shows the project's own conversations — synthetic runs
+    // (sandbox / fix-temp / eval iterations) are filtered out unconditionally.
+    // Users who want to inspect synthetic runs can do so from the
+    // ConversationsScreen via its toggle.
+    const userScoped = analyses.filter((a) => a.kind !== 'synthetic');
+    const sorted = [...userScoped].sort(
       (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
     );
     if (windowKey === 'all') return sorted;
@@ -143,6 +327,59 @@ export default function ProjectOverviewScreen({ project }: Props) {
       </header>
 
       <div className="flex-1 overflow-y-auto px-7 py-6">
+        {/* Configuration shortcuts — always visible regardless of conversation data */}
+        {onNavigate && (
+          <div className="mb-5">
+            <div className="mb-2 font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-subtle">
+              {t('sections.config')}
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+              <ConfigCard
+                icon={<Layers size={14} strokeWidth={2} />}
+                label={t('config.rules')}
+                count={rulesCount}
+                onClick={() => onNavigate('rules')}
+              />
+              <ConfigCard
+                icon={<Bot size={14} strokeWidth={2} />}
+                label={t('config.subagents')}
+                count={subagentsCount}
+                onClick={() => onNavigate('subagents')}
+              />
+              <ConfigCard
+                icon={<Zap size={14} strokeWidth={2} />}
+                label={t('config.hooks')}
+                count={hooksCount}
+                onClick={() => onNavigate('hooks')}
+              />
+              <ConfigCard
+                icon={<ShieldCheck size={14} strokeWidth={2} />}
+                label={t('config.permissions')}
+                count={permissionsCount}
+                subtitle={
+                  permissionsCountBreakdown &&
+                  (permissionsCountBreakdown.project > 0 || permissionsCountBreakdown.local > 0)
+                    ? `${permissionsCountBreakdown.project} project · ${permissionsCountBreakdown.local} local`
+                    : undefined
+                }
+                onClick={() => onNavigate('permissions')}
+              />
+              <ConfigCard
+                icon={<Plug size={14} strokeWidth={2} />}
+                label={t('config.mcp')}
+                count={mcpCount}
+                onClick={() => onNavigate('mcp')}
+              />
+              <ConfigCard
+                icon={<Sliders size={14} strokeWidth={2} />}
+                label={t('config.outputStyles')}
+                count={outputStylesCount}
+                onClick={() => onNavigate('outputStyles')}
+              />
+            </div>
+          </div>
+        )}
+
         {!hasData ? (
           <div className="rounded-n-md border border-dashed border-n-border-default bg-n-surface p-10 text-center text-sm text-n-muted">
             {t('noAnalyzedHint')}
@@ -349,6 +586,7 @@ export default function ProjectOverviewScreen({ project }: Props) {
         <ConvDrawer
           analysis={selected}
           onClose={() => setSelected(null)}
+          onOpenRunTab={onOpenRunTab}
         />
       )}
     </div>
@@ -611,4 +849,48 @@ function shortenPath(path: string, maxSegments = 3): string {
   const parts = path.split('/').filter(Boolean);
   if (parts.length <= maxSegments) return path;
   return '…/' + parts.slice(-maxSegments).join('/');
+}
+
+/** Clickable config shortcut card — used in the "Configuration" row of the overview. */
+function ConfigCard({
+  icon,
+  label,
+  count,
+  subtitle,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  count: number | null;
+  /** Optional secondary line shown below the count, e.g. "X project · Y local". */
+  subtitle?: string;
+  onClick(): void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex items-center gap-3 rounded-n-lg border border-n-border-subtle bg-n-surface px-4 py-3 text-left transition-colors hover:border-n-border-default hover:bg-n-raised"
+    >
+      <span className="flex-shrink-0 text-n-accent">{icon}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block font-n-mono text-[12.5px] text-n-fg">{label}</span>
+        {count !== null && (
+          <span className="block font-n-mono text-[10.5px] text-n-faint tabular-nums">
+            {count}
+          </span>
+        )}
+        {subtitle && (
+          <span className="block font-n-mono text-[10px] text-n-faint/70 tabular-nums">
+            {subtitle}
+          </span>
+        )}
+      </span>
+      <ChevronRight
+        size={12}
+        strokeWidth={2.25}
+        className="flex-shrink-0 text-n-faint transition-colors group-hover:text-n-accent"
+      />
+    </button>
+  );
 }

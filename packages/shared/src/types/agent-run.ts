@@ -1,4 +1,13 @@
-import type { SkillScope } from './project.js';
+import type { ClaudeMdRunMode, RulesRunMode, SubagentsRunMode, HooksRunMode, PermissionsRunMode, PermissionsExpertScope, McpRunMode, OutputStylesRunMode, SkillScope } from './project.js';
+
+export type { ClaudeMdRunMode } from './project.js';
+export type { RulesRunMode } from './project.js';
+export type { SubagentsRunMode } from './project.js';
+export type { HooksRunMode } from './project.js';
+export type { PermissionsRunMode } from './project.js';
+export type { PermissionsExpertScope } from './project.js';
+export type { McpRunMode } from './project.js';
+export type { OutputStylesRunMode } from './project.js';
 
 /**
  * The discriminator of an agent run. Each kind has its own backing runner on
@@ -6,7 +15,7 @@ import type { SkillScope } from './project.js';
  * on the frontend. New kinds (e.g. `analyze-convo`) extend this union without
  * changing the surrounding contract.
  */
-export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'analyze-convo';
+export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'analyze-convo' | 'classify-convo';
 
 /**
  * Lifecycle status surfaced to the UI. Mapped from each runner's native
@@ -58,10 +67,105 @@ export interface ConversationRunTarget {
 }
 
 /**
+ * A CLAUDE.md-bound target — used by the `claudemd` kind. Targets the
+ * project-root `./CLAUDE.md` exclusively (no multi-scope support).
+ */
+export interface ClaudeMdRunTarget {
+  type: 'claudemd';
+  projectId: string;
+  projectPath: string;
+  mode: ClaudeMdRunMode;
+}
+
+/**
+ * A rules-bound target — used when an audit / fix / create run targets a
+ * specific `.claude/rules/<ruleName>` file via `nakiros-rules-expert`.
+ * The `ruleName` is the relative path from `.claude/rules/` (e.g.
+ * `"i18n.md"` or `"frontend/styling.md"`).
+ */
+export interface RulesRunTarget {
+  type: 'rules';
+  projectId: string;
+  projectPath: string;
+  /** ".claude/rules/<ruleName>" — relative path from .claude/rules/ */
+  ruleName: string;
+  mode: RulesRunMode;
+}
+
+/**
+ * A subagents-bound target — used when an audit / fix / create run targets a
+ * specific `.claude/agents/<subagentName>` file via `nakiros-subagents-expert`.
+ * The `subagentName` is the relative filename from `.claude/agents/` (e.g.
+ * `"backend.md"` or `"team/reviewer.md"`).
+ */
+export interface SubagentsRunTarget {
+  type: 'subagents';
+  projectId: string;
+  projectPath: string;
+  /** ".claude/agents/<subagentName>" — relative filename from .claude/agents/ */
+  subagentName: string;
+  mode: SubagentsRunMode;
+}
+
+/**
+ * A hooks-bound target — used when an audit / fix / create run targets the
+ * `.claude/settings.json` hooks block via `nakiros-hooks-expert`. Singleton
+ * per project — no `name` field (unlike rules or subagents).
+ */
+export interface HooksRunTarget {
+  type: 'hooks';
+  projectId: string;
+  projectPath: string;
+  mode: HooksRunMode;
+}
+
+/**
+ * A permissions-bound target — used when an audit / fix / create run targets
+ * the `.claude/settings.json` or `.claude/settings.local.json` permissions block
+ * via `nakiros-permissions-expert`. No `name` field — scoped by `scope` only.
+ * Two runs with different scopes may coexist on the same project.
+ */
+export interface PermissionsRunTarget {
+  type: 'permissions';
+  projectId: string;
+  projectPath: string;
+  /** Which settings file is targeted (`'project'` or `'local'`). */
+  scope: PermissionsExpertScope;
+  mode: PermissionsRunMode;
+}
+
+/**
+ * A mcp-bound target — used when an audit / fix / create run targets the
+ * project-root `.mcp.json` file via `nakiros-mcp-expert`. Singleton per
+ * project — no `name` field (unlike rules or subagents).
+ */
+export interface McpRunTarget {
+  type: 'mcp';
+  projectId: string;
+  projectPath: string;
+  mode: McpRunMode;
+}
+
+/**
+ * An output-styles-bound target — used when an audit / fix / create run
+ * targets a specific `.claude/output-styles/<styleName>` file via
+ * `nakiros-output-styles-expert`. Collection — one entry per style file,
+ * same as rules/subagents.
+ */
+export interface OutputStylesRunTarget {
+  type: 'output-styles';
+  projectId: string;
+  projectPath: string;
+  /** Relative filename from .claude/output-styles/ (e.g. "minimal.md", "subdir/explanatory.md"). */
+  styleName: string;
+  mode: OutputStylesRunMode;
+}
+
+/**
  * Discriminated union of every supported target shape. New target kinds
  * extend this union when their corresponding agent-run kind ships.
  */
-export type AgentRunTarget = SkillRunTarget | ConversationRunTarget;
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget | PermissionsRunTarget | McpRunTarget | OutputStylesRunTarget;
 
 /**
  * Kind-specific opaque payload riding alongside an `AgentRun`. The store

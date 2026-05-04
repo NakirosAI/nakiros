@@ -48,6 +48,11 @@ export const IPC_CHANNELS = {
   'project:listConversationsWithAnalysis': 'project:listConversationsWithAnalysis',
   'project:deepAnalyzeConversation': 'project:deepAnalyzeConversation',
   'project:loadDeepAnalysis': 'project:loadDeepAnalysis',
+  // Lazy-load helpers for classify-convo digests. The runner family lives
+  // under `classifyConvo:*` — these read the persisted output without
+  // re-running the model.
+  'project:getConversationDigest': 'project:getConversationDigest',
+  'project:listConversationDigests': 'project:listConversationDigests',
   'project:listSkills': 'project:listSkills',
   'project:getSkill': 'project:getSkill',
   'project:saveSkill': 'project:saveSkill',
@@ -213,6 +218,77 @@ export const IPC_CHANNELS = {
   'claudeMd:read': 'claudeMd:read',
   'claudeMd:save': 'claudeMd:save',
   'claudeMd:delete': 'claudeMd:delete',
+  // CLAUDE.md audit history (archived from audit-runner when claudemdTarget present)
+  'claudeMd:listAudits': 'claudeMd:listAudits',
+  'claudeMd:readAudit': 'claudeMd:readAudit',
+
+  // Rules CRUD — project-scoped, recursive discovery under .claude/rules/
+  'rules:list': 'rules:list',
+  'rules:read': 'rules:read',
+  'rules:save': 'rules:save',
+  'rules:delete': 'rules:delete',
+  // Rules audit history (archived from audit-runner when rulesTarget present)
+  'rules:listAudits': 'rules:listAudits',
+  'rules:readAudit': 'rules:readAudit',
+
+  // Subagents CRUD — project-scoped, recursive discovery under .claude/agents/
+  'subagents:list': 'subagents:list',
+  'subagents:read': 'subagents:read',
+  'subagents:save': 'subagents:save',
+  'subagents:delete': 'subagents:delete',
+  // Subagents audit history (archived from audit-runner when subagentsTarget present)
+  'subagents:listAudits': 'subagents:listAudits',
+  'subagents:readAudit': 'subagents:readAudit',
+
+  // Hooks expert — singleton read/save (hooks block only) + audit history.
+  // NOTE: 'hooks:*' is distinct from the editor channels 'claudeHooks:*'
+  // (Module 6 V2) which edit the full hooks structure per scope. These four
+  // channels are for the `nakiros-hooks-expert` audit/fix/create flow.
+  'hooks:read': 'hooks:read',
+  'hooks:save': 'hooks:save',
+  'hooks:listAudits': 'hooks:listAudits',
+  'hooks:readAudit': 'hooks:readAudit',
+
+  // Permissions expert — singleton read/save (permissions block only) + audit
+  // history. NOTE: 'permissions:*' is distinct from 'claudePermissions:*'
+  // (Module 4 V2) which is the structured form-based permissions editor.
+  // These four channels are for the `nakiros-permissions-expert` audit/fix/create flow.
+  'permissions:read': 'permissions:read',
+  'permissions:save': 'permissions:save',
+  'permissions:listAudits': 'permissions:listAudits',
+  'permissions:readAudit': 'permissions:readAudit',
+
+  // MCP expert — singleton read/save (entire .mcp.json file) + audit history.
+  // NOTE: 'mcp:*' is distinct from 'claudeMcp:*' (Module 5 V2) which is the
+  // structured form-based MCP server editor. These four channels are for the
+  // `nakiros-mcp-expert` audit/fix/create flow.
+  'mcp:read': 'mcp:read',
+  'mcp:save': 'mcp:save',
+  'mcp:listAudits': 'mcp:listAudits',
+  'mcp:readAudit': 'mcp:readAudit',
+
+  // Output styles expert — collection CRUD + audit history, one entry per style
+  // file under .claude/output-styles/. NOTE: 'outputStyles:*' is distinct from
+  // 'claudeOutputStyles:*' (Module 3 V2) which is the structured form-based
+  // output-styles editor. These six channels are for the
+  // `nakiros-output-styles-expert` audit/fix/create flow.
+  'outputStyles:list': 'outputStyles:list',
+  'outputStyles:read': 'outputStyles:read',
+  'outputStyles:save': 'outputStyles:save',
+  'outputStyles:delete': 'outputStyles:delete',
+  'outputStyles:listAudits': 'outputStyles:listAudits',
+  'outputStyles:readAudit': 'outputStyles:readAudit',
+
+  // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
+  'conversationIngest:status': 'conversationIngest:status',
+  'conversationIngest:previewHookDiff': 'conversationIngest:previewHookDiff',
+  'conversationIngest:enable': 'conversationIngest:enable',
+  'conversationIngest:disable': 'conversationIngest:disable',
+  'conversationIngest:purge': 'conversationIngest:purge',
+  'conversationIngest:runNow': 'conversationIngest:runNow',
+  'conversationIngest:listProjects': 'conversationIngest:listProjects',
+  'conversationIngest:listSessions': 'conversationIngest:listSessions',
+  'conversationIngest:progress': 'conversationIngest:progress',
 
   // Conversation deep-analysis runner (analyze-convo Run kind)
   'analyzeConvo:start': 'analyzeConvo:start',
@@ -224,6 +300,17 @@ export const IPC_CHANNELS = {
   'analyzeConvo:listActive': 'analyzeConvo:listActive',
   'analyzeConvo:listAll': 'analyzeConvo:listAll',
   'analyzeConvo:getBufferedEvents': 'analyzeConvo:getBufferedEvents',
+
+  // Conversation friction-classifier runner (classify-convo Run kind, V1.1)
+  'classifyConvo:start': 'classifyConvo:start',
+  'classifyConvo:stopRun': 'classifyConvo:stopRun',
+  'classifyConvo:getRun': 'classifyConvo:getRun',
+  'classifyConvo:sendUserMessage': 'classifyConvo:sendUserMessage',
+  'classifyConvo:finish': 'classifyConvo:finish',
+  'classifyConvo:event': 'classifyConvo:event',
+  'classifyConvo:listActive': 'classifyConvo:listActive',
+  'classifyConvo:listAll': 'classifyConvo:listAll',
+  'classifyConvo:getBufferedEvents': 'classifyConvo:getBufferedEvents',
 } as const;
 
 /** Union of every IPC channel key declared in {@link IPC_CHANNELS}. */

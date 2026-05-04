@@ -422,6 +422,18 @@ export interface HookEditEntry {
   command: string;
   /** Optional shell timeout in seconds (Claude Code accepts `timeout`). */
   timeout: number | null;
+  /**
+   * Original handler object (the inner `{ type, command, timeout, async,
+   * asyncRewake, statusMessage, if, shell, ... }`). Stored to preserve
+   * advanced fields the form editor doesn't render — they are merged back
+   * during serialization so a Form ↔ JSON roundtrip never loses data.
+   */
+  _handlerRaw?: Record<string, unknown>;
+  /**
+   * Original matcher-group object (the outer `{ matcher, hooks: [...] }`).
+   * Same purpose as `_handlerRaw` for matcher-group-level fields.
+   */
+  _entryRaw?: Record<string, unknown>;
 }
 
 export interface HookEditEvent {
@@ -460,17 +472,11 @@ export type HooksMutationErrorCode =
 
 // ── CLAUDE.md editor (Module 7 — V2 edit) ──────────────────────────────────-
 /**
- * Where a CLAUDE.md file can live, scoped to the project (we don't edit
- * the user-global `~/.claude/CLAUDE.md` in V2).
- *
- * - `root`       — `./CLAUDE.md`, the canonical project file
- * - `claude-dir` — `./.claude/CLAUDE.md`, the alternative project file
- * - `local`      — `./CLAUDE.local.md`, your gitignored personal overlay
+ * Metadata summary for the project-root `CLAUDE.md` file (`./CLAUDE.md`).
+ * Multi-scope variants (`.claude/CLAUDE.md`, `CLAUDE.local.md`) have been
+ * removed — only the root file is supported.
  */
-export type ClaudeMdScope = 'root' | 'claude-dir' | 'local';
-
 export interface ClaudeMdSummary {
-  scope: ClaudeMdScope;
   /** Absolute path on disk, reported even when missing. */
   path: string;
   exists: boolean;
@@ -489,8 +495,8 @@ export interface ClaudeMdSummary {
 }
 
 export interface ClaudeMdListResult {
-  /** Per-scope summary, ordered root → claude-dir → local. */
-  files: ClaudeMdSummary[];
+  /** Summary of the root `CLAUDE.md`. */
+  file: ClaudeMdSummary;
   /** True when an `AGENTS.md` exists at the project root. */
   agentsMdAtRoot: boolean;
   /** Absolute path of the project root (used for relative path display). */
@@ -505,7 +511,6 @@ export interface ClaudeMdFileContent extends ClaudeMdSummary {
 }
 
 export interface SaveClaudeMdRequest {
-  scope: ClaudeMdScope;
   body: string;
   /** mtime at read time; ignored when the file didn't exist. */
   mtimeAtRead: string;
@@ -520,6 +525,21 @@ export type ClaudeMdMutationErrorCode =
   | 'conflict'
   | 'project-not-found'
   | 'write-failed';
+
+/**
+ * One archived CLAUDE.md audit produced by the audit-runner when the run
+ * carries a `claudemdTarget`. Stored under
+ * `~/.nakiros/<projectId>/claudemd/audit/audit-<ISO>.md`. The list
+ * IPC returns these sorted newest-first.
+ */
+export interface ClaudeMdAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** "X/Y" score scraped from the markdown header — `null` when absent. */
+  score: string | null;
+}
 
 // ── skills (gateway only) ──────────────────────────────────────────────────
 export interface SkillsGatewayInfo {
@@ -623,4 +643,340 @@ export interface HookEntry {
   command: string;
   /** Source: `'project'` from `settings.json`, `'local'` from `settings.local.json`. */
   source: 'project' | 'local';
+}
+
+// ── Rules expert — CRUD + audit history types ──────────────────────────────
+
+/**
+ * Summary of a single rule file under `.claude/rules/`. Returned by
+ * `rules:list`. The `name` is the relative path from `.claude/rules/`
+ * (e.g. `"i18n.md"` or `"frontend/styling.md"`).
+ */
+export interface RuleSummary {
+  /** Relative path from `.claude/rules/` — the canonical rule identifier. */
+  name: string;
+  /** Absolute path on disk. */
+  path: string;
+  /** First `paths:` glob extracted from frontmatter, or null when absent. */
+  pathsGlob: string | null;
+  /** Description from frontmatter `description:` or first H1, or null. */
+  description: string | null;
+  /** ISO timestamp of last modification. */
+  mtime: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+  /** Number of non-empty lines. */
+  linesCount: number;
+}
+
+/** Result of `rules:list`. */
+export interface RulesListResult {
+  rules: RuleSummary[];
+}
+
+/** Full rule content read for editing — returned by `rules:read`. */
+export interface RulesReadResult {
+  content: string;
+  /** ISO mtime captured at read time — used as the optimistic-lock token for `rules:save`. */
+  mtime: string;
+  /** True when the file exists on disk. */
+  exists: boolean;
+  /** Absolute path to the rule file. */
+  path: string;
+}
+
+/** Result of `rules:save` and `rules:delete`. */
+export type RulesMutationResult =
+  | { ok: true }
+  | { ok: false; code: 'conflict' | 'project-not-found' | 'write-failed' | 'invalid-path' | 'not-found'; message: string };
+
+/**
+ * One archived rules audit produced by the audit-runner when the run
+ * carries a `rulesTarget`. Stored under
+ * `~/.nakiros/<projectId>/rules-audits/<ruleName>/audit-<ISO>.md`.
+ * The list IPC returns these sorted newest-first.
+ */
+export interface RulesAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** "X/Y" score scraped from the markdown header — `null` when absent. */
+  score: string | null;
+}
+
+// ── Subagents expert — CRUD + audit history types ──────────────────────────
+
+/**
+ * Summary of a single subagent file under `.claude/agents/`. Returned by
+ * `subagents:list`. The `name` is the relative filename from `.claude/agents/`
+ * (e.g. `"backend.md"` or `"team/reviewer.md"`).
+ */
+export interface SubagentSummary {
+  /** Relative filename from `.claude/agents/` — the canonical subagent identifier. */
+  name: string;
+  /** Absolute path on disk. */
+  path: string;
+  /** Description from frontmatter `description:` or first H1, or null. */
+  description: string | null;
+  /** Model from frontmatter `model:`, or null. */
+  model: string | null;
+  /** Tools from frontmatter `tools:`, or empty array. */
+  tools: string[];
+  /** ISO timestamp of last modification. */
+  mtime: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+  /** Number of non-empty lines. */
+  linesCount: number;
+}
+
+/** Result of `subagents:list`. */
+export interface SubagentsListResult {
+  subagents: SubagentSummary[];
+}
+
+/** Full subagent content read for editing — returned by `subagents:read`. */
+export interface SubagentsReadResult {
+  content: string;
+  /** ISO mtime captured at read time — used as the optimistic-lock token for `subagents:save`. */
+  mtime: string;
+  /** True when the file exists on disk. */
+  exists: boolean;
+  /** Absolute path to the subagent file. */
+  path: string;
+}
+
+/** Result of `subagents:save` and `subagents:delete`. */
+export type SubagentsMutationResult =
+  | { ok: true }
+  | { ok: false; code: 'conflict' | 'project-not-found' | 'write-failed' | 'invalid-path' | 'not-found'; message: string };
+
+/**
+ * One archived subagents audit produced by the audit-runner when the run
+ * carries a `subagentsTarget`. Stored under
+ * `~/.nakiros/<projectId>/subagents-audits/<subagentName>/audit-<ISO>.md`.
+ * The list IPC returns these sorted newest-first.
+ */
+export interface SubagentsAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** "X/Y" score scraped from the markdown header — `null` when absent. */
+  score: string | null;
+}
+
+// ── Hooks expert — read/save + audit history types ─────────────────────────
+
+/**
+ * Result of `hooks:read`. Returns the `hooks` block of the project's
+ * `.claude/settings.json` as a pretty-printed JSON string. Other settings
+ * keys (permissions, env, model, etc.) are NOT included — this is a
+ * hooks-only view. Use the permissions editor for the rest.
+ */
+export interface HooksReadResult {
+  /**
+   * JSON-stringified content of the `hooks` block from settings.json
+   * (pretty-printed). Empty object string `"{}"` when no hooks block exists.
+   */
+  content: string;
+  /** Settings.json mtime at read time (optimistic-lock token for save). */
+  mtime: string;
+  /** Whether `.claude/settings.json` exists. The hooks block may be empty even when settings.json exists. */
+  exists: boolean;
+  /** Absolute path to .claude/settings.json. */
+  path: string;
+}
+
+/**
+ * Result of `hooks:save`. Writes the hooks block back into settings.json
+ * while preserving all other keys.
+ */
+export interface HooksExpertMutationResult {
+  ok: boolean;
+  code?: 'conflict' | 'invalid-json' | 'project-not-found' | 'fs-error' | string;
+  message?: string;
+}
+
+/**
+ * One archived hooks audit produced by the audit-runner when the run carries
+ * a `hooksTarget`. Stored under
+ * `~/.nakiros/<projectId>/hooks-audits/audit-<ISO>.md`. Singleton — no
+ * sub-folder per target name. The list IPC returns these sorted newest-first.
+ */
+export interface HooksAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+}
+
+// ── Permissions expert (nakiros-permissions-expert) — singleton read/save ──
+
+/**
+ * Result of `permissions:read`. Returns the `permissions` block of the
+ * project's `.claude/settings.json` as a pretty-printed JSON string. Other
+ * settings keys (hooks, env, model, etc.) are NOT included — this is a
+ * permissions-only view.
+ */
+export interface PermissionsReadResult {
+  /**
+   * JSON-stringified content of the `permissions` block from settings.json
+   * (pretty-printed). Empty object string `"{}"` when no permissions block
+   * exists.
+   */
+  content: string;
+  /** Settings.json mtime at read time (optimistic-lock token for save). */
+  mtime: string;
+  /** Whether `.claude/settings.json` exists. */
+  exists: boolean;
+  /** Absolute path to .claude/settings.json. */
+  path: string;
+}
+
+/**
+ * Result of `permissions:save` (expert channel). Writes the permissions block
+ * back into settings.json while preserving all other keys.
+ *
+ * NOTE: distinct from {@link PermissionsMutationResult} (Module 4 V2 form
+ * editor) which has a richer discriminated-union shape.
+ */
+export interface PermissionsExpertMutationResult {
+  ok: boolean;
+  code?: 'conflict' | 'invalid-json' | 'project-not-found' | 'fs-error' | string;
+  message?: string;
+}
+
+/**
+ * One archived permissions audit produced by the audit-runner when the run
+ * carries a `permissionsTarget`. Stored under
+ * `~/.nakiros/<projectId>/permissions-audits/audit-<ISO>.md`. Singleton — no
+ * sub-folder per target name. The list IPC returns these sorted newest-first.
+ */
+export interface PermissionsAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+}
+
+// ── MCP expert (nakiros-mcp-expert) — singleton read/save ──────────────────
+
+/**
+ * Result of `mcp:read`. Returns the full content of the project-root
+ * `.mcp.json` file as a pretty-printed JSON string. Unlike the hooks/permissions
+ * experts (which extract a sub-block from settings.json), this reads the entire
+ * `.mcp.json` file — MCP configuration is a standalone file, not a sub-key.
+ */
+export interface McpReadResult {
+  /**
+   * Full content of `.mcp.json` (pretty-printed via JSON.stringify(…, null, 2)).
+   * Empty object string `"{}"` when the file does not exist.
+   */
+  content: string;
+  /** ISO mtime of `.mcp.json` at read time. Empty string when file doesn't exist. */
+  mtime: string;
+  /** Whether `.mcp.json` exists. */
+  exists: boolean;
+  /** Absolute path to `.mcp.json` (resolved even when not existing). */
+  path: string;
+}
+
+/**
+ * Result of `mcp:save`. Writes the entire `.mcp.json` file (no merge with
+ * other keys — it is the complete file).
+ *
+ * NOTE: named `McpExpertMutationResult` (not just `McpMutationResult`) to
+ * avoid collision with the Module 5 V2 editor's {@link McpMutationResult}.
+ */
+export interface McpExpertMutationResult {
+  ok: boolean;
+  code?: 'conflict' | 'invalid-json' | 'project-not-found' | 'fs-error' | string;
+  message?: string;
+}
+
+/**
+ * One archived MCP audit produced by the audit-runner when the run carries a
+ * `mcpTarget`. Stored under `~/.nakiros/<projectId>/mcp-audits/audit-<ISO>.md`.
+ * Singleton — no sub-folder per target name. The list IPC returns these sorted
+ * newest-first.
+ */
+export interface McpAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+}
+
+// ── Output-styles expert — CRUD + audit history types ──────────────────────
+
+/**
+ * Summary of a single output-style file under `.claude/output-styles/`.
+ * Returned by `outputStyles:list`. The `name` is the relative filename from
+ * `.claude/output-styles/` (e.g. `"minimal.md"` or
+ * `"subdir/explanatory.md"`).
+ */
+export interface OutputStyleSummary {
+  /** Relative filename from `.claude/output-styles/` — the canonical style identifier. */
+  name: string;
+  /** Absolute path on disk. */
+  path: string;
+  /** Description from frontmatter `description:` or first H1, or null. */
+  description: string | null;
+  /** Display name from frontmatter `name:` field, or null. */
+  displayName: string | null;
+  /** ISO timestamp of last modification. */
+  mtime: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+  /** Number of non-empty lines. */
+  linesCount: number;
+}
+
+/**
+ * Result of `outputStyles:list` (expert channel — distinct from
+ * {@link OutputStylesListResult} which is the V2 editor's list result).
+ */
+export interface OutputStylesExpertListResult {
+  styles: OutputStyleSummary[];
+}
+
+/** Full output-style content read for editing — returned by `outputStyles:read`. */
+export interface OutputStylesReadResult {
+  content: string;
+  /** ISO mtime captured at read time — used as the optimistic-lock token for `outputStyles:save`. */
+  mtime: string;
+  /** True when the file exists on disk. */
+  exists: boolean;
+  /** Absolute path to the style file. */
+  path: string;
+}
+
+/** Result of `outputStyles:save` and `outputStyles:delete`. */
+export interface OutputStylesExpertMutationResult {
+  ok: boolean;
+  code?: 'conflict' | 'invalid-name' | 'not-found' | 'project-not-found' | 'fs-error' | string;
+  message?: string;
+}
+
+/**
+ * One archived output-styles audit produced by the audit-runner when the run
+ * carries an `outputStylesTarget`. Stored under
+ * `~/.nakiros/<projectId>/output-styles-audits/<styleName>/audit-<ISO>.md`.
+ * The list IPC returns these sorted newest-first.
+ */
+export interface OutputStylesAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** File size in bytes. */
+  sizeBytes: number;
 }

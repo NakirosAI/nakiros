@@ -1,34 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Clock, FileText } from 'lucide-react';
-import type { AuditHistoryEntry } from '@nakiros/shared';
+import { formatAuditTimestamp } from '../../lib/run-display';
+
+/**
+ * Minimal audit entry shape accepted by this picker. Both
+ * `AuditHistoryEntry` (skill audits) and `ClaudeMdAuditHistoryEntry`
+ * (CLAUDE.md audits) satisfy this interface so the same picker can be
+ * reused across entity screens without duplicating the dropdown UI.
+ *
+ * `sizeBytes` is optional because `ClaudeMdAuditHistoryEntry` does not
+ * carry it. When absent, the size column is simply omitted.
+ */
+export interface GenericAuditEntry {
+  path: string;
+  timestamp: string;
+  sizeBytes?: number;
+}
 
 interface AuditHistoryPickerProps {
   /**
-   * Available audit reports for the skill, expected most-recent-first.
+   * Available audit reports, expected most-recent-first.
    * Empty array → component renders a disabled "no audit yet" state.
    */
-  entries: AuditHistoryEntry[];
+  entries: GenericAuditEntry[];
   /** Currently selected audit (or `null` until the first is picked). */
-  selected: AuditHistoryEntry | null;
+  selected: GenericAuditEntry | null;
   /** Activated when the user picks an entry from the dropdown. */
-  onSelect(entry: AuditHistoryEntry): void;
+  onSelect(entry: GenericAuditEntry): void;
 }
 
 /**
- * Pill-style picker for an audit's history. Replaces the static
- * `audit · 2026-04-19T15:56:42 · auto` line of the mockup
- * (`apps/Nakiros-new-design/screens-skills.jsx:193-195`) with a
- * clickable affordance that surfaces the underlying list of archived
- * reports stored alongside the skill (`{skill}/audits/audit-*.md`).
+ * Pill-style picker for an audit's history. Works for both skill audits
+ * (`AuditHistoryEntry`) and CLAUDE.md audits (`ClaudeMdAuditHistoryEntry`)
+ * by accepting the minimal {@link GenericAuditEntry} interface.
  *
- * The list is fetched via `window.nakiros.listAuditHistory(...)` —
- * this component is purely presentational and lets the parent own the
- * load. Click-outside dismisses the dropdown; the pill collapses to a
- * disabled state when no audit has been recorded yet.
- *
- * Out of scope for this PR: a "view all audits" overlay opening a full
- * history view (placeholder kept at the bottom of the dropdown with a
- * `// TODO` so we surface the intent).
+ * The list is fetched by the parent — this component is purely presentational.
+ * Click-outside dismisses the dropdown; the pill collapses to a disabled state
+ * when no audit has been recorded yet.
  */
 export default function AuditHistoryPicker({ entries, selected, onSelect }: AuditHistoryPickerProps) {
   const [open, setOpen] = useState(false);
@@ -74,7 +82,7 @@ export default function AuditHistoryPicker({ entries, selected, onSelect }: Audi
       >
         <Clock size={11} strokeWidth={2} className="text-n-subtle" />
         <span className="text-n-faint">audit ·</span>
-        <span className="text-n-fg">{formatTimestamp(active.timestamp)}</span>
+        <span className="text-n-fg">{formatAuditTimestamp(active.timestamp)}</span>
         <span className="text-n-faint">·</span>
         <span className={isLatest ? 'text-n-accent' : 'text-n-watch'}>
           {isLatest ? 'latest' : 'archived'}
@@ -113,12 +121,16 @@ export default function AuditHistoryPicker({ entries, selected, onSelect }: Audi
                   />
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="font-n-mono text-[12px] text-n-fg">
-                      {formatTimestamp(entry.timestamp)}
+                      {formatAuditTimestamp(entry.timestamp)}
                     </span>
                     <span className="mt-0.5 flex items-center gap-2 font-n-mono text-[10.5px] text-n-subtle">
                       <span>{tagline}</span>
-                      <span className="text-n-faint">·</span>
-                      <span>{formatSize(entry.sizeBytes)}</span>
+                      {entry.sizeBytes != null && (
+                        <>
+                          <span className="text-n-faint">·</span>
+                          <span>{formatSize(entry.sizeBytes)}</span>
+                        </>
+                      )}
                     </span>
                   </span>
                   <FileText size={12} strokeWidth={2} className="flex-shrink-0 text-n-faint" />
@@ -142,22 +154,6 @@ export default function AuditHistoryPicker({ entries, selected, onSelect }: Audi
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-function formatTimestamp(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  // Use the user's locale, but stay compact and unambiguous.
-  const date = d.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const time = d.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  return `${date} ${time}`;
-}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

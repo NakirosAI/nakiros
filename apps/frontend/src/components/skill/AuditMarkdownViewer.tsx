@@ -153,7 +153,7 @@ const components: Components = {
   ),
 
   th: ({ children }) => (
-    <th className="px-4 py-2 font-medium first:w-12 [&:nth-child(3)]:w-[80px]">{children}</th>
+    <th className="whitespace-nowrap px-4 py-2 font-medium">{children}</th>
   ),
 
   td: ({ children, ...props }) => (
@@ -214,6 +214,20 @@ function AuditTableCell({ children, ...props }: AuditTableCellProps) {
       <td
         {...props}
         className="px-4 py-2.5 font-n-mono text-[11px] text-n-faint"
+      >
+        {children}
+      </td>
+    );
+  }
+
+  // ID-like cell (`structure.line_count`, `paths.unambiguous`, ...) — no
+  // spaces, alphanumeric + dots/underscores. Mono + no-wrap so audit IDs
+  // stay readable on one line; the table scrolls horizontally if needed.
+  if (/^[a-z][\w.]+$/i.test(text)) {
+    return (
+      <td
+        {...props}
+        className="whitespace-nowrap px-4 py-2.5 font-n-mono text-[11px] text-n-fg"
       >
         {children}
       </td>

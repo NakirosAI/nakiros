@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "skillName": "nakiros-hooks-expert",
+  "totalChecks": 14,
+  "sections": [
+    { "id": "structure",  "label": "Structure",      "checks": ["structure.valid_json", "structure.valid_event_name", "structure.matcher_compatible_with_event", "structure.handlers_array_non_empty"] },
+    { "id": "handler",    "label": "Handler",        "checks": ["handler.type_valid", "handler.required_fields", "handler.timeout_explicit", "handler.if_condition_valid"] },
+    { "id": "bp",         "label": "Best Practices", "checks": ["bp.exit_code_2_for_blocking", "bp.no_unjustified_dangerous", "bp.idempotent_or_documented"] },
+    { "id": "crossref",   "label": "Cross-entity",   "checks": ["crossref.command_path_exists", "crossref.referenced_subagent_exists", "crossref.referenced_mcp_server_exists"] }
+  ],
+  "checks": [
+    { "id": "structure.valid_json",                   "section": "structure",  "label": "settings.json is valid JSON",                                       "severityIfFail": "critical", "findingCode": "INVALID_JSON" },
+    { "id": "structure.valid_event_name",             "section": "structure",  "label": "Every hooks key is a known hook event",                             "severityIfFail": "critical", "findingCode": "UNKNOWN_EVENT_NAME" },
+    { "id": "structure.matcher_compatible_with_event","section": "structure",  "label": "No matcher set on events that ignore it",                           "severityIfFail": "warn",     "findingCode": "MATCHER_IGNORED_FOR_EVENT" },
+    { "id": "structure.handlers_array_non_empty",     "section": "structure",  "label": "Each matcher group has at least 1 handler",                         "severityIfFail": "warn",     "findingCode": "HANDLERS_ARRAY_EMPTY" },
+
+    { "id": "handler.type_valid",                     "section": "handler",    "label": "Each handler type is in {command, http, mcp_tool, prompt, agent}",  "severityIfFail": "critical", "findingCode": "INVALID_HANDLER_TYPE" },
+    { "id": "handler.required_fields",               "section": "handler",    "label": "Required fields present per handler type",                          "severityIfFail": "critical", "findingCode": "MISSING_REQUIRED_FIELD" },
+    { "id": "handler.timeout_explicit",              "section": "handler",    "label": "timeout set on command handlers",                                   "severityIfFail": "warn",     "findingCode": "TIMEOUT_NOT_SET" },
+    { "id": "handler.if_condition_valid",            "section": "handler",    "label": "if field only on tool events and has valid syntax",                 "severityIfFail": "warn",     "findingCode": "IF_CONDITION_INVALID" },
+
+    { "id": "bp.exit_code_2_for_blocking",           "section": "bp",         "label": "Blocking command hooks use exit 2",                                 "severityIfFail": "info",     "findingCode": "NO_EXIT_2_FOR_BLOCKING" },
+    { "id": "bp.no_unjustified_dangerous",           "section": "bp",         "label": "No HTTP (non-HTTPS) URLs, no path traversal",                      "severityIfFail": "warn",     "findingCode": "UNJUSTIFIED_DANGEROUS_HOOK" },
+    { "id": "bp.idempotent_or_documented",           "section": "bp",         "label": "Command hooks are idempotent or have documented side-effects",      "severityIfFail": "info",     "findingCode": "NOT_IDEMPOTENT_OR_UNDOCUMENTED" },
+
+    { "id": "crossref.command_path_exists",          "section": "crossref",   "label": "Script paths referenced via $CLAUDE_PROJECT_DIR exist on disk",     "severityIfFail": "warn",     "findingCode": "COMMAND_PATH_NOT_FOUND" },
+    { "id": "crossref.referenced_subagent_exists",   "section": "crossref",   "label": "SubagentStart/Stop matchers reference real subagents",              "severityIfFail": "warn",     "findingCode": "SUBAGENT_REF_NOT_FOUND" },
+    { "id": "crossref.referenced_mcp_server_exists", "section": "crossref",   "label": "mcp_tool hooks and mcp__ matchers reference real MCP servers",      "severityIfFail": "warn",     "findingCode": "MCP_SERVER_REF_NOT_FOUND" }
+  ]
+}

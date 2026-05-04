@@ -38,7 +38,12 @@ import frOutputStyles from './locales/fr/output-styles.json';
 import frPermissions from './locales/fr/permissions.json';
 import frMcp from './locales/fr/mcp.json';
 import frHooks from './locales/fr/hooks.json';
+import frHooksRunner from './locales/fr/hooks-runner.json';
+import frPermissionsRunner from './locales/fr/permissions-runner.json';
+import frMcpRunner from './locales/fr/mcp-runner.json';
+import frOutputStylesRunner from './locales/fr/output-styles-runner.json';
 import frClaudeMd from './locales/fr/claude-md.json';
+import frConversationIngest from './locales/fr/conversation-ingest.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -77,7 +82,12 @@ import enOutputStyles from './locales/en/output-styles.json';
 import enPermissions from './locales/en/permissions.json';
 import enMcp from './locales/en/mcp.json';
 import enHooks from './locales/en/hooks.json';
+import enHooksRunner from './locales/en/hooks-runner.json';
+import enPermissionsRunner from './locales/en/permissions-runner.json';
+import enMcpRunner from './locales/en/mcp-runner.json';
+import enOutputStylesRunner from './locales/en/output-styles-runner.json';
 import enClaudeMd from './locales/en/claude-md.json';
+import enConversationIngest from './locales/en/conversation-ingest.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -120,7 +130,12 @@ const resources = {
     permissions: frPermissions,
     mcp: frMcp,
     hooks: frHooks,
+    'hooks-runner': frHooksRunner,
+    'permissions-runner': frPermissionsRunner,
+    'mcp-runner': frMcpRunner,
+    'output-styles-runner': frOutputStylesRunner,
     'claude-md': frClaudeMd,
+    'conversation-ingest': frConversationIngest,
   },
   en: {
     common: enCommon,
@@ -160,7 +175,12 @@ const resources = {
     permissions: enPermissions,
     mcp: enMcp,
     hooks: enHooks,
+    'hooks-runner': enHooksRunner,
+    'permissions-runner': enPermissionsRunner,
+    'mcp-runner': enMcpRunner,
+    'output-styles-runner': enOutputStylesRunner,
     'claude-md': enClaudeMd,
+    'conversation-ingest': enConversationIngest,
   },
 };
 

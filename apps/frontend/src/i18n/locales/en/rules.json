@@ -1,4 +1,71 @@
 {
+  "detail": {
+    "back": "Rules",
+    "loading": "Loading rule…",
+    "errorTitle": "Could not load rule",
+    "retry": "Retry",
+    "reload": "Reload from disk",
+    "confirmDeleteTitle": "Delete rule?",
+    "confirmDelete": "Delete rule \"{{name}}\"? This cannot be undone.",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "cancel": "Cancel",
+    "runAudit": "Audit",
+    "runAuditTitle": "Run an audit on this rule",
+    "runFix": "Fix",
+    "runFixTitle": "Run a fix pass on this rule",
+    "runCreate": "Create",
+    "runCreateTitle": "Generate this rule with AI",
+    "runLaunching": "Launching…",
+    "missingBanner": "This rule file does not exist yet. Generate it with AI or create it manually.",
+    "missingBannerCta": "Generate with AI",
+    "tabs": {
+      "edit": "Edit",
+      "audit": "Audit",
+      "fix": "Fix"
+    },
+    "editTab": {
+      "save": "Save",
+      "delete": "Delete",
+      "bodyPlaceholder": "# Rule title\n\n- Convention…",
+      "sidebarSize": "Size",
+      "tokens": "Tokens",
+      "sections": "Sections",
+      "lines": "Lines",
+      "paths": "Paths",
+      "ruleName": "Rule"
+    },
+    "auditTab": {
+      "empty": "No audits yet for this rule. Launch an audit to get started.",
+      "loading": "Loading audit report…",
+      "emptyReport": "Audit report is empty.",
+      "fixFromAudit": "Fix from audit"
+    },
+    "fixTab": {
+      "title": "Fix this rule",
+      "lead": "Apply AI-suggested fixes to this rule based on the latest audit report.",
+      "cta": "Run Fix",
+      "cantFixWithoutAudit": "Run an audit first so the Fix agent knows what to improve."
+    },
+    "errors": {
+      "conflictTitle": "External edit detected",
+      "write-failedTitle": "Write failed",
+      "project-not-foundTitle": "Project not found",
+      "invalid-pathTitle": "Invalid path",
+      "not-foundTitle": "Not found",
+      "launch-failedTitle": "Launch failed"
+    }
+  },
+  "modal": {
+    "title": "New rule",
+    "hint": "Pick a short name (letters, digits, dashes, .md). The agent will generate the rule for you based on the name.",
+    "placeholder": "test-conventions.md",
+    "cancel": "Cancel",
+    "ai": "Generate with AI",
+    "launching": "Launching…",
+    "errorEmptyName": "Name cannot be empty.",
+    "aiUnavailable": "Unavailable — no run tab to open."
+  },
   "list": {
     "title": "Rules",
     "subtitle": "Topic-scoped instructions Claude reads when it touches matching files. Use `paths:` to limit a rule to a directory or file type, or leave it empty for an always-on rule.",

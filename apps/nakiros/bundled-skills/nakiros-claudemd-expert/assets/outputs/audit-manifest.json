@@ -1,0 +1,54 @@
+{
+  "skillFactoryVersion": "claudemd-expert@1.0.0",
+  "totalChecks": 18,
+  "sections": [
+    {
+      "id": "structure",
+      "title": "Size & Structure",
+      "checks": [
+        { "id": "structure.line_count", "title": "Line count under 200", "severity": "important", "deterministic": true },
+        { "id": "structure.heading_hierarchy", "title": "Heading hierarchy correct", "severity": "important", "deterministic": true },
+        { "id": "structure.bullet_depth", "title": "No nested bullets > 2 deep", "severity": "minor", "deterministic": true },
+        { "id": "structure.section_size", "title": "No section > 50 lines", "severity": "important", "deterministic": true }
+      ]
+    },
+    {
+      "id": "content",
+      "title": "Content categories",
+      "checks": [
+        { "id": "content.architecture_pointers", "title": "Architecture pointers present", "severity": "important", "deterministic": false },
+        { "id": "content.mandatory_constraints", "title": "Mandatory constraints present", "severity": "critical", "deterministic": false },
+        { "id": "content.quick_pointers", "title": "Gotchas / quick pointers present", "severity": "important", "deterministic": false },
+        { "id": "content.validation_commands", "title": "Validation commands present", "severity": "important", "deterministic": false },
+        { "id": "content.runtime_stack", "title": "Runtime/stack identified", "severity": "minor", "deterministic": true }
+      ]
+    },
+    {
+      "id": "tone",
+      "title": "Tone & specificity",
+      "checks": [
+        { "id": "tone.imperative_mood", "title": "Imperative mood, no hedges", "severity": "important", "deterministic": false },
+        { "id": "tone.no_fluff", "title": "No marketing/fluff tokens", "severity": "minor", "deterministic": true },
+        { "id": "tone.no_verbose_why", "title": "No verbose WHY paragraphs", "severity": "minor", "deterministic": false },
+        { "id": "tone.actionable_instructions", "title": "Every rule is actionable", "severity": "important", "deterministic": false }
+      ]
+    },
+    {
+      "id": "antipattern",
+      "title": "Anti-patterns",
+      "checks": [
+        { "id": "antipattern.vague_advice", "title": "No vague advice", "severity": "important", "deterministic": true },
+        { "id": "antipattern.code_obvious", "title": "No code-obvious restatements", "severity": "minor", "deterministic": false },
+        { "id": "antipattern.long_lists", "title": "No flat list > 7 items", "severity": "minor", "deterministic": true }
+      ]
+    },
+    {
+      "id": "paths",
+      "title": "Paths & references",
+      "checks": [
+        { "id": "paths.unambiguous", "title": "Paths unambiguous", "severity": "minor", "deterministic": true },
+        { "id": "paths.external_docs_linked", "title": "External docs linked, not duplicated", "severity": "minor", "deterministic": false }
+      ]
+    }
+  ]
+}

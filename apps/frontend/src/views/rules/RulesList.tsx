@@ -59,7 +59,7 @@ export default function RulesList({
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {rules.map((r) => (
-              <RuleCard key={r.relativePath} rule={r} onClick={() => onOpen(stripMd(r.name))} />
+              <RuleCard key={r.relativePath} rule={r} onClick={() => onOpen(r.name)} />
             ))}
           </div>
         )}
@@ -160,10 +160,6 @@ function ErrorPanel({ message, onRetry }: { message: string; onRetry(): void }) 
       </div>
     </div>
   );
-}
-
-function stripMd(name: string): string {
-  return name.endsWith('.md') ? name.slice(0, -3) : name;
 }
 
 function formatRelative(iso: string): string {

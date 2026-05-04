@@ -48,7 +48,16 @@
     "topTips": "Conseils récurrents",
     "topTools": "Outils les plus fragiles",
     "hotFiles": "Fichiers chauds récurrents",
-    "critical": "Conversations critiques à revoir"
+    "critical": "Conversations critiques à revoir",
+    "config": "Configuration"
+  },
+  "config": {
+    "rules": "Règles",
+    "subagents": "Sous-agents",
+    "hooks": "Hooks",
+    "permissions": "Permissions",
+    "mcp": "MCP",
+    "outputStyles": "Output styles"
   },
   "empty.tips": "Pas de conseil récurrent",
   "empty.tools": "Aucun outil en échec",

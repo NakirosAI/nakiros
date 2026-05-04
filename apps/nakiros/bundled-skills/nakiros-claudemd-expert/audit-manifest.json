@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "skillName": "nakiros-claudemd-expert",
+  "totalChecks": 18,
+  "sections": [
+    { "id": "structure",    "label": "Size & Structure",     "checks": ["structure.line_count", "structure.heading_hierarchy", "structure.bullet_depth", "structure.section_size"] },
+    { "id": "content",      "label": "Content categories",   "checks": ["content.architecture_pointers", "content.mandatory_constraints", "content.quick_pointers", "content.validation_commands", "content.runtime_stack"] },
+    { "id": "tone",         "label": "Tone & specificity",   "checks": ["tone.imperative_mood", "tone.no_fluff", "tone.no_verbose_why", "tone.actionable_instructions"] },
+    { "id": "antipattern",  "label": "Anti-patterns",        "checks": ["antipattern.vague_advice", "antipattern.code_obvious", "antipattern.long_lists"] },
+    { "id": "paths",        "label": "Paths & references",   "checks": ["paths.unambiguous", "paths.external_docs_linked"] }
+  ],
+  "checks": [
+    { "id": "structure.line_count",            "section": "structure",   "label": "Line count under 200",                      "severityIfFail": "warn",     "findingCode": "LINE_COUNT_EXCEEDED" },
+    { "id": "structure.heading_hierarchy",     "section": "structure",   "label": "Heading hierarchy correct",                 "severityIfFail": "warn",     "findingCode": "HEADING_HIERARCHY_WRONG" },
+    { "id": "structure.bullet_depth",          "section": "structure",   "label": "No nested bullets > 2 deep",                "severityIfFail": "info",     "findingCode": "BULLET_DEPTH_EXCEEDED" },
+    { "id": "structure.section_size",          "section": "structure",   "label": "No section > 50 lines",                    "severityIfFail": "warn",     "findingCode": "SECTION_TOO_LONG" },
+
+    { "id": "content.architecture_pointers",  "section": "content",     "label": "Architecture pointers present",             "severityIfFail": "warn",     "findingCode": "ARCH_POINTERS_MISSING" },
+    { "id": "content.mandatory_constraints",  "section": "content",     "label": "Mandatory constraints present",             "severityIfFail": "critical", "findingCode": "MANDATORY_CONSTRAINTS_MISSING" },
+    { "id": "content.quick_pointers",         "section": "content",     "label": "Gotchas / quick pointers present",          "severityIfFail": "warn",     "findingCode": "QUICK_POINTERS_MISSING" },
+    { "id": "content.validation_commands",    "section": "content",     "label": "Validation commands present",               "severityIfFail": "warn",     "findingCode": "VALIDATION_COMMANDS_MISSING" },
+    { "id": "content.runtime_stack",          "section": "content",     "label": "Runtime/stack identified",                  "severityIfFail": "info",     "findingCode": "RUNTIME_STACK_MISSING" },
+
+    { "id": "tone.imperative_mood",           "section": "tone",        "label": "Imperative mood, no hedges",                "severityIfFail": "warn",     "findingCode": "TONE_NOT_IMPERATIVE" },
+    { "id": "tone.no_fluff",                  "section": "tone",        "label": "No marketing/fluff tokens",                 "severityIfFail": "info",     "findingCode": "FLUFF_TOKENS_FOUND" },
+    { "id": "tone.no_verbose_why",            "section": "tone",        "label": "No verbose WHY paragraphs",                 "severityIfFail": "info",     "findingCode": "VERBOSE_WHY_FOUND" },
+    { "id": "tone.actionable_instructions",   "section": "tone",        "label": "Every rule is actionable",                  "severityIfFail": "warn",     "findingCode": "INSTRUCTIONS_NOT_ACTIONABLE" },
+
+    { "id": "antipattern.vague_advice",       "section": "antipattern", "label": "No vague advice",                          "severityIfFail": "warn",     "findingCode": "VAGUE_ADVICE_FOUND" },
+    { "id": "antipattern.code_obvious",       "section": "antipattern", "label": "No code-obvious restatements",             "severityIfFail": "info",     "findingCode": "CODE_OBVIOUS_FOUND" },
+    { "id": "antipattern.long_lists",         "section": "antipattern", "label": "No flat list > 7 items",                   "severityIfFail": "info",     "findingCode": "LONG_LIST_FOUND" },
+
+    { "id": "paths.unambiguous",              "section": "paths",       "label": "Paths unambiguous",                         "severityIfFail": "info",     "findingCode": "PATHS_AMBIGUOUS" },
+    { "id": "paths.external_docs_linked",     "section": "paths",       "label": "External docs linked, not duplicated",      "severityIfFail": "info",     "findingCode": "EXTERNAL_DOCS_NOT_LINKED" }
+  ]
+}

@@ -1,20 +1,33 @@
-import type { AgentRunKind, AuditRun, AuditRunEvent } from '@nakiros/shared';
+import type {
+  AgentRunKind,
+  AuditRun,
+  AuditRunEvent,
+  ClassifyConvoRun,
+  ClassifyConvoRunEvent,
+} from '@nakiros/shared';
 import type { RunStateApi } from '../hooks/useRunState';
 
 /**
  * Cross-kind dispatcher for run-related IPC channels. Audit, Fix and
  * Create share the same `AuditRun` shape on the daemon side, so they
- * map onto the same `RunStateApi`. Eval and analyze-convo land in
- * later sub-PRs (PR9b / PR9c) — for now their slots return null and
- * the RunScreen renders a "kind not yet supported" placeholder.
+ * map onto the same `RunStateApi`. The V1.1 friction classifier
+ * (`classify-convo`) reuses the same RunScreen pipeline via a wider
+ * `AuditLikeRun` union — its terminal artefact is a `ConversationDigest`
+ * rendered through {@link DigestView}, not a markdown report.
  *
- * Centralising the dispatch here keeps the screens agnostic of the
- * per-kind channel naming (`getAuditRun` vs `getFixRun` vs ...).
+ * Eval and analyze-convo still land in later sub-PRs (PR9b / PR9c) —
+ * for now their slots return null and the RunScreen renders a
+ * "kind not yet supported" placeholder.
  */
 
-/** Common run state API surface — every kind that ships in PR9a fits here. */
-export type AuditLikeRun = AuditRun;
-export type AuditLikeEvent = AuditRunEvent['event'];
+/**
+ * Common run state API surface. The runner-core gives every kind a
+ * `BaseRun`-shaped object — fields specific to one kind (audit's
+ * `manifest` / `checkResults` / `targets`, classify-convo's
+ * `digestPath`) are narrowed at the call site by `runKind`.
+ */
+export type AuditLikeRun = AuditRun | ClassifyConvoRun;
+export type AuditLikeEvent = AuditRunEvent['event'] | ClassifyConvoRunEvent['event'];
 
 export interface RunUserActions {
   /** Send a free-form message while the run is `waiting_for_input`. */
@@ -91,5 +104,22 @@ export function getRunAPI(kind: AgentRunKind): KindRunAPI | null {
     case 'analyze-convo':
       // Wired in later sub-PRs of Phase 4.
       return null;
+    case 'classify-convo':
+      return {
+        state: {
+          getRun: (id) => window.nakiros.getClassifyConvoRun(id),
+          getBufferedEvents: (id) => window.nakiros.getClassifyConvoBufferedEvents(id),
+          onEvent: window.nakiros.onClassifyConvoEvent,
+        },
+        actions: {
+          sendUserMessage: (id, msg) => window.nakiros.sendClassifyConvoUserMessage(id, msg),
+          stop: (id) => window.nakiros.stopClassifyConvo(id),
+          finish: (id) => window.nakiros.finishClassifyConvo(id),
+        },
+        // classify-convo's terminal artefact is a structured `ConversationDigest`
+        // rendered via `DigestView`, not a markdown report. The RunScreen swaps
+        // its terminal panel based on `runKind === 'classify-convo'`.
+        readReport: null,
+      };
   }
 }

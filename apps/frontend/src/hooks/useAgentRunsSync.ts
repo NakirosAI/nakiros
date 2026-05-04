@@ -3,6 +3,8 @@ import type {
   AgentRunStatus,
   AuditRun,
   AuditRunStatus,
+  ClassifyConvoRun,
+  ClassifyConvoRunStatus,
   EvalRunStatus,
   SkillEvalRun,
 } from '@nakiros/shared';
@@ -33,6 +35,39 @@ const EVAL_STATUS_MAP: Record<EvalRunStatus, AgentRunStatus> = {
   stopped: 'cancelled',
 };
 
+const CLASSIFY_CONVO_STATUS_MAP: Record<ClassifyConvoRunStatus, AgentRunStatus> = {
+  starting: 'pending',
+  running: 'running',
+  waiting_for_input: 'awaiting_input',
+  completed: 'done',
+  failed: 'failed',
+  stopped: 'cancelled',
+};
+
+
+function classifyConvoToAgentRun(run: ClassifyConvoRun): AgentRun {
+  return {
+    id: run.runId,
+    kind: 'classify-convo',
+    title: `Classify · ${run.sourceSessionId.slice(0, 8)}`,
+    target: {
+      type: 'conversation',
+      projectId: run.projectId,
+      // Identify the SOURCE conversation, not the spawned sub-run's session id.
+      sessionId: run.sourceSessionId,
+    },
+    status: CLASSIFY_CONVO_STATUS_MAP[run.status],
+    startedAt: run.startedAt,
+    endedAt: run.finishedAt ?? undefined,
+    capabilities: {
+      canSendMessage: true,
+      canApprove: false,
+      canStop: true,
+    },
+    tokensUsed: run.tokensUsed,
+  };
+}
+
 // ── audit / fix / create — same AuditRun shape, slightly different titles ──
 
 function auditLikeToAgentRun(
@@ -40,6 +75,201 @@ function auditLikeToAgentRun(
   kind: AgentRun['kind'],
   titlePrefix: string,
 ): AgentRun {
+  // Runs that target a CLAUDE.md (via the bundled `nakiros-claudemd-expert`)
+  // surface as audit/fix/create runs with a different target shape and a
+  // CLAUDE.md-focused title — kind stays unchanged so the entire RunScreen
+  // pipeline reuses without modification.
+  if (run.claudemdTarget) {
+    const ct = run.claudemdTarget;
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · CLAUDE.md`,
+      target: {
+        type: 'claudemd',
+        projectId: ct.projectId,
+        projectPath: ct.projectPath,
+        mode: ct.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
+  // Runs that target a rules file (via `nakiros-rules-expert`) surface with
+  // a rules-focused title and a `rules` target type.
+  if (run.rulesTarget) {
+    const rt = run.rulesTarget;
+    const shortName = rt.ruleName.replace(/\.md$/i, '');
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · ${shortName}`,
+      target: {
+        type: 'rules',
+        projectId: rt.projectId,
+        projectPath: rt.projectPath,
+        ruleName: rt.ruleName,
+        mode: rt.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
+  // Runs that target a subagent file (via `nakiros-subagents-expert`) surface
+  // with a subagents-focused title and a `subagents` target type.
+  if (run.subagentsTarget) {
+    const st = run.subagentsTarget;
+    const shortName = st.subagentName.replace(/\.md$/i, '');
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · ${shortName}`,
+      target: {
+        type: 'subagents',
+        projectId: st.projectId,
+        projectPath: st.projectPath,
+        subagentName: st.subagentName,
+        mode: st.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
+  // Runs that target the hooks block (via `nakiros-hooks-expert`) surface with
+  // a hooks-focused title and a `hooks` target type. Singleton — no sub-name.
+  if (run.hooksTarget) {
+    const ht = run.hooksTarget;
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · Hooks`,
+      target: {
+        type: 'hooks',
+        projectId: ht.projectId,
+        projectPath: ht.projectPath,
+        mode: ht.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
+  // Runs that target the permissions block (via `nakiros-permissions-expert`)
+  // surface with a permissions-focused title and a `permissions` target type.
+  // Include the scope label in the title when it's 'local' so the user can
+  // distinguish a project run from a local run at a glance.
+  if (run.permissionsTarget) {
+    const pt = run.permissionsTarget;
+    const scopeSuffix = (pt.scope ?? 'project') === 'local' ? ' (local)' : '';
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · Permissions${scopeSuffix}`,
+      target: {
+        type: 'permissions',
+        projectId: pt.projectId,
+        projectPath: pt.projectPath,
+        scope: pt.scope ?? 'project',
+        mode: pt.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
+  // Runs that target the .mcp.json file (via `nakiros-mcp-expert`) surface
+  // with an mcp-focused title and an `mcp` target type. Singleton — no sub-name.
+  if (run.mcpTarget) {
+    const mt = run.mcpTarget;
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · MCP`,
+      target: {
+        type: 'mcp',
+        projectId: mt.projectId,
+        projectPath: mt.projectPath,
+        mode: mt.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
+  // Runs that target an output-style file (via `nakiros-output-styles-expert`)
+  // surface with an output-style-focused title and an `output-styles` target
+  // type. Collection — one run per style file.
+  if (run.outputStylesTarget) {
+    const ost = run.outputStylesTarget;
+    const shortName = ost.styleName.replace(/\.md$/i, '');
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · ${shortName}`,
+      target: {
+        type: 'output-styles',
+        projectId: ost.projectId,
+        projectPath: ost.projectPath,
+        styleName: ost.styleName,
+        mode: ost.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
   return {
     id: run.runId,
     kind,
@@ -171,15 +401,17 @@ export function useAgentRunsSync(): void {
     // completed runs the daemon restored from disk and let the user
     // dismiss them once acknowledged. The store filters out anything in
     // its dismissed-ids localStorage entry on every upsert.
-    const [audits, fixes, creates, evals] = await Promise.all([
+    const [audits, fixes, creates, evals, classifyConvos] = await Promise.all([
       window.nakiros.listAllAuditRuns(),
       window.nakiros.listAllFixRuns(),
       window.nakiros.listAllCreateRuns(),
       window.nakiros.listEvalRuns(),
+      window.nakiros.listAllClassifyConvoRuns(),
     ]);
     agentRunStore.syncKind('audit', audits.map((r) => auditLikeToAgentRun(r, 'audit', 'Audit')));
     agentRunStore.syncKind('fix', fixes.map((r) => auditLikeToAgentRun(r, 'fix', 'Fix')));
     agentRunStore.syncKind('create', creates.map((r) => auditLikeToAgentRun(r, 'create', 'Create')));
     agentRunStore.syncKind('eval', groupEvalRuns(evals));
+    agentRunStore.syncKind('classify-convo', classifyConvos.map(classifyConvoToAgentRun));
   }, 2000);
 }

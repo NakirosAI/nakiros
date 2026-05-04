@@ -99,6 +99,42 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     };
   }, [project.id]);
 
+  // Hooks event count — fetched via hooks-expert IPC, parsed from the JSON block.
+  const [hooksCount, setHooksCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .readHooks(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        const hooksResult = result as import('@nakiros/shared').HooksReadResult;
+        if (!hooksResult?.content) {
+          setHooksCount(0);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(hooksResult.content) as Record<string, unknown>;
+          const knownEvents = [
+            'SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse',
+            'Notification', 'Stop', 'SubagentStop', 'SessionEnd',
+          ];
+          const count = knownEvents.filter(
+            (ev) => Array.isArray(parsed[ev]) && (parsed[ev] as unknown[]).length > 0,
+          ).length;
+          setHooksCount(count);
+        } catch {
+          setHooksCount(0);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHooksCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
   const windowed = useMemo(() => {
     if (!analyses) return [];
     // Overview shows the project's own conversations — synthetic runs
@@ -210,6 +246,12 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
                 label={t('config.subagents')}
                 count={subagentsCount}
                 onClick={() => onNavigate('subagents')}
+              />
+              <ConfigCard
+                icon={<Zap size={14} strokeWidth={2} />}
+                label={t('config.hooks')}
+                count={hooksCount}
+                onClick={() => onNavigate('hooks')}
               />
             </div>
           </div>

@@ -1,0 +1,64 @@
+{
+  "loading": "Loading hooks…",
+  "errorTitle": "Could not load hooks",
+  "retry": "Retry",
+  "reload": "Reload from disk",
+  "back": "Project",
+  "missingBanner": "No hooks configured for this project yet.",
+  "missingBannerCta": "Create with expert",
+  "runAudit": "Audit",
+  "runAuditTitle": "Run nakiros-hooks-expert in audit mode against this project's hooks",
+  "runFix": "Fix",
+  "runFixTitle": "Run nakiros-hooks-expert in fix mode (consumes audit findings)",
+  "runCreate": "Create",
+  "runCreateTitle": "Bootstrap hooks configuration for this project via nakiros-hooks-expert",
+  "runLaunching": "Launching…",
+  "tabs": {
+    "edit": "Edit",
+    "audit": "Audit",
+    "fix": "Fix"
+  },
+  "editTab": {
+    "save": "Save",
+    "reset": "Reset",
+    "validJson": "Valid JSON",
+    "invalidJson": "Invalid JSON",
+    "form": "Form",
+    "json": "JSON",
+    "formDisabledTooltip": "Fix the JSON syntax first to use the form editor",
+    "formCannotRenderInvalid": "Cannot render form: invalid JSON. Switch to JSON view to fix.",
+    "placeholder": "{\n  \"PostToolUse\": [\n    {\n      \"hooks\": [\n        { \"type\": \"command\", \"command\": \"./scripts/on-tool.sh\" }\n      ]\n    }\n  ],\n  \"Stop\": [\n    {\n      \"hooks\": [\n        { \"type\": \"command\", \"command\": \"./scripts/on-stop.sh\" }\n      ]\n    }\n  ]\n}",
+    "newFileHint": "Saving will create or update the hooks block in .claude/settings.json.",
+    "eventsCount": "Metrics",
+    "eventsConfigured": "Events configured",
+    "handlersPerEvent": "Handlers per event",
+    "sidebarEmpty": "Invalid JSON — fix to see metrics",
+    "warnings": {
+      "disableAllHooks": "All hooks are disabled (disableAllHooks: true)",
+      "missingTimeout": "Some handlers are missing a timeout — they may block indefinitely",
+      "insecureHttp": "Insecure HTTP URL detected — use HTTPS for hook endpoints"
+    }
+  },
+  "auditTab": {
+    "empty": "No audit has been recorded for hooks yet.",
+    "loading": "Loading…",
+    "emptyReport": "This audit report is empty.",
+    "fixFromAudit": "Fix from this audit"
+  },
+  "fixTab": {
+    "title": "Run a Fix on Hooks",
+    "lead": "The fix relies on the most recent audit findings. It patches the hooks block in .claude/settings.json based on the expert's recommendations.",
+    "cta": "Run fix",
+    "cantFixWithoutAudit": "Run an audit first — the fix needs at least one report."
+  },
+  "errors": {
+    "conflict": "This settings file was modified outside Nakiros. Reload to see the latest version.",
+    "conflictTitle": "External edit detected",
+    "writeFailed": "Could not write to disk.",
+    "writeFailedTitle": "Write failed",
+    "invalid-json": "The content is not valid JSON.",
+    "invalid-jsonTitle": "Invalid JSON",
+    "projectNotFound": "Project not found.",
+    "projectNotFoundTitle": "Unknown project"
+  }
+}

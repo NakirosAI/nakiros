@@ -53,7 +53,8 @@
   },
   "config": {
     "rules": "Rules",
-    "subagents": "Subagents"
+    "subagents": "Subagents",
+    "hooks": "Hooks"
   },
   "empty.tips": "No recurring tip",
   "empty.tools": "No failing tool",

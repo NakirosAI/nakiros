@@ -14,6 +14,7 @@ import type { AuditCheckSeverity, AuditRun, Skill } from '@nakiros/shared';
 import { launchEvalBatch, launchFix, type OpenRunTabCallback } from '../../lib/run-launcher';
 import { useActiveFixForSkill } from '../../hooks/useAgentRun';
 import type { SkillTabIdentity } from '../../hooks/useTabs';
+import { runDisplayContext } from '../../lib/run-display';
 
 interface AuditCompletedReportProps {
   /** Completed audit run — we read `manifest`, `checkResults`, `tokensUsed`, `durationMs`. */
@@ -48,13 +49,14 @@ export default function AuditCompletedReport({
   const { t } = useTranslation('runs');
   const stats = useMemo(() => computeStats(run), [run]);
   const findings = useMemo(() => computeFindings(run), [run]);
+  const isClaudemd = runDisplayContext('audit', run).isClaudemd;
 
   // Fetch the skill record once we know the audit is over — drives the
-  // "Évaluer le skill" button (enabled iff `skill.hasEvals`). Failure modes
-  // (skill deleted between the audit and now, scope mismatch) leave the
-  // button disabled rather than crash.
+  // "Évaluer le skill" button (enabled iff `skill.hasEvals`). Skipped for
+  // CLAUDE.md targets (no eval suite concept).
   const [skill, setSkill] = useState<Skill | null>(null);
   useEffect(() => {
+    if (isClaudemd) return;
     let cancelled = false;
     void fetchSkillForRun(run).then((s) => {
       if (!cancelled) setSkill(s);
@@ -62,7 +64,7 @@ export default function AuditCompletedReport({
     return () => {
       cancelled = true;
     };
-  }, [run]);
+  }, [run, isClaudemd]);
   const [isLaunchingEval, setIsLaunchingEval] = useState(false);
   const [isLaunchingFix, setIsLaunchingFix] = useState(false);
 
@@ -142,7 +144,7 @@ export default function AuditCompletedReport({
               })}
             </span>
             <span className="text-[12.5px] leading-snug text-n-muted">
-              {summaryLine(stats, t)}
+              {summaryLine(stats, t, isClaudemd)}
             </span>
           </div>
         </div>
@@ -213,34 +215,40 @@ export default function AuditCompletedReport({
             disabled={!canLaunchFix}
             disabledReason={
               activeFix
-                ? t('audit.nextSteps.fixActive', {
-                    defaultValue: 'Un Fix run est déjà en cours pour ce skill.',
-                  })
+                ? isClaudemd
+                  ? t('audit.nextSteps.fixActiveClaudemd', {
+                      defaultValue: 'Un Fix run est déjà en cours pour ce CLAUDE.md.',
+                    })
+                  : t('audit.nextSteps.fixActive', {
+                      defaultValue: 'Un Fix run est déjà en cours pour ce skill.',
+                    })
                 : undefined
             }
           />
-          <NextStepRow
-            icon={FlaskConical}
-            label={
-              skill && !skill.hasEvals
-                ? t('audit.nextSteps.evalNoSuite', {
-                    defaultValue: 'Évaluer le skill — aucune eval définie',
-                  })
-                : t('audit.nextSteps.eval', {
-                    defaultValue: 'Évaluer le skill tel quel sur les fixtures',
-                  })
-            }
-            onClick={canLaunchEval ? handleLaunchEval : undefined}
-            disabled={!canLaunchEval}
-            disabledReason={
-              skill && !skill.hasEvals
-                ? t('audit.nextSteps.evalNoSuiteHint', {
-                    defaultValue:
-                      'Crée une suite d\'évals pour ce skill avant de pouvoir l\'évaluer.',
-                  })
-                : undefined
-            }
-          />
+          {!isClaudemd && (
+            <NextStepRow
+              icon={FlaskConical}
+              label={
+                skill && !skill.hasEvals
+                  ? t('audit.nextSteps.evalNoSuite', {
+                      defaultValue: 'Évaluer le skill — aucune eval définie',
+                    })
+                  : t('audit.nextSteps.eval', {
+                      defaultValue: 'Évaluer le skill tel quel sur les fixtures',
+                    })
+              }
+              onClick={canLaunchEval ? handleLaunchEval : undefined}
+              disabled={!canLaunchEval}
+              disabledReason={
+                skill && !skill.hasEvals
+                  ? t('audit.nextSteps.evalNoSuiteHint', {
+                      defaultValue:
+                        'Crée une suite d\'évals pour ce skill avant de pouvoir l\'évaluer.',
+                    })
+                  : undefined
+              }
+            />
+          )}
           <NextStepRow
             icon={FileText}
             label={t('audit.nextSteps.export', {
@@ -475,24 +483,41 @@ function computeFindings(run: AuditRun): FindingRowData[] {
 function summaryLine(
   stats: AuditStats,
   t: ReturnType<typeof useTranslation<'runs'>>['t'],
+  isClaudemd: boolean,
 ): string {
   if (stats.critical > 0) {
-    return t('audit.completed.summaryCritical', {
-      findings: stats.failed,
-      critical: stats.critical,
-      defaultValue:
-        '{{findings}} findings, {{critical}} critique. Le skill nécessite des corrections avant déploiement.',
-    });
+    return isClaudemd
+      ? t('audit.completed.summaryCriticalClaudemd', {
+          findings: stats.failed,
+          critical: stats.critical,
+          defaultValue:
+            '{{findings}} findings, {{critical}} critique. CLAUDE.md nécessite des corrections avant déploiement.',
+        })
+      : t('audit.completed.summaryCritical', {
+          findings: stats.failed,
+          critical: stats.critical,
+          defaultValue:
+            '{{findings}} findings, {{critical}} critique. Le skill nécessite des corrections avant déploiement.',
+        });
   }
   if (stats.failed > 0) {
-    return t('audit.completed.summaryWarn', {
-      findings: stats.failed,
-      defaultValue: '{{findings}} findings. Le skill est utilisable mais peut être amélioré.',
-    });
+    return isClaudemd
+      ? t('audit.completed.summaryWarnClaudemd', {
+          findings: stats.failed,
+          defaultValue: '{{findings}} findings. CLAUDE.md est utilisable mais peut être amélioré.',
+        })
+      : t('audit.completed.summaryWarn', {
+          findings: stats.failed,
+          defaultValue: '{{findings}} findings. Le skill est utilisable mais peut être amélioré.',
+        });
   }
-  return t('audit.completed.summaryHealthy', {
-    defaultValue: 'Tous les checks sont passés. Le skill respecte les bonnes pratiques.',
-  });
+  return isClaudemd
+    ? t('audit.completed.summaryHealthyClaudemd', {
+        defaultValue: 'Tous les checks sont passés. CLAUDE.md respecte les bonnes pratiques.',
+      })
+    : t('audit.completed.summaryHealthy', {
+        defaultValue: 'Tous les checks sont passés. Le skill respecte les bonnes pratiques.',
+      });
 }
 
 // ── Skill resolution ──────────────────────────────────────────────────────

@@ -770,7 +770,7 @@ function AuditTab({
   }
 
   return (
-    <div className="mx-auto max-w-[1100px] px-7 py-6">
+    <div className="px-7 py-6">
       {/* Audit header card */}
       <div className="mb-4 rounded-n-lg border border-n-border-subtle bg-n-surface p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -927,7 +927,10 @@ function Kpi({ label, value }: { label: string; value: number }) {
 function parseAuditScore(content: string | null): AuditScore | null {
   if (!content) return null;
   const head = content.slice(0, 3000);
-  const match = head.match(/score\s*[:=]?\s*\*{0,2}\s*(\d+)\s*\/\s*(\d+)/i);
+  // Tolerant to formatting noise between "Score" and the ratio:
+  // colons, bold markers (`**`), inline code (` ` `), spaces. We anchor on
+  // the word "score" and grab the first `<digit>/<digit>` that follows.
+  const match = head.match(/score[^0-9]{0,20}(\d+)\s*\/\s*(\d+)/i);
   if (!match) return null;
   const value = Number(match[1]);
   const max = Number(match[2]);

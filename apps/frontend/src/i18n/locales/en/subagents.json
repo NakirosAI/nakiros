@@ -5,7 +5,11 @@
     "errorTitle": "Could not load subagent",
     "retry": "Retry",
     "reload": "Reload from disk",
+    "confirmDeleteTitle": "Delete subagent?",
     "confirmDelete": "Delete subagent \"{{name}}\"? This cannot be undone.",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "cancel": "Cancel",
     "runAudit": "Audit",
     "runAuditTitle": "Run an audit on this subagent",
     "runFix": "Fix",
@@ -60,6 +64,16 @@
       "not-foundTitle": "Not found",
       "launch-failedTitle": "Launch failed"
     }
+  },
+  "modal": {
+    "title": "New subagent",
+    "hint": "Pick a short name (letters, digits, dashes, .md). The agent will generate the subagent for you based on the name.",
+    "placeholder": "code-reviewer.md",
+    "cancel": "Cancel",
+    "ai": "Generate with AI",
+    "launching": "Launching…",
+    "errorEmptyName": "Name cannot be empty.",
+    "aiUnavailable": "Unavailable — no run tab to open."
   },
   "list": {
     "title": "Subagents",

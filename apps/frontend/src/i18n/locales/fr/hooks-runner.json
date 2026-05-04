@@ -10,8 +10,8 @@
   "runAuditTitle": "Lancer nakiros-hooks-expert en mode audit sur les hooks de ce projet",
   "runFix": "Fix",
   "runFixTitle": "Lancer nakiros-hooks-expert en mode fix (consomme les résultats d'audit)",
-  "runCreate": "Créer",
-  "runCreateTitle": "Générer une configuration hooks pour ce projet via nakiros-hooks-expert",
+  "runCreate": "Nouveau hook",
+  "runCreateTitle": "Lancer un run AI pour créer un hook (l'agent te demandera quel comportement tu veux automatiser)",
   "runLaunching": "Lancement…",
   "tabs": {
     "edit": "Édition",

@@ -5,7 +5,11 @@
     "errorTitle": "Could not load rule",
     "retry": "Retry",
     "reload": "Reload from disk",
+    "confirmDeleteTitle": "Delete rule?",
     "confirmDelete": "Delete rule \"{{name}}\"? This cannot be undone.",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "cancel": "Cancel",
     "runAudit": "Audit",
     "runAuditTitle": "Run an audit on this rule",
     "runFix": "Fix",
@@ -51,6 +55,16 @@
       "not-foundTitle": "Not found",
       "launch-failedTitle": "Launch failed"
     }
+  },
+  "modal": {
+    "title": "New rule",
+    "hint": "Pick a short name (letters, digits, dashes, .md). The agent will generate the rule for you based on the name.",
+    "placeholder": "test-conventions.md",
+    "cancel": "Cancel",
+    "ai": "Generate with AI",
+    "launching": "Launching…",
+    "errorEmptyName": "Name cannot be empty.",
+    "aiUnavailable": "Unavailable — no run tab to open."
   },
   "list": {
     "title": "Rules",

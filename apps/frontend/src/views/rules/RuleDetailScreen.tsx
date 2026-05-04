@@ -16,6 +16,7 @@ import type { GenericAuditEntry } from '../../components/skill/AuditHistoryPicke
 import AuditMarkdownViewer from '../../components/skill/AuditMarkdownViewer';
 import ScoreRing from '../../components/viz/ScoreRing';
 import { MarkdownEditor } from '../../components/markdown/MarkdownEditor';
+import ConfirmModal from '../../components/ConfirmModal';
 import { launchRules, type OpenRunTabCallback } from '../../lib/run-launcher';
 
 interface RuleDetailScreenProps {
@@ -65,6 +66,7 @@ export default function RuleDetailScreen({
   // ── UI state ────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<ScreenTab>('edit');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [launchingMode, setLaunchingMode] = useState<RulesRunMode | null>(null);
   const [errorBanner, setErrorBanner] = useState<{
     code: string;
@@ -187,23 +189,30 @@ export default function RuleDetailScreen({
     }
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm(t('detail.confirmDelete', { name: ruleName }))) return;
+  const handleDelete = () => {
+    if (!exists) return;
+    setConfirmDeleteOpen(true);
+  };
+
+  const performDelete = async () => {
+    if (!exists) return;
     setSubmitting(true);
     try {
       const result = await window.nakiros.deleteRule(projectId, ruleName);
+      setSubmitting(false);
+      setConfirmDeleteOpen(false);
       if (!result.ok) {
         setErrorBanner({ code: result.code, message: result.message });
       } else {
         onBack();
       }
     } catch (err) {
+      setSubmitting(false);
+      setConfirmDeleteOpen(false);
       setErrorBanner({
         code: 'write-failed',
         message: err instanceof Error ? err.message : String(err),
       });
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -425,7 +434,7 @@ export default function RuleDetailScreen({
             ruleName={ruleName}
             linesCount={body.split('\n').filter(Boolean).length}
             onSave={() => void handleSave()}
-            onDelete={() => void handleDelete()}
+            onDelete={handleDelete}
             t={t}
           />
         )}
@@ -454,6 +463,20 @@ export default function RuleDetailScreen({
           />
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        title={t('detail.confirmDeleteTitle', { defaultValue: 'Delete rule?' })}
+        body={t('detail.confirmDelete', { name: ruleName })}
+        confirmLabel={submitting ? t('detail.deleting', { defaultValue: 'Deleting…' }) : t('detail.delete', { defaultValue: 'Delete' })}
+        cancelLabel={t('detail.cancel', { defaultValue: 'Cancel' })}
+        loading={submitting}
+        onConfirm={() => void performDelete()}
+        onCancel={() => {
+          if (submitting) return;
+          setConfirmDeleteOpen(false);
+        }}
+      />
     </div>
   );
 }

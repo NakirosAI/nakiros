@@ -10,8 +10,8 @@
   "runAuditTitle": "Run nakiros-hooks-expert in audit mode against this project's hooks",
   "runFix": "Fix",
   "runFixTitle": "Run nakiros-hooks-expert in fix mode (consumes audit findings)",
-  "runCreate": "Create",
-  "runCreateTitle": "Bootstrap hooks configuration for this project via nakiros-hooks-expert",
+  "runCreate": "New hook",
+  "runCreateTitle": "Launch an AI run to create a new hook (the agent will ask what behaviour you want to automate)",
   "runLaunching": "Launching…",
   "tabs": {
     "edit": "Edit",

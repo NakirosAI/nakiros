@@ -17,6 +17,7 @@ import type { GenericAuditEntry } from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
 import ScoreRing from '../components/viz/ScoreRing';
 import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
+import ConfirmModal from '../components/ConfirmModal';
 import { launchClaudemd, type OpenRunTabCallback } from '../lib/run-launcher';
 import { useClaudeMdFile, useClaudeMdList } from './claude-md/useClaudeMd';
 
@@ -54,6 +55,7 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
   const [tab, setTab] = useState<ScreenTab>('edit');
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [launchingMode, setLaunchingMode] = useState<ClaudeMdRunMode | null>(null);
   const [errorBanner, setErrorBanner] = useState<{
     code: string;
@@ -135,12 +137,17 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!file || !file.exists) return;
-    if (!window.confirm(t('confirmDelete', { path: file.path }))) return;
+    setConfirmDeleteOpen(true);
+  };
+
+  const performDelete = async () => {
+    if (!file || !file.exists) return;
     setSubmitting(true);
     const result = await remove();
     setSubmitting(false);
+    setConfirmDeleteOpen(false);
     if (!result.ok) {
       setErrorBanner({ code: result.code, message: result.message });
     }
@@ -401,6 +408,20 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
           />
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        title={t('confirmDeleteTitle', { defaultValue: 'Supprimer CLAUDE.md ?' })}
+        body={t('confirmDelete', { path: file.path })}
+        confirmLabel={submitting ? t('deleting', { defaultValue: 'Suppression…' }) : t('delete', { defaultValue: 'Supprimer' })}
+        cancelLabel={t('cancel', { defaultValue: 'Annuler' })}
+        loading={submitting}
+        onConfirm={() => void performDelete()}
+        onCancel={() => {
+          if (submitting) return;
+          setConfirmDeleteOpen(false);
+        }}
+      />
     </div>
   );
 }

@@ -271,7 +271,7 @@ export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScre
               </button>
             </>
           )}
-          {onOpenRunTab && !file.exists && (
+          {onOpenRunTab && (
             <button
               type="button"
               disabled={launchingMode !== null}

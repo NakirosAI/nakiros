@@ -5,7 +5,11 @@
     "errorTitle": "Impossible de charger le sous-agent",
     "retry": "Réessayer",
     "reload": "Recharger depuis le disque",
+    "confirmDeleteTitle": "Supprimer le sous-agent ?",
     "confirmDelete": "Supprimer le sous-agent « {{name}} » ? Action irréversible.",
+    "delete": "Supprimer",
+    "deleting": "Suppression…",
+    "cancel": "Annuler",
     "runAudit": "Audit",
     "runAuditTitle": "Lancer un audit sur ce sous-agent",
     "runFix": "Fix",
@@ -60,6 +64,16 @@
       "not-foundTitle": "Introuvable",
       "launch-failedTitle": "Lancement échoué"
     }
+  },
+  "modal": {
+    "title": "Nouveau sous-agent",
+    "hint": "Choisis un nom court (lettres, chiffres, tirets, .md). L'agent va générer le sous-agent pour toi en fonction du nom.",
+    "placeholder": "code-reviewer.md",
+    "cancel": "Annuler",
+    "ai": "Génère avec l'IA",
+    "launching": "Lancement…",
+    "errorEmptyName": "Le nom ne peut pas être vide.",
+    "aiUnavailable": "Indisponible — pas de tab de run disponible."
   },
   "list": {
     "title": "Sous-agents",

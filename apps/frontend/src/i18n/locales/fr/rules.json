@@ -5,7 +5,11 @@
     "errorTitle": "Impossible de charger la règle",
     "retry": "Réessayer",
     "reload": "Recharger depuis le disque",
+    "confirmDeleteTitle": "Supprimer la règle ?",
     "confirmDelete": "Supprimer la règle « {{name}} » ? Action irréversible.",
+    "delete": "Supprimer",
+    "deleting": "Suppression…",
+    "cancel": "Annuler",
     "runAudit": "Audit",
     "runAuditTitle": "Lancer un audit sur cette règle",
     "runFix": "Fix",
@@ -51,6 +55,16 @@
       "not-foundTitle": "Introuvable",
       "launch-failedTitle": "Lancement échoué"
     }
+  },
+  "modal": {
+    "title": "Nouvelle règle",
+    "hint": "Choisis un nom court (lettres, chiffres, tirets, .md). L'agent va générer la règle pour toi en fonction du nom.",
+    "placeholder": "test-conventions.md",
+    "cancel": "Annuler",
+    "ai": "Génère avec l'IA",
+    "launching": "Lancement…",
+    "errorEmptyName": "Le nom ne peut pas être vide.",
+    "aiUnavailable": "Indisponible — pas de tab de run disponible."
   },
   "list": {
     "title": "Règles",

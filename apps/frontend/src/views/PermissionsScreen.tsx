@@ -344,29 +344,9 @@ export default function PermissionsScreen({
               </button>
             </>
           )}
-          {onOpenRunTab && !file.exists && (
-            <button
-              type="button"
-              disabled={launchingMode !== null}
-              onClick={() => void handleLaunchRun('create')}
-              className={
-                'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-2.5 font-n-mono text-[11.5px] text-n-accent-strong ' +
-                (launchingMode === null
-                  ? 'hover:bg-n-accent-soft/80'
-                  : 'opacity-60')
-              }
-              title={t('runCreateTitle')}
-            >
-              {launchingMode === 'create' ? (
-                <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
-              ) : (
-                <Sparkles size={12} strokeWidth={2} />
-              )}
-              {launchingMode === 'create'
-                ? t('runLaunching')
-                : t('runCreate')}
-            </button>
-          )}
+          {/* Permissions "Create" via agent removed — rules are mechanical
+              JSON, the Edit tab's form is faster than spinning up an agent.
+              Saving an empty permissions block in the editor creates the file. */}
         </div>
       </div>
 
@@ -380,17 +360,13 @@ export default function PermissionsScreen({
             />
             {t('missingBanner')}
           </div>
-          {onOpenRunTab && (
-            <button
-              type="button"
-              disabled={launchingMode !== null}
-              onClick={() => void handleLaunchRun('create')}
-              className="inline-flex items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 py-1.5 font-n-mono text-[11.5px] text-n-accent-strong hover:bg-n-accent-soft/80 disabled:opacity-50"
-            >
-              <Sparkles size={11} />
-              {t('missingBannerCta')}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setTab('edit')}
+            className="inline-flex items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 py-1.5 font-n-mono text-[11.5px] text-n-accent-strong hover:bg-n-accent-soft/80"
+          >
+            {t('missingBannerCta')}
+          </button>
         </div>
       )}
 

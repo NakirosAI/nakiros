@@ -41,22 +41,30 @@ function parseEventsFromJson(value: string): HookEditEvent[] | null {
 
     if (Array.isArray(raw)) {
       for (const item of raw as Record<string, unknown>[]) {
-        // Nested shape: { matcher?, hooks: [{ type, command }] }
+        // Nested shape: { matcher?, hooks: [{ type, command, timeout?,
+        // async?, asyncRewake?, statusMessage?, if?, shell? }] }.
+        // We stash the original objects on the entry so unknown fields
+        // (everything beyond matcher/command/timeout) survive the
+        // Form ↔ JSON roundtrip.
         const nestedHooks = item['hooks'];
         if (Array.isArray(nestedHooks)) {
           for (const h of nestedHooks as Record<string, unknown>[]) {
             entries.push({
               matcher: typeof item['matcher'] === 'string' ? item['matcher'] : '',
               command: typeof h['command'] === 'string' ? h['command'] : '',
-              timeout: typeof item['timeout'] === 'number' ? item['timeout'] : null,
+              timeout: typeof h['timeout'] === 'number' ? h['timeout'] : null,
+              _handlerRaw: { ...h },
+              _entryRaw: { ...item },
             });
           }
         } else {
-          // Flat shape: { matcher?, command, timeout? }
+          // Flat shape: { matcher?, command, timeout?, ... }
           entries.push({
             matcher: typeof item['matcher'] === 'string' ? item['matcher'] : '',
             command: typeof item['command'] === 'string' ? item['command'] : '',
             timeout: typeof item['timeout'] === 'number' ? item['timeout'] : null,
+            _handlerRaw: { ...item },
+            _entryRaw: { ...item },
           });
         }
       }
@@ -79,10 +87,22 @@ function serializeEventsToJson(events: HookEditEvent[]): string {
   for (const ev of events) {
     if (ev.entries.length === 0) continue;
     obj[ev.event] = ev.entries.map((e) => {
-      const entry: Record<string, unknown> = {};
+      // Start from the original objects so async / asyncRewake /
+      // statusMessage / if / shell / ... survive untouched. Then overlay
+      // the form-edited fields on top.
+      const handler: Record<string, unknown> = { ...(e._handlerRaw ?? {}), type: 'command' };
+      handler['command'] = e.command;
+      if (e.timeout === null) delete handler['timeout'];
+      else handler['timeout'] = e.timeout;
+
+      const entry: Record<string, unknown> = { ...(e._entryRaw ?? {}) };
+      // Overwrite matcher (or remove when empty) — the form is the source of truth for it.
       if (e.matcher.trim() !== '') entry['matcher'] = e.matcher.trim();
-      entry['hooks'] = [{ type: 'command', command: e.command }];
-      if (e.timeout !== null) entry['timeout'] = e.timeout;
+      else delete entry['matcher'];
+      // Always replace `hooks` with our single-handler array. We don't try
+      // to preserve sibling handlers under the same matcher because the form
+      // doesn't expose them as a group — each row is one (matcher, handler).
+      entry['hooks'] = [handler];
       return entry;
     });
   }

@@ -16,6 +16,7 @@ import type { GenericAuditEntry } from '../../components/skill/AuditHistoryPicke
 import AuditMarkdownViewer from '../../components/skill/AuditMarkdownViewer';
 import ScoreRing from '../../components/viz/ScoreRing';
 import { MarkdownEditor } from '../../components/markdown/MarkdownEditor';
+import ConfirmModal from '../../components/ConfirmModal';
 import { launchSubagents, type OpenRunTabCallback } from '../../lib/run-launcher';
 
 interface SubagentDetailScreenProps {
@@ -66,6 +67,7 @@ export default function SubagentDetailScreen({
   // ── UI state ────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<ScreenTab>('edit');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [launchingMode, setLaunchingMode] = useState<SubagentsRunMode | null>(null);
   const [errorBanner, setErrorBanner] = useState<{
     code: string;
@@ -188,23 +190,30 @@ export default function SubagentDetailScreen({
     }
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm(t('detail.confirmDelete', { name: subagentName }))) return;
+  const handleDelete = () => {
+    if (!exists) return;
+    setConfirmDeleteOpen(true);
+  };
+
+  const performDelete = async () => {
+    if (!exists) return;
     setSubmitting(true);
     try {
       const result = await window.nakiros.deleteSubagent(projectId, subagentName);
+      setSubmitting(false);
+      setConfirmDeleteOpen(false);
       if (!result.ok) {
         setErrorBanner({ code: result.code, message: result.message });
       } else {
         onBack();
       }
     } catch (err) {
+      setSubmitting(false);
+      setConfirmDeleteOpen(false);
       setErrorBanner({
         code: 'write-failed',
         message: err instanceof Error ? err.message : String(err),
       });
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -424,7 +433,7 @@ export default function SubagentDetailScreen({
             subagentName={subagentName}
             linesCount={body.split('\n').filter(Boolean).length}
             onSave={() => void handleSave()}
-            onDelete={() => void handleDelete()}
+            onDelete={handleDelete}
             t={t}
           />
         )}
@@ -453,6 +462,20 @@ export default function SubagentDetailScreen({
           />
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        title={t('detail.confirmDeleteTitle', { defaultValue: 'Delete subagent?' })}
+        body={t('detail.confirmDelete', { name: subagentName })}
+        confirmLabel={submitting ? t('detail.deleting', { defaultValue: 'Deleting…' }) : t('detail.delete', { defaultValue: 'Delete' })}
+        cancelLabel={t('detail.cancel', { defaultValue: 'Cancel' })}
+        loading={submitting}
+        onConfirm={() => void performDelete()}
+        onCancel={() => {
+          if (submitting) return;
+          setConfirmDeleteOpen(false);
+        }}
+      />
     </div>
   );
 }

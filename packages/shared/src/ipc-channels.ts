@@ -48,6 +48,11 @@ export const IPC_CHANNELS = {
   'project:listConversationsWithAnalysis': 'project:listConversationsWithAnalysis',
   'project:deepAnalyzeConversation': 'project:deepAnalyzeConversation',
   'project:loadDeepAnalysis': 'project:loadDeepAnalysis',
+  // Lazy-load helpers for classify-convo digests. The runner family lives
+  // under `classifyConvo:*` — these read the persisted output without
+  // re-running the model.
+  'project:getConversationDigest': 'project:getConversationDigest',
+  'project:listConversationDigests': 'project:listConversationDigests',
   'project:listSkills': 'project:listSkills',
   'project:getSkill': 'project:getSkill',
   'project:saveSkill': 'project:saveSkill',
@@ -213,6 +218,9 @@ export const IPC_CHANNELS = {
   'claudeMd:read': 'claudeMd:read',
   'claudeMd:save': 'claudeMd:save',
   'claudeMd:delete': 'claudeMd:delete',
+  // CLAUDE.md audit history (archived from audit-runner when claudemdTarget present)
+  'claudeMd:listAudits': 'claudeMd:listAudits',
+  'claudeMd:readAudit': 'claudeMd:readAudit',
 
   // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
   'conversationIngest:status': 'conversationIngest:status',
@@ -235,6 +243,17 @@ export const IPC_CHANNELS = {
   'analyzeConvo:listActive': 'analyzeConvo:listActive',
   'analyzeConvo:listAll': 'analyzeConvo:listAll',
   'analyzeConvo:getBufferedEvents': 'analyzeConvo:getBufferedEvents',
+
+  // Conversation friction-classifier runner (classify-convo Run kind, V1.1)
+  'classifyConvo:start': 'classifyConvo:start',
+  'classifyConvo:stopRun': 'classifyConvo:stopRun',
+  'classifyConvo:getRun': 'classifyConvo:getRun',
+  'classifyConvo:sendUserMessage': 'classifyConvo:sendUserMessage',
+  'classifyConvo:finish': 'classifyConvo:finish',
+  'classifyConvo:event': 'classifyConvo:event',
+  'classifyConvo:listActive': 'classifyConvo:listActive',
+  'classifyConvo:listAll': 'classifyConvo:listAll',
+  'classifyConvo:getBufferedEvents': 'classifyConvo:getBufferedEvents',
 } as const;
 
 /** Union of every IPC channel key declared in {@link IPC_CHANNELS}. */

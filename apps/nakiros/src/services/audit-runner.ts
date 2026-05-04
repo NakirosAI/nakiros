@@ -29,7 +29,9 @@ import {
 } from './runner-core/index.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
+const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
 const KIND = 'audit';
+
 
 interface AuditEntryExtras {
   /** Absolute path to the real skill directory — used to archive the audit report. */
@@ -209,6 +211,20 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
   if (!existsSync(reportSrc)) {
     return { ok: false, error: 'No audit-report.md was produced' };
   }
+  // CLAUDE.md audits archive under `~/.nakiros/<projectId>/claudemd/audit/`.
+  // The bundled expert is immutable so we never write into the skill dir.
+  if (entry.run.claudemdTarget) {
+    const ct = entry.run.claudemdTarget;
+    const archiveDir = join(homedir(), '.nakiros', ct.projectId, 'claudemd', 'audit');
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive CLAUDE.md audit: ${(err as Error).message}` };
+    }
+  }
   const auditsDir = join(entry.extras.skillDir, 'audits');
   mkdirSync(auditsDir, { recursive: true });
   const dest = join(auditsDir, `audit-${isoSafeTimestamp()}.md`);
@@ -230,6 +246,20 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
   },
 
   buildFirstPrompt(req) {
+    if (req.claudemdTarget) {
+      const ct = req.claudemdTarget;
+      const targetPath = join(ct.projectPath, 'CLAUDE.md');
+      const exists = existsSync(targetPath);
+      return [
+        `/${CLAUDEMD_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the project root CLAUDE.md.`,
+        `Project root: ${ct.projectPath}`,
+        `Target file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
     return `/${FACTORY_SKILL_NAME} audit ${req.skillName}`;
   },
 
@@ -253,6 +283,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       error: null,
       manifest: null,
       checkResults: [],
+      claudemdTarget: req.claudemdTarget,
     };
   },
 
@@ -301,6 +332,12 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       if (run.scope !== req.scope) continue;
       if (run.projectId !== req.projectId) continue;
       if (run.skillName !== req.skillName) continue;
+      // CLAUDE.md audits disambiguate by projectPath so two projects with the
+      // same skill name don't collapse onto a single run.
+      if (req.claudemdTarget || run.claudemdTarget) {
+        if (!req.claudemdTarget || !run.claudemdTarget) continue;
+        if (req.claudemdTarget.projectPath !== run.claudemdTarget.projectPath) continue;
+      }
       if (isActiveRunStatus(run.status)) return entry;
     }
     return null;
@@ -357,6 +394,9 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         restoredStatus === 'waiting_for_input' && wasActive
           ? true
           : blob.interruptedByReboot,
+      // Restore the claudemd target so the run keeps surfacing the right
+      // CLAUDE.md context across reboots.
+      claudemdTarget: blob.claudemdTarget,
       // Restore live audit state — sidebar resumes where it left off without
       // re-reading the workdir until the next turn (which re-syncs anyway).
       manifest: blob.manifest ?? null,

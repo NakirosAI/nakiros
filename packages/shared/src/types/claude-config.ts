@@ -460,17 +460,11 @@ export type HooksMutationErrorCode =
 
 // ── CLAUDE.md editor (Module 7 — V2 edit) ──────────────────────────────────-
 /**
- * Where a CLAUDE.md file can live, scoped to the project (we don't edit
- * the user-global `~/.claude/CLAUDE.md` in V2).
- *
- * - `root`       — `./CLAUDE.md`, the canonical project file
- * - `claude-dir` — `./.claude/CLAUDE.md`, the alternative project file
- * - `local`      — `./CLAUDE.local.md`, your gitignored personal overlay
+ * Metadata summary for the project-root `CLAUDE.md` file (`./CLAUDE.md`).
+ * Multi-scope variants (`.claude/CLAUDE.md`, `CLAUDE.local.md`) have been
+ * removed — only the root file is supported.
  */
-export type ClaudeMdScope = 'root' | 'claude-dir' | 'local';
-
 export interface ClaudeMdSummary {
-  scope: ClaudeMdScope;
   /** Absolute path on disk, reported even when missing. */
   path: string;
   exists: boolean;
@@ -489,8 +483,8 @@ export interface ClaudeMdSummary {
 }
 
 export interface ClaudeMdListResult {
-  /** Per-scope summary, ordered root → claude-dir → local. */
-  files: ClaudeMdSummary[];
+  /** Summary of the root `CLAUDE.md`. */
+  file: ClaudeMdSummary;
   /** True when an `AGENTS.md` exists at the project root. */
   agentsMdAtRoot: boolean;
   /** Absolute path of the project root (used for relative path display). */
@@ -505,7 +499,6 @@ export interface ClaudeMdFileContent extends ClaudeMdSummary {
 }
 
 export interface SaveClaudeMdRequest {
-  scope: ClaudeMdScope;
   body: string;
   /** mtime at read time; ignored when the file didn't exist. */
   mtimeAtRead: string;
@@ -520,6 +513,21 @@ export type ClaudeMdMutationErrorCode =
   | 'conflict'
   | 'project-not-found'
   | 'write-failed';
+
+/**
+ * One archived CLAUDE.md audit produced by the audit-runner when the run
+ * carries a `claudemdTarget`. Stored under
+ * `~/.nakiros/<projectId>/claudemd/audit/audit-<ISO>.md`. The list
+ * IPC returns these sorted newest-first.
+ */
+export interface ClaudeMdAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** "X/Y" score scraped from the markdown header — `null` when absent. */
+  score: string | null;
+}
 
 // ── skills (gateway only) ──────────────────────────────────────────────────
 export interface SkillsGatewayInfo {

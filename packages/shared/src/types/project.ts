@@ -830,6 +830,12 @@ export interface AuditRun {
    * (`outputs/fix-findings.jsonl`). Only populated for fix runs.
    */
   findings?: FixFinding[];
+  /**
+   * Set when this run targets a CLAUDE.md file (via `nakiros-claudemd-expert`)
+   * instead of a skill. The frontend uses it to swap the run's title /
+   * label without changing the kind. Stable across rehydrate.
+   */
+  claudemdTarget?: ClaudeMdTargetContext;
 }
 
 /**
@@ -890,6 +896,109 @@ export interface StartAnalyzeConvoRequest {
   sessionId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Classify-convo runner — V1.1 friction classifier (Haiku 4.5) emits a
+// structured JSON digest instead of a markdown report. Reuses the same runner
+// pattern as analyze-convo so multiple sessions can be classified in parallel,
+// runs survive reboots, and the UI gets live token/tool/text streaming.
+// ---------------------------------------------------------------------------
+
+export type ClassifyConvoRunStatus =
+  | 'starting'
+  | 'running'
+  | 'waiting_for_input'
+  | 'completed'
+  | 'failed'
+  | 'stopped';
+
+/** Full in-memory state of a friction-classification run. */
+export interface ClassifyConvoRun {
+  runId: string;
+  projectId: string;
+  /**
+   * Claude Code session id of the **sub-agent run** spawned by `claude --print`
+   * to produce the digest. Inherited from `BaseRun.sessionId` and overwritten
+   * by runner-core's `onSession` handler the moment the sub-run emits its
+   * first event. **Never use this to identify the source conversation** —
+   * use {@link sourceSessionId}.
+   */
+  sessionId: string;
+  /**
+   * Claude Code session id of the **source conversation** being classified
+   * (passed in `StartClassifyConvoRequest.sessionId`). Stable across the run's
+   * lifetime; the digest is persisted under this id so the UI can look it up
+   * from the conversation drawer.
+   */
+  sourceSessionId: string;
+  status: ClassifyConvoRunStatus;
+  sessionClaudeId: string | null;
+  workdir: string;
+  /** `claude --model` id pinned at start (haiku for ≤170k digest, sonnet above). */
+  model: string;
+  /** Estimated input tokens of the digest+prompt — used for cost transparency. */
+  estimatedInputTokens: number;
+  /** Path of the persisted digest JSON under `~/.nakiros/ingest/projects/<encoded>/digests/`. */
+  digestPath: string | null;
+  turns: AuditRunTurn[];
+  tokensUsed: number;
+  durationMs: number;
+  startedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+  interruptedByReboot?: boolean;
+}
+
+/** Event broadcast on `classifyConvo:event` while a classify-convo run is alive. */
+export interface ClassifyConvoRunEvent {
+  runId: string;
+  event:
+    | { type: 'status'; status: ClassifyConvoRunStatus }
+    | { type: 'text'; text: string; ts?: string }
+    | { type: 'tool'; name: string; display: string; ts?: string }
+    | { type: 'tokens'; tokensUsed: number }
+    | { type: 'waiting_for_input'; lastAssistantText: string }
+    | { type: 'done'; exitCode: number; error?: string; digestPath?: string }
+    | { type: 'error'; error: string };
+}
+
+/** Request payload for `classifyConvo:start`. */
+export interface StartClassifyConvoRequest {
+  projectId: string;
+  sessionId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Claudemd target — when an audit / fix / create run targets a CLAUDE.md file
+// instead of a skill, this carries the resolution context so the runner's
+// buildFirstPrompt can invoke `nakiros-claudemd-expert` with the correct file
+// path. The kind stays `audit` / `fix` / `create` so the entire RunScreen UI
+// (AuditCompletedReport, sidebar, header progress) reuses unchanged.
+// ---------------------------------------------------------------------------
+
+/**
+ * Mode of a claudemd run. The bundled `nakiros-claudemd-expert` skill exposes
+ * four entry-point commands; only the first three are launched as Nakiros
+ * runs (improve is interactive and stays inside an existing run).
+ */
+export type ClaudeMdRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * the project-root `./CLAUDE.md` via the bundled `nakiros-claudemd-expert`.
+ * When present, the runner's buildFirstPrompt switches to a
+ * `/nakiros-claudemd-expert` invocation; when absent, the runner targets a
+ * skill via `nakiros-skill-factory`.
+ *
+ * Only the root CLAUDE.md is supported — multi-scope variants
+ * (`.claude/CLAUDE.md`, `CLAUDE.local.md`) have been removed.
+ */
+export interface ClaudeMdTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Run mode — drives the slash-command suffix. */
+  mode: ClaudeMdRunMode;
+}
+
 /** Event broadcast on `audit:event` while an audit run is alive. */
 export interface AuditRunEvent {
   runId: string;
@@ -948,6 +1057,13 @@ export interface StartAuditRequest {
   marketplaceName?: string;
   projectId?: string;
   skillName: string;
+  /**
+   * Optional descriptor for runs that target a CLAUDE.md file via the
+   * bundled `nakiros-claudemd-expert`. When present, the runner switches its
+   * slash-command and skips the skill-bound archive step. The standard
+   * `scope` / `skillName` still resolve to the bundled expert directory.
+   */
+  claudemdTarget?: ClaudeMdTargetContext;
 }
 
 // ---------------------------------------------------------------------------

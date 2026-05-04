@@ -4,9 +4,11 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'fs';
 import type { Dirent } from 'fs';
@@ -52,6 +54,7 @@ import {
 } from './runner-core/index.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
+const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
 
 /**
  * Two flavors of skill-factory-driven runs:
@@ -462,7 +465,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
   },
 
   prepareWorkdir(req, runId) {
-    if (req.mode === 'create' && existsSync(req.skillDir)) {
+    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget) {
       throw new Error(
         `Cannot create skill "${req.skillName}": target directory already exists (${req.skillDir}). ` +
           `Pick a different name or run "fix" on the existing skill instead.`,
@@ -490,7 +493,23 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     let latestAuditFile: string | null = null;
     let latestIteration: number | null = null;
 
-    if (req.mode === 'fix') {
+    if (req.claudemdTarget) {
+      // For CLAUDE.md runs we don't copy the bundled expert into the workdir —
+      // it's immutable. We only symlink it under `.claude/skills/<name>` so the
+      // slash-command `/nakiros-claudemd-expert` resolves from cwd. The agent
+      // edits the user's CLAUDE.md directly via Write/Edit at the absolute path
+      // (projectPath/CLAUDE.md) injected in the first prompt.
+      const claudeSkillsDir = join(workdir, '.claude', 'skills');
+      mkdirSync(claudeSkillsDir, { recursive: true });
+      const linkPath = join(claudeSkillsDir, req.skillName);
+      if (!existsSync(linkPath)) {
+        try {
+          symlinkSync(realpathSync(req.skillDir), linkPath, 'dir');
+        } catch (err) {
+          console.warn(`[skill-agent-runner] Failed to symlink expert: ${(err as Error).message}`);
+        }
+      }
+    } else if (req.mode === 'fix') {
       copySkillSourceForFix(req.skillDir, workdir);
       latestAuditFile = copyLatestAudit(req.skillDir, workdir);
       latestIteration = copyLatestIteration(req.skillDir, workdir);
@@ -518,6 +537,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       language === 'fr'
         ? '- IMPORTANT: communique avec l\'utilisateur en français. Toutes tes questions, résumés, demandes de clarification et messages de progression doivent être en français.'
         : '- IMPORTANT: communicate with the user in English. All your questions, summaries, clarifications and progress updates must be in English.';
+
+    if (req.claudemdTarget) {
+      const ct = req.claudemdTarget;
+      const targetPath = join(ct.projectPath, 'CLAUDE.md');
+      const exists = existsSync(targetPath);
+      const command = req.mode === 'fix' ? 'fix' : 'create';
+      return [
+        `/${CLAUDEMD_EXPERT_SKILL_NAME} ${command}`,
+        '',
+        languageLine,
+        `- Operate on the project root CLAUDE.md.`,
+        `- Project root: ${ct.projectPath}`,
+        `- Target file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        '',
+        `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+      ].join('\n');
+    }
 
     if (req.mode === 'fix') {
       const auditLine = extras.latestAuditFile
@@ -573,6 +610,7 @@ ${languageLine}
       error: null,
       targets: [],
       findings: [],
+      claudemdTarget: req.claudemdTarget,
     };
   },
 
@@ -687,6 +725,10 @@ ${languageLine}
       if (run.scope !== req.scope) continue;
       if (run.projectId !== req.projectId) continue;
       if (run.skillName !== req.skillName) continue;
+      if (req.claudemdTarget || run.claudemdTarget) {
+        if (!req.claudemdTarget || !run.claudemdTarget) continue;
+        if (req.claudemdTarget.projectPath !== run.claudemdTarget.projectPath) continue;
+      }
       if (isActiveRunStatus(run.status)) return entry;
     }
     return null;
@@ -772,6 +814,7 @@ ${languageLine}
       // targets. The poller resumes from the same line indices via extras.
       targets: Array.isArray(blob.targets) ? blob.targets : [],
       findings: Array.isArray(blob.findings) ? blob.findings : [],
+      claudemdTarget: blob.claudemdTarget,
     };
 
     console.log(

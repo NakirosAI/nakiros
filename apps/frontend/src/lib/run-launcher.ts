@@ -1,4 +1,4 @@
-import type { AuditRun } from '@nakiros/shared';
+import type { AuditRun, ClaudeMdRunMode } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import { computeEvalRunId } from './eval-batch-key';
 
@@ -21,7 +21,7 @@ import { computeEvalRunId } from './eval-batch-key';
 /** Callback fired with the resolved run identity once the start succeeds. */
 export type OpenRunTabCallback = (params: {
   runId: string;
-  runKind: 'audit' | 'fix' | 'create' | 'eval';
+  runKind: 'audit' | 'fix' | 'create' | 'eval' | 'classify-convo';
   label: string;
 }) => void;
 
@@ -88,6 +88,56 @@ export async function launchCreate(
     runId: run.runId,
     runKind: 'create',
     label: `Create · ${identity.skillName}`,
+  });
+}
+
+/**
+ * Start an audit / fix / create run that targets the project-root `./CLAUDE.md`
+ * via the bundled `nakiros-claudemd-expert`. Reuses the same `startAudit` /
+ * `startFix` / `startCreate` IPC channels as skill runs — only the request
+ * carries an extra `claudemdTarget` so the runner switches its slash-command
+ * and the frontend store displays a CLAUDE.md-focused title.
+ */
+export async function launchClaudemd(
+  request: { projectId: string; projectPath: string; mode: ClaudeMdRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-claudemd-expert',
+    projectId: request.projectId,
+    claudemdTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      mode: request.mode,
+    },
+  };
+
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: 'Audit · CLAUDE.md' });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · CLAUDE.md' });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · CLAUDE.md' });
+  }
+}
+
+/**
+ * Start a `classify-convo` run on a Claude Code conversation and open its
+ * dedicated RunScreen tab. Used by the conversations drawer's "Frictions" tab.
+ */
+export async function launchClassifyConvo(
+  request: { projectId: string; sessionId: string },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const run = await window.nakiros.startClassifyConvo(request);
+  openRunTab({
+    runId: run.runId,
+    runKind: 'classify-convo',
+    label: `Classify · ${request.sessionId.slice(0, 8)}`,
   });
 }
 

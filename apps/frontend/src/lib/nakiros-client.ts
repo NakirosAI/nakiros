@@ -219,6 +219,10 @@ const client = {
     invoke(C['project:loadDeepAnalysis'], projectId, sessionId),
   deepAnalyzeConversation: (projectId: string, sessionId: string) =>
     invoke(C['project:deepAnalyzeConversation'], projectId, sessionId),
+  getConversationDigest: (projectId: string, sessionId: string) =>
+    invoke(C['project:getConversationDigest'], projectId, sessionId),
+  listConversationDigests: (projectId: string) =>
+    invoke(C['project:listConversationDigests'], projectId),
   listProjectSkills: (projectId: string) => invoke(C['project:listSkills'], projectId),
   getProjectSkill: (projectId: string, skillName: string) => invoke(C['project:getSkill'], projectId, skillName),
   saveProjectSkill: (projectId: string, skillName: string, content: string) =>
@@ -501,16 +505,14 @@ const client = {
     },
   ) => invoke(C['claudeHooks:save'], projectId, request),
 
-  // CLAUDE.md editor (Module 7 V2)
+  // CLAUDE.md editor (Module 7 V2) — root CLAUDE.md only
   listClaudeMd: (projectId: string) => invoke(C['claudeMd:list'], projectId),
-  readClaudeMd: (projectId: string, scope: 'root' | 'claude-dir' | 'local') =>
-    invoke(C['claudeMd:read'], projectId, scope),
+  readClaudeMd: (projectId: string) => invoke(C['claudeMd:read'], projectId),
   saveClaudeMdFile: (
     projectId: string,
-    request: { scope: 'root' | 'claude-dir' | 'local'; body: string; mtimeAtRead: string },
+    request: { body: string; mtimeAtRead: string },
   ) => invoke(C['claudeMd:save'], projectId, request),
-  deleteClaudeMd: (projectId: string, scope: 'root' | 'claude-dir' | 'local') =>
-    invoke(C['claudeMd:delete'], projectId, scope),
+  deleteClaudeMd: (projectId: string) => invoke(C['claudeMd:delete'], projectId),
 
   // Conversation ingest (Phase A V1)
   getConversationIngestStatus: () => invoke(C['conversationIngest:status']),
@@ -536,6 +538,24 @@ const client = {
   listAllAnalyzeConvoRuns: () => invoke(C['analyzeConvo:listAll']),
   getAnalyzeConvoBufferedEvents: (runId: string) => invoke(C['analyzeConvo:getBufferedEvents'], runId),
   onAnalyzeConvoEvent: (cb: (event: unknown) => void) => subscribe(C['analyzeConvo:event'], cb),
+
+  // CLAUDE.md audit history — archived runs under ~/.nakiros/<projectId>/claudemd/audit/
+  listClaudemdAudits: (projectId: string) =>
+    invoke(C['claudeMd:listAudits'], projectId),
+  readClaudemdAudit: (path: string) => invoke(C['claudeMd:readAudit'], path),
+
+  // Conversation friction-classifier runner (classify-convo)
+  startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),
+  stopClassifyConvo: (runId: string) => invoke(C['classifyConvo:stopRun'], runId),
+  getClassifyConvoRun: (runId: string) => invoke(C['classifyConvo:getRun'], runId),
+  sendClassifyConvoUserMessage: (runId: string, message: string) =>
+    invoke(C['classifyConvo:sendUserMessage'], runId, message),
+  finishClassifyConvo: (runId: string) => invoke(C['classifyConvo:finish'], runId),
+  listActiveClassifyConvoRuns: () => invoke(C['classifyConvo:listActive']),
+  listAllClassifyConvoRuns: () => invoke(C['classifyConvo:listAll']),
+  getClassifyConvoBufferedEvents: (runId: string) =>
+    invoke(C['classifyConvo:getBufferedEvents'], runId),
+  onClassifyConvoEvent: (cb: (event: unknown) => void) => subscribe(C['classifyConvo:event'], cb),
 };
 
 // Install on window. We cast via `unknown` because the full type surface in

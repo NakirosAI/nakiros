@@ -22,6 +22,11 @@ import type {
   ConversationMessage,
   ConversationAnalysis,
   ConversationDeepAnalysis,
+  ConversationDigest,
+  ConversationDigestSummary,
+  ClassifyConvoRun,
+  ClassifyConvoRunEvent,
+  StartClassifyConvoRequest,
   Skill,
   SkillScope,
   ScanProgress,
@@ -89,7 +94,7 @@ import type {
   ClaudeMdFileContent,
   ClaudeMdListResult,
   ClaudeMdMutationResult,
-  ClaudeMdScope,
+  ClaudeMdAuditHistoryEntry,
   SaveClaudeMdRequest,
   ConversationIngestStatus,
   ConversationIngestHookDiff,
@@ -178,6 +183,23 @@ declare global {
       loadConversationDeepAnalysis(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis | null>;
       /** @deprecated kept for backward compat — prefer the streaming analyzeConvo:* family. */
       deepAnalyzeConversation(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis>;
+
+      // V1.1 friction classifier — lazy-load helpers around the persisted
+      // output of the streaming `classifyConvo:*` runner. They never trigger
+      // a model call.
+      getConversationDigest(projectId: string, sessionId: string): Promise<ConversationDigest | null>;
+      listConversationDigests(projectId: string): Promise<ConversationDigestSummary[]>;
+
+      // Conversation friction-classifier runner (classify-convo Run kind, V1.1)
+      startClassifyConvo(request: StartClassifyConvoRequest): Promise<ClassifyConvoRun>;
+      stopClassifyConvo(runId: string): Promise<void>;
+      getClassifyConvoRun(runId: string): Promise<ClassifyConvoRun | null>;
+      sendClassifyConvoUserMessage(runId: string, message: string): Promise<void>;
+      finishClassifyConvo(runId: string): Promise<void>;
+      listActiveClassifyConvoRuns(): Promise<ClassifyConvoRun[]>;
+      listAllClassifyConvoRuns(): Promise<ClassifyConvoRun[]>;
+      getClassifyConvoBufferedEvents(runId: string): Promise<ClassifyConvoRunEvent['event'][]>;
+      onClassifyConvoEvent(cb: (event: ClassifyConvoRunEvent) => void): () => void;
 
       // Conversation deep-analysis runner (analyze-convo Run kind)
       startAnalyzeConvo(request: { projectId: string; sessionId: string }): Promise<AnalyzeConvoRun>;
@@ -400,20 +422,19 @@ declare global {
         request: SaveHooksRequest,
       ): Promise<HooksMutationResult>;
 
-      // CLAUDE.md editor (Module 7 V2)
+      // CLAUDE.md editor (Module 7 V2) — root CLAUDE.md only
       listClaudeMd(projectId: string): Promise<ClaudeMdListResult>;
-      readClaudeMd(
-        projectId: string,
-        scope: ClaudeMdScope,
-      ): Promise<ClaudeMdFileContent | null>;
+      readClaudeMd(projectId: string): Promise<ClaudeMdFileContent | null>;
       saveClaudeMdFile(
         projectId: string,
         request: SaveClaudeMdRequest,
       ): Promise<ClaudeMdMutationResult>;
-      deleteClaudeMd(
-        projectId: string,
-        scope: ClaudeMdScope,
-      ): Promise<ClaudeMdMutationResult>;
+      deleteClaudeMd(projectId: string): Promise<ClaudeMdMutationResult>;
+      // CLAUDE.md audit history — archived reports under
+      // ~/.nakiros/<projectId>/claudemd/audit/, populated by audit runs whose
+      // request carried `claudemdTarget`.
+      listClaudemdAudits(projectId: string): Promise<ClaudeMdAuditHistoryEntry[]>;
+      readClaudemdAudit(path: string): Promise<string | null>;
 
       // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
       getConversationIngestStatus(): Promise<ConversationIngestStatus>;

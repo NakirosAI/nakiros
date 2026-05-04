@@ -1,4 +1,6 @@
-import type { SkillScope } from './project.js';
+import type { ClaudeMdRunMode, SkillScope } from './project.js';
+
+export type { ClaudeMdRunMode } from './project.js';
 
 /**
  * The discriminator of an agent run. Each kind has its own backing runner on
@@ -6,7 +8,7 @@ import type { SkillScope } from './project.js';
  * on the frontend. New kinds (e.g. `analyze-convo`) extend this union without
  * changing the surrounding contract.
  */
-export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'analyze-convo';
+export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'analyze-convo' | 'classify-convo';
 
 /**
  * Lifecycle status surfaced to the UI. Mapped from each runner's native
@@ -58,10 +60,21 @@ export interface ConversationRunTarget {
 }
 
 /**
+ * A CLAUDE.md-bound target — used by the `claudemd` kind. Targets the
+ * project-root `./CLAUDE.md` exclusively (no multi-scope support).
+ */
+export interface ClaudeMdRunTarget {
+  type: 'claudemd';
+  projectId: string;
+  projectPath: string;
+  mode: ClaudeMdRunMode;
+}
+
+/**
  * Discriminated union of every supported target shape. New target kinds
  * extend this union when their corresponding agent-run kind ships.
  */
-export type AgentRunTarget = SkillRunTarget | ConversationRunTarget;
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget;
 
 /**
  * Kind-specific opaque payload riding alongside an `AgentRun`. The store

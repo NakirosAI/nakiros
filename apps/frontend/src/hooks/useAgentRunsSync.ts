@@ -3,6 +3,8 @@ import type {
   AgentRunStatus,
   AuditRun,
   AuditRunStatus,
+  ClassifyConvoRun,
+  ClassifyConvoRunStatus,
   EvalRunStatus,
   SkillEvalRun,
 } from '@nakiros/shared';
@@ -33,6 +35,39 @@ const EVAL_STATUS_MAP: Record<EvalRunStatus, AgentRunStatus> = {
   stopped: 'cancelled',
 };
 
+const CLASSIFY_CONVO_STATUS_MAP: Record<ClassifyConvoRunStatus, AgentRunStatus> = {
+  starting: 'pending',
+  running: 'running',
+  waiting_for_input: 'awaiting_input',
+  completed: 'done',
+  failed: 'failed',
+  stopped: 'cancelled',
+};
+
+
+function classifyConvoToAgentRun(run: ClassifyConvoRun): AgentRun {
+  return {
+    id: run.runId,
+    kind: 'classify-convo',
+    title: `Classify · ${run.sourceSessionId.slice(0, 8)}`,
+    target: {
+      type: 'conversation',
+      projectId: run.projectId,
+      // Identify the SOURCE conversation, not the spawned sub-run's session id.
+      sessionId: run.sourceSessionId,
+    },
+    status: CLASSIFY_CONVO_STATUS_MAP[run.status],
+    startedAt: run.startedAt,
+    endedAt: run.finishedAt ?? undefined,
+    capabilities: {
+      canSendMessage: true,
+      canApprove: false,
+      canStop: true,
+    },
+    tokensUsed: run.tokensUsed,
+  };
+}
+
 // ── audit / fix / create — same AuditRun shape, slightly different titles ──
 
 function auditLikeToAgentRun(
@@ -40,6 +75,33 @@ function auditLikeToAgentRun(
   kind: AgentRun['kind'],
   titlePrefix: string,
 ): AgentRun {
+  // Runs that target a CLAUDE.md (via the bundled `nakiros-claudemd-expert`)
+  // surface as audit/fix/create runs with a different target shape and a
+  // CLAUDE.md-focused title — kind stays unchanged so the entire RunScreen
+  // pipeline reuses without modification.
+  if (run.claudemdTarget) {
+    const ct = run.claudemdTarget;
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · CLAUDE.md`,
+      target: {
+        type: 'claudemd',
+        projectId: ct.projectId,
+        projectPath: ct.projectPath,
+        mode: ct.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
   return {
     id: run.runId,
     kind,
@@ -171,15 +233,17 @@ export function useAgentRunsSync(): void {
     // completed runs the daemon restored from disk and let the user
     // dismiss them once acknowledged. The store filters out anything in
     // its dismissed-ids localStorage entry on every upsert.
-    const [audits, fixes, creates, evals] = await Promise.all([
+    const [audits, fixes, creates, evals, classifyConvos] = await Promise.all([
       window.nakiros.listAllAuditRuns(),
       window.nakiros.listAllFixRuns(),
       window.nakiros.listAllCreateRuns(),
       window.nakiros.listEvalRuns(),
+      window.nakiros.listAllClassifyConvoRuns(),
     ]);
     agentRunStore.syncKind('audit', audits.map((r) => auditLikeToAgentRun(r, 'audit', 'Audit')));
     agentRunStore.syncKind('fix', fixes.map((r) => auditLikeToAgentRun(r, 'fix', 'Fix')));
     agentRunStore.syncKind('create', creates.map((r) => auditLikeToAgentRun(r, 'create', 'Create')));
     agentRunStore.syncKind('eval', groupEvalRuns(evals));
+    agentRunStore.syncKind('classify-convo', classifyConvos.map(classifyConvoToAgentRun));
   }, 2000);
 }

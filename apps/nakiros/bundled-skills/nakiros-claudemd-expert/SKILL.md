@@ -65,17 +65,40 @@ Output:  Modified CLAUDE.md + outputs/fix-targets.jsonl + outputs/fix-findings.j
 Chat:    Diff of changes
 ```
 
+## Cross-entity context
+
+Nakiros writes a `dot-claude-snapshot.json` file at the root of your working directory before invoking you. **Read it at the start of every `audit` and `fix` run** (it is a small JSON file — one `Read` call suffices).
+
+```
+Read: dot-claude-snapshot.json
+```
+
+The snapshot gives you the full `.claude/` ecosystem in one pass: all rules, subagents, hooks, permissions, MCP servers, output styles and skills for this project. Use it to flag the following cross-entity coherence issues in your audit report or as fix targets:
+
+1. **Routing table vs subagents** — CLAUDE.md often has a routing table listing subagents by name (e.g. `@backend`, `@frontend`). Cross-check every name in that table against `snapshot.subagents[].name`. Any name that appears in the routing table but not in the snapshot is a dangling reference.
+
+2. **`@import` targets** — Every `@<path>` listed in `snapshot.claudemd.imports` should resolve to a real file under the project root. Flag any import whose target you cannot verify (you may do a quick `Read` to confirm).
+
+3. **Skill mentions vs actual skills** — If CLAUDE.md mentions a skill by name (e.g. "use `/nakiros-skill-factory`"), check that `snapshot.skills` contains a skill with that name. A mismatch means the instruction is stale.
+
+4. **Rule mentions vs actual rules** — If CLAUDE.md references a rule file (e.g. "see `.claude/rules/ipc-contract.md`"), check that `snapshot.rules` contains a rule with that name.
+
+5. **Hooks and permissions** — If CLAUDE.md documents automation policies (e.g. "hooks run tsc on every stop"), cross-check `snapshot.hooks` to confirm those hooks exist. Similarly for permissions.
+
+**Do NOT add new audit checks to the manifest for these.** The snapshot enriches your judgment on existing judgment-based checks (e.g. `content.architecture_pointers`). Only flag coherence issues as details in the existing check results or as additional observations in the report's "Notes" section.
+
 ## Context loading — do this EVERY time
 
 | # | File | When |
 |---|------|------|
-| 1 | `references/claudemd-spec.md` | Always |
-| 2 | `references/claudemd-checklist.md` | On `audit`, `create` (validation step) |
-| 3 | `references/friction-mapping.md` | On `fix` |
-| 4 | `assets/templates/claudemd-template.md` | Before `create` |
-| 5 | `assets/outputs/audit-report.md` | Before `audit` — EXACT format to follow |
-| 6 | `assets/outputs/audit-manifest.json` | Before `audit` — taxonomy template |
-| 7 | `{project}/.nakiros/frictions/aggregate.json` | On `fix` (if exists) |
+| 1 | `dot-claude-snapshot.json` (cwd root) | On `audit`, `fix` — read first |
+| 2 | `references/claudemd-spec.md` | Always |
+| 3 | `references/claudemd-checklist.md` | On `audit`, `create` (validation step) |
+| 4 | `references/friction-mapping.md` | On `fix` |
+| 5 | `assets/templates/claudemd-template.md` | Before `create` |
+| 6 | `assets/outputs/audit-report.md` | Before `audit` — EXACT format to follow |
+| 7 | `assets/outputs/audit-manifest.json` | Before `audit` — taxonomy template |
+| 8 | `{project}/.nakiros/frictions/aggregate.json` | On `fix` (if exists) |
 
 ## CLAUDE.md quality checklist
 

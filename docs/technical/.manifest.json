@@ -215,7 +215,9 @@
     "apps/frontend/src/components/runs/resume-prompts.ts": "e621077aeac5662ee98a74eb75d4770bb6a0e7fe34c16d96cce5ba6331c81e45",
     "apps/frontend/src/views/AnalyzeConvoView.tsx": "32f829a38164c0ff50c319b2f0bb62625d968b491e123cd575bee075f48c44d1",
     "apps/nakiros/src/daemon/handlers/analyze-convo.ts": "18c97f1a64a61ad50b663faa92d01abb2c0da3826c49c785046e313a6b4a370a",
-    "apps/nakiros/src/services/analyze-convo-runner.ts": "ed4ed8ee798d85c17219aaeaf8ddeea3e49f3537b63ceae5e21a7fd2383f1e8f"
+    "apps/nakiros/src/services/analyze-convo-runner.ts": "ed4ed8ee798d85c17219aaeaf8ddeea3e49f3537b63ceae5e21a7fd2383f1e8f",
+    "packages/shared/src/types/dot-claude-snapshot.ts": "86845dc88d2661f6aa2dbbd82bde941e6b4c7797e18b0abe523bdd5fae8884bf",
+    "apps/nakiros/src/services/dot-claude-snapshot-builder.ts": "b93aef69fd90322527284506d88043abbccaa963b8fb3aac1d65b519e6c597b5"
   },
-  "updated_at": "2026-04-26T11:47:19.998Z"
+  "updated_at": "2026-05-04T09:42:04.529Z"
 }

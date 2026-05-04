@@ -52,6 +52,7 @@ import {
   type RunnerSpec,
   writeExecutionSettings,
 } from './runner-core/index.js';
+import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
@@ -516,6 +517,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     }
 
     writeExecutionSettings(workdir);
+
+    // For CLAUDE.md fix/create runs, write a cross-entity snapshot so the expert
+    // agent can detect coherence issues across the full .claude/ configuration.
+    if (req.claudemdTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.claudemdTarget.projectId,
+          projectPath: req.claudemdTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json: ${(err as Error).message}`);
+      }
+    }
 
     return {
       workdir,

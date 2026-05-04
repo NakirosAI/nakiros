@@ -39,6 +39,10 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 - [conversation-analyzer.ts](./conversation-analyzer.md) — Deterministic health analysis (score, tips, friction, cache waste).
 - [conversation-deep-analyzer.ts](./conversation-deep-analyzer.md) — LLM-powered narrative report with Haiku/Sonnet routing.
 
+## Snapshot builders
+
+- [dot-claude-snapshot-builder.ts](./dot-claude-snapshot-builder.md) — Synchronous builder for `DotClaudeSnapshot`; serialised to `dot-claude-snapshot.json` in the expert's workdir before each CLAUDE.md audit/fix run.
+
 ## App-level + identity
 
 - [agent-cli.ts](./agent-cli.md) — Detect `claude` / `codex` / `cursor-agent` binaries and version.

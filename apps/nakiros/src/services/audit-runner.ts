@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'fs';
 import { join, basename, relative } from 'path';
 import { homedir } from 'os';
 
@@ -27,6 +27,7 @@ import {
   type RunnerSpec,
   writeExecutionSettings,
 } from './runner-core/index.js';
+import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
@@ -242,6 +243,25 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
 
   prepareWorkdir(req, runId) {
     const workdir = prepareWorkdir(req.skillDir, req.skillName, runId);
+
+    // For CLAUDE.md audits, write a cross-entity snapshot so the expert agent
+    // can detect coherence issues across the full .claude/ configuration.
+    if (req.claudemdTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.claudemdTarget.projectId,
+          projectPath: req.claudemdTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json: ${(err as Error).message}`);
+      }
+    }
+
     return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
   },
 

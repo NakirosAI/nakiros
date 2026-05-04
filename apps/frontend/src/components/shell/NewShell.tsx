@@ -205,7 +205,11 @@ export default function NewShell({
                     />
                   )}
                   {view === 'mcp' && (
-                    <McpScreen key={project.id} project={project} />
+                    <McpScreen
+                      key={project.id}
+                      project={project}
+                      onOpenRunTab={handleOpenRunByIds}
+                    />
                   )}
                   {view === 'hooks' && (
                     <HooksScreen

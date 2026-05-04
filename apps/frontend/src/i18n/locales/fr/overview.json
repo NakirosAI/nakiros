@@ -55,7 +55,8 @@
     "rules": "Règles",
     "subagents": "Sous-agents",
     "hooks": "Hooks",
-    "permissions": "Permissions"
+    "permissions": "Permissions",
+    "mcp": "MCP"
   },
   "empty.tips": "Pas de conseil récurrent",
   "empty.tools": "Aucun outil en échec",

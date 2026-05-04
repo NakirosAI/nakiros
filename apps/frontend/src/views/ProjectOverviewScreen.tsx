@@ -7,6 +7,7 @@ import {
   FileCode2,
   Layers,
   MessageSquare,
+  Plug,
   ShieldCheck,
   Sparkles,
   Wrench,
@@ -94,6 +95,40 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
       .catch(() => {
         if (cancelled) return;
         setSubagentsCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
+  // MCP server count — fetched via mcp-expert IPC, parsed from .mcp.json.
+  const [mcpCount, setMcpCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .readMcp(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        const mcpResult = result as import('@nakiros/shared').McpReadResult;
+        if (!mcpResult?.content || !mcpResult.exists) {
+          setMcpCount(0);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(mcpResult.content) as Record<string, unknown>;
+          const servers = parsed['mcpServers'];
+          if (typeof servers === 'object' && servers !== null && !Array.isArray(servers)) {
+            setMcpCount(Object.keys(servers).length);
+          } else {
+            setMcpCount(0);
+          }
+        } catch {
+          setMcpCount(0);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMcpCount(null);
       });
     return () => {
       cancelled = true;
@@ -308,6 +343,12 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
                     : undefined
                 }
                 onClick={() => onNavigate('permissions')}
+              />
+              <ConfigCard
+                icon={<Plug size={14} strokeWidth={2} />}
+                label={t('config.mcp')}
+                count={mcpCount}
+                onClick={() => onNavigate('mcp')}
               />
             </div>
           </div>

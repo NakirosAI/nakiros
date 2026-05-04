@@ -1,0 +1,76 @@
+{
+  "loading": "Loading MCP configuration…",
+  "errorTitle": "Could not load MCP configuration",
+  "retry": "Retry",
+  "reload": "Reload from disk",
+  "back": "Project",
+  "missingBanner": "No .mcp.json file found for this project yet.",
+  "missingBannerCta": "Create with expert",
+  "runAudit": "Audit",
+  "runAuditTitle": "Run nakiros-mcp-expert in audit mode against this project's MCP config",
+  "runFix": "Fix",
+  "runFixTitle": "Run nakiros-mcp-expert in fix mode (consumes audit findings)",
+  "runCreate": "Create",
+  "runCreateTitle": "Bootstrap .mcp.json for this project via nakiros-mcp-expert",
+  "runLaunching": "Launching…",
+  "tabs": {
+    "edit": "Edit",
+    "audit": "Audit",
+    "fix": "Fix"
+  },
+  "editTab": {
+    "save": "Save",
+    "reset": "Reset",
+    "validJson": "Valid JSON",
+    "invalidJson": "Invalid JSON",
+    "form": "Form",
+    "json": "JSON",
+    "formDisabledTooltip": "Fix the JSON syntax first to use the form editor",
+    "formCannotRenderInvalid": "Cannot render form: invalid JSON. Switch to JSON view to fix.",
+    "placeholder": "{\n  \"mcpServers\": {\n    \"github\": {\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-github\"]\n    }\n  }\n}",
+    "newFileHint": "Saving will create or update .mcp.json at the root of your project.",
+    "sidebarEmpty": "Invalid JSON — fix to see metrics",
+    "serversCount": "Servers",
+    "serversConfigured": "Servers configured",
+    "transportDistribution": "Transport distribution",
+    "serverList": "Server list",
+    "addServer": "Add server",
+    "removeServer": "Remove",
+    "serverName": "Server name",
+    "serverType": "Type",
+    "url": "URL",
+    "command": "Command",
+    "args": "Args",
+    "env": "Environment variables",
+    "headers": "Headers",
+    "alwaysLoad": "Always load",
+    "warnings": {
+      "httpNotHttps": "HTTP (non-HTTPS) URL detected — use HTTPS for remote MCP servers",
+      "sseDeprecated": "SSE transport is deprecated by Anthropic — migrate to HTTP Streamable",
+      "alwaysLoadOveruse": "More than 2 servers have alwaysLoad: true — may impact performance",
+      "plainSecrets": "Env var with a sensitive name (TOKEN/KEY/SECRET/PASSWORD) is not interpolated — use ${VAR} syntax"
+    }
+  },
+  "auditTab": {
+    "empty": "No audit has been recorded for MCP yet.",
+    "loading": "Loading…",
+    "emptyReport": "This audit report is empty.",
+    "fixFromAudit": "Fix from this audit"
+  },
+  "fixTab": {
+    "title": "Run a Fix on MCP",
+    "lead": "The fix relies on the most recent audit findings. It patches .mcp.json based on the expert's recommendations.",
+    "cta": "Run fix",
+    "cantFixWithoutAudit": "Run an audit first — the fix needs at least one report."
+  },
+  "errors": {
+    "conflict": "The .mcp.json file was modified outside Nakiros. Reload to see the latest version.",
+    "conflictTitle": "External edit detected",
+    "writeFailed": "Could not write to disk.",
+    "writeFailedTitle": "Write failed",
+    "invalid-json": "The content is not valid JSON.",
+    "invalid-jsonTitle": "Invalid JSON",
+    "projectNotFound": "Project not found.",
+    "projectNotFoundTitle": "Unknown project"
+  }
+}

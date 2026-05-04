@@ -11,6 +11,9 @@
   "dependencies": {
     "@fontsource/geist": "^5.2.8",
     "@fontsource/geist-mono": "^5.2.7",
+    "@milkdown/core": "^7.20.0",
+    "@milkdown/crepe": "^7.20.0",
+    "@milkdown/react": "^7.20.0",
     "@nakiros/shared": "workspace:*",
     "@types/diff": "^8.0.0",
     "class-variance-authority": "^0.7.1",

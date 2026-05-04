@@ -1,6 +1,6 @@
 {
   "title": "CLAUDE.md",
-  "subtitle": "Project instructions Claude reads at the start of every session. Three locations: the project root, `.claude/CLAUDE.md`, and a private `CLAUDE.local.md` (gitignored). Loaded into context together — keep each one focused.",
+  "subtitle": "Project instructions Claude reads at the start of every session. Keep it focused — long files reduce adherence.",
   "loading": "Loading CLAUDE.md…",
   "errorTitle": "Could not load CLAUDE.md",
   "retry": "Retry",
@@ -8,30 +8,47 @@
   "delete": "Delete",
   "reload": "Reload from disk",
   "confirmDelete": "Delete this file? {{path}}",
-  "bodyLabel": "Body (markdown)",
-  "bodyPlaceholder": "# Project conventions\n\n- Build: `npm run build`\n- Tests: `npm test`\n…",
-  "previewBody": "Preview",
-  "editBody": "Edit",
+  "back": "Project",
+  "missingBanner": "CLAUDE.md is missing for this project.",
+  "missingBannerCta": "Create with expert",
+  "runAudit": "Audit",
+  "runAuditTitle": "Run nakiros-claudemd-expert in audit mode against this CLAUDE.md",
+  "runFix": "Fix",
+  "runFixTitle": "Run nakiros-claudemd-expert in fix mode (consumes audit findings + project frictions)",
+  "runCreate": "Create",
+  "runCreateTitle": "Bootstrap a CLAUDE.md tailored to this project via nakiros-claudemd-expert",
+  "runLaunching": "Launching…",
   "tabs": {
-    "root": "./CLAUDE.md",
-    "claude-dir": "./.claude/CLAUDE.md",
-    "local": "./CLAUDE.local.md",
-    "missing": "missing"
+    "edit": "Edit",
+    "audit": "Audit",
+    "fix": "Fix"
   },
-  "badges": {
-    "root": "shared (project)",
-    "claude-dir": "shared (.claude/)",
-    "local": "gitignored",
-    "missing": "file does not exist yet — saving will create it"
+  "editTab": {
+    "modeWysiwyg": "WYSIWYG",
+    "modeRaw": "Raw markdown",
+    "bodyPlaceholder": "# Project conventions\n\n- Build: `npm run build`\n- Tests: `npm test`\n…"
+  },
+  "auditTab": {
+    "empty": "No audit has been recorded for this CLAUDE.md yet.",
+    "loading": "Loading…",
+    "emptyReport": "This audit report is empty.",
+    "running": "An audit is running — see RunScreen for live progress.",
+    "openRun": "Open run",
+    "fixFromAudit": "Fix from this audit"
+  },
+  "fixTab": {
+    "title": "Run a Fix on CLAUDE.md",
+    "intro": "The fix relies on the most recent audit findings and conversation frictions. It works on a copy of your CLAUDE.md,",
+    "introCont": "iterates, and deploys at finish.",
+    "run": "Run fix",
+    "noAudit": "Run an audit first — the fix needs at least one report.",
+    "fixRunning": "Fix running"
   },
   "sidebar": {
-    "size": "Size",
-    "lines": "Lines",
+    "size": "Metrics",
     "chars": "Chars",
     "tokens": "Tokens",
     "sections": "Sections",
-    "linesWarning": "Over {{threshold}} lines reduces adherence. Consider splitting into `.claude/rules/` files scoped by paths.",
-    "headings": "Top-level sections",
     "imports": "@-imports",
     "importsEmpty": "No `@<path>` imports detected.",
     "importAgentsMd": "Add @AGENTS.md import",

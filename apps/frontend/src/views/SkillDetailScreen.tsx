@@ -10,7 +10,8 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
-import type { AuditHistoryEntry, Skill } from '@nakiros/shared';
+import type { Skill } from '@nakiros/shared';
+import type { GenericAuditEntry } from '../components/skill/AuditHistoryPicker';
 import ScoreRing from '../components/viz/ScoreRing';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
@@ -319,9 +320,9 @@ function AuditTab({
       setIsLaunchingFixFromAudit(false);
     }
   };
-  const [history, setHistory] = useState<AuditHistoryEntry[] | null>(null);
+  const [history, setHistory] = useState<GenericAuditEntry[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<AuditHistoryEntry | null>(null);
+  const [selected, setSelected] = useState<GenericAuditEntry | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
 

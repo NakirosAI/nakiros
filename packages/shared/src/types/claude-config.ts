@@ -632,3 +632,125 @@ export interface HookEntry {
   /** Source: `'project'` from `settings.json`, `'local'` from `settings.local.json`. */
   source: 'project' | 'local';
 }
+
+// ── Rules expert — CRUD + audit history types ──────────────────────────────
+
+/**
+ * Summary of a single rule file under `.claude/rules/`. Returned by
+ * `rules:list`. The `name` is the relative path from `.claude/rules/`
+ * (e.g. `"i18n.md"` or `"frontend/styling.md"`).
+ */
+export interface RuleSummary {
+  /** Relative path from `.claude/rules/` — the canonical rule identifier. */
+  name: string;
+  /** Absolute path on disk. */
+  path: string;
+  /** First `paths:` glob extracted from frontmatter, or null when absent. */
+  pathsGlob: string | null;
+  /** Description from frontmatter `description:` or first H1, or null. */
+  description: string | null;
+  /** ISO timestamp of last modification. */
+  mtime: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+  /** Number of non-empty lines. */
+  linesCount: number;
+}
+
+/** Result of `rules:list`. */
+export interface RulesListResult {
+  rules: RuleSummary[];
+}
+
+/** Full rule content read for editing — returned by `rules:read`. */
+export interface RulesReadResult {
+  content: string;
+  /** ISO mtime captured at read time — used as the optimistic-lock token for `rules:save`. */
+  mtime: string;
+  /** True when the file exists on disk. */
+  exists: boolean;
+  /** Absolute path to the rule file. */
+  path: string;
+}
+
+/** Result of `rules:save` and `rules:delete`. */
+export type RulesMutationResult =
+  | { ok: true }
+  | { ok: false; code: 'conflict' | 'project-not-found' | 'write-failed' | 'invalid-path' | 'not-found'; message: string };
+
+/**
+ * One archived rules audit produced by the audit-runner when the run
+ * carries a `rulesTarget`. Stored under
+ * `~/.nakiros/<projectId>/rules-audits/<ruleName>/audit-<ISO>.md`.
+ * The list IPC returns these sorted newest-first.
+ */
+export interface RulesAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** "X/Y" score scraped from the markdown header — `null` when absent. */
+  score: string | null;
+}
+
+// ── Subagents expert — CRUD + audit history types ──────────────────────────
+
+/**
+ * Summary of a single subagent file under `.claude/agents/`. Returned by
+ * `subagents:list`. The `name` is the relative filename from `.claude/agents/`
+ * (e.g. `"backend.md"` or `"team/reviewer.md"`).
+ */
+export interface SubagentSummary {
+  /** Relative filename from `.claude/agents/` — the canonical subagent identifier. */
+  name: string;
+  /** Absolute path on disk. */
+  path: string;
+  /** Description from frontmatter `description:` or first H1, or null. */
+  description: string | null;
+  /** Model from frontmatter `model:`, or null. */
+  model: string | null;
+  /** Tools from frontmatter `tools:`, or empty array. */
+  tools: string[];
+  /** ISO timestamp of last modification. */
+  mtime: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+  /** Number of non-empty lines. */
+  linesCount: number;
+}
+
+/** Result of `subagents:list`. */
+export interface SubagentsListResult {
+  subagents: SubagentSummary[];
+}
+
+/** Full subagent content read for editing — returned by `subagents:read`. */
+export interface SubagentsReadResult {
+  content: string;
+  /** ISO mtime captured at read time — used as the optimistic-lock token for `subagents:save`. */
+  mtime: string;
+  /** True when the file exists on disk. */
+  exists: boolean;
+  /** Absolute path to the subagent file. */
+  path: string;
+}
+
+/** Result of `subagents:save` and `subagents:delete`. */
+export type SubagentsMutationResult =
+  | { ok: true }
+  | { ok: false; code: 'conflict' | 'project-not-found' | 'write-failed' | 'invalid-path' | 'not-found'; message: string };
+
+/**
+ * One archived subagents audit produced by the audit-runner when the run
+ * carries a `subagentsTarget`. Stored under
+ * `~/.nakiros/<projectId>/subagents-audits/<subagentName>/audit-<ISO>.md`.
+ * The list IPC returns these sorted newest-first.
+ */
+export interface SubagentsAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** "X/Y" score scraped from the markdown header — `null` when absent. */
+  score: string | null;
+}

@@ -130,6 +130,35 @@ function auditLikeToAgentRun(
       tokensUsed: run.tokensUsed,
     };
   }
+
+  // Runs that target a subagent file (via `nakiros-subagents-expert`) surface
+  // with a subagents-focused title and a `subagents` target type.
+  if (run.subagentsTarget) {
+    const st = run.subagentsTarget;
+    const shortName = st.subagentName.replace(/\.md$/i, '');
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · ${shortName}`,
+      target: {
+        type: 'subagents',
+        projectId: st.projectId,
+        projectPath: st.projectPath,
+        subagentName: st.subagentName,
+        mode: st.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
   return {
     id: run.runId,
     kind,

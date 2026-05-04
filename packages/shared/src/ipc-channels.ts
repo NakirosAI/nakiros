@@ -231,6 +231,15 @@ export const IPC_CHANNELS = {
   'rules:listAudits': 'rules:listAudits',
   'rules:readAudit': 'rules:readAudit',
 
+  // Subagents CRUD — project-scoped, recursive discovery under .claude/agents/
+  'subagents:list': 'subagents:list',
+  'subagents:read': 'subagents:read',
+  'subagents:save': 'subagents:save',
+  'subagents:delete': 'subagents:delete',
+  // Subagents audit history (archived from audit-runner when subagentsTarget present)
+  'subagents:listAudits': 'subagents:listAudits',
+  'subagents:readAudit': 'subagents:readAudit',
+
   // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
   'conversationIngest:status': 'conversationIngest:status',
   'conversationIngest:previewHookDiff': 'conversationIngest:previewHookDiff',

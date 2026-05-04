@@ -1,4 +1,4 @@
-import type { AuditRun, ClaudeMdRunMode, RulesRunMode } from '@nakiros/shared';
+import type { AuditRun, ClaudeMdRunMode, RulesRunMode, SubagentsRunMode } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import { computeEvalRunId } from './eval-batch-key';
 
@@ -149,6 +149,42 @@ export async function launchRules(
   };
 
   const shortName = request.ruleName.replace(/\.md$/i, '');
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · ${shortName}` });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${shortName}` });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${shortName}` });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets a specific `.claude/agents/<subagentName>`
+ * via the bundled `nakiros-subagents-expert`. Reuses the same `startAudit` /
+ * `startFix` IPC channels as skill runs — only the request carries an extra
+ * `subagentsTarget` so the runner switches its slash-command and the frontend
+ * store displays a subagents-focused title.
+ */
+export async function launchSubagents(
+  request: { projectId: string; projectPath: string; subagentName: string; mode: SubagentsRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-subagents-expert',
+    projectId: request.projectId,
+    subagentsTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      subagentName: request.subagentName,
+      mode: request.mode,
+    },
+  };
+
+  const shortName = request.subagentName.replace(/\.md$/i, '');
   if (request.mode === 'audit') {
     const run = await window.nakiros.startAudit(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · ${shortName}` });

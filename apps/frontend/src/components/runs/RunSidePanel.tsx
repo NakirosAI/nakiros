@@ -64,6 +64,13 @@ interface RunSidePanelProps {
   onLaunchEval?: () => void;
   /** True while the eval launch is in flight. */
   isLaunchingEval?: boolean;
+  /**
+   * What the run operates on, in user-facing prose (`'skill'`, `'CLAUDE.md'`,
+   * `'conversation'`, `'rule'`). Drives the wording of the deploy / discard
+   * buttons so a CLAUDE.md or rules fix run doesn't display "Apply & deploy".
+   * Defaults to `'skill'`.
+   */
+  targetNoun?: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent';
 }
 
 /**
@@ -95,6 +102,7 @@ export default function RunSidePanel({
   onSelectDiffFile,
   onLaunchEval,
   isLaunchingEval,
+  targetNoun = 'skill',
 }: RunSidePanelProps) {
   if (kind === 'audit') return <AuditPanel run={run} reportContent={reportContent} />;
   if (kind === 'fix' || kind === 'create')
@@ -110,6 +118,7 @@ export default function RunSidePanel({
         onSelectDiffFile={onSelectDiffFile}
         onLaunchEval={onLaunchEval}
         isLaunchingEval={isLaunchingEval}
+        targetNoun={targetNoun}
       />
     );
   return <FallbackPanel kind={kind} />;
@@ -343,6 +352,7 @@ function FixPanel({
   onSelectDiffFile,
   onLaunchEval,
   isLaunchingEval,
+  targetNoun,
 }: {
   kind: 'fix' | 'create';
   run: AuditRun;
@@ -354,6 +364,7 @@ function FixPanel({
   onSelectDiffFile?(relativePath: string | null): void;
   onLaunchEval?: () => void;
   isLaunchingEval?: boolean;
+  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent';
 }) {
   const { t } = useTranslation('runs');
   const [diff, setDiff] = useState<SkillDiffEntry[] | null>(null);
@@ -398,18 +409,58 @@ function FixPanel({
   const targets = run.targets ?? [];
   const targetsDone = targets.filter((t) => t.status === 'done').length;
 
-  const panelTitle =
-    kind === 'create'
+  const isClaudemd = targetNoun === 'CLAUDE.md';
+  const isRules = targetNoun === 'rule';
+  // Both CLAUDE.md and rules runs edit the target file directly — no sandbox deploy.
+  const isDirectEdit = isClaudemd || isRules;
+  const panelTitle = isDirectEdit
+    ? kind === 'create'
+      ? t('panels.create.titleClaudemd', { defaultValue: 'Création CLAUDE.md' })
+      : t('panels.fix.titleClaudemd', { defaultValue: 'Fix CLAUDE.md' })
+    : kind === 'create'
       ? t('panels.create.title', { defaultValue: 'Skill creation' })
       : t('panels.fix.title', { defaultValue: 'Fix sandbox' });
   const panelIcon = kind === 'create' ? Plus : Wrench;
   const panelTone = kind === 'create' ? 'healthy' : 'violet';
 
+  // Wording overrides for CLAUDE.md / rules targets — the bundled expert writes
+  // to the user's file directly, there's no sandbox to deploy or discard.
+  const labels = isDirectEdit
+    ? {
+        sandboxLabel: t('panels.fix.workdirClaudemd', { defaultValue: 'Espace de travail' }),
+        deployHint: t('panels.fix.deployHintClaudemd', {
+          defaultValue:
+            'Le CLAUDE.md a été mis à jour directement. Clique « Terminer » pour clore le run.',
+        }),
+        applyLabel: t('panels.fix.applyLabelClaudemd', { defaultValue: 'Terminer' }),
+        applyTooltip: t('panels.fix.applyTooltipClaudemd', {
+          defaultValue: 'Marquer le run comme terminé. Le CLAUDE.md reste tel quel.',
+        }),
+        applyText: t('panels.fix.applyClaudemd', { defaultValue: 'Terminer' }),
+        applyingText: t('panels.fix.applyingClaudemd', { defaultValue: 'En cours…' }),
+        discardLabel: t('panels.fix.discardLabelClaudemd', { defaultValue: 'Stopper le run' }),
+        discardingText: t('panels.fix.discardingClaudemd', { defaultValue: 'Arrêt…' }),
+      }
+    : {
+        sandboxLabel: t('panels.fix.sandboxTmpSkill', { defaultValue: 'Sandbox · tmp_skill' }),
+        deployHint: t('panels.fix.deployHint', {
+          defaultValue:
+            'Hit "Finish & deploy" to copy the sandbox over the real skill. Cancel keeps the original untouched.',
+        }),
+        applyLabel: t('panels.fix.applyLabel', { defaultValue: 'Apply to skill' }),
+        applyTooltip: t('panels.fix.applyTooltip', {
+          defaultValue:
+            'Sync the sandbox to the real skill, promote the latest fix-temp eval iteration, and clean up the sandbox.',
+        }),
+        applyText: t('panels.fix.apply', { defaultValue: 'Apply & deploy' }),
+        applyingText: t('panels.fix.applying', { defaultValue: 'Applying…' }),
+        discardLabel: t('panels.fix.discardLabel', { defaultValue: 'Discard sandbox' }),
+        discardingText: t('panels.fix.discarding', { defaultValue: 'Discarding…' }),
+      };
+
   return (
     <SidePanel icon={panelIcon} title={panelTitle} tone={panelTone}>
-      <PanelSection
-        label={t('panels.fix.sandboxTmpSkill', { defaultValue: 'Sandbox · tmp_skill' })}
-      >
+      <PanelSection label={labels.sandboxLabel}>
         <div className="rounded-n-lg border border-n-border-subtle bg-n-canvas px-3 py-2.5">
           <div
             className="truncate font-n-mono text-[11.5px] text-n-muted"
@@ -479,12 +530,7 @@ function FixPanel({
         <PanelSection label={t('panels.fix.next', { defaultValue: 'Next step' })}>
           <div className="flex items-start gap-2 rounded-n-md border border-n-accent-line bg-n-accent-soft px-3 py-2.5">
             <CheckCircle size={12} strokeWidth={2.25} className="mt-0.5 flex-shrink-0 text-n-accent" />
-            <span className="text-[11.5px] leading-snug text-n-fg">
-              {t('panels.fix.deployHint', {
-                defaultValue:
-                  'Hit "Finish & deploy" to copy the sandbox over the real skill. Cancel keeps the original untouched.',
-              })}
-            </span>
+            <span className="text-[11.5px] leading-snug text-n-fg">{labels.deployHint}</span>
           </div>
         </PanelSection>
       )}
@@ -515,36 +561,27 @@ function FixPanel({
 
       {onFinish &&
         (run.status === 'completed' || run.status === 'waiting_for_input') && (
-          <PanelSection
-            label={t('panels.fix.applyLabel', { defaultValue: 'Apply to skill' })}
-          >
+          <PanelSection label={labels.applyLabel}>
             <button
               type="button"
               onClick={onFinish}
               disabled={isFinishing || isRejecting}
               className="flex w-full items-center justify-center gap-2 rounded-n-md border border-n-healthy/40 bg-n-healthy-soft px-3 py-2 text-[12px] font-medium text-n-healthy transition-colors hover:bg-n-healthy-soft/80 disabled:cursor-not-allowed disabled:opacity-60"
-              title={t('panels.fix.applyTooltip', {
-                defaultValue:
-                  'Sync the sandbox to the real skill, promote the latest fix-temp eval iteration, and clean up the sandbox.',
-              })}
+              title={labels.applyTooltip}
             >
               {isFinishing ? (
                 <Loader2 size={13} strokeWidth={2.25} className="animate-spin" />
               ) : (
                 <Check size={13} strokeWidth={2.25} />
               )}
-              {isFinishing
-                ? t('panels.fix.applying', { defaultValue: 'Applying…' })
-                : t('panels.fix.apply', { defaultValue: 'Apply & deploy' })}
+              {isFinishing ? labels.applyingText : labels.applyText}
             </button>
           </PanelSection>
         )}
 
       {onReject &&
         (run.status === 'completed' || run.status === 'waiting_for_input') && (
-          <PanelSection
-            label={t('panels.fix.discardLabel', { defaultValue: 'Discard sandbox' })}
-          >
+          <PanelSection label={labels.discardLabel}>
             <button
               type="button"
               onClick={onReject}
@@ -557,8 +594,10 @@ function FixPanel({
                 <Trash2 size={13} strokeWidth={2.25} />
               )}
               {isRejecting
-                ? t('panels.fix.discarding', { defaultValue: 'Discarding…' })
-                : t('panels.fix.discard', { defaultValue: 'Reject changes' })}
+                ? labels.discardingText
+                : isDirectEdit
+                  ? t('panels.fix.discardClaudemd', { defaultValue: 'Stopper' })
+                  : t('panels.fix.discard', { defaultValue: 'Reject changes' })}
             </button>
           </PanelSection>
         )}

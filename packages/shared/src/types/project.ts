@@ -842,6 +842,12 @@ export interface AuditRun {
    * with `claudemdTarget`. Stable across rehydrate.
    */
   rulesTarget?: RulesTargetContext;
+  /**
+   * Set when this run targets a specific `.claude/agents/<subagentName>` file
+   * via the bundled `nakiros-subagents-expert` instead of a skill. Mutually
+   * exclusive with `claudemdTarget` and `rulesTarget`. Stable across rehydrate.
+   */
+  subagentsTarget?: SubagentsTargetContext;
 }
 
 /**
@@ -1077,6 +1083,13 @@ export interface StartAuditRequest {
    * exclusive with `claudemdTarget`.
    */
   rulesTarget?: RulesTargetContext;
+  /**
+   * Optional descriptor for runs that target a specific `.claude/agents/<subagentName>`
+   * file via the bundled `nakiros-subagents-expert`. When present, the runner switches
+   * its slash-command and archives the report under the subagents history. Mutually
+   * exclusive with `claudemdTarget` and `rulesTarget`.
+   */
+  subagentsTarget?: SubagentsTargetContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -1191,6 +1204,30 @@ export interface RulesTargetContext {
   /** Filename of the rule under .claude/rules/ (e.g. "i18n.md", "frontend/styling.md"). */
   ruleName: string;
   mode: RulesRunMode;
+}
+
+/**
+ * Mode of a subagents run. The bundled `nakiros-subagents-expert` skill
+ * exposes three entry-point commands.
+ */
+export type SubagentsRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * a specific `.claude/agents/<subagentName>` file via the bundled
+ * `nakiros-subagents-expert`. When present on `StartAuditRequest`, the runner's
+ * `buildFirstPrompt` switches to a `/nakiros-subagents-expert` invocation; when
+ * absent, the runner targets a skill via `nakiros-skill-factory`.
+ *
+ * The `subagentName` is the **relative filename from `.claude/agents/`** (e.g.
+ * `"backend.md"` or `"team/reviewer.md"`). Sub-folder notation is supported.
+ */
+export interface SubagentsTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Filename of the subagent under .claude/agents/ (e.g. "backend.md", "team/reviewer.md"). */
+  subagentName: string;
+  mode: SubagentsRunMode;
 }
 
 /** Per-project stats tile: total sessions, messages, tool frequency, top skills. */

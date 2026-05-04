@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "skillName": "nakiros-subagents-expert",
+  "totalChecks": 15,
+  "sections": [
+    { "id": "frontmatter",  "label": "Frontmatter",    "checks": ["frontmatter.present", "frontmatter.name_format", "frontmatter.description_present", "frontmatter.description_actionable"] },
+    { "id": "structure",    "label": "Structure",      "checks": ["structure.line_count", "structure.body_present", "structure.heading_hierarchy"] },
+    { "id": "config",       "label": "Configuration",  "checks": ["config.model_specified", "config.tools_scoped", "config.no_unjustified_bypass"] },
+    { "id": "content",      "label": "Content",        "checks": ["content.single_domain", "content.imperative_mood", "content.has_examples"] },
+    { "id": "crossref",     "label": "Cross-entity",   "checks": ["crossref.referenced_in_claudemd", "crossref.skills_exist"] }
+  ],
+  "checks": [
+    { "id": "frontmatter.present",              "section": "frontmatter", "label": "Valid YAML frontmatter present",                          "severityIfFail": "critical", "findingCode": "FRONTMATTER_MISSING" },
+    { "id": "frontmatter.name_format",          "section": "frontmatter", "label": "name: lowercase letters and hyphens only",                "severityIfFail": "critical", "findingCode": "NAME_FORMAT_INVALID" },
+    { "id": "frontmatter.description_present",  "section": "frontmatter", "label": "description: field present and non-empty",                "severityIfFail": "warn",     "findingCode": "DESCRIPTION_MISSING" },
+    { "id": "frontmatter.description_actionable","section": "frontmatter", "label": "description: contains delegation keywords",              "severityIfFail": "warn",     "findingCode": "DESCRIPTION_NOT_ACTIONABLE" },
+
+    { "id": "structure.line_count",             "section": "structure",   "label": "File <= 200 lines",                                       "severityIfFail": "warn",     "findingCode": "LINE_COUNT_EXCEEDED" },
+    { "id": "structure.body_present",           "section": "structure",   "label": "Body present after frontmatter (>= 5 lines)",             "severityIfFail": "critical", "findingCode": "BODY_MISSING" },
+    { "id": "structure.heading_hierarchy",      "section": "structure",   "label": "No skipped heading levels, max H3",                       "severityIfFail": "warn",     "findingCode": "HEADING_HIERARCHY_WRONG" },
+
+    { "id": "config.model_specified",           "section": "config",      "label": "model: field present",                                    "severityIfFail": "warn",     "findingCode": "MODEL_NOT_SPECIFIED" },
+    { "id": "config.tools_scoped",              "section": "config",      "label": "tools: or disallowedTools: present",                      "severityIfFail": "warn",     "findingCode": "TOOLS_NOT_SCOPED" },
+    { "id": "config.no_unjustified_bypass",     "section": "config",      "label": "No permissionMode: bypassPermissions without justification", "severityIfFail": "critical", "findingCode": "UNJUSTIFIED_BYPASS_PERMISSIONS" },
+
+    { "id": "content.single_domain",            "section": "content",     "label": "Body describes one focused domain",                       "severityIfFail": "warn",     "findingCode": "DOMAIN_TOO_BROAD" },
+    { "id": "content.imperative_mood",          "section": "content",     "label": "Body uses imperative verbs (use/always/never/do)",        "severityIfFail": "warn",     "findingCode": "TONE_NOT_IMPERATIVE" },
+    { "id": "content.has_examples",             "section": "content",     "label": "At least one code block or Example: pattern present",     "severityIfFail": "info",     "findingCode": "NO_EXAMPLES_FOUND" },
+
+    { "id": "crossref.referenced_in_claudemd", "section": "crossref",    "label": "Subagent referenced/routed in CLAUDE.md",                 "severityIfFail": "info",     "findingCode": "NOT_REFERENCED_IN_CLAUDEMD" },
+    { "id": "crossref.skills_exist",           "section": "crossref",    "label": "All skills: entries exist in snapshot.skills",            "severityIfFail": "warn",     "findingCode": "SKILL_REF_NOT_FOUND" }
+  ]
+}

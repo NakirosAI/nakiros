@@ -40,7 +40,7 @@ export interface RunDisplayContext {
   /** Bare action verb localised for the current run kind. */
   actionVerb: 'Audit' | 'Fix' | 'Create' | 'Eval' | 'Analyze' | 'Classify';
   /** What the run operates on, in user-facing prose. */
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent';
   /**
    * `true` when this run targets a CLAUDE.md via the bundled expert. UI
    * surfaces use this to hide skill-only actions (eval, sync-back, etc.).
@@ -53,7 +53,13 @@ export interface RunDisplayContext {
    * conditionally show the eval button.
    */
   isRules: boolean;
-  /** Always `'CLAUDE.md'` when isClaudemd, rule filename when isRules, otherwise null. */
+  /**
+   * `true` when this run targets a subagent file via the bundled
+   * `nakiros-subagents-expert`. UI surfaces use this to hide skill-only actions
+   * (eval, sync-back, etc.).
+   */
+  isSubagents: boolean;
+  /** Always `'CLAUDE.md'` when isClaudemd, rule/subagent filename when isRules/isSubagents, otherwise null. */
   scopeLabel: string | null;
 }
 
@@ -83,6 +89,7 @@ export function runDisplayContext(
       targetNoun: 'CLAUDE.md',
       isClaudemd: true,
       isRules: false,
+      isSubagents: false,
       scopeLabel: 'CLAUDE.md',
     };
   }
@@ -98,7 +105,24 @@ export function runDisplayContext(
       targetNoun: 'rule',
       isClaudemd: false,
       isRules: true,
+      isSubagents: false,
       scopeLabel: rt.ruleName,
+    };
+  }
+
+  // Subagents target — applies to audit / fix / create with subagentsTarget.
+  if ('subagentsTarget' in run && run.subagentsTarget) {
+    const st = run.subagentsTarget;
+    const shortName = st.subagentName.replace(/\.md$/i, '');
+    return {
+      title: `${actionVerb} · ${shortName}`,
+      kindLabel: `${actionVerb} subagent`,
+      actionVerb,
+      targetNoun: 'subagent',
+      isClaudemd: false,
+      isRules: false,
+      isSubagents: true,
+      scopeLabel: st.subagentName,
     };
   }
 
@@ -112,6 +136,7 @@ export function runDisplayContext(
       targetNoun: 'conversation',
       isClaudemd: false,
       isRules: false,
+      isSubagents: false,
       scopeLabel: null,
     };
   }
@@ -126,6 +151,7 @@ export function runDisplayContext(
     targetNoun: 'skill',
     isClaudemd: false,
     isRules: false,
+    isSubagents: false,
     scopeLabel: null,
   };
 }

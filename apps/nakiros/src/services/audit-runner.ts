@@ -29,10 +29,12 @@ import {
 } from './runner-core/index.js';
 import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
 import { rulesAuditArchiveDir } from './rules-audit-history.js';
+import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
 const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
+const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 const KIND = 'audit';
 
 
@@ -243,6 +245,23 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
       return { ok: false, error: `Failed to archive rules audit: ${(err as Error).message}` };
     }
   }
+
+  // Subagents audits archive under
+  // `~/.nakiros/<projectId>/subagents-audits/<subagentName>/`.
+  // Sub-folders per subagent keep the history organised.
+  if (entry.run.subagentsTarget) {
+    const st = entry.run.subagentsTarget;
+    const archiveDir = subagentsAuditArchiveDir(st.projectId, st.subagentName);
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive subagents audit: ${(err as Error).message}` };
+    }
+  }
+
   const auditsDir = join(entry.extras.skillDir, 'audits');
   mkdirSync(auditsDir, { recursive: true });
   const dest = join(auditsDir, `audit-${isoSafeTimestamp()}.md`);
@@ -298,6 +317,25 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       }
     }
 
+    // For subagents audits, write the cross-entity snapshot so the expert
+    // agent can reason about the subagent in the context of the full
+    // .claude/ configuration (CLAUDE.md, tools, other subagents, etc.).
+    if (req.subagentsTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.subagentsTarget.projectId,
+          projectPath: req.subagentsTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for subagents: ${(err as Error).message}`);
+      }
+    }
+
     return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
   },
 
@@ -330,6 +368,20 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
       ].join('\n');
     }
+    if (req.subagentsTarget) {
+      const st = req.subagentsTarget;
+      const targetPath = join(st.projectPath, '.claude', 'agents', st.subagentName);
+      const exists = existsSync(targetPath);
+      return [
+        `/${SUBAGENTS_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the subagent file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `Project root: ${st.projectPath}`,
+        `Subagent name (relative to .claude/agents/): ${st.subagentName}`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
     return `/${FACTORY_SKILL_NAME} audit ${req.skillName}`;
   },
 
@@ -355,6 +407,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       checkResults: [],
       claudemdTarget: req.claudemdTarget,
       rulesTarget: req.rulesTarget,
+      subagentsTarget: req.subagentsTarget,
     };
   },
 
@@ -414,6 +467,12 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         if (!req.rulesTarget || !run.rulesTarget) continue;
         if (req.rulesTarget.projectId !== run.rulesTarget.projectId) continue;
         if (req.rulesTarget.ruleName !== run.rulesTarget.ruleName) continue;
+      }
+      // Subagents audits disambiguate by projectId + subagentName.
+      if (req.subagentsTarget || run.subagentsTarget) {
+        if (!req.subagentsTarget || !run.subagentsTarget) continue;
+        if (req.subagentsTarget.projectId !== run.subagentsTarget.projectId) continue;
+        if (req.subagentsTarget.subagentName !== run.subagentsTarget.subagentName) continue;
       }
       if (isActiveRunStatus(run.status)) return entry;
     }
@@ -477,6 +536,9 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       // Restore the rules target so the run keeps surfacing the right
       // rule context across reboots.
       rulesTarget: blob.rulesTarget,
+      // Restore the subagents target so the run keeps surfacing the right
+      // subagent context across reboots.
+      subagentsTarget: blob.subagentsTarget,
       // Restore live audit state — sidebar resumes where it left off without
       // re-reading the workdir until the next turn (which re-syncs anyway).
       manifest: blob.manifest ?? null,

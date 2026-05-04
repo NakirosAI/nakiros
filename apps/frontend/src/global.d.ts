@@ -1,4 +1,8 @@
 import type {
+  SubagentsListResult,
+  SubagentsReadResult,
+  SubagentsMutationResult,
+  SubagentsAuditHistoryEntry,
   AppPreferences,
   AgentInstallStatus,
   AgentInstallRequest,
@@ -455,6 +459,22 @@ declare global {
       // runs whose request carried `rulesTarget`.
       listRulesAudits(projectId: string, ruleName: string): Promise<RulesAuditHistoryEntry[]>;
       readRulesAudit(path: string): Promise<string | null>;
+
+      // Subagents CRUD — recursive discovery under .claude/agents/
+      listSubagents(projectId: string): Promise<SubagentsListResult>;
+      readSubagent(projectId: string, subagentName: string): Promise<SubagentsReadResult | null>;
+      saveSubagent(
+        projectId: string,
+        subagentName: string,
+        content: string,
+        mtimeAtRead: string,
+      ): Promise<SubagentsMutationResult>;
+      deleteSubagent(projectId: string, subagentName: string): Promise<SubagentsMutationResult>;
+      // Subagents audit history — archived reports under
+      // ~/.nakiros/<projectId>/subagents-audits/<subagentName>/, populated by
+      // audit runs whose request carried `subagentsTarget`.
+      listSubagentsAudits(projectId: string, subagentName: string): Promise<SubagentsAuditHistoryEntry[]>;
+      readSubagentsAudit(path: string): Promise<string | null>;
 
       // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
       getConversationIngestStatus(): Promise<ConversationIngestStatus>;

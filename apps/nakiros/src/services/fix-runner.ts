@@ -54,10 +54,12 @@ import {
 } from './runner-core/index.js';
 import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
 import { rulesAuditArchiveDir } from './rules-audit-history.js';
+import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
 const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
+const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 
 /**
  * Two flavors of skill-factory-driven runs:
@@ -468,7 +470,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
   },
 
   prepareWorkdir(req, runId) {
-    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget) {
+    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget) {
       throw new Error(
         `Cannot create skill "${req.skillName}": target directory already exists (${req.skillDir}). ` +
           `Pick a different name or run "fix" on the existing skill instead.`,
@@ -496,11 +498,12 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     let latestAuditFile: string | null = null;
     let latestIteration: number | null = null;
 
-    if (req.claudemdTarget || req.rulesTarget) {
-      // For CLAUDE.md and rules runs we don't copy the bundled expert into the
-      // workdir — it's immutable. We only symlink it under `.claude/skills/<name>`
-      // so the slash-command resolves from cwd. The agent edits the target file
-      // directly via Write/Edit at the absolute path injected in the first prompt.
+    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget) {
+      // For CLAUDE.md, rules, and subagents runs we don't copy the bundled expert
+      // into the workdir — it's immutable. We only symlink it under
+      // `.claude/skills/<name>` so the slash-command resolves from cwd. The agent
+      // edits the target file directly via Write/Edit at the absolute path
+      // injected in the first prompt.
       const claudeSkillsDir = join(workdir, '.claude', 'skills');
       mkdirSync(claudeSkillsDir, { recursive: true });
       const linkPath = join(claudeSkillsDir, req.skillName);
@@ -555,6 +558,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       }
     }
 
+    // For subagents fix/create runs, write the cross-entity snapshot so the
+    // expert agent can reason about the subagent in context.
+    if (req.subagentsTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.subagentsTarget.projectId,
+          projectPath: req.subagentsTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for subagents: ${(err as Error).message}`);
+      }
+    }
+
     return {
       workdir,
       extras: {
@@ -606,6 +627,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         `- Operate on the rule file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
         `- Project root: ${rt.projectPath}`,
         `- Rule name (relative to .claude/rules/): ${rt.ruleName}`,
+        '',
+        `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+      ].join('\n');
+    }
+
+    if (req.subagentsTarget) {
+      const st = req.subagentsTarget;
+      const targetPath = join(st.projectPath, '.claude', 'agents', st.subagentName);
+      const exists = existsSync(targetPath);
+      const command = req.mode === 'fix' ? 'fix' : 'create';
+      return [
+        `/${SUBAGENTS_EXPERT_SKILL_NAME} ${command}`,
+        '',
+        languageLine,
+        `- Operate on the subagent file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `- Project root: ${st.projectPath}`,
+        `- Subagent name (relative to .claude/agents/): ${st.subagentName}`,
         '',
         `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
         `- Follow the procedure for the "${command}" command in your SKILL.md.`,
@@ -668,6 +707,7 @@ ${languageLine}
       findings: [],
       claudemdTarget: req.claudemdTarget,
       rulesTarget: req.rulesTarget,
+      subagentsTarget: req.subagentsTarget,
     };
   },
 
@@ -734,9 +774,9 @@ ${languageLine}
       `[fix-runner] finish start runId=${run.runId} mode=${extras.mode} realSkillDir=${extras.realSkillDir} workdir=${run.workdir}`,
     );
 
-    // CLAUDE.md and rules runs edit the target file directly — no sandbox
-    // sync-back required. Just transition to completed.
-    if (run.claudemdTarget || run.rulesTarget) {
+    // CLAUDE.md, rules, and subagents runs edit the target file directly — no
+    // sandbox sync-back required. Just transition to completed.
+    if (run.claudemdTarget || run.rulesTarget || run.subagentsTarget) {
       run.status = 'completed';
       run.finishedAt = new Date().toISOString();
       run.error = null;
@@ -802,6 +842,12 @@ ${languageLine}
         if (!req.rulesTarget || !run.rulesTarget) continue;
         if (req.rulesTarget.projectId !== run.rulesTarget.projectId) continue;
         if (req.rulesTarget.ruleName !== run.rulesTarget.ruleName) continue;
+      }
+      // Subagents runs disambiguate by projectId + subagentName.
+      if (req.subagentsTarget || run.subagentsTarget) {
+        if (!req.subagentsTarget || !run.subagentsTarget) continue;
+        if (req.subagentsTarget.projectId !== run.subagentsTarget.projectId) continue;
+        if (req.subagentsTarget.subagentName !== run.subagentsTarget.subagentName) continue;
       }
       if (isActiveRunStatus(run.status)) return entry;
     }
@@ -890,6 +936,7 @@ ${languageLine}
       findings: Array.isArray(blob.findings) ? blob.findings : [],
       claudemdTarget: blob.claudemdTarget,
       rulesTarget: blob.rulesTarget,
+      subagentsTarget: blob.subagentsTarget,
     };
 
     console.log(

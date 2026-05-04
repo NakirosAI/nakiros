@@ -868,6 +868,13 @@ export interface AuditRun {
    * exclusive with the other `*Target` fields. Stable across rehydrate.
    */
   mcpTarget?: McpTargetContext;
+  /**
+   * Set when this run targets a specific `.claude/output-styles/<styleName>`
+   * file via the bundled `nakiros-output-styles-expert`. Collection — one entry
+   * per style file, same as rules/subagents. Mutually exclusive with the other
+   * `*Target` fields. Stable across rehydrate.
+   */
+  outputStylesTarget?: OutputStylesTargetContext;
 }
 
 /**
@@ -1128,6 +1135,12 @@ export interface StartAuditRequest {
    * exclusive with the other `*Target` fields.
    */
   mcpTarget?: McpTargetContext;
+  /**
+   * Optional descriptor for runs that target a specific `.claude/output-styles/<styleName>`
+   * file via the bundled `nakiros-output-styles-expert`. Collection — one entry
+   * per style file. Mutually exclusive with the other `*Target` fields.
+   */
+  outputStylesTarget?: OutputStylesTargetContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -1334,6 +1347,32 @@ export interface SubagentsTargetContext {
   /** Filename of the subagent under .claude/agents/ (e.g. "backend.md", "team/reviewer.md"). */
   subagentName: string;
   mode: SubagentsRunMode;
+}
+
+/**
+ * Mode of an output-styles run. The bundled `nakiros-output-styles-expert`
+ * skill exposes three entry-point commands.
+ */
+export type OutputStylesRunMode = 'audit' | 'fix' | 'create';
+
+/**
+ * Optional target descriptor for an audit / fix / create run that operates on
+ * a specific `.claude/output-styles/<styleName>` file via the bundled
+ * `nakiros-output-styles-expert`. When present on `StartAuditRequest`, the
+ * runner's `buildFirstPrompt` switches to a `/nakiros-output-styles-expert`
+ * invocation; when absent, the runner targets a skill via
+ * `nakiros-skill-factory`.
+ *
+ * The `styleName` is the **relative filename from `.claude/output-styles/`**
+ * (e.g. `"minimal.md"` or `"subdir/explanatory.md"`). Sub-folder notation is
+ * supported.
+ */
+export interface OutputStylesTargetContext {
+  projectId: string;
+  projectPath: string;
+  /** Filename of the style under .claude/output-styles/ (e.g. "minimal.md", "subdir/explanatory.md"). */
+  styleName: string;
+  mode: OutputStylesRunMode;
 }
 
 /** Per-project stats tile: total sessions, messages, tool frequency, top skills. */

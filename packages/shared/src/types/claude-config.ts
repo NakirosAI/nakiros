@@ -422,6 +422,18 @@ export interface HookEditEntry {
   command: string;
   /** Optional shell timeout in seconds (Claude Code accepts `timeout`). */
   timeout: number | null;
+  /**
+   * Original handler object (the inner `{ type, command, timeout, async,
+   * asyncRewake, statusMessage, if, shell, ... }`). Stored to preserve
+   * advanced fields the form editor doesn't render — they are merged back
+   * during serialization so a Form ↔ JSON roundtrip never loses data.
+   */
+  _handlerRaw?: Record<string, unknown>;
+  /**
+   * Original matcher-group object (the outer `{ matcher, hooks: [...] }`).
+   * Same purpose as `_handlerRaw` for matcher-group-level fields.
+   */
+  _entryRaw?: Record<string, unknown>;
 }
 
 export interface HookEditEvent {
@@ -895,6 +907,72 @@ export interface McpExpertMutationResult {
  * newest-first.
  */
 export interface McpAuditHistoryEntry {
+  /** Absolute path of the archived markdown report on disk. */
+  path: string;
+  /** ISO timestamp parsed from the filename. */
+  timestamp: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+}
+
+// ── Output-styles expert — CRUD + audit history types ──────────────────────
+
+/**
+ * Summary of a single output-style file under `.claude/output-styles/`.
+ * Returned by `outputStyles:list`. The `name` is the relative filename from
+ * `.claude/output-styles/` (e.g. `"minimal.md"` or
+ * `"subdir/explanatory.md"`).
+ */
+export interface OutputStyleSummary {
+  /** Relative filename from `.claude/output-styles/` — the canonical style identifier. */
+  name: string;
+  /** Absolute path on disk. */
+  path: string;
+  /** Description from frontmatter `description:` or first H1, or null. */
+  description: string | null;
+  /** Display name from frontmatter `name:` field, or null. */
+  displayName: string | null;
+  /** ISO timestamp of last modification. */
+  mtime: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+  /** Number of non-empty lines. */
+  linesCount: number;
+}
+
+/**
+ * Result of `outputStyles:list` (expert channel — distinct from
+ * {@link OutputStylesListResult} which is the V2 editor's list result).
+ */
+export interface OutputStylesExpertListResult {
+  styles: OutputStyleSummary[];
+}
+
+/** Full output-style content read for editing — returned by `outputStyles:read`. */
+export interface OutputStylesReadResult {
+  content: string;
+  /** ISO mtime captured at read time — used as the optimistic-lock token for `outputStyles:save`. */
+  mtime: string;
+  /** True when the file exists on disk. */
+  exists: boolean;
+  /** Absolute path to the style file. */
+  path: string;
+}
+
+/** Result of `outputStyles:save` and `outputStyles:delete`. */
+export interface OutputStylesExpertMutationResult {
+  ok: boolean;
+  code?: 'conflict' | 'invalid-name' | 'not-found' | 'project-not-found' | 'fs-error' | string;
+  message?: string;
+}
+
+/**
+ * One archived output-styles audit produced by the audit-runner when the run
+ * carries an `outputStylesTarget`. Stored under
+ * `~/.nakiros/<projectId>/output-styles-audits/<styleName>/audit-<ISO>.md`.
+ * The list IPC returns these sorted newest-first.
+ */
+export interface OutputStylesAuditHistoryEntry {
   /** Absolute path of the archived markdown report on disk. */
   path: string;
   /** ISO timestamp parsed from the filename. */

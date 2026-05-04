@@ -8,6 +8,7 @@ import {
   Layers,
   MessageSquare,
   Plug,
+  Sliders,
   ShieldCheck,
   Sparkles,
   Wrench,
@@ -214,6 +215,25 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     };
   }, [project.id]);
 
+  // Output styles count — fetched via the output-styles expert IPC channel.
+  const [outputStylesCount, setOutputStylesCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .listOutputStyles(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        setOutputStylesCount(result.styles.length);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOutputStylesCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
   const windowed = useMemo(() => {
     if (!analyses) return [];
     // Overview shows the project's own conversations — synthetic runs
@@ -349,6 +369,12 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
                 label={t('config.mcp')}
                 count={mcpCount}
                 onClick={() => onNavigate('mcp')}
+              />
+              <ConfigCard
+                icon={<Sliders size={14} strokeWidth={2} />}
+                label={t('config.outputStyles')}
+                count={outputStylesCount}
+                onClick={() => onNavigate('outputStyles')}
               />
             </div>
           </div>

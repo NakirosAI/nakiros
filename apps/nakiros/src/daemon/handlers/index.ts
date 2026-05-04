@@ -30,6 +30,7 @@ import { subagentsHandlers } from './subagents.js';
 import { hooksHandlers } from './hooks.js';
 import { permissionsHandlers } from './permissions.js';
 import { mcpHandlers } from './mcp.js';
+import { outputStylesHandlers } from './output-styles.js';
 import { conversationIngestHandlers } from './conversation-ingest.js';
 
 /** Signature every IPC handler must implement — takes an arg array, returns a value or promise. */
@@ -80,6 +81,7 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...hooksHandlers,
     ...permissionsHandlers,
     ...mcpHandlers,
+    ...outputStylesHandlers,
     ...conversationIngestHandlers,
   };
 }

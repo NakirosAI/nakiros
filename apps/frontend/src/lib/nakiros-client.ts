@@ -603,6 +603,24 @@ const client = {
   listMcpAudits: (projectId: string) => invoke(C['mcp:listAudits'], projectId),
   readMcpAudit: (path: string) => invoke(C['mcp:readAudit'], path),
 
+  // Output styles expert (nakiros-output-styles-expert) — CRUD on
+  // .claude/output-styles/ files + audit history. Distinct from Module 3 V2
+  // claudeOutputStyles:* editor.
+  listOutputStyles: (projectId: string) => invoke(C['outputStyles:list'], projectId),
+  readOutputStyle: (projectId: string, styleName: string) =>
+    invoke(C['outputStyles:read'], projectId, styleName),
+  saveOutputStyle: (
+    projectId: string,
+    styleName: string,
+    content: string,
+    mtimeAtRead: string,
+  ) => invoke(C['outputStyles:save'], projectId, styleName, content, mtimeAtRead),
+  deleteOutputStyle: (projectId: string, styleName: string) =>
+    invoke(C['outputStyles:delete'], projectId, styleName),
+  listOutputStylesAudits: (projectId: string, styleName: string) =>
+    invoke(C['outputStyles:listAudits'], projectId, styleName),
+  readOutputStylesAudit: (path: string) => invoke(C['outputStyles:readAudit'], path),
+
   // Conversation friction-classifier runner (classify-convo)
   startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),
   stopClassifyConvo: (runId: string) => invoke(C['classifyConvo:stopRun'], runId),

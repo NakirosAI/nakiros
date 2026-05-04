@@ -195,7 +195,7 @@ export default function NewShell({
                     <SubagentsScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
                   )}
                   {view === 'outputStyles' && (
-                    <OutputStylesScreen key={project.id} project={project} />
+                    <OutputStylesScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
                   )}
                   {view === 'permissions' && (
                     <PermissionsScreen

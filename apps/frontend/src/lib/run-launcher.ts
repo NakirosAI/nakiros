@@ -1,4 +1,4 @@
-import type { AuditRun, ClaudeMdRunMode, HooksRunMode, McpRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode } from '@nakiros/shared';
+import type { AuditRun, ClaudeMdRunMode, HooksRunMode, McpRunMode, OutputStylesRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import { computeEvalRunId } from './eval-batch-key';
 
@@ -301,6 +301,48 @@ export async function launchMcp(
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · MCP' });
+  }
+}
+
+/**
+ * Start an audit / fix / create run that targets a specific
+ * `.claude/output-styles/<styleName>` file via the bundled
+ * `nakiros-output-styles-expert`. Reuses the same `startAudit` / `startFix`
+ * IPC channels as skill runs — only the request carries an extra
+ * `outputStylesTarget` so the runner switches its slash-command and the
+ * frontend store displays an output-styles-focused title.
+ */
+export async function launchOutputStyles(
+  request: {
+    projectId: string;
+    projectPath: string;
+    styleName: string;
+    mode: OutputStylesRunMode;
+  },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-output-styles-expert',
+    projectId: request.projectId,
+    outputStylesTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      styleName: request.styleName,
+      mode: request.mode,
+    },
+  };
+
+  const shortName = request.styleName.replace(/\.md$/i, '');
+  if (request.mode === 'audit') {
+    const run = await window.nakiros.startAudit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · ${shortName}` });
+  } else if (request.mode === 'fix') {
+    const run = await window.nakiros.startFix(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${shortName}` });
+  } else {
+    const run = await window.nakiros.startCreate(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${shortName}` });
   }
 }
 

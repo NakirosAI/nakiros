@@ -389,6 +389,9 @@ function resolveTargetLabel(run: AgentRun, projects: Project[]): string {
   if (target.type === 'mcp') {
     return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
   }
+  if (target.type === 'output-styles') {
+    return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
+  }
   switch (target.scope) {
     case 'project':
       return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId ?? '';

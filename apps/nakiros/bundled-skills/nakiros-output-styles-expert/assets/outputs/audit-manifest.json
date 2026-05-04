@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "skillName": "nakiros-output-styles-expert",
+  "totalChecks": 12,
+  "target": "{path filled in by run-static-checks.mjs}",
+  "sections": [
+    { "id": "frontmatter", "label": "Frontmatter",   "checks": ["frontmatter.present", "frontmatter.name_or_filename", "frontmatter.description_present"] },
+    { "id": "structure",   "label": "Structure",     "checks": ["structure.line_count", "structure.body_present", "structure.heading_hierarchy"] },
+    { "id": "content",     "label": "Content",       "checks": ["content.role_defined", "content.tone_specified", "content.format_specified", "content.imperative_mood"] },
+    { "id": "crossref",    "label": "Cross-entity",  "checks": ["crossref.no_conflict_with_claudemd", "crossref.unique_role"] }
+  ],
+  "checks": [
+    { "id": "frontmatter.present",             "section": "frontmatter", "label": "Valid YAML frontmatter present",                           "severityIfFail": "critical", "findingCode": "FRONTMATTER_MISSING" },
+    { "id": "frontmatter.name_or_filename",    "section": "frontmatter", "label": "name: field present or filename is a valid identifier",    "severityIfFail": "info",     "findingCode": "NAME_MISSING_USING_FILENAME" },
+    { "id": "frontmatter.description_present", "section": "frontmatter", "label": "description: field present and non-empty",                 "severityIfFail": "warn",     "findingCode": "DESCRIPTION_MISSING" },
+
+    { "id": "structure.line_count",            "section": "structure",   "label": "File <= 200 lines",                                        "severityIfFail": "warn",     "findingCode": "LINE_COUNT_EXCEEDED" },
+    { "id": "structure.body_present",          "section": "structure",   "label": "Body markdown after frontmatter (>= 5 lines)",             "severityIfFail": "critical", "findingCode": "BODY_MISSING" },
+    { "id": "structure.heading_hierarchy",     "section": "structure",   "label": "No skipped heading levels, max H3",                        "severityIfFail": "warn",     "findingCode": "HEADING_HIERARCHY_WRONG" },
+
+    { "id": "content.role_defined",            "section": "content",     "label": "Style defines a clear role or persona",                    "severityIfFail": "warn",     "findingCode": "ROLE_NOT_DEFINED" },
+    { "id": "content.tone_specified",          "section": "content",     "label": "Style specifies tone, formality, or verbosity",            "severityIfFail": "warn",     "findingCode": "TONE_NOT_SPECIFIED" },
+    { "id": "content.format_specified",        "section": "content",     "label": "Style specifies expected output format",                   "severityIfFail": "info",     "findingCode": "FORMAT_NOT_SPECIFIED" },
+    { "id": "content.imperative_mood",         "section": "content",     "label": "Uses imperative mood without excessive hedges",            "severityIfFail": "warn",     "findingCode": "HEDGES_DETECTED" },
+
+    { "id": "crossref.no_conflict_with_claudemd", "section": "crossref", "label": "Style does not frontally contradict CLAUDE.md",           "severityIfFail": "warn",     "findingCode": "CONFLICT_WITH_CLAUDEMD" },
+    { "id": "crossref.unique_role",            "section": "crossref",    "label": "No major role overlap with another output-style",          "severityIfFail": "info",     "findingCode": "ROLE_OVERLAP_DETECTED" }
+  ]
+}

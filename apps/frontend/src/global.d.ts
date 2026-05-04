@@ -13,6 +13,11 @@ import type {
   McpReadResult,
   McpExpertMutationResult,
   McpAuditHistoryEntry,
+  OutputStyleSummary,
+  OutputStylesExpertListResult,
+  OutputStylesReadResult,
+  OutputStylesExpertMutationResult,
+  OutputStylesAuditHistoryEntry,
   AppPreferences,
   AgentInstallStatus,
   AgentInstallRequest,
@@ -511,6 +516,27 @@ declare global {
       saveMcp(projectId: string, content: string, mtimeAtRead: string): Promise<McpExpertMutationResult>;
       listMcpAudits(projectId: string): Promise<McpAuditHistoryEntry[]>;
       readMcpAudit(path: string): Promise<string | null>;
+
+      // Output styles expert (nakiros-output-styles-expert) — CRUD on
+      // .claude/output-styles/ files + audit history. NOTE: distinct from the
+      // Module 3 V2 form-based editor (claudeOutputStyles:* channels).
+      listOutputStyles(projectId: string): Promise<OutputStylesExpertListResult>;
+      readOutputStyle(projectId: string, styleName: string): Promise<OutputStylesReadResult | null>;
+      saveOutputStyle(
+        projectId: string,
+        styleName: string,
+        content: string,
+        mtimeAtRead: string,
+      ): Promise<OutputStylesExpertMutationResult>;
+      deleteOutputStyle(projectId: string, styleName: string): Promise<OutputStylesExpertMutationResult>;
+      // Output-styles audit history — archived reports under
+      // ~/.nakiros/<projectId>/output-styles-audits/<styleName>/, populated by
+      // audit runs whose request carried `outputStylesTarget`.
+      listOutputStylesAudits(
+        projectId: string,
+        styleName: string,
+      ): Promise<OutputStylesAuditHistoryEntry[]>;
+      readOutputStylesAudit(path: string): Promise<string | null>;
 
       // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
       getConversationIngestStatus(): Promise<ConversationIngestStatus>;

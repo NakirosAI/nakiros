@@ -87,7 +87,7 @@ export default function OutputStylesList({
                     key={s.relativePath}
                     style={s}
                     isActive={s.name === activeName}
-                    onClick={() => onOpen(s.name)}
+                    onClick={() => onOpen(s.relativePath.replace(/^(?:\.claude\/)?output-styles\//, ''))}
                   />
                 ))}
               </div>

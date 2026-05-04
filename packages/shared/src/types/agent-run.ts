@@ -1,4 +1,4 @@
-import type { ClaudeMdRunMode, RulesRunMode, SubagentsRunMode, HooksRunMode, PermissionsRunMode, PermissionsExpertScope, McpRunMode, SkillScope } from './project.js';
+import type { ClaudeMdRunMode, RulesRunMode, SubagentsRunMode, HooksRunMode, PermissionsRunMode, PermissionsExpertScope, McpRunMode, OutputStylesRunMode, SkillScope } from './project.js';
 
 export type { ClaudeMdRunMode } from './project.js';
 export type { RulesRunMode } from './project.js';
@@ -7,6 +7,7 @@ export type { HooksRunMode } from './project.js';
 export type { PermissionsRunMode } from './project.js';
 export type { PermissionsExpertScope } from './project.js';
 export type { McpRunMode } from './project.js';
+export type { OutputStylesRunMode } from './project.js';
 
 /**
  * The discriminator of an agent run. Each kind has its own backing runner on
@@ -146,10 +147,25 @@ export interface McpRunTarget {
 }
 
 /**
+ * An output-styles-bound target — used when an audit / fix / create run
+ * targets a specific `.claude/output-styles/<styleName>` file via
+ * `nakiros-output-styles-expert`. Collection — one entry per style file,
+ * same as rules/subagents.
+ */
+export interface OutputStylesRunTarget {
+  type: 'output-styles';
+  projectId: string;
+  projectPath: string;
+  /** Relative filename from .claude/output-styles/ (e.g. "minimal.md", "subdir/explanatory.md"). */
+  styleName: string;
+  mode: OutputStylesRunMode;
+}
+
+/**
  * Discriminated union of every supported target shape. New target kinds
  * extend this union when their corresponding agent-run kind ships.
  */
-export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget | PermissionsRunTarget | McpRunTarget;
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget | PermissionsRunTarget | McpRunTarget | OutputStylesRunTarget;
 
 /**
  * Kind-specific opaque payload riding alongside an `AgentRun`. The store

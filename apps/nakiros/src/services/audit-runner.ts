@@ -33,6 +33,7 @@ import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
 import { hooksAuditArchiveDir } from './hooks-audit-history.js';
 import { permissionsAuditArchiveDir } from './permissions-audit-history.js';
 import { mcpAuditArchiveDir } from './mcp-audit-history.js';
+import { outputStylesAuditArchiveDir } from './output-styles-audit-history.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
@@ -41,6 +42,7 @@ const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
 const PERMISSIONS_EXPERT_SKILL_NAME = 'nakiros-permissions-expert';
 const MCP_EXPERT_SKILL_NAME = 'nakiros-mcp-expert';
+const OUTPUT_STYLES_EXPERT_SKILL_NAME = 'nakiros-output-styles-expert';
 const KIND = 'audit';
 
 
@@ -314,6 +316,22 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
     }
   }
 
+  // Output-styles audits archive under
+  // `~/.nakiros/<projectId>/output-styles-audits/<styleName>/`.
+  // Sub-folders per style keep the history organised when a project has many styles.
+  if (entry.run.outputStylesTarget) {
+    const ost = entry.run.outputStylesTarget;
+    const archiveDir = outputStylesAuditArchiveDir(ost.projectId, ost.styleName);
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive output-styles audit: ${(err as Error).message}` };
+    }
+  }
+
   const auditsDir = join(entry.extras.skillDir, 'audits');
   mkdirSync(auditsDir, { recursive: true });
   const dest = join(auditsDir, `audit-${isoSafeTimestamp()}.md`);
@@ -445,6 +463,25 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       }
     }
 
+    // For output-styles audits, write the cross-entity snapshot so the expert
+    // agent can reason about the style in the context of the full .claude/
+    // configuration (CLAUDE.md, rules, other styles, etc.).
+    if (req.outputStylesTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.outputStylesTarget.projectId,
+          projectPath: req.outputStylesTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for output-styles: ${(err as Error).message}`);
+      }
+    }
+
     return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
   },
 
@@ -536,6 +573,20 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
       ].join('\n');
     }
+    if (req.outputStylesTarget) {
+      const ost = req.outputStylesTarget;
+      const targetPath = join(ost.projectPath, '.claude', 'output-styles', ost.styleName);
+      const exists = existsSync(targetPath);
+      return [
+        `/${OUTPUT_STYLES_EXPERT_SKILL_NAME} audit`,
+        '',
+        `Operate on the output style file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `Project root: ${ost.projectPath}`,
+        `Style name (relative to .claude/output-styles/): ${ost.styleName}`,
+        '',
+        `Follow the procedure for the "audit" command in your SKILL.md and begin now.`,
+      ].join('\n');
+    }
     return `/${FACTORY_SKILL_NAME} audit ${req.skillName}`;
   },
 
@@ -565,6 +616,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       hooksTarget: req.hooksTarget,
       permissionsTarget: req.permissionsTarget,
       mcpTarget: req.mcpTarget,
+      outputStylesTarget: req.outputStylesTarget,
     };
   },
 
@@ -650,6 +702,12 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         if (!req.mcpTarget || !run.mcpTarget) continue;
         if (req.mcpTarget.projectId !== run.mcpTarget.projectId) continue;
       }
+      // Output-styles audits disambiguate by projectId + styleName.
+      if (req.outputStylesTarget || run.outputStylesTarget) {
+        if (!req.outputStylesTarget || !run.outputStylesTarget) continue;
+        if (req.outputStylesTarget.projectId !== run.outputStylesTarget.projectId) continue;
+        if (req.outputStylesTarget.styleName !== run.outputStylesTarget.styleName) continue;
+      }
       if (isActiveRunStatus(run.status)) return entry;
     }
     return null;
@@ -724,6 +782,9 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       // Restore the MCP target so the run keeps surfacing the right
       // .mcp.json context across reboots.
       mcpTarget: blob.mcpTarget,
+      // Restore the output-styles target so the run keeps surfacing the right
+      // style context across reboots.
+      outputStylesTarget: blob.outputStylesTarget,
       // Restore live audit state — sidebar resumes where it left off without
       // re-reading the workdir until the next turn (which re-syncs anyway).
       manifest: blob.manifest ?? null,

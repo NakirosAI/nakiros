@@ -56,7 +56,8 @@
     "subagents": "Sous-agents",
     "hooks": "Hooks",
     "permissions": "Permissions",
-    "mcp": "MCP"
+    "mcp": "MCP",
+    "outputStyles": "Output styles"
   },
   "empty.tips": "Pas de conseil récurrent",
   "empty.tools": "Aucun outil en échec",

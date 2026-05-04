@@ -1,5 +1,6 @@
 import {
   appendFileSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -12,7 +13,7 @@ import {
   writeFileSync,
 } from 'fs';
 import type { Dirent } from 'fs';
-import { join, relative } from 'path';
+import { dirname, join, relative } from 'path';
 import { homedir } from 'os';
 
 import type {
@@ -58,6 +59,8 @@ import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
 import { hooksAuditArchiveDir } from './hooks-audit-history.js';
 import { permissionsAuditArchiveDir } from './permissions-audit-history.js';
 import { mcpAuditArchiveDir } from './mcp-audit-history.js';
+import { readHooksBlock, saveHooksBlock } from './hooks-writer.js';
+import { readPermissionsBlock, savePermissionsBlock } from './permissions-writer.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
@@ -66,6 +69,7 @@ const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
 const PERMISSIONS_EXPERT_SKILL_NAME = 'nakiros-permissions-expert';
 const MCP_EXPERT_SKILL_NAME = 'nakiros-mcp-expert';
+const OUTPUT_STYLES_EXPERT_SKILL_NAME = 'nakiros-output-styles-expert';
 
 /**
  * Two flavors of skill-factory-driven runs:
@@ -476,7 +480,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
   },
 
   prepareWorkdir(req, runId) {
-    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget && !req.hooksTarget && !req.permissionsTarget && !req.mcpTarget) {
+    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget && !req.hooksTarget && !req.permissionsTarget && !req.mcpTarget && !req.outputStylesTarget) {
       throw new Error(
         `Cannot create skill "${req.skillName}": target directory already exists (${req.skillDir}). ` +
           `Pick a different name or run "fix" on the existing skill instead.`,
@@ -504,7 +508,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     let latestAuditFile: string | null = null;
     let latestIteration: number | null = null;
 
-    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget || req.permissionsTarget || req.mcpTarget) {
+    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget || req.permissionsTarget || req.mcpTarget || req.outputStylesTarget) {
       // For CLAUDE.md, rules, subagents, hooks, permissions, and mcp runs we
       // don't copy the bundled expert into the workdir — it's immutable. We only
       // symlink it under `.claude/skills/<name>` so the slash-command resolves
@@ -639,6 +643,99 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       }
     }
 
+    // For rules fix/create runs, seed `<workdir>/draft.md` from the existing
+    // rule file when present — Claude Code blocks all writes inside
+    // `.claude/**`, so the agent must edit the workdir-relative draft and
+    // Nakiros syncs it back on finish.
+    if (req.rulesTarget) {
+      try {
+        const rt = req.rulesTarget;
+        const sourcePath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
+        const draftPath = join(workdir, 'draft.md');
+        if (existsSync(sourcePath)) {
+          copyFileSync(sourcePath, draftPath);
+        }
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not seed rules draft: ${(err as Error).message}`);
+      }
+    }
+
+    // For subagents fix/create runs, seed `<workdir>/draft.md` from the
+    // existing subagent file when present — same Claude Code write-block
+    // constraint as rules.
+    if (req.subagentsTarget) {
+      try {
+        const st = req.subagentsTarget;
+        const sourcePath = join(st.projectPath, '.claude', 'agents', st.subagentName);
+        const draftPath = join(workdir, 'draft.md');
+        if (existsSync(sourcePath)) {
+          copyFileSync(sourcePath, draftPath);
+        }
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not seed subagents draft: ${(err as Error).message}`);
+      }
+    }
+
+    // For hooks fix/create runs, seed `<workdir>/draft.json` with the current
+    // hooks block extracted from settings.json — Claude Code blocks writes
+    // inside `.claude/**`, so the agent edits only the extracted sub-block and
+    // Nakiros merges it back via saveHooksBlock on finish.
+    if (req.hooksTarget) {
+      try {
+        const ht = req.hooksTarget;
+        const { content } = readHooksBlock(ht.projectPath);
+        writeFileSync(join(workdir, 'draft.json'), content, 'utf8');
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not seed hooks draft: ${(err as Error).message}`);
+      }
+    }
+
+    // For permissions fix/create runs, seed `<workdir>/draft.json` with the
+    // current permissions block extracted from the scoped settings file —
+    // same Claude Code write-block constraint as hooks.
+    if (req.permissionsTarget) {
+      try {
+        const pt = req.permissionsTarget;
+        const scope = pt.scope ?? 'project';
+        const { content } = readPermissionsBlock(pt.projectPath, scope);
+        writeFileSync(join(workdir, 'draft.json'), content, 'utf8');
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not seed permissions draft: ${(err as Error).message}`);
+      }
+    }
+
+    // For output-styles fix/create runs, write the cross-entity snapshot so
+    // the expert agent can reason about the style in context of the full
+    // .claude/ configuration (CLAUDE.md, rules, other styles, etc.).
+    // Also seed `<workdir>/draft.md` from the existing file when present —
+    // Claude Code blocks all writes inside `.claude/**`, so the agent must
+    // edit the workdir-relative draft and Nakiros syncs it back on finish.
+    if (req.outputStylesTarget) {
+      try {
+        const snapshot = buildDotClaudeSnapshot({
+          projectId: req.outputStylesTarget.projectId,
+          projectPath: req.outputStylesTarget.projectPath,
+        });
+        writeFileSync(
+          join(workdir, 'dot-claude-snapshot.json'),
+          JSON.stringify(snapshot, null, 2),
+          'utf8',
+        );
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for output-styles: ${(err as Error).message}`);
+      }
+      try {
+        const ost = req.outputStylesTarget;
+        const sourcePath = join(ost.projectPath, '.claude', 'output-styles', ost.styleName);
+        const draftPath = join(workdir, 'draft.md');
+        if (existsSync(sourcePath)) {
+          copyFileSync(sourcePath, draftPath);
+        }
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Could not seed output-style draft: ${(err as Error).message}`);
+      }
+    }
+
     return {
       workdir,
       extras: {
@@ -680,55 +777,63 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
 
     if (req.rulesTarget) {
       const rt = req.rulesTarget;
-      const targetPath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
-      const exists = existsSync(targetPath);
+      const finalPath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
+      const draftPath = join(workdir, 'draft.md');
+      const seeded = existsSync(draftPath);
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${RULES_EXPERT_SKILL_NAME} ${command}`,
         '',
         languageLine,
-        `- Operate on the rule file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `- Final destination: ${finalPath} (managed by Nakiros — DO NOT write there yourself).`,
         `- Project root: ${rt.projectPath}`,
         `- Rule name (relative to .claude/rules/): ${rt.ruleName}`,
         '',
-        `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
-        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+        `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit your rule ONLY at the workdir-relative path \`./draft.md\` (absolute: ${draftPath}). Nakiros will copy it to the final destination when the user clicks "Terminer".`,
+        seeded
+          ? `- An existing copy of the rule was seeded at ./draft.md. Read it first, then edit in place.`
+          : `- ./draft.md does not exist yet — create it with the generated content.`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.md\` as the target instead of any \`.claude/rules/\` path.`,
       ].join('\n');
     }
 
     if (req.subagentsTarget) {
       const st = req.subagentsTarget;
-      const targetPath = join(st.projectPath, '.claude', 'agents', st.subagentName);
-      const exists = existsSync(targetPath);
+      const finalPath = join(st.projectPath, '.claude', 'agents', st.subagentName);
+      const draftPath = join(workdir, 'draft.md');
+      const seeded = existsSync(draftPath);
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${SUBAGENTS_EXPERT_SKILL_NAME} ${command}`,
         '',
         languageLine,
-        `- Operate on the subagent file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `- Final destination: ${finalPath} (managed by Nakiros — DO NOT write there yourself).`,
         `- Project root: ${st.projectPath}`,
         `- Subagent name (relative to .claude/agents/): ${st.subagentName}`,
         '',
-        `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
-        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+        `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit your subagent ONLY at the workdir-relative path \`./draft.md\` (absolute: ${draftPath}). Nakiros will copy it to the final destination when the user clicks "Terminer".`,
+        seeded
+          ? `- An existing copy of the subagent was seeded at ./draft.md. Read it first, then edit in place.`
+          : `- ./draft.md does not exist yet — create it with the generated content.`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.md\` as the target instead of any \`.claude/agents/\` path.`,
       ].join('\n');
     }
 
     if (req.hooksTarget) {
       const ht = req.hooksTarget;
       const settingsPath = join(ht.projectPath, '.claude', 'settings.json');
-      const exists = existsSync(settingsPath);
+      const draftPath = join(workdir, 'draft.json');
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${HOOKS_EXPERT_SKILL_NAME} ${command}`,
         '',
         languageLine,
-        `- Operate on the hooks block of the project settings.`,
+        `- Final destination: ${settingsPath} (key "hooks" — managed by Nakiros — DO NOT write to settings.json yourself).`,
         `- Project root: ${ht.projectPath}`,
-        `- Settings file: ${settingsPath} (${exists ? 'exists' : 'does not exist yet'})`,
         '',
-        `- You may edit the settings file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
-        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+        `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY the workdir-relative file \`./draft.json\` (absolute: ${draftPath}). This file contains ONLY the "hooks" sub-block extracted from settings.json — it does NOT contain the full settings file. Write valid JSON representing the hooks block. Nakiros will merge it back into settings.json (preserving all other keys: permissions, env, model, etc.) when the user clicks "Terminer".`,
+        `- ./draft.json was pre-seeded with the current hooks block (or "{}" if none existed). Read it first, then edit in place.`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.json\` as the target hooks block instead of any \`.claude/settings.json\` path.`,
       ].join('\n');
     }
 
@@ -737,19 +842,19 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       const scope = pt.scope ?? 'project';
       const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
       const settingsPath = join(pt.projectPath, '.claude', filename);
-      const exists = existsSync(settingsPath);
+      const draftPath = join(workdir, 'draft.json');
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${PERMISSIONS_EXPERT_SKILL_NAME} ${command}`,
         '',
         languageLine,
-        `- Operate on the permissions block of the project settings.`,
+        `- Final destination: ${settingsPath} (key "permissions" — managed by Nakiros — DO NOT write to ${filename} yourself).`,
         `- Project root: ${pt.projectPath}`,
         `- Scope: ${scope}`,
-        `- Settings file: ${settingsPath} (${exists ? 'exists' : 'does not exist yet'})`,
         '',
-        `- You may edit the settings file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
-        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+        `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY the workdir-relative file \`./draft.json\` (absolute: ${draftPath}). This file contains ONLY the "permissions" sub-block extracted from ${filename} — it does NOT contain the full settings file. Write valid JSON representing the permissions block. Nakiros will merge it back into ${filename} (preserving all other keys: hooks, env, model, etc.) when the user clicks "Terminer".`,
+        `- ./draft.json was pre-seeded with the current permissions block (or "{}" if none existed). Read it first, then edit in place.`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.json\` as the target permissions block instead of any \`.claude/${filename}\` path.`,
       ].join('\n');
     }
 
@@ -768,6 +873,28 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         '',
         `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
         `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+      ].join('\n');
+    }
+
+    if (req.outputStylesTarget) {
+      const ost = req.outputStylesTarget;
+      const finalPath = join(ost.projectPath, '.claude', 'output-styles', ost.styleName);
+      const draftPath = join(workdir, 'draft.md');
+      const seeded = existsSync(draftPath);
+      const command = req.mode === 'fix' ? 'fix' : 'create';
+      return [
+        `/${OUTPUT_STYLES_EXPERT_SKILL_NAME} ${command}`,
+        '',
+        languageLine,
+        `- Final destination: ${finalPath} (managed by Nakiros — DO NOT write there yourself).`,
+        `- Project root: ${ost.projectPath}`,
+        `- Style name (relative to .claude/output-styles/): ${ost.styleName}`,
+        '',
+        `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit your style ONLY at the workdir-relative path \`./draft.md\` (absolute: ${draftPath}). Nakiros will copy it to the final destination when the user clicks "Terminer".`,
+        seeded
+          ? `- An existing copy of the style was seeded at ./draft.md. Read it first, then edit in place.`
+          : `- ./draft.md does not exist yet — create it with the generated content.`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.md\` as the target instead of any \`.claude/output-styles/\` path.`,
       ].join('\n');
     }
 
@@ -831,6 +958,7 @@ ${languageLine}
       hooksTarget: req.hooksTarget,
       permissionsTarget: req.permissionsTarget,
       mcpTarget: req.mcpTarget,
+      outputStylesTarget: req.outputStylesTarget,
     };
   },
 
@@ -897,10 +1025,209 @@ ${languageLine}
       `[fix-runner] finish start runId=${run.runId} mode=${extras.mode} realSkillDir=${extras.realSkillDir} workdir=${run.workdir}`,
     );
 
-    // CLAUDE.md, rules, subagents, hooks, permissions, and mcp runs edit the
-    // target file directly — no sandbox sync-back required. Just transition
-    // to completed.
-    if (run.claudemdTarget || run.rulesTarget || run.subagentsTarget || run.hooksTarget || run.permissionsTarget || run.mcpTarget) {
+    // Output-styles use the workdir-draft pattern: the agent edits
+    // `<workdir>/draft.md`, Nakiros copies it back to
+    // `<projectPath>/.claude/output-styles/<styleName>` on finish (Claude Code
+    // hard-blocks writes inside `.claude/**`).
+    if (run.outputStylesTarget) {
+      const ost = run.outputStylesTarget;
+      const draftPath = join(run.workdir, 'draft.md');
+      const finalPath = join(ost.projectPath, '.claude', 'output-styles', ost.styleName);
+      try {
+        if (!existsSync(draftPath)) {
+          run.status = 'failed';
+          run.error =
+            'Le fichier draft.md est absent du workdir. L\'agent n\'a probablement rien généré — relance la création.';
+          run.finishedAt = new Date().toISOString();
+          opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+          return;
+        }
+        mkdirSync(dirname(finalPath), { recursive: true });
+        copyFileSync(draftPath, finalPath);
+      } catch (err) {
+        run.status = 'failed';
+        run.error = `Sync-back vers ${finalPath} a échoué: ${(err as Error).message}`;
+        run.finishedAt = new Date().toISOString();
+        opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+        return;
+      }
+      run.status = 'completed';
+      run.finishedAt = new Date().toISOString();
+      run.error = null;
+      console.log(`[skill-agent-runner] ${extras.mode} ${run.runId} completed (workdir draft → ${finalPath})`);
+      opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
+      opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+      return;
+    }
+
+    // Rules: workdir-draft pattern — copy draft.md back to .claude/rules/<name>.
+    if (run.rulesTarget) {
+      const rt = run.rulesTarget;
+      const draftPath = join(run.workdir, 'draft.md');
+      const finalPath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
+      try {
+        if (!existsSync(draftPath)) {
+          run.status = 'failed';
+          run.error =
+            'Le fichier draft.md est absent du workdir. L\'agent n\'a probablement rien généré — relance la création.';
+          run.finishedAt = new Date().toISOString();
+          opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+          return;
+        }
+        mkdirSync(dirname(finalPath), { recursive: true });
+        copyFileSync(draftPath, finalPath);
+      } catch (err) {
+        run.status = 'failed';
+        run.error = `Sync-back vers ${finalPath} a échoué: ${(err as Error).message}`;
+        run.finishedAt = new Date().toISOString();
+        opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+        return;
+      }
+      run.status = 'completed';
+      run.finishedAt = new Date().toISOString();
+      run.error = null;
+      console.log(`[skill-agent-runner] ${extras.mode} ${run.runId} completed (workdir draft → ${finalPath})`);
+      opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
+      opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+      return;
+    }
+
+    // Subagents: workdir-draft pattern — copy draft.md back to .claude/agents/<name>.
+    if (run.subagentsTarget) {
+      const st = run.subagentsTarget;
+      const draftPath = join(run.workdir, 'draft.md');
+      const finalPath = join(st.projectPath, '.claude', 'agents', st.subagentName);
+      try {
+        if (!existsSync(draftPath)) {
+          run.status = 'failed';
+          run.error =
+            'Le fichier draft.md est absent du workdir. L\'agent n\'a probablement rien généré — relance la création.';
+          run.finishedAt = new Date().toISOString();
+          opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+          return;
+        }
+        mkdirSync(dirname(finalPath), { recursive: true });
+        copyFileSync(draftPath, finalPath);
+      } catch (err) {
+        run.status = 'failed';
+        run.error = `Sync-back vers ${finalPath} a échoué: ${(err as Error).message}`;
+        run.finishedAt = new Date().toISOString();
+        opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+        return;
+      }
+      run.status = 'completed';
+      run.finishedAt = new Date().toISOString();
+      run.error = null;
+      console.log(`[skill-agent-runner] ${extras.mode} ${run.runId} completed (workdir draft → ${finalPath})`);
+      opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
+      opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+      return;
+    }
+
+    // Hooks: workdir-draft pattern — read draft.json and merge back into
+    // settings.json via the hooks-writer service (preserves all other keys).
+    if (run.hooksTarget) {
+      const ht = run.hooksTarget;
+      const draftPath = join(run.workdir, 'draft.json');
+      try {
+        if (!existsSync(draftPath)) {
+          run.status = 'failed';
+          run.error =
+            'Le fichier draft.json est absent du workdir. L\'agent n\'a probablement rien généré — relance la création.';
+          run.finishedAt = new Date().toISOString();
+          opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+          return;
+        }
+        const draftContent = readFileSync(draftPath, 'utf8');
+        // Use the current mtime for the optimistic-lock — if the file was
+        // modified externally during the run we still proceed (best-effort).
+        const settingsPath = join(ht.projectPath, '.claude', 'settings.json');
+        let mtimeAtRead = '';
+        try {
+          if (existsSync(settingsPath)) {
+            mtimeAtRead = statSync(settingsPath).mtime.toISOString();
+          }
+        } catch {
+          // ignore — proceed without lock
+        }
+        const result = saveHooksBlock(ht.projectPath, draftContent, mtimeAtRead);
+        if (!result.ok) {
+          run.status = 'failed';
+          run.error = `Merge hooks échoué (${result.code}): ${result.message}`;
+          run.finishedAt = new Date().toISOString();
+          opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+          return;
+        }
+      } catch (err) {
+        run.status = 'failed';
+        run.error = `Sync-back hooks a échoué: ${(err as Error).message}`;
+        run.finishedAt = new Date().toISOString();
+        opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+        return;
+      }
+      run.status = 'completed';
+      run.finishedAt = new Date().toISOString();
+      run.error = null;
+      console.log(`[skill-agent-runner] ${extras.mode} ${run.runId} completed (hooks draft → settings.json)`);
+      opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
+      opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+      return;
+    }
+
+    // Permissions: workdir-draft pattern — read draft.json and merge back into
+    // the scoped settings file via the permissions-writer service.
+    if (run.permissionsTarget) {
+      const pt = run.permissionsTarget;
+      const scope = pt.scope ?? 'project';
+      const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
+      const draftPath = join(run.workdir, 'draft.json');
+      try {
+        if (!existsSync(draftPath)) {
+          run.status = 'failed';
+          run.error =
+            'Le fichier draft.json est absent du workdir. L\'agent n\'a probablement rien généré — relance la création.';
+          run.finishedAt = new Date().toISOString();
+          opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+          return;
+        }
+        const draftContent = readFileSync(draftPath, 'utf8');
+        // Use the current mtime for the optimistic-lock (best-effort).
+        const settingsPath = join(pt.projectPath, '.claude', filename);
+        let mtimeAtRead = '';
+        try {
+          if (existsSync(settingsPath)) {
+            mtimeAtRead = statSync(settingsPath).mtime.toISOString();
+          }
+        } catch {
+          // ignore — proceed without lock
+        }
+        const result = savePermissionsBlock(pt.projectPath, scope, draftContent, mtimeAtRead);
+        if (!result.ok) {
+          run.status = 'failed';
+          run.error = `Merge permissions échoué (${result.code}): ${result.message}`;
+          run.finishedAt = new Date().toISOString();
+          opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+          return;
+        }
+      } catch (err) {
+        run.status = 'failed';
+        run.error = `Sync-back permissions a échoué: ${(err as Error).message}`;
+        run.finishedAt = new Date().toISOString();
+        opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+        return;
+      }
+      run.status = 'completed';
+      run.finishedAt = new Date().toISOString();
+      run.error = null;
+      console.log(`[skill-agent-runner] ${extras.mode} ${run.runId} completed (permissions draft → ${filename})`);
+      opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
+      opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+      return;
+    }
+
+    // CLAUDE.md and MCP targets write outside `.claude/**` so direct edits
+    // by the agent are permitted — no workdir-draft sync-back needed.
+    if (run.claudemdTarget || run.mcpTarget) {
       run.status = 'completed';
       run.finishedAt = new Date().toISOString();
       run.error = null;
@@ -986,6 +1313,17 @@ ${languageLine}
         const reqScope = req.permissionsTarget.scope ?? 'project';
         const runScope = run.permissionsTarget.scope ?? 'project';
         if (reqScope !== runScope) continue;
+      }
+      // MCP runs: singleton per project — disambiguate by projectId only.
+      if (req.mcpTarget || run.mcpTarget) {
+        if (!req.mcpTarget || !run.mcpTarget) continue;
+        if (req.mcpTarget.projectId !== run.mcpTarget.projectId) continue;
+      }
+      // Output-styles runs disambiguate by projectId + styleName.
+      if (req.outputStylesTarget || run.outputStylesTarget) {
+        if (!req.outputStylesTarget || !run.outputStylesTarget) continue;
+        if (req.outputStylesTarget.projectId !== run.outputStylesTarget.projectId) continue;
+        if (req.outputStylesTarget.styleName !== run.outputStylesTarget.styleName) continue;
       }
       if (isActiveRunStatus(run.status)) return entry;
     }
@@ -1078,6 +1416,7 @@ ${languageLine}
       hooksTarget: blob.hooksTarget,
       permissionsTarget: blob.permissionsTarget,
       mcpTarget: blob.mcpTarget,
+      outputStylesTarget: blob.outputStylesTarget,
     };
 
     console.log(

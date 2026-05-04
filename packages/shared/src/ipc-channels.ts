@@ -267,6 +267,18 @@ export const IPC_CHANNELS = {
   'mcp:listAudits': 'mcp:listAudits',
   'mcp:readAudit': 'mcp:readAudit',
 
+  // Output styles expert — collection CRUD + audit history, one entry per style
+  // file under .claude/output-styles/. NOTE: 'outputStyles:*' is distinct from
+  // 'claudeOutputStyles:*' (Module 3 V2) which is the structured form-based
+  // output-styles editor. These six channels are for the
+  // `nakiros-output-styles-expert` audit/fix/create flow.
+  'outputStyles:list': 'outputStyles:list',
+  'outputStyles:read': 'outputStyles:read',
+  'outputStyles:save': 'outputStyles:save',
+  'outputStyles:delete': 'outputStyles:delete',
+  'outputStyles:listAudits': 'outputStyles:listAudits',
+  'outputStyles:readAudit': 'outputStyles:readAudit',
+
   // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
   'conversationIngest:status': 'conversationIngest:status',
   'conversationIngest:previewHookDiff': 'conversationIngest:previewHookDiff',

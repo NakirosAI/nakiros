@@ -70,7 +70,7 @@ interface RunSidePanelProps {
    * buttons so a CLAUDE.md or rules fix run doesn't display "Apply & deploy".
    * Defaults to `'skill'`.
    */
-  targetNoun?: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp';
+  targetNoun?: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp' | 'output style';
 }
 
 /**
@@ -364,7 +364,7 @@ function FixPanel({
   onSelectDiffFile?(relativePath: string | null): void;
   onLaunchEval?: () => void;
   isLaunchingEval?: boolean;
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp' | 'output style';
 }) {
   const { t } = useTranslation('runs');
   const [diff, setDiff] = useState<SkillDiffEntry[] | null>(null);
@@ -411,8 +411,10 @@ function FixPanel({
 
   const isClaudemd = targetNoun === 'CLAUDE.md';
   const isRules = targetNoun === 'rule';
-  // Both CLAUDE.md and rules runs edit the target file directly — no sandbox deploy.
-  const isDirectEdit = isClaudemd || isRules;
+  // Every non-skill target writes its file directly — no sandbox to deploy.
+  // The skill flow is the only one that uses a tmp_skill copy under
+  // ~/.nakiros/runs/ that needs an explicit "Apply & deploy" sync.
+  const isDirectEdit = targetNoun !== 'skill';
   const panelTitle = isDirectEdit
     ? kind === 'create'
       ? t('panels.create.titleClaudemd', { defaultValue: 'Création CLAUDE.md' })

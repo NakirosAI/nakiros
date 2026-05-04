@@ -241,6 +241,35 @@ function auditLikeToAgentRun(
     };
   }
 
+  // Runs that target an output-style file (via `nakiros-output-styles-expert`)
+  // surface with an output-style-focused title and an `output-styles` target
+  // type. Collection — one run per style file.
+  if (run.outputStylesTarget) {
+    const ost = run.outputStylesTarget;
+    const shortName = ost.styleName.replace(/\.md$/i, '');
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · ${shortName}`,
+      target: {
+        type: 'output-styles',
+        projectId: ost.projectId,
+        projectPath: ost.projectPath,
+        styleName: ost.styleName,
+        mode: ost.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: {
+        canSendMessage: true,
+        canApprove: false,
+        canStop: true,
+      },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
   return {
     id: run.runId,
     kind,

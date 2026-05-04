@@ -40,7 +40,7 @@ export interface RunDisplayContext {
   /** Bare action verb localised for the current run kind. */
   actionVerb: 'Audit' | 'Fix' | 'Create' | 'Eval' | 'Analyze' | 'Classify';
   /** What the run operates on, in user-facing prose. */
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp' | 'output style';
   /**
    * `true` when this run targets a CLAUDE.md via the bundled expert. UI
    * surfaces use this to hide skill-only actions (eval, sync-back, etc.).
@@ -77,7 +77,13 @@ export interface RunDisplayContext {
    * (eval, sync-back, etc.).
    */
   isMcp: boolean;
-  /** Always `'CLAUDE.md'` when isClaudemd, rule/subagent filename when isRules/isSubagents, `'hooks'` when isHooks, `'permissions'` when isPermissions, `'mcp'` when isMcp, otherwise null. */
+  /**
+   * `true` when this run targets a `.claude/output-styles/<styleName>` file
+   * via the bundled `nakiros-output-styles-expert`. UI surfaces use this to
+   * hide skill-only actions (eval, sync-back, etc.).
+   */
+  isOutputStyles: boolean;
+  /** Always `'CLAUDE.md'` when isClaudemd, rule/subagent filename when isRules/isSubagents, `'hooks'` when isHooks, `'permissions'` when isPermissions, `'mcp'` when isMcp, style filename when isOutputStyles, otherwise null. */
   scopeLabel: string | null;
 }
 
@@ -111,6 +117,7 @@ export function runDisplayContext(
       isHooks: false,
       isPermissions: false,
       isMcp: false,
+      isOutputStyles: false,
       scopeLabel: 'CLAUDE.md',
     };
   }
@@ -130,6 +137,7 @@ export function runDisplayContext(
       isHooks: false,
       isPermissions: false,
       isMcp: false,
+      isOutputStyles: false,
       scopeLabel: rt.ruleName,
     };
   }
@@ -149,6 +157,7 @@ export function runDisplayContext(
       isHooks: false,
       isPermissions: false,
       isMcp: false,
+      isOutputStyles: false,
       scopeLabel: st.subagentName,
     };
   }
@@ -166,6 +175,7 @@ export function runDisplayContext(
       isHooks: true,
       isPermissions: false,
       isMcp: false,
+      isOutputStyles: false,
       scopeLabel: 'hooks',
     };
   }
@@ -186,6 +196,7 @@ export function runDisplayContext(
       isHooks: false,
       isPermissions: true,
       isMcp: false,
+      isOutputStyles: false,
       scopeLabel: ptScope === 'local' ? 'permissions (local)' : 'permissions',
     };
   }
@@ -203,7 +214,28 @@ export function runDisplayContext(
       isHooks: false,
       isPermissions: false,
       isMcp: true,
+      isOutputStyles: false,
       scopeLabel: 'mcp',
+    };
+  }
+
+  // Output-styles target — applies to audit / fix / create with outputStylesTarget.
+  if ('outputStylesTarget' in run && run.outputStylesTarget) {
+    const ost = run.outputStylesTarget;
+    const shortName = ost.styleName.replace(/\.md$/i, '');
+    return {
+      title: `${actionVerb} · ${shortName}`,
+      kindLabel: `${actionVerb} output style`,
+      actionVerb,
+      targetNoun: 'output style',
+      isClaudemd: false,
+      isRules: false,
+      isSubagents: false,
+      isHooks: false,
+      isPermissions: false,
+      isMcp: false,
+      isOutputStyles: true,
+      scopeLabel: ost.styleName,
     };
   }
 
@@ -221,6 +253,7 @@ export function runDisplayContext(
       isHooks: false,
       isPermissions: false,
       isMcp: false,
+      isOutputStyles: false,
       scopeLabel: null,
     };
   }
@@ -239,6 +272,7 @@ export function runDisplayContext(
     isHooks: false,
     isPermissions: false,
     isMcp: false,
+    isOutputStyles: false,
     scopeLabel: null,
   };
 }

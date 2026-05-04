@@ -1,4 +1,57 @@
 {
+  "detail": {
+    "back": "Règles",
+    "loading": "Chargement de la règle…",
+    "errorTitle": "Impossible de charger la règle",
+    "retry": "Réessayer",
+    "reload": "Recharger depuis le disque",
+    "confirmDelete": "Supprimer la règle « {{name}} » ? Action irréversible.",
+    "runAudit": "Audit",
+    "runAuditTitle": "Lancer un audit sur cette règle",
+    "runFix": "Fix",
+    "runFixTitle": "Lancer un fix sur cette règle",
+    "runCreate": "Créer",
+    "runCreateTitle": "Générer cette règle avec l'IA",
+    "runLaunching": "Lancement…",
+    "missingBanner": "Ce fichier de règle n'existe pas encore. Génère-le avec l'IA ou crée-le manuellement.",
+    "missingBannerCta": "Générer avec l'IA",
+    "tabs": {
+      "edit": "Édition",
+      "audit": "Audit",
+      "fix": "Fix"
+    },
+    "editTab": {
+      "save": "Enregistrer",
+      "delete": "Supprimer",
+      "bodyPlaceholder": "# Titre de la règle\n\n- Convention…",
+      "sidebarSize": "Taille",
+      "tokens": "Tokens",
+      "sections": "Sections",
+      "lines": "Lignes",
+      "paths": "Chemins",
+      "ruleName": "Règle"
+    },
+    "auditTab": {
+      "empty": "Aucun audit pour cette règle. Lance un audit pour commencer.",
+      "loading": "Chargement du rapport d'audit…",
+      "emptyReport": "Le rapport d'audit est vide.",
+      "fixFromAudit": "Fix depuis l'audit"
+    },
+    "fixTab": {
+      "title": "Corriger cette règle",
+      "lead": "Applique les corrections suggérées par l'IA basées sur le dernier rapport d'audit.",
+      "cta": "Lancer le Fix",
+      "cantFixWithoutAudit": "Lance d'abord un audit pour que l'agent Fix sache quoi améliorer."
+    },
+    "errors": {
+      "conflictTitle": "Modification externe détectée",
+      "write-failedTitle": "Écriture échouée",
+      "project-not-foundTitle": "Projet introuvable",
+      "invalid-pathTitle": "Chemin invalide",
+      "not-foundTitle": "Introuvable",
+      "launch-failedTitle": "Lancement échoué"
+    }
+  },
   "list": {
     "title": "Règles",
     "subtitle": "Instructions ciblées que Claude lit quand il touche à certains fichiers. Utilise `paths:` pour limiter une règle à un dossier ou type de fichier, ou laisse vide pour une règle toujours active.",

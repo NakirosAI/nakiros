@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
@@ -22,10 +22,15 @@ import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
 import Sparkline from '../components/viz/Sparkline';
 import HBar from '../components/viz/HBar';
 import { bucketizeForOverview } from '../lib/overview-buckets';
+import type { ProjectTabView } from '../hooks/useTabs';
 
 interface Props {
   /** Project whose conversation analyses are aggregated. */
   project: Project;
+  /** Threaded down from `NewShell` so the drawer's Frictions tab can open run tabs. */
+  onOpenRunTab?: import('../lib/run-launcher').OpenRunTabCallback;
+  /** Navigate to a project sub-view (sidebar). */
+  onNavigate?: (view: ProjectTabView) => void;
 }
 
 type WindowKey = '10' | '30' | '90' | 'all';
@@ -49,11 +54,30 @@ const WINDOW_KEYS: WindowKey[] = ['10', '30', '90', 'all'];
  * Mounted from {@link NewShell} when the active project tab's `view` is
  * `'overview'`.
  */
-export default function ProjectOverviewScreen({ project }: Props) {
+export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigate }: Props) {
   const { t } = useTranslation('overview');
   const analyses = useConversationAnalyses(project.id);
   const [windowKey, setWindowKey] = useState<WindowKey>('30');
   const [selected, setSelected] = useState<ConversationAnalysis | null>(null);
+
+  // Rules count — fetched via the rules-expert IPC channel.
+  const [rulesCount, setRulesCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .listRules(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        setRulesCount(result.rules.length);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRulesCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
 
   const windowed = useMemo(() => {
     if (!analyses) return [];
@@ -148,6 +172,23 @@ export default function ProjectOverviewScreen({ project }: Props) {
       </header>
 
       <div className="flex-1 overflow-y-auto px-7 py-6">
+        {/* Configuration shortcuts — always visible regardless of conversation data */}
+        {onNavigate && (
+          <div className="mb-5">
+            <div className="mb-2 font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-subtle">
+              {t('sections.config')}
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+              <ConfigCard
+                icon={<Layers size={14} strokeWidth={2} />}
+                label={t('config.rules')}
+                count={rulesCount}
+                onClick={() => onNavigate('rules')}
+              />
+            </div>
+          </div>
+        )}
+
         {!hasData ? (
           <div className="rounded-n-md border border-dashed border-n-border-default bg-n-surface p-10 text-center text-sm text-n-muted">
             {t('noAnalyzedHint')}
@@ -354,6 +395,7 @@ export default function ProjectOverviewScreen({ project }: Props) {
         <ConvDrawer
           analysis={selected}
           onClose={() => setSelected(null)}
+          onOpenRunTab={onOpenRunTab}
         />
       )}
     </div>
@@ -616,4 +658,40 @@ function shortenPath(path: string, maxSegments = 3): string {
   const parts = path.split('/').filter(Boolean);
   if (parts.length <= maxSegments) return path;
   return '…/' + parts.slice(-maxSegments).join('/');
+}
+
+/** Clickable config shortcut card — used in the "Configuration" row of the overview. */
+function ConfigCard({
+  icon,
+  label,
+  count,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  count: number | null;
+  onClick(): void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex items-center gap-3 rounded-n-lg border border-n-border-subtle bg-n-surface px-4 py-3 text-left transition-colors hover:border-n-border-default hover:bg-n-raised"
+    >
+      <span className="flex-shrink-0 text-n-accent">{icon}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block font-n-mono text-[12.5px] text-n-fg">{label}</span>
+        {count !== null && (
+          <span className="block font-n-mono text-[10.5px] text-n-faint tabular-nums">
+            {count}
+          </span>
+        )}
+      </span>
+      <ChevronRight
+        size={12}
+        strokeWidth={2.25}
+        className="flex-shrink-0 text-n-faint transition-colors group-hover:text-n-accent"
+      />
+    </button>
+  );
 }

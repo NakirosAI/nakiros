@@ -90,7 +90,7 @@ export default function NewShell({
    */
   const handleOpenRunByIds = (params: {
     runId: string;
-    runKind: 'audit' | 'fix' | 'create' | 'eval';
+    runKind: 'audit' | 'fix' | 'create' | 'eval' | 'classify-convo';
     label: string;
   }) => {
     openTab({ kind: 'run', runId: params.runId, runKind: params.runKind, label: params.label });
@@ -163,7 +163,7 @@ export default function NewShell({
                 <NewShellSidebar active={view} onNavigate={setView} />
                 <section className="flex flex-1 flex-col overflow-hidden">
                   {view === 'overview' && (
-                    <ProjectOverviewScreen key={project.id} project={project} />
+                    <ProjectOverviewScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} onNavigate={setView} />
                   )}
                   {view === 'skills' && !tab.skillId && (
                     <SkillsScreen
@@ -186,10 +186,10 @@ export default function NewShell({
                     />
                   )}
                   {view === 'convs' && (
-                    <ConversationsScreen key={project.id} project={project} />
+                    <ConversationsScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
                   )}
                   {view === 'rules' && (
-                    <RulesScreen key={project.id} project={project} />
+                    <RulesScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
                   )}
                   {view === 'subagents' && (
                     <SubagentsScreen key={project.id} project={project} />
@@ -207,7 +207,11 @@ export default function NewShell({
                     <HooksScreen key={project.id} project={project} />
                   )}
                   {view === 'claudeMd' && (
-                    <ClaudeMdScreen key={project.id} project={project} />
+                    <ClaudeMdScreen
+                      key={project.id}
+                      project={project}
+                      onOpenRunTab={handleOpenRunByIds}
+                    />
                   )}
                   {view === 'settings' && <SettingsScreen />}
                   {view !== 'overview' &&

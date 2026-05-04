@@ -48,7 +48,11 @@
     "topTips": "Recurring tips",
     "topTools": "Most fragile tools",
     "hotFiles": "Recurring hot files",
-    "critical": "Critical conversations to revisit"
+    "critical": "Critical conversations to revisit",
+    "config": "Configuration"
+  },
+  "config": {
+    "rules": "Rules"
   },
   "empty.tips": "No recurring tip",
   "empty.tools": "No failing tool",

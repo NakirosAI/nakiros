@@ -52,7 +52,8 @@
     "config": "Configuration"
   },
   "config": {
-    "rules": "Rules"
+    "rules": "Rules",
+    "subagents": "Subagents"
   },
   "empty.tips": "No recurring tip",
   "empty.tools": "No failing tool",

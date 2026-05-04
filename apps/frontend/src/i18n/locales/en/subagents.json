@@ -1,4 +1,66 @@
 {
+  "detail": {
+    "back": "Subagents",
+    "loading": "Loading subagent…",
+    "errorTitle": "Could not load subagent",
+    "retry": "Retry",
+    "reload": "Reload from disk",
+    "confirmDelete": "Delete subagent \"{{name}}\"? This cannot be undone.",
+    "runAudit": "Audit",
+    "runAuditTitle": "Run an audit on this subagent",
+    "runFix": "Fix",
+    "runFixTitle": "Run a fix pass on this subagent",
+    "runCreate": "Create",
+    "runCreateTitle": "Generate this subagent with AI",
+    "runLaunching": "Launching…",
+    "missingBanner": "This subagent file does not exist yet. Generate it with AI or create it manually.",
+    "missingBannerCta": "Generate with AI",
+    "tabs": {
+      "edit": "Edit",
+      "audit": "Audit",
+      "fix": "Fix"
+    },
+    "editTab": {
+      "save": "Save",
+      "delete": "Delete",
+      "bodyPlaceholder": "You are a specialized subagent…",
+      "sidebarSize": "Size",
+      "tokens": "Tokens",
+      "sections": "Sections",
+      "lines": "Lines",
+      "subagentName": "Subagent",
+      "sidebarFrontmatter": "Frontmatter",
+      "model": "Model",
+      "tools": "Tools",
+      "description": "Description",
+      "permissionMode": "Permission mode",
+      "skills": "Skills",
+      "mcpServers": "MCP servers",
+      "hooks": "Hooks",
+      "bypassWarning": "Bypass mode enabled — this subagent can perform any action without prompting.",
+      "inheritsAllToolsWarning": "No tool restriction — this subagent inherits all tools from the main session."
+    },
+    "auditTab": {
+      "empty": "No audits yet for this subagent. Launch an audit to get started.",
+      "loading": "Loading audit report…",
+      "emptyReport": "Audit report is empty.",
+      "fixFromAudit": "Fix from audit"
+    },
+    "fixTab": {
+      "title": "Fix this subagent",
+      "lead": "Apply AI-suggested fixes to this subagent based on the latest audit report.",
+      "cta": "Run Fix",
+      "cantFixWithoutAudit": "Run an audit first so the Fix agent knows what to improve."
+    },
+    "errors": {
+      "conflictTitle": "External edit detected",
+      "write-failedTitle": "Write failed",
+      "project-not-foundTitle": "Project not found",
+      "invalid-pathTitle": "Invalid path",
+      "not-foundTitle": "Not found",
+      "launch-failedTitle": "Launch failed"
+    }
+  },
   "list": {
     "title": "Subagents",
     "subtitle": "Specialized agents the main Claude can delegate to. Each runs in its own context window with its own system prompt and tool restrictions.",

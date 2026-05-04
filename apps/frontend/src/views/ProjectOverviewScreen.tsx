@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
+  Bot,
   ChevronRight,
   FileCode2,
   Layers,
@@ -73,6 +74,25 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
       .catch(() => {
         if (cancelled) return;
         setRulesCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+
+  // Subagents count — fetched via the subagents IPC channel.
+  const [subagentsCount, setSubagentsCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.nakiros
+      .listSubagents(project.id)
+      .then((result) => {
+        if (cancelled) return;
+        setSubagentsCount(result.subagents.length);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSubagentsCount(null);
       });
     return () => {
       cancelled = true;
@@ -184,6 +204,12 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
                 label={t('config.rules')}
                 count={rulesCount}
                 onClick={() => onNavigate('rules')}
+              />
+              <ConfigCard
+                icon={<Bot size={14} strokeWidth={2} />}
+                label={t('config.subagents')}
+                count={subagentsCount}
+                onClick={() => onNavigate('subagents')}
               />
             </div>
           </div>

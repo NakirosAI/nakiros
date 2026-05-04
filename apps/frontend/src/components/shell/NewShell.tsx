@@ -192,7 +192,7 @@ export default function NewShell({
                     <RulesScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
                   )}
                   {view === 'subagents' && (
-                    <SubagentsScreen key={project.id} project={project} />
+                    <SubagentsScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
                   )}
                   {view === 'outputStyles' && (
                     <OutputStylesScreen key={project.id} project={project} />

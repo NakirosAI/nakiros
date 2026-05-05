@@ -3,6 +3,13 @@ import open from 'open';
 import { bootstrapDaemonRuntime, createDaemonServer } from '../src/daemon/server.js';
 import { findFreePort, DEFAULT_PORT } from '../src/daemon/port.js';
 import { runBaselineCleanup } from '../src/scripts/baseline-cleanup.js';
+import {
+  installService,
+  startService,
+  stopService,
+  uninstallService,
+  getServiceStatus,
+} from '../src/services/service-manager/index.js';
 
 const HELP = `
 nakiros — local daemon that observes Claude Code and lets you inspect,
@@ -11,12 +18,22 @@ audit, evaluate and improve skills from your browser.
 Usage:
   nakiros [options]                  Start the daemon (default).
   nakiros baseline:cleanup [opts]    Remove legacy baseline run dirs.
+  nakiros service <action>           Manage the background service.
 
 Options (daemon):
   --port <n>   Preferred port (default 4242 or NAKIROS_PORT). Falls
                back to the next free port if taken.
   --no-open    Do not open the browser automatically.
   -h, --help   Show this help.
+
+Service actions:
+  install      Register and start Nakiros as a login-persistent service.
+               macOS: ~/Library/LaunchAgents/com.nakiros.daemon.plist
+               Linux: ~/.config/systemd/user/nakiros.service
+  start        Start the installed service.
+  stop         Stop the running service (keeps the service registered).
+  uninstall    Stop, deregister, and remove the service definition file.
+  status       Show current service state (running/stopped, PID, log path).
 
 Environment:
   NAKIROS_PORT  Override default port.
@@ -27,6 +44,10 @@ Examples:
   nakiros --no-open
   nakiros baseline:cleanup           # dry-run, see what would be deleted
   nakiros baseline:cleanup --apply
+  nakiros service install
+  nakiros service status
+  nakiros service stop
+  nakiros service uninstall
 `;
 
 async function main(): Promise<void> {
@@ -37,6 +58,34 @@ async function main(): Promise<void> {
   if (subcommand === 'baseline:cleanup') {
     const code = await runBaselineCleanup(process.argv.slice(3));
     process.exit(code);
+  }
+
+  if (subcommand === 'service') {
+    const action = process.argv[3];
+    switch (action) {
+      case 'install':
+        await installService(import.meta.url);
+        break;
+      case 'start':
+        await startService();
+        break;
+      case 'stop':
+        await stopService();
+        break;
+      case 'uninstall':
+        await uninstallService();
+        break;
+      case 'status':
+        await getServiceStatus();
+        break;
+      default:
+        process.stderr.write(
+          `Unknown service action: ${action ?? '(none)'}\n` +
+            `Available actions: install, start, stop, uninstall, status\n`,
+        );
+        process.exit(1);
+    }
+    process.exit(0);
   }
 
   const { values } = parseArgs({

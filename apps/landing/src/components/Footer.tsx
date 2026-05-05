@@ -1,33 +1,65 @@
 import { NakirosLogo } from './NakirosLogo';
 import { useI18n } from '@/i18n/I18nProvider';
 
-/**
- * Page footer for the landing site.
- *
- * Displays the Nakiros logo, tagline, "built with" line, and copyright.
- * All text comes from the `footer` block of the active locale via
- * {@link useI18n}. Last component rendered by `App`.
- */
+const GITHUB_URL = 'https://github.com/nakirosai/nakiros';
+
 export function Footer() {
   const { messages } = useI18n();
+  const f = messages.footer;
 
   return (
-    <footer className="bg-[#080808] py-12">
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <NakirosLogo className="h-6 w-6" />
-            <div>
-              <p className="font-mono text-sm font-bold text-[#F0F0F0]">nakiros</p>
-              <p className="text-xs text-[#F0F0F0]/50">{messages.footer.tagline}</p>
-            </div>
-          </div>
-
-          <div className="text-sm text-[#F0F0F0]/50 md:text-right">
-            <p>{messages.footer.builtWith}</p>
-            <p className="mt-1 font-mono text-xs">{messages.footer.copyright}</p>
-          </div>
+    <footer
+      className="relative z-10 border-t py-10"
+      style={{ borderColor: 'var(--border-subtle)' }}
+    >
+      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-6 px-6 md:px-9">
+        <div className="flex items-center gap-2.5">
+          <NakirosLogo className="h-5 w-5" />
+          <span
+            className="lp-mono text-[14px] tracking-[0.4px]"
+            style={{ color: 'var(--fg)' }}
+          >
+            nakiros
+          </span>
+          <span
+            className="lp-mono ml-3 text-[12.5px]"
+            style={{ color: 'var(--fg-muted)' }}
+          >
+            {f.tagline}
+          </span>
         </div>
+
+        <div
+          className="lp-mono flex items-center gap-4 text-[11.5px]"
+          style={{ color: 'var(--fg-faint)' }}
+        >
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="transition-colors hover:text-[color:var(--fg)]"
+            style={{ color: 'var(--fg-muted)' }}
+          >
+            GitHub
+          </a>
+          <span>·</span>
+          <span>MIT</span>
+          <span>·</span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: 'var(--healthy)' }}
+            />
+            all systems local
+          </span>
+        </div>
+      </div>
+
+      <div
+        className="mx-auto mt-6 max-w-[1180px] px-6 md:px-9 lp-mono text-[11px]"
+        style={{ color: 'var(--fg-faint)' }}
+      >
+        {f.meta}
       </div>
     </footer>
   );

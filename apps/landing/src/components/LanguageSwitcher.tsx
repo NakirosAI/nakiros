@@ -12,18 +12,26 @@ export function LanguageSwitcher() {
   const { locale, setLocale, availableLocales } = useI18n();
 
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-md border border-[#1A1A1A] bg-[#111111] p-0.5 text-xs font-mono uppercase">
+    <div
+      className="lp-mono inline-flex items-center gap-0.5 rounded-md p-0.5 text-[11px] uppercase"
+      style={{
+        background: 'var(--bg-sunken)',
+        border: '1px solid var(--border-subtle)',
+      }}
+    >
       {availableLocales.map((code) => (
         <button
           key={code}
           type="button"
           onClick={() => setLocale(code as Locale)}
-          className={cn(
-            'rounded px-2 py-1 transition-colors',
-            code === locale
-              ? 'bg-[#1A1A1A] text-[#2ECFCF]'
-              : 'text-[#F0F0F0]/60 hover:text-[#F0F0F0]',
-          )}
+          className={cn('rounded px-2.5 py-1 transition-colors')}
+          style={{
+            background: code === locale ? 'var(--bg-raised)' : 'transparent',
+            color: code === locale ? 'var(--accent)' : 'var(--fg-faint)',
+            border: 'none',
+            cursor: 'pointer',
+            letterSpacing: '0.06em',
+          }}
         >
           {code}
         </button>

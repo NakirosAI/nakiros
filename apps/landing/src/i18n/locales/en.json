@@ -1,24 +1,35 @@
 {
   "navbar": {
-    "features": "Features",
-    "howItWorks": "How it works",
-    "etymology": "Origin",
+    "product": "Product",
+    "skills": "Skills",
     "github": "GitHub",
     "install": "Install"
   },
   "hero": {
-    "eyebrow": "Local-first · Open source · Node ≥ 20",
+    "eyebrow": "LOCAL-FIRST · OPEN SOURCE · MIT",
+    "kicker": "LOCAL-FIRST · OPEN SOURCE · MIT",
+    "titleA": "The local control room for your ",
+    "titleB": ".claude",
+    "titleC": " folder.",
+    "sub": "Nakiros manages, normalizes, audits and fixes every skill, agent, rule, hook and setting Claude Code writes to your machine — to spec.",
+    "installCommand": "npm i -g @nakirosai/nakiros",
+    "cta1Hint": "click to copy",
+    "cta2": "GitHub",
+    "runtime": "live · 127.0.0.1",
+    "stationLabel": "STATION · NAKIROS",
+    "treeLabel": "~/.claude · normalized",
+    "treeSub": "4 skills · 3 agents · 2 rules · 1 output-style",
+    "shotcaseLabel": "live · scanned 2s ago",
     "titleLine1": "Is your Claude Code skill",
     "titleAccent": "actually worth",
     "titleLine2": "keeping?",
     "description": "Many skills add nothing. Some even make Claude worse. Nakiros audits them, runs evals with and without, and tells you which ones to keep, improve, or drop.",
     "installLabel": "Install globally",
-    "installCommand": "npm i -g @nakirosai/nakiros",
     "installHint": "Then type `nakiros` — your browser opens on localhost.",
     "secondaryCta": "How it works"
   },
   "etymology": {
-    "eyebrow": "Where the name comes from",
+    "eyebrow": "09 — ETYMOLOGY",
     "title": "Two words, one purpose.",
     "nakama": {
       "term": "Nakama · 仲間",
@@ -32,61 +43,176 @@
     },
     "synthesis": "Nakiros — the companion that shows up at the right moment. Inside the tool you already use every day, Claude Code."
   },
-  "features": {
-    "title": "Four simple acts, one continuous loop.",
-    "description": "Nakiros doesn't ask you to change how you work. It reads what's already in ~/.claude and helps you make your skills better.",
-    "items": [
-      {
-        "title": "Scan",
-        "description": "Discover every skill living in your projects and in ~/.claude/skills. See who uses what, how often, and where gaps hide."
-      },
-      {
-        "title": "Audit",
-        "description": "Run a structured audit on any skill — trigger description, references, outputs, examples — against a quality checklist."
-      },
-      {
-        "title": "Evaluate",
-        "description": "Spin up an isolated copy of a skill and run a suite of evals. Measure what works, what regresses, with real Claude runs."
-      },
-      {
-        "title": "Fix & Create",
-        "description": "Tweak a skill in a temp workdir, evaluate the fix against the baseline, then ship once you're sure. Or craft a brand new one from scratch."
-      }
+  "problem": {
+    "label": "01 — UNMANAGED",
+    "title": "Your .claude folder grew without you noticing.",
+    "sub": "Skills accumulate. Hooks contradict. Agents drift from spec. Settings disagree across projects. Nothing checks any of it.",
+    "pillars": [
+      { "k": "14", "label": "skills, no eval", "desc": "Drafted, copy-pasted, never tested against your real history.", "tone": "critical" },
+      { "k": "6",  "label": "hooks running blind", "desc": "PreToolUse, PostToolUse, SessionStart — no log, no audit, no idea if they fire.", "tone": "watch" },
+      { "k": "3",  "label": "agents off-spec", "desc": "Frontmatter missing required fields. Some have no description. One has no model pinned.", "tone": "critical" },
+      { "k": "∞",  "label": "settings drift", "desc": "project / user / managed — different permissions, no source of truth.", "tone": "watch" }
     ]
   },
-  "howItWorks": {
-    "title": "Install. Open. Improve.",
-    "steps": [
-      {
-        "number": "01",
-        "title": "Install",
-        "description": "One command. No account, no cloud, no tracking. Nakiros is a daemon that runs on your machine."
-      },
-      {
-        "number": "02",
-        "title": "Open",
-        "description": "Run `nakiros`. Your browser opens on localhost:4242. The daemon scans your Claude projects and skills."
-      },
-      {
-        "number": "03",
-        "title": "Improve",
-        "description": "Pick a skill. Audit it. Run evals. Propose a fix. Compare before and after. Ship when you're satisfied — or don't."
-      }
-    ]
-  },
-  "openSource": {
-    "title": "Local-first. Open source. Yours.",
-    "description": "Your skills and Claude conversations never leave your machine. Nakiros is a plain Node daemon that reads from your disk and serves a local web UI. No telemetry. No sign-up. No lock-in.",
-    "bullets": [
-      "Runs as a local daemon on localhost:4242",
-      "MIT licensed, fully auditable",
-      "No account, no cloud, no data exfiltration",
-      "Contribute, fork, or just read the code"
+  "room": {
+    "label": "02 — THE CONTROL ROOM",
+    "title": "Every artifact in .claude, in one place.",
+    "sub": "Nakiros indexes ~/.claude and every project-local .claude/. Files, frontmatter, dependencies, run history — one read-only canonical view.",
+    "tabs": [
+      { "key": "tree",  "label": ".claude" },
+      { "key": "audit", "label": "Audit" },
+      { "key": "eval",  "label": "Eval" }
     ],
-    "cta": "See the repo on GitHub"
+    "tree": {
+      "metaLabel": "~/.claude · 4 projects",
+      "coverageLabel": "Spec coverage · global",
+      "coverageValue": "73%",
+      "coverageHint": "of all .claude artifacts pass the official spec",
+      "whatYouGet": [
+        "Per-artifact health score 0–100",
+        "Frontmatter validation against the official Claude Code schema",
+        "Dependencies graph: which skill triggers which hook, which agent uses which rule",
+        "Last-used timestamp from your real conversation history"
+      ]
+    },
+    "audit": {
+      "metaLabel": "audit run · skills/proposal-engine · 1m 14s",
+      "eyebrow": "Audit completed",
+      "headline": "11/14 checks passed",
+      "subline": "3 findings — 1 critical, 2 warnings. The skill drifts from the official Claude Code spec on frontmatter and retry policy.",
+      "kpis": [
+        { "label": "Checks",   "value": "11/14", "tone": "watch" },
+        { "label": "Critical", "value": "1",     "tone": "critical" },
+        { "label": "Warnings", "value": "2",     "tone": "watch" },
+        { "label": "Tokens",   "value": "146k",  "tone": "fg" }
+      ],
+      "findingsLabel": "Findings · 3",
+      "findings": [
+        { "code": "FRT-001", "text": "SKILL.md frontmatter missing 'model' field — required by the official spec.", "severity": "critical" },
+        { "code": "RTR-014", "text": "No retry budget in the tool-error path — agent loops indefinitely on permission_denied.", "severity": "warn" },
+        { "code": "REF-022", "text": "References point to a non-existent path: docs/auth-flow.md.", "severity": "warn" }
+      ]
+    },
+    "eval": {
+      "metaLabel": "eval matrix · skills/proposal-engine · 4 evals × 5 iter",
+      "eyebrow": "Eval batch completed",
+      "headline": "9/9 sessions beat baseline on iter 5",
+      "subline": "Each cell is pass / total on real conversation fixtures. Green ≥ 85%, amber 50–85%, red < 50%.",
+      "iterations": [
+        { "n": 1, "kind": "baseline", "model": "sonnet" },
+        { "n": 2, "kind": "skill",    "model": "sonnet" },
+        { "n": 3, "kind": "skill",    "model": "sonnet" },
+        { "n": 4, "kind": "skill",    "model": "opus" },
+        { "n": 5, "kind": "skill",    "model": "sonnet" }
+      ],
+      "rows": [
+        { "name": "no-retry-on-permission-denied", "tag": "stable", "withSkill": [null, "5/5", "5/5", "5/5", "5/5"], "withoutSkill": ["1/5", "1/5", "1/5", "1/5", "1/5"] },
+        { "name": "short-circuit-on-bash-fail",    "tag": "fixed",  "withSkill": [null, "3/5", "4/5", "5/5", "5/5"], "withoutSkill": ["0/5", "0/5", "0/5", "0/5", "0/5"] },
+        { "name": "respects-retry-budget",         "tag": "new",    "withSkill": [null, "2/5", "3/5", "4/5", "5/5"], "withoutSkill": ["0/5", "0/5", "0/5", "0/5", "0/5"] },
+        { "name": "preserves-stack-trace",         "tag": "stable", "withSkill": [null, "5/5", "5/5", "5/5", "5/5"], "withoutSkill": ["4/5", "4/5", "4/5", "4/5", "4/5"] }
+      ]
+    }
+  },
+  "standard": {
+    "label": "03 — STANDARDIZED",
+    "title": "Held to the official Claude Code spec — not vibes.",
+    "sub": "Nakiros ships with the canonical schema for every .claude artifact. Frontmatter, file layout, naming, sub-skill resources — checked on every scan.",
+    "checks": [
+      { "name": "SKILL.md frontmatter", "pass": 11, "fail": 3, "info": "name · description · model — required keys, length limits, allowed values." },
+      { "name": "Agent file shape",     "pass": 6,  "fail": 1, "info": "Top-level frontmatter, system prompt body, allowed-tools array shape." },
+      { "name": "Hook event keys",      "pass": 5,  "fail": 1, "info": "Each entry in settings.json must be a valid event: PreToolUse, PostToolUse, UserPromptSubmit, SessionStart…" },
+      { "name": "Settings precedence",  "pass": 3,  "fail": 0, "info": "managed > project > user — no contradictory permissions across layers." },
+      { "name": "Rules + output-styles", "pass": 4, "fail": 0, "info": "Rules frontmatter (`paths` glob), output-style required fields (`name`, `description`)." }
+    ],
+    "proofLabel": "Backed by the docs",
+    "proofItems": [
+      "docs.claude.com/agent-skills",
+      "docs.claude.com/sub-agents",
+      "docs.claude.com/hooks",
+      "docs.claude.com/settings",
+      "docs.claude.com/output-styles"
+    ]
+  },
+  "audit": {
+    "label": "04 — AUDIT",
+    "title": "A worker re-reads what your agent actually did.",
+    "sub": "For every artifact, Nakiros runs a forensic audit through your local Claude CLI. It reads the conversations that touched the skill, the diffs it produced, the tool errors it caused — and writes a report.",
+    "target": "skills / proposal-engine",
+    "verdict": "Score 60 — needs fix",
+    "bullets": [
+      { "k": "evidence",   "v": "Failed to short-circuit on Bash permission errors in 5 / 9 sampled sessions." },
+      { "k": "pattern",    "v": "Retries the same tool call within 3 messages — no exponential backoff written." },
+      { "k": "cost",       "v": "~146k cache rewrite tokens wasted on retries (last 7 days)." },
+      { "k": "hypothesis", "v": "Add a guard clause + retry budget to SKILL.md. See proposal v2." }
+    ]
+  },
+  "fix": {
+    "label": "05 — FIX",
+    "title": "Every audit ends with a proposal. You decide.",
+    "sub": "Nakiros doesn't edit your .claude on its own. It drafts a versioned proposal, runs evals against your real conversation history, and shows you the delta. One click to accept.",
+    "cardLabel": "PROPOSAL · auto-drafted",
+    "acceptLabel": "Accept proposal",
+    "diffLabel": "See eval diff",
+    "detail": "proposal-engine v2 — adds a retry budget and short-circuits on `permission denied`. Outperforms v1 on 9/9 sampled sessions.",
+    "delta": "+22%",
+    "deltaLabel": "pass-rate vs v1",
+    "stages": [
+      { "n": "A", "label": "Detect", "desc": "A friction recurs across N sessions." },
+      { "n": "B", "label": "Draft",  "desc": "Worker writes a candidate skill or patch." },
+      { "n": "C", "label": "Eval",   "desc": "Replays K real sessions, scores delta." },
+      { "n": "D", "label": "Apply",  "desc": "You accept → versioned commit to .claude." }
+    ]
+  },
+  "factory": {
+    "label": "06 — SKILLS FACTORY",
+    "title": "Skills carry their own evals. Or they don't exist.",
+    "sub": "Every skill in your .claude gets a lifecycle: draft → eval → ship. With trends, iteration logs, and a pass-rate per project.",
+    "cols": ["skill", "iter", "evals", "audits", "pass-rate", "trend"]
+  },
+  "local": {
+    "label": "07 — LOCAL-FIRST",
+    "title": "Your .claude never leaves your machine.",
+    "points": [
+      "Daemon binds 127.0.0.1:4242. No outbound calls.",
+      "Storage: plain JSON + JSONL files under ~/.nakiros. Open them with any editor.",
+      "Audits run through your local Claude CLI — no API key, no extra cost, your existing plan.",
+      "Open source, MIT. Read the daemon, the UI, the prompts."
+    ]
+  },
+  "install": {
+    "label": "08 — INSTALL",
+    "title": "Install in ten seconds.",
+    "sub": "Requires Node 20+. The daemon binds 127.0.0.1:4242 and the UI opens automatically in your browser.",
+    "terminalLabel": "~/code — zsh",
+    "lines": [
+      { "p": "$", "c": "npm i -g @nakirosai/nakiros" },
+      { "p": "$", "c": "nakiros" },
+      { "p": "#", "c": "scanning ~/.claude ...", "muted": true },
+      { "p": "#", "c": "indexed 4 skills · 3 agents · 2 rules · 1 output-style in 1.4s", "muted": true },
+      { "p": "#", "c": "checking against the official Claude Code spec ...", "muted": true },
+      { "p": "#", "c": "3 findings · 1 auto-fixable · 2 need your review", "muted": true },
+      { "p": "#", "c": "ui ready → http://localhost:4242", "accent": true }
+    ],
+    "tipLabel": "PERSISTENT DAEMON",
+    "tip": "Want it to autostart at boot? Run `nakiros service install` — registers a launchd / systemd unit, no extra config.",
+    "systemReq": "macOS · Linux · Windows (WSL)"
+  },
+  "faq": {
+    "label": "10 — FAQ",
+    "title": "Honest answers.",
+    "items": [
+      { "q": "Does Nakiros write to my .claude?", "a": "Not without your hand. The daemon is read-only by default. Every fix is a proposal — you accept it and Nakiros writes a versioned commit. You can revert any change." },
+      { "q": "What spec do you use?", "a": "The official Claude Code documentation. Skills, sub-agents, hooks, settings, rules, output-styles — same shape, same validation. We track the docs as upstream." },
+      { "q": "Does it send my conversations anywhere?", "a": "No. Indexing and scoring are local. Audits go through your local Claude CLI — no API key, no extra billing, just your existing Claude plan." },
+      { "q": "Will it slow down my machine?", "a": "The scanner runs once at start and watches for new files. Idle CPU is ~0%. An audit run uses one CLI call per session it analyzes." },
+      { "q": "What if I have no .claude yet?", "a": "Nakiros bootstraps a clean one for you, with three example skills wired to evals — so you can see the loop work before you commit anything real." },
+      { "q": "Does it work without Claude Code?", "a": "No. Nakiros is built on top of the file format Claude Code writes. We may support other agent runtimes later, if their on-disk shape is open." }
+    ]
   },
   "cta": {
-    "title": "Try Nakiros right now.",
+    "title": "Stop guessing whether your .claude is in shape.",
+    "sub": "Read what's really there. Score it. Fix it. Repeat.",
+    "btn": "Get Nakiros",
     "description": "No waitlist, no signup. Just install and go.",
     "command": "npm i -g @nakirosai/nakiros",
     "then": "then",
@@ -94,9 +220,8 @@
     "github": "Star on GitHub"
   },
   "footer": {
-    "tagline": "The companion that shows up at the right moment.",
-    "builtWith": "Built for developers who love tools they can trust.",
-    "copyright": "© 2026 Nakiros · MIT License"
+    "tagline": "Local control room for your .claude folder.",
+    "meta": "© 2026 Nakiros · Made by an indie dev tired of unmanaged .claude folders"
   },
   "language": {
     "label": "Language"

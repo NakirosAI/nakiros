@@ -1,28 +1,30 @@
 import { useI18n } from '@/i18n/I18nProvider';
 
 /**
- * "Etymology" section of the landing page.
- *
- * Explains the origin of the name "Nakiros" by combining the words *nakama*
- * (Japanese) and *kairos* (Greek). Reads its copy from the `etymology` block
- * of the active locale via {@link useI18n}. Rendered between the Hero and
- * Features sections inside `App`.
+ * "Etymology" section — origin story of the name Nakiros (nakama + kairos).
+ * Preserved from v1; v2 redesign lacked it. Sits mid-page after the product
+ * narrative, just before the FAQ.
  */
 export function Etymology() {
   const { messages } = useI18n();
   const { eyebrow, title, nakama, kairos, synthesis } = messages.etymology;
 
   return (
-    <section id="etymology" className="border-b border-[#1A1A1A] bg-[#111111] py-24">
-      <div className="mx-auto max-w-5xl px-6">
-        <div className="text-center">
-          <span className="font-mono text-xs uppercase tracking-[0.15em] text-[#2ECFCF]">
+    <section id="etymology" className="relative z-10 py-24">
+      <div className="mx-auto max-w-[1180px] px-6 md:px-9">
+        <div className="mb-10">
+          <p className="lp-mono mb-3.5 text-[10.5px] uppercase tracking-[1.4px] text-[color:var(--fg-subtle)]">
             {eyebrow}
-          </span>
-          <h2 className="mt-3 font-mono text-3xl text-[#F0F0F0] sm:text-4xl">{title}</h2>
+          </p>
+          <h2 className="mb-2 max-w-[720px] text-[38px] font-medium leading-tight tracking-[-0.6px] text-[color:var(--fg)]">
+            {title}
+          </h2>
+          <p className="max-w-[560px] text-[15px] leading-relaxed text-[color:var(--fg-muted)]">
+            {synthesis}
+          </p>
         </div>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2">
           <EtymologyCard
             term={nakama.term}
             origin={nakama.origin}
@@ -34,10 +36,6 @@ export function Etymology() {
             meaning={kairos.meaning}
           />
         </div>
-
-        <p className="mx-auto mt-12 max-w-2xl text-center text-lg leading-relaxed text-[#F0F0F0]/80">
-          {synthesis}
-        </p>
       </div>
     </section>
   );
@@ -53,14 +51,30 @@ function EtymologyCard({
   meaning: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[#1A1A1A] bg-[#0D0D0D] p-8 transition-colors hover:border-[#2ECFCF]/30">
+    <div
+      className="rounded-[10px] p-6"
+      style={{
+        border: '1px solid var(--border-subtle)',
+        background: 'var(--bg-surface)',
+      }}
+    >
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="font-mono text-2xl text-[#F0F0F0]">{term}</h3>
-        <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#F0F0F0]/40">
+        <h3 className="lp-mono text-[20px]" style={{ color: 'var(--fg)' }}>
+          {term}
+        </h3>
+        <span
+          className="lp-mono text-[10.5px] uppercase tracking-[1.4px]"
+          style={{ color: 'var(--fg-faint)' }}
+        >
           {origin}
         </span>
       </div>
-      <p className="mt-4 leading-relaxed text-[#F0F0F0]/70">{meaning}</p>
+      <p
+        className="mt-3 text-[14px] leading-[1.55]"
+        style={{ color: 'var(--fg-muted)' }}
+      >
+        {meaning}
+      </p>
     </div>
   );
 }

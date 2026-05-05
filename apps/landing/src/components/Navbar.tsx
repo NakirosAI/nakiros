@@ -2,52 +2,95 @@ import { Github } from 'lucide-react';
 import { NakirosLogo } from './NakirosLogo';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useI18n } from '@/i18n/I18nProvider';
+import { useNpmVersion } from '@/lib/useNpmVersion';
 
 /**
- * Sticky top navigation bar of the landing page.
+ * Sticky top navigation bar — v2 design.
  *
- * Renders the {@link NakirosLogo}, in-page anchor links (Etymology, Features,
- * How it works), the {@link LanguageSwitcher}, a GitHub icon link and the
- * primary "Install" CTA pointing to `#install`. Anchor labels come from the
- * `navbar` block of the active locale via {@link useI18n}.
+ * Links point to in-page anchors matching the new section sequence:
+ * #problem, #factory, #faq, #install. The GitHub link opens in a new tab.
+ * The "Install" CTA scrolls to the FinalCta section.
  */
 export function Navbar() {
   const { messages } = useI18n();
+  const npm = useNpmVersion('@nakirosai/nakiros');
+  const versionLabel = npm
+    ? `v${npm.version}${npm.tag !== 'latest' ? ` · ${npm.tag}` : ''}`
+    : null;
+
+  const items = [
+    { label: messages.navbar.product, href: '#problem' },
+    { label: messages.navbar.skills,  href: '#factory' },
+    { label: messages.navbar.github,  href: 'https://github.com/NakirosAI/nakiros', external: true },
+  ];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#1A1A1A] bg-[#080808]/80 backdrop-blur-md">
-      <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-        <a href="#top" className="flex items-center gap-2.5 text-[#F0F0F0]">
-          <NakirosLogo className="h-6 w-6" />
-          <span className="font-mono text-sm font-bold">nakiros</span>
+    <header
+      className="sticky top-0 z-50 border-b"
+      style={{
+        background: 'oklch(0.08 0.005 240 / 0.85)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderColor: 'var(--border-subtle)',
+      }}
+    >
+      <nav className="mx-auto flex h-16 max-w-[1180px] items-center gap-7 px-6 md:px-9">
+        {/* Logo + name */}
+        <a href="#top" className="flex items-center gap-2.5" style={{ color: 'var(--fg)' }}>
+          <NakirosLogo className="h-5 w-5" />
+          <span className="lp-mono text-[14px] tracking-[0.4px]">nakiros</span>
+          {versionLabel && (
+            <span
+              className="lp-mono ml-1 rounded px-1.5 py-0.5 text-[9.5px] uppercase tracking-[0.6px]"
+              style={{
+                background: 'var(--bg-sunken)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--fg-faint)',
+              }}
+            >
+              {versionLabel}
+            </span>
+          )}
         </a>
 
-        <div className="hidden items-center gap-6 md:flex">
-          <a href="#etymology" className="text-sm text-[#F0F0F0]/70 transition-colors hover:text-[#F0F0F0]">
-            {messages.navbar.etymology}
-          </a>
-          <a href="#features" className="text-sm text-[#F0F0F0]/70 transition-colors hover:text-[#F0F0F0]">
-            {messages.navbar.features}
-          </a>
-          <a href="#how-it-works" className="text-sm text-[#F0F0F0]/70 transition-colors hover:text-[#F0F0F0]">
-            {messages.navbar.howItWorks}
-          </a>
+        {/* Nav links */}
+        <div className="hidden flex-1 items-center gap-6 md:flex">
+          {items.map((item) => (
+            item.external ? (
+              <a
+                key={item.label}
+                href={item.href}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 text-[13px] transition-colors"
+                style={{ color: 'var(--fg-muted)' }}
+              >
+                <Github className="h-3.5 w-3.5" />
+                {item.label}
+              </a>
+            ) : (
+              <a
+                key={item.label}
+                href={item.href}
+                className="text-[13px] transition-colors hover:text-[color:var(--fg)]"
+                style={{ color: 'var(--fg-muted)' }}
+              >
+                {item.label}
+              </a>
+            )
+          ))}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3">
           <LanguageSwitcher />
           <a
-            href="https://github.com/NakirosAI/nakiros"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="GitHub"
-            className="rounded-md p-2 text-[#F0F0F0]/70 transition-colors hover:bg-[#1A1A1A] hover:text-[#F0F0F0]"
-          >
-            <Github className="h-4 w-4" />
-          </a>
-          <a
             href="#install"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#0D9E9E] px-4 py-2 text-sm font-medium text-[#F0F0F0] transition-all hover:bg-[#2ECFCF]"
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium transition-colors"
+            style={{
+              background: 'var(--accent)',
+              color: 'oklch(0.14 0.012 240)',
+              border: '1px solid transparent',
+            }}
           >
             {messages.navbar.install}
           </a>

@@ -39,6 +39,7 @@ If the user explicitly asks for artefacts in another language (e.g. "écris le C
 | `audit` | `outputs/audit-manifest.json` + `outputs/audit-progress.jsonl` + `outputs/audit-report.md` | One-line score |
 | `fix` | Modified `{project}/CLAUDE.md` + `outputs/fix-targets.jsonl` + `outputs/fix-findings.jsonl` | Diff |
 | `improve` | Modified `{project}/CLAUDE.md` | Root cause + diff |
+| `sync` | Modified `{project}/CLAUDE.md` (markers-only) or no-op | One-line status |
 | `eval create` | `evals/evals.json` + fixtures in `evals/files/` | Summary of test cases |
 | `eval run` | `evals/workspace/iteration-{N}/` | Pass rate + delta |
 
@@ -248,6 +249,90 @@ Cap the edit budget: if applying every mapped edit would push the file over 200 
 
 Same pattern as skill-factory: write `outputs/fix-targets.jsonl` (one line per actionable fix, status `todo` then `done`) and `outputs/fix-findings.jsonl` (observations). Do NOT add a `ts` field — Nakiros stamps it.
 
+## Syncing routing tables (`sync` command)
+
+The `sync` command keeps CLAUDE.md's routing/rules tables aligned with the
+project's actual `.claude/agents/` and `.claude/rules/` content. It is a
+no-op unless the target CLAUDE.md opts in via HTML markers — never modifies
+a file that has not opted in.
+
+### Markers (opt-in)
+
+The user adds these markers once to the CLAUDE.md they want kept in sync:
+
+```markdown
+<!-- nakiros:routing:start -->
+<!-- nakiros:routing:end -->
+
+<!-- nakiros:rules:start -->
+<!-- nakiros:rules:end -->
+```
+
+Both pairs are independent. A CLAUDE.md may have one, both, or neither.
+Anything outside the markers is preserved verbatim.
+
+### Procedure
+
+1. **Locate target CLAUDE.md.** Default to `{cwd}/CLAUDE.md`. If absent,
+   output `"CLAUDE.md not found at {path} — sync skipped"` and stop.
+
+2. **Read CLAUDE.md.** Detect which marker pairs exist. If neither pair is
+   present, output `"no nakiros markers found in CLAUDE.md — sync skipped
+   (add markers to opt in)"` and stop.
+
+3. **Read context source.** Prefer `dot-claude-snapshot.json` at cwd root
+   when present (Nakiros writes it). Otherwise scan directly:
+   - Subagents: `find {project}/.claude/agents -name '*.md' -maxdepth 2`
+   - Rules: `find {project}/.claude/rules -name '*.md' -maxdepth 1`
+   For each file, read the YAML frontmatter to extract `name`,
+   `description`, and (for rules) `paths`.
+
+4. **Build routing block** (only if `nakiros:routing` markers exist):
+   ```
+   - **`@{name}`** — {description, first sentence, ≤ 200 chars}
+   ```
+   Sort alphabetically by `name`. Use the `name:` from frontmatter, not
+   the filename.
+
+5. **Build rules block** (only if `nakiros:rules` markers exist):
+   ```
+   | Rule | Auto-attaches when touching |
+   |------|-----------------------------|
+   | `.claude/rules/{file}.md` | {paths joined with `, `} |
+   ```
+   Sort alphabetically by file name. If `paths:` is absent or empty,
+   render `_(no paths declared)_` in the right column.
+
+6. **Edit CLAUDE.md** with the `Edit` tool, replacing each block including
+   its markers. The markers themselves are part of the replacement (they
+   stay in place — replace start-marker → end-marker → start-marker →
+   end-marker with the new content sandwiched).
+
+7. **Output**: one line:
+   - Success — `"CLAUDE.md routing synced ({N} subagents, {M} rules)"`
+   - Skipped — `"CLAUDE.md sync skipped: {reason}"`
+
+### Important
+
+- `sync` only modifies content **between markers**. Everything else
+  (intro, custom sections, validation block, comments) is left untouched.
+- Hand-edited content between markers is OVERWRITTEN. Anything
+  load-bearing must live outside the markers.
+- `sync` never creates a CLAUDE.md. If absent, the command is a no-op —
+  the user must run `create` first.
+- `sync` is intentionally separate from `fix`: `fix` consumes friction
+  signals and may rewrite content, `sync` only refreshes mechanical
+  routing/rules tables.
+
+### When `sync` is invoked
+
+- **Automatically** by sister `.claude/` experts (`subagents`, `rules`,
+  `hooks`, `permissions`, `mcp`, `output-styles`) at the end of `create`
+  and `fix` operations, via `Skill('nakiros-claudemd-expert', 'sync')`.
+- **Manually** by the user (`/nakiros-claudemd-expert sync`) when they
+  suspect drift.
+- **NOT** during `audit` — audit reads only.
+
 ## Improving from execution feedback
 
 Same procedure as skill-factory: understand → root cause → minimal fix → verify. The four root cause classes here are:
@@ -283,6 +368,7 @@ Do NOT auto-create evals on `create`. Propose at the end: *"CLAUDE.md created. W
 - **"audit"** → Audit CLAUDE.md against the 18-check list
 - **"fix"** → Apply fixes from latest audit + aggregated frictions
 - **"improve"** → Improve from user-described execution feedback
+- **"sync"** → Refresh routing/rules tables between `<!-- nakiros:* -->` markers (no-op if absent)
 
 ### CLAUDE.md evaluation
 - **"eval create"** → Create test cases + fixtures

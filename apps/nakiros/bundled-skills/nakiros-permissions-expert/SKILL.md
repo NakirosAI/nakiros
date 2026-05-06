@@ -237,6 +237,20 @@ Write the updated settings.json. Chat output: `"Permissions block added with
 secure defaults. See .claude/settings.json"`. Paste only the relevant new JSON
 fragment, not the whole file.
 
+### Step 6 — Sync CLAUDE.md routing tables
+
+Invoke the claudemd-expert sync mode for uniformity with sister experts.
+Permissions are not in today's auto-generated tables (which cover subagents
+and rules), so this is a no-op for the permissions block today — but the
+sync may be extended in the future:
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
+
+Safe to call: no-op if the project's CLAUDE.md does not opt in via nakiros
+markers.
+
 ## Fixing permissions from frictions
 
 ### Read signals (in this order)
@@ -258,6 +272,15 @@ One finding → one targeted edit. Do not rewrite the whole permissions block.
 
 Write `outputs/fix-diff.md` following `assets/outputs/fix-diff.md`. Do NOT
 add a `ts` field — Nakiros stamps it.
+
+### Sync CLAUDE.md routing tables
+
+After applying the fix, invoke the claudemd-expert sync mode for uniformity
+with sister experts (no-op for permissions today):
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
 
 ## Best practices for permissions
 

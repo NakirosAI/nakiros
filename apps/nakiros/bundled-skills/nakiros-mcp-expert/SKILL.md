@@ -243,6 +243,20 @@ Write `.mcp.json` to the project root. Chat output: `"Created .mcp.json with
 {N} server(s). See .mcp.json"`. Paste only the relevant JSON fragment if
 updating an existing file.
 
+### Step 6 — Sync CLAUDE.md routing tables
+
+Invoke the claudemd-expert sync mode for uniformity with sister experts.
+MCP servers are not in today's auto-generated tables (which cover subagents
+and rules), so this is a no-op for the MCP block today — but the sync may
+be extended in the future:
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
+
+Safe to call: no-op if the project's CLAUDE.md does not opt in via nakiros
+markers.
+
 ## Fixing .mcp.json from frictions
 
 ### Read signals (in this order)
@@ -264,6 +278,15 @@ One finding → one targeted edit. Do not rewrite the whole file.
 
 Write `outputs/fix-diff.md` following `assets/outputs/fix-diff.md`. Do NOT
 add a `ts` field — Nakiros stamps it.
+
+### Sync CLAUDE.md routing tables
+
+After applying the fix, invoke the claudemd-expert sync mode for uniformity
+with sister experts (no-op for MCP servers today):
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
 
 ## Best practices for MCP configuration
 

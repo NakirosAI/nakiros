@@ -248,6 +248,20 @@ Write the updated settings.json. Chat output: `"Hook added to {EventName}
 (matcher: {matcher}). See .claude/settings.json"`. Paste only the relevant
 new JSON fragment, not the whole file.
 
+### Step 7 — Sync CLAUDE.md routing tables
+
+Invoke the claudemd-expert sync mode. Hooks are not in today's
+auto-generated tables (which cover subagents and rules), so this is a no-op
+for the hooks block today — but the sync may be extended in the future and
+calling it unconditionally keeps every expert uniform:
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
+
+Safe to call: no-op if the project's CLAUDE.md does not opt in via nakiros
+markers.
+
 ## Fixing hooks from frictions
 
 ### Read signals (in this order)
@@ -269,6 +283,15 @@ One finding → one targeted edit. Do not rewrite the whole hooks block.
 
 Write `outputs/fix-diff.md` following `assets/outputs/fix-diff.md`. Do NOT
 add a `ts` field — Nakiros stamps it.
+
+### Sync CLAUDE.md routing tables
+
+After applying the fix, invoke the claudemd-expert sync mode for uniformity
+with sister experts (no-op for hooks today):
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
 
 ## Best practices for hooks
 

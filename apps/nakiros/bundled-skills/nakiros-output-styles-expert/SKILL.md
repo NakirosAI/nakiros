@@ -188,6 +188,20 @@ Walk all 12 checks. Fix any critical or warn ❌ before delivering.
 Write the file. Chat output: `"Style created ({N} lines). See {path}"`. Do NOT
 paste the content in chat.
 
+### Step 6 — Sync CLAUDE.md routing tables
+
+Invoke the claudemd-expert sync mode for uniformity with sister experts.
+Output styles are not in today's auto-generated tables (which cover
+subagents and rules), so this is a no-op for output styles today — but the
+sync may be extended in the future:
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
+
+Safe to call: no-op if the project's CLAUDE.md does not opt in via nakiros
+markers.
+
 ## Auditing a style
 
 **Every audit MUST produce three artefacts** (same pattern as skill-factory):
@@ -260,6 +274,15 @@ ask which frictions to prioritize.
 Write `outputs/fix-targets.jsonl` (one line per actionable fix, `todo` then
 `done`) and `outputs/fix-findings.jsonl`. Do NOT add a `ts` field — Nakiros
 stamps it.
+
+### Sync CLAUDE.md routing tables
+
+After applying the fix, invoke the claudemd-expert sync mode for uniformity
+with sister experts (no-op for output styles today):
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
 
 ## Best practices for output styles
 

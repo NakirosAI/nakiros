@@ -200,6 +200,20 @@ ask the user whether to merge or keep separate.
 Write the file. Chat output: `"Rule created ({N} lines). See {path}"`. Do NOT
 paste the content in chat.
 
+### Step 7 — Sync CLAUDE.md routing tables
+
+Invoke the claudemd-expert sync mode so the new rule appears in the project
+CLAUDE.md's auto-generated rules table:
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
+
+This is a no-op if the project's CLAUDE.md does not opt in via
+`<!-- nakiros:rules:start -->` markers — safe to call unconditionally.
+Append the sync output (one line) to your chat output. Do NOT skip this
+step on `create`.
+
 ## Auditing a rule
 
 **Every audit MUST produce three artefacts** (same pattern as skill-factory):
@@ -269,6 +283,19 @@ ask which frictions to prioritize.
 Write `outputs/fix-targets.jsonl` (one line per actionable fix, `todo` then
 `done`) and `outputs/fix-findings.jsonl`. Do NOT add a `ts` field — Nakiros
 stamps it.
+
+### Sync CLAUDE.md routing tables
+
+After applying the fix, invoke the claudemd-expert sync mode in case the
+edit changed the rule's `name` or `paths:` (which would invalidate the
+auto-generated rules table in CLAUDE.md):
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
+
+No-op if the project's CLAUDE.md does not opt in. Always run, regardless of
+whether you think the frontmatter changed.
 
 ## Best practices for rules
 

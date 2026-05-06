@@ -207,6 +207,20 @@ is a routing table, add this subagent to it.
 Write the file. Chat output: `"Subagent created ({N} lines). See {path}"`. Do
 NOT paste the content in chat.
 
+### Step 8 — Sync CLAUDE.md routing tables
+
+Invoke the claudemd-expert sync mode so the new subagent appears in the
+project CLAUDE.md's auto-generated routing block:
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
+
+This is a no-op if the project's CLAUDE.md does not opt in via
+`<!-- nakiros:routing:start -->` markers — safe to call unconditionally.
+Append the sync output (one line) to your chat output. Do NOT skip this
+step on `create`.
+
 ## Auditing a subagent
 
 **Every audit MUST produce three artefacts** (same pattern as skill-factory):
@@ -278,6 +292,19 @@ ask which frictions to prioritize.
 Write `outputs/fix-targets.jsonl` (one line per actionable fix, `todo` then
 `done`) and `outputs/fix-findings.jsonl`. Do NOT add a `ts` field — Nakiros
 stamps it.
+
+### Sync CLAUDE.md routing tables
+
+After applying the fix, invoke the claudemd-expert sync mode in case the
+edit changed the subagent's `name` or `description` (which would invalidate
+the auto-generated routing table in CLAUDE.md):
+
+```
+Skill('nakiros-claudemd-expert', 'sync')
+```
+
+No-op if the project's CLAUDE.md does not opt in. Always run, regardless of
+whether you think the frontmatter changed.
 
 ## Best practices for subagents
 

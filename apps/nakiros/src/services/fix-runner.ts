@@ -54,11 +54,13 @@ import {
   writeExecutionSettings,
 } from './runner-core/index.js';
 import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
-import { rulesAuditArchiveDir } from './rules-audit-history.js';
-import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
-import { hooksAuditArchiveDir } from './hooks-audit-history.js';
-import { permissionsAuditArchiveDir } from './permissions-audit-history.js';
-import { mcpAuditArchiveDir } from './mcp-audit-history.js';
+import { listClaudemdAudits } from './claudemd-audit-history.js';
+import { rulesAuditArchiveDir, listRulesAudits } from './rules-audit-history.js';
+import { subagentsAuditArchiveDir, listSubagentsAudits } from './subagents-audit-history.js';
+import { hooksAuditArchiveDir, listHooksAudits } from './hooks-audit-history.js';
+import { permissionsAuditArchiveDir, listPermissionsAudits } from './permissions-audit-history.js';
+import { mcpAuditArchiveDir, listMcpAudits } from './mcp-audit-history.js';
+import { listOutputStylesAudits } from './output-styles-audit-history.js';
 import { readHooksBlock, saveHooksBlock } from './hooks-writer.js';
 import { readPermissionsBlock, savePermissionsBlock } from './permissions-writer.js';
 
@@ -204,6 +206,43 @@ function copyLatestAudit(realSkillDir: string, destSkillDir: string): string | n
   mkdirSync(destAuditsDir, { recursive: true });
   writeFileSync(join(destAuditsDir, latest), readFileSync(join(auditsDir, latest)));
   return latest;
+}
+
+/**
+ * Locate the latest archived audit for a non-skill target (claudemd / rules /
+ * subagents / hooks / permissions / mcp / output-styles) and copy it to
+ * `<workdir>/outputs/audit-report.md` so the expert's `fix` procedure can
+ * read it at the conventional path. Returns the absolute destination path,
+ * or null when no archived audit exists for the target.
+ */
+function copyLatestNonSkillAudit(req: SkillAgentStartReq, workdir: string): string | null {
+  let auditPath: string | null = null;
+  if (req.claudemdTarget) {
+    auditPath = listClaudemdAudits(req.claudemdTarget.projectId)[0]?.path ?? null;
+  } else if (req.rulesTarget) {
+    auditPath = listRulesAudits(req.rulesTarget.projectId, req.rulesTarget.ruleName)[0]?.path ?? null;
+  } else if (req.subagentsTarget) {
+    auditPath = listSubagentsAudits(req.subagentsTarget.projectId, req.subagentsTarget.subagentName)[0]?.path ?? null;
+  } else if (req.hooksTarget) {
+    auditPath = listHooksAudits(req.hooksTarget.projectId)[0]?.path ?? null;
+  } else if (req.permissionsTarget) {
+    auditPath = listPermissionsAudits(req.permissionsTarget.projectId, req.permissionsTarget.scope ?? 'project')[0]?.path ?? null;
+  } else if (req.mcpTarget) {
+    auditPath = listMcpAudits(req.mcpTarget.projectId)[0]?.path ?? null;
+  } else if (req.outputStylesTarget) {
+    auditPath = listOutputStylesAudits(req.outputStylesTarget.projectId, req.outputStylesTarget.styleName)[0]?.path ?? null;
+  }
+  if (!auditPath || !existsSync(auditPath)) return null;
+  const outputsDir = join(workdir, 'outputs');
+  mkdirSync(outputsDir, { recursive: true });
+  const destPath = join(outputsDir, 'audit-report.md');
+  try {
+    copyFileSync(auditPath, destPath);
+    return destPath;
+  } catch (err) {
+    console.warn(`[fix-runner] Could not copy non-skill audit: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 /** Copy only the highest-numbered iteration into `{dest}/evals/workspace/iteration-N/`. */
@@ -865,6 +904,23 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not seed output-style draft: ${(err as Error).message}`);
       }
+    }
+
+    // For non-skill fix runs, seed outputs/audit-report.md from the latest
+    // archived audit so the expert agent can read it at the conventional path.
+    // This mirrors what copyLatestAudit does for skill runs. Only applies to
+    // mode === 'fix' — edit is audit-less by design, create has no prior audit.
+    if (
+      req.mode === 'fix' &&
+      (req.claudemdTarget ||
+        req.rulesTarget ||
+        req.subagentsTarget ||
+        req.hooksTarget ||
+        req.permissionsTarget ||
+        req.mcpTarget ||
+        req.outputStylesTarget)
+    ) {
+      latestAuditFile = copyLatestNonSkillAudit(req, workdir);
     }
 
     return {

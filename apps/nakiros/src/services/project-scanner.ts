@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
-import type { Project } from '@nakiros/shared';
+import type { Project, ProviderType } from '@nakiros/shared';
 
 import { nakirosFile } from '../utils/nakiros-dir.js';
 import { scanClaudeProjects } from './providers/claude-scanner.js';
+import { scanCoworkProjects } from './providers/cowork-scanner.js';
 
 type StoredProject = Project;
 
@@ -51,11 +52,11 @@ function stripInternal(p: StoredProject): Project {
  * dismissed across scans; obsolete paths (eval iteration artifacts
  * auto-recorded by Claude) are purged.
  *
- * @param onProgress - optional progress callback: `(current, total, projectName)`
+ * @param onProgress - optional progress callback: `(provider, current, total, projectName)`
  * @returns every non-dismissed project, as surfaced to the UI
  */
 export function scan(
-  onProgress?: (current: number, total: number, name: string | null) => void,
+  onProgress?: (provider: ProviderType, current: number, total: number, name: string | null) => void,
 ): Project[] {
   const now = new Date().toISOString();
   const existing = readAll();
@@ -63,7 +64,9 @@ export function scan(
   const kept = existing.filter((p) => !isObsoletePath(p.projectPath));
   const dismissedIds = new Set(kept.filter((p) => p.status === 'dismissed').map((p) => p.id));
 
-  const detected = scanClaudeProjects(onProgress);
+  const claudeDetected = scanClaudeProjects((c, t, n) => onProgress?.('claude', c, t, n));
+  const coworkDetected = scanCoworkProjects((c, t, n) => onProgress?.('cowork', c, t, n));
+  const detected = [...claudeDetected, ...coworkDetected];
 
   const byId = new Map<string, StoredProject>();
   for (const p of kept) byId.set(p.id, p);

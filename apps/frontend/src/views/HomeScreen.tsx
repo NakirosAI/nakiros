@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Search,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import type { ProjectAggregate, Project, ScanProgress, Skill } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
@@ -40,7 +41,7 @@ interface HomeScreenProps {
   onOpenMarketplaceTab(marketplaceName: string, label: string): void;
 }
 
-type HomeTabKey = 'projects' | 'plugins' | 'globals' | 'nakiros';
+type HomeTabKey = 'projects' | 'cowork' | 'plugins' | 'globals' | 'nakiros';
 
 /**
  * New-design Home screen — port of `screens-home.jsx` from the
@@ -87,6 +88,15 @@ export default function HomeScreen({
   const [globalsError, setGlobalsError] = useState<string | null>(null);
   const [bundledSkills, setBundledSkills] = useState<Skill[] | null>(null);
   const [bundledError, setBundledError] = useState<string | null>(null);
+
+  const claudeProjects = useMemo(
+    () => projects.filter((p) => p.provider === 'claude'),
+    [projects],
+  );
+  const coworkProjects = useMemo(
+    () => projects.filter((p) => p.provider === 'cowork'),
+    [projects],
+  );
 
   // Lazy-load the secondary tabs the first time the user opens them
   // so the projects tab paints fast on boot.
@@ -189,9 +199,15 @@ export default function HomeScreen({
   const tabs: Array<{ id: HomeTabKey; label: string; icon: React.ReactNode; count: number | null }> = [
     {
       id: 'projects',
-      label: t('tabs.projects', { defaultValue: 'Projects' }),
+      label: t('tabs.projects', { defaultValue: 'Claude Code' }),
       icon: <Folder size={13} strokeWidth={2} />,
-      count: projects.length,
+      count: claudeProjects.length,
+    },
+    {
+      id: 'cowork',
+      label: t('tabs.cowork', { defaultValue: 'Cowork' }),
+      icon: <Users size={13} strokeWidth={2} />,
+      count: coworkProjects.length,
     },
     {
       id: 'plugins',
@@ -309,7 +325,7 @@ export default function HomeScreen({
       {/* Body */}
       {tab === 'projects' && (
         <>
-          <ProjectsTab projects={projects} search={search} onOpen={onOpenProject} />
+          <ProjectsTab projects={claudeProjects} kind="claude" search={search} onOpen={onOpenProject} />
           <DismissedToggle
             open={showDismissed}
             count={dismissedProjects?.length ?? null}
@@ -325,6 +341,9 @@ export default function HomeScreen({
             />
           )}
         </>
+      )}
+      {tab === 'cowork' && (
+        <ProjectsTab projects={coworkProjects} kind="cowork" search={search} onOpen={onOpenProject} />
       )}
       {tab === 'plugins' && (
         <PluginsTab
@@ -394,14 +413,18 @@ function SearchInput({ value, onChange }: { value: string; onChange(v: string): 
 
 function ProjectsTab({
   projects,
+  kind,
   search,
   onOpen,
 }: {
   projects: Project[];
+  /** Determines which i18n section to use for labels. */
+  kind: 'claude' | 'cowork';
   search: string;
   onOpen(projectId: string): void;
 }) {
   const { t } = useTranslation('home');
+  const tabKey = kind === 'cowork' ? 'coworkTab' : 'projectsTab';
   const [aggregates, setAggregates] = useState<Map<string, ProjectAggregate>>(new Map());
 
   // Stale-while-revalidate: read every project's persisted aggregate so the
@@ -472,19 +495,19 @@ function ProjectsTab({
       <SectionLabel
         right={
           <span className="font-n-mono text-[11px] text-n-faint">
-            {t('projectsTab.found', { count: filtered.length, defaultValue: '{{count}} found' })} ·{' '}
-            {t('projectsTab.scannedFrom', { defaultValue: 'scanned ~/.claude/projects' })}
+            {t(`${tabKey}.found`, { count: filtered.length, defaultValue: '{{count}} found' })} ·{' '}
+            {t(`${tabKey}.scannedFrom`, { defaultValue: 'scanned ~/.claude/projects' })}
           </span>
         }
       >
-        {t('projectsTab.heading', { defaultValue: 'Projects' })}
+        {t(`${tabKey}.heading`, { defaultValue: kind === 'cowork' ? 'Cowork projects' : 'Claude Code projects' })}
       </SectionLabel>
       {filtered.length === 0 ? (
         <EmptyCard
           text={
             search
-              ? t('projectsTab.noMatch', { defaultValue: 'No project matches your search.' })
-              : t('projectsTab.empty', { defaultValue: 'No project scanned yet.' })
+              ? t(`${tabKey}.noMatch`, { defaultValue: 'No project matches your search.' })
+              : t(`${tabKey}.empty`, { defaultValue: 'No project scanned yet.' })
           }
         />
       ) : (

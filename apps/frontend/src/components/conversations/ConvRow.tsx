@@ -47,7 +47,7 @@ export function ConvRow({ analysis, onOpen }: Props) {
         >
           {analysis.score}
         </div>
-        <span className="font-n-mono text-[9.5px] uppercase tracking-[0.6px] text-n-faint">
+        <span className="font-n-mono text-[9.5px] uppercase tracking-[0.6px] text-n-subtle">
           {analysis.sessionId.slice(0, 6)}
         </span>
       </div>
@@ -81,7 +81,7 @@ export function ConvRow({ analysis, onOpen }: Props) {
           )}
         </div>
 
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-n-mono text-[10.5px] text-n-faint">
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-n-mono text-[10.5px] text-n-subtle">
           <span>{new Date(analysis.lastMessageAt).toLocaleDateString()}</span>
           <span>·</span>
           <span>{t('messageCount', { count: analysis.messageCount })}</span>
@@ -107,7 +107,7 @@ export function ConvRow({ analysis, onOpen }: Props) {
 
       <ChevronRight
         size={16}
-        className="mt-3 flex-shrink-0 text-n-faint transition-colors group-hover:text-n-muted"
+        className="mt-3 flex-shrink-0 text-n-subtle transition-colors group-hover:text-n-muted"
       />
     </button>
   );

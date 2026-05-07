@@ -17,6 +17,7 @@ export {
 export {
   drainQueue,
   ensureProjectIndexed,
+  ensureCoworkProjectIndexed,
   fullScan,
   ingestSession,
   getQueueLength,
@@ -30,6 +31,7 @@ export {
   purgeIngestData,
   readSessionBody,
   toProjectConversation,
+  getSessionTranscriptDir,
 } from './project-store.js';
 export {
   getIngestHookScriptPath,

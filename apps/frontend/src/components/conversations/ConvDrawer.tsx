@@ -85,13 +85,13 @@ export function ConvDrawer({ analysis, onClose, onOpenRunTab }: Props) {
                   <span className={'inline-block h-1.5 w-1.5 rounded-full ' + tone.dot} />
                   {t(`health.${analysis.healthZone}`)}
                 </span>
-                <span className="font-n-mono text-[11px] text-n-faint">session {sessionShort}</span>
-                <span className="text-n-faint">·</span>
-                <span className="font-n-mono text-[11px] text-n-faint">{date}</span>
+                <span className="font-n-mono text-[11px] text-n-subtle">session {sessionShort}</span>
+                <span className="text-n-subtle">·</span>
+                <span className="font-n-mono text-[11px] text-n-subtle">{date}</span>
                 {analysis.gitBranch && (
                   <>
-                    <span className="text-n-faint">·</span>
-                    <span className="font-n-mono text-[11px] text-n-faint">{analysis.gitBranch}</span>
+                    <span className="text-n-subtle">·</span>
+                    <span className="font-n-mono text-[11px] text-n-subtle">{analysis.gitBranch}</span>
                   </>
                 )}
               </div>

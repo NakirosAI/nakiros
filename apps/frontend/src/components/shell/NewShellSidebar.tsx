@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import nakirosLogo from '../../assets/icon.svg';
 import type { ProjectTabView } from '../../hooks/useTabs';
+import { useProject } from '../../hooks/useProject';
+import type { ProviderType } from '@nakiros/shared';
 
 interface SidebarItem {
   id: ProjectTabView;
@@ -24,6 +26,11 @@ interface SidebarItem {
   disabled: boolean;
   /** Tooltip suffix shown after the label (e.g. "Module 2"). */
   comingIn?: string;
+  /**
+   * Allowlist of providers on which this item is visible.
+   * Omitting the field means the item is visible for all providers.
+   */
+  providers?: ProviderType[];
 }
 
 interface SidebarSection {
@@ -47,8 +54,14 @@ interface NewShellSidebarProps {
  *
  * Tooltips appear on hover with a slight delay to avoid flicker.
  */
+/** Providers that support the full .claude/ config surface. */
+const CLAUDE_ONLY_PROVIDERS: ProviderType[] = ['claude'];
+
 export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarProps) {
-  const sections: SidebarSection[] = [
+  const { project } = useProject();
+  const provider = project.provider;
+
+  const allSections: SidebarSection[] = [
     {
       items: [
         { id: 'overview', label: 'Overview', icon: <Home size={18} strokeWidth={2} />, disabled: false },
@@ -58,13 +71,13 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
     {
       items: [
         { id: 'claudeMd', label: 'CLAUDE.md', icon: <FileText size={18} strokeWidth={2} />, disabled: false },
-        { id: 'rules', label: 'Rules', icon: <Layers size={18} strokeWidth={2} />, disabled: false },
+        { id: 'rules', label: 'Rules', icon: <Layers size={18} strokeWidth={2} />, disabled: false, providers: CLAUDE_ONLY_PROVIDERS },
         { id: 'subagents', label: 'Subagents', icon: <Bot size={18} strokeWidth={2} />, disabled: false },
         { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false },
-        { id: 'outputStyles', label: 'Output styles', icon: <Sliders size={18} strokeWidth={2} />, disabled: false },
+        { id: 'outputStyles', label: 'Output styles', icon: <Sliders size={18} strokeWidth={2} />, disabled: false, providers: CLAUDE_ONLY_PROVIDERS },
         { id: 'permissions', label: 'Permissions', icon: <ShieldCheck size={18} strokeWidth={2} />, disabled: false },
-        { id: 'mcp', label: 'MCP', icon: <Plug size={18} strokeWidth={2} />, disabled: false },
-        { id: 'hooks', label: 'Hooks', icon: <Zap size={18} strokeWidth={2} />, disabled: false },
+        { id: 'mcp', label: 'MCP', icon: <Plug size={18} strokeWidth={2} />, disabled: false, providers: CLAUDE_ONLY_PROVIDERS },
+        { id: 'hooks', label: 'Hooks', icon: <Zap size={18} strokeWidth={2} />, disabled: false, providers: CLAUDE_ONLY_PROVIDERS },
       ],
     },
     {
@@ -73,6 +86,11 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
       ],
     },
   ];
+
+  // Filter items by provider: if `providers` is set, the item is only shown for listed providers.
+  const sections: SidebarSection[] = allSections.map((section) => ({
+    items: section.items.filter((item) => !item.providers || item.providers.includes(provider)),
+  }));
 
   const settingsItem: SidebarItem = {
     id: 'settings',

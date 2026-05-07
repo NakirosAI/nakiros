@@ -35,7 +35,7 @@
     "apps/nakiros/src/daemon/handlers/onboarding.ts": "4ed2b17cfef1547433861c506bdf31196c6923487805e6d019145801633fd9e7",
     "apps/nakiros/src/daemon/handlers/plugin-skills.ts": "22a752ff2a2d6d347a2865a0db83240bac5d4a39ccb2502566e2b41d275a30ba",
     "apps/nakiros/src/daemon/handlers/preferences.ts": "438ab00e3f4ddfe9fda8a3f9fd055ad88d18392b972258d456f2ea49dcefc6ee",
-    "apps/nakiros/src/daemon/handlers/projects.ts": "d643110f4266de70453e03b31a3fa7c9acad27a7488a91161b9ddbd3ef6ebe81",
+    "apps/nakiros/src/daemon/handlers/projects.ts": "c7c235f39d184a7c1b19f7186cbe225e56ca15a4f86d33e444b37546651f2976",
     "apps/nakiros/src/daemon/handlers/run-helpers.ts": "98cf685e9892f7b0a444cbeafab0befc195cd0b8eddb4b19d66b46110e12df64",
     "apps/nakiros/src/daemon/handlers/shell.ts": "a49772caa1597deec0df27d84c0c89cdc1b3be4cca81333b338c9793d318e327",
     "apps/nakiros/src/daemon/handlers/skill-agent.ts": "8a09c119bc2e005bb50677bdef9ea1f6f034b5eab908778324b3ded9e6f959d4",
@@ -76,7 +76,7 @@
     "apps/nakiros/src/services/onboarding-installer.ts": "c22f93b04d047f6c62d5c1bb15eca3a35536b2d30f2852d27349da2d2017a9ff",
     "apps/nakiros/src/services/plugin-skills-reader.ts": "a5d30e17e64066b37979a06213bf39d7fa98e2ee2707204f34febb0f0e08c443",
     "apps/nakiros/src/services/preferences.ts": "a2eca6b4dcaae021b4731f8634d0412df49437cc3f83c11662fbf00d5b588fda",
-    "apps/nakiros/src/services/project-scanner.ts": "06c3cbcbfdda411d924199239a9a671ff8ae2e18902e49ab43064a27ac997f4a",
+    "apps/nakiros/src/services/project-scanner.ts": "7cf81e631feb47ab0516fd8c17250bf6a7cb6002b7214a9008052cf20abf9b93",
     "apps/nakiros/src/services/providers/claude-scanner.ts": "f4b0e8e8a1bc352182d03f91bc5a4404bb162c19b7d4dd632b83035be0e80853",
     "apps/nakiros/src/services/skill-fingerprint.ts": "f133dc0274bf7aee3060eeebe75b6ca18c6990586f6ce6fc2b664f736862e1ec",
     "apps/nakiros/src/services/skill-reader.ts": "924abf8a5574cf0541a9e64be0a1dab2dcd25dc276be12d5f796826ed7d266d3",
@@ -224,7 +224,10 @@
     "apps/nakiros/src/daemon/handlers/hooks.ts": "08376b8c30778efdebd2167970c324f045fcb43d43e3e4d320809984222f0afc",
     "apps/nakiros/src/services/mcp-writer.ts": "744b98205e5935e9316825b3ce10d984409131654dedcb78f22aa29cf6ccb2d8",
     "apps/nakiros/src/services/mcp-audit-history.ts": "6d3c398687488b6c3d45775b82532a32bd82aec8867889a3ff9d69a386297c35",
-    "apps/nakiros/src/daemon/handlers/mcp.ts": "4a8a2b198f5d7510d48de57e9aca84f6d235ca8e40979c87f4c54b1fbab838e2"
+    "apps/nakiros/src/daemon/handlers/mcp.ts": "4a8a2b198f5d7510d48de57e9aca84f6d235ca8e40979c87f4c54b1fbab838e2",
+    "apps/nakiros/src/services/providers/cowork-scanner.ts": "b7da9750fccf9403f7b1732ac9970977846f850403b10bbf1294d12a682afae6",
+    "apps/nakiros/src/services/conversation-ingest/runner.ts": "e61dd50e3580268917b8b156283c13ac2b44fa6dbf63ba6fdfed62069dad275f",
+    "apps/nakiros/src/services/conversation-ingest/index.ts": "0f8eb91551ad1bbe11963e4b9188c42f98b723d7993d39a7f03ec0bdbfab83b7"
   },
-  "updated_at": "2026-05-04T19:59:58.878Z"
+  "updated_at": "2026-05-07T16:59:07.837Z"
 }

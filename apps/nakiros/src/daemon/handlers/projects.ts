@@ -1,3 +1,5 @@
+import { dirname } from 'node:path';
+
 import {
   scan as scanProjects,
   listProjects,
@@ -10,11 +12,13 @@ import { listConversations, getConversationMessages } from '../../services/conve
 import { getOrComputeAnalysis } from '../../services/conversation-analysis-cache.js';
 import {
   ensureProjectIndexed,
+  ensureCoworkProjectIndexed,
   listDigestsForProject,
   listSessionsForProject,
   loadDigest,
   readSessionBody,
   toProjectConversation,
+  getSessionTranscriptDir,
 } from '../../services/conversation-ingest/index.js';
 import {
   loadProjectAggregate,
@@ -34,6 +38,21 @@ import {
 import { eventBus } from '../event-bus.js';
 import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
+import type { Project } from '@nakiros/shared';
+
+/**
+ * Route to the correct lazy indexer based on the project's provider.
+ * - `'cowork'`: uses `ensureCoworkProjectIndexed` which walks the Cowork
+ *   session groups and keys sessions under `projectPath`.
+ * - all others: uses `ensureProjectIndexed` against `providerProjectDir`.
+ */
+function ensureIndexed(project: Project): void {
+  if (project.provider === 'cowork') {
+    ensureCoworkProjectIndexed(project.providerProjectDir, project.projectPath);
+  } else {
+    ensureProjectIndexed(project.providerProjectDir);
+  }
+}
 
 /**
  * Registers the `project:*` IPC channels — project scanning, conversation
@@ -55,9 +74,9 @@ import type { HandlerRegistry } from './index.js';
  */
 export const projectHandlers: HandlerRegistry = {
   'project:scan': createTypedHandler(() =>
-    scanProjects((current, total, projectName) => {
+    scanProjects((provider, current, total, projectName) => {
       eventBus.broadcast('project:scanProgress', {
-        provider: 'claude',
+        provider,
         current,
         total,
         projectName,
@@ -82,7 +101,7 @@ export const projectHandlers: HandlerRegistry = {
   'project:listConversations': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
-    ensureProjectIndexed(project.providerProjectDir);
+    ensureIndexed(project);
     const sessions = listSessionsForProject(project.projectPath);
     if (sessions.length > 0) return sessions.map((s) => toProjectConversation(s, projectId));
     // Fallback: project hasn't been indexed (e.g. fresh after purge or the
@@ -93,7 +112,7 @@ export const projectHandlers: HandlerRegistry = {
   'project:getConversationMessages': createTypedHandler((projectId: string, sessionId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
-    ensureProjectIndexed(project.providerProjectDir);
+    ensureIndexed(project);
     const body = readSessionBody(project.projectPath, sessionId);
     if (body) return body.messages;
     // Fallback when the session was just deleted from the ingest store.
@@ -103,21 +122,33 @@ export const projectHandlers: HandlerRegistry = {
   'project:analyzeConversation': createTypedHandler((projectId: string, sessionId: string) => {
     const project = getProject(projectId);
     if (!project) return null;
-    return getOrComputeAnalysis(project.providerProjectDir, sessionId, projectId);
+    const analysisDir =
+      getSessionTranscriptDir(project.projectPath, sessionId) ?? project.providerProjectDir;
+    return getOrComputeAnalysis(analysisDir, sessionId, projectId);
   }),
 
   'project:listConversationsWithAnalysis': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
-    ensureProjectIndexed(project.providerProjectDir);
+    ensureIndexed(project);
     const sessions = listSessionsForProject(project.projectPath);
-    const convs =
-      sessions.length > 0
-        ? sessions.map((s) => toProjectConversation(s, projectId))
-        : listConversations(project.providerProjectDir, projectId);
     // Carry the `kind` tag from the ingest store onto each analysis so the
     // ConversationsScreen can hide synthetic runs by default without a
     // second IPC round-trip.
+    if (sessions.length > 0) {
+      return sessions
+        .map((s) => {
+          // For providers like 'cowork', the JSONL does not live directly under
+          // providerProjectDir — use the per-session transcriptPath instead.
+          const analysisDir = dirname(s.transcriptPath);
+          const analysis = getOrComputeAnalysis(analysisDir, s.sessionId, projectId);
+          if (!analysis) return null;
+          return s.kind ? { ...analysis, kind: s.kind } : analysis;
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+    }
+    // Fallback: not yet indexed — read live JSONL directly (non-cowork only).
+    const convs = listConversations(project.providerProjectDir, projectId);
     return convs
       .map((c) => {
         const analysis = getOrComputeAnalysis(project.providerProjectDir, c.sessionId, projectId);
@@ -143,7 +174,9 @@ export const projectHandlers: HandlerRegistry = {
     async (projectId: string, sessionId: string) => {
       const project = getProject(projectId);
       if (!project) throw new Error(`Project ${projectId} not found`);
-      return runDeepAnalysis(project.providerProjectDir, sessionId, projectId);
+      const analysisDir =
+        getSessionTranscriptDir(project.projectPath, sessionId) ?? project.providerProjectDir;
+      return runDeepAnalysis(analysisDir, sessionId, projectId);
     },
   ),
 

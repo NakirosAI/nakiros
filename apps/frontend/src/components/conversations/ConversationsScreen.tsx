@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RefreshCw } from 'lucide-react';
 import type { ConversationAnalysis, Project } from '@nakiros/shared';
 import { useConversationAnalyses } from '../../hooks/useConversationAnalyses';
-import { EmptyState, LoadingState } from '../ui';
 import { ConvRow } from './ConvRow';
 import { ConvDrawer } from './ConvDrawer';
 
@@ -96,7 +96,12 @@ export default function ConversationsScreen({ project, onOpenRunTab }: Props) {
   }, [userScopedAnalyses, filter]);
 
   if (loading) {
-    return <LoadingState>{t('loading')}</LoadingState>;
+    return (
+      <div className="flex flex-1 items-center justify-center gap-2 font-n-mono text-[12px] text-n-muted">
+        <RefreshCw size={12} className="animate-spin" />
+        {t('loading')}
+      </div>
+    );
   }
 
   return (
@@ -158,7 +163,11 @@ export default function ConversationsScreen({ project, onOpenRunTab }: Props) {
 
       <div className="flex-1 overflow-y-auto">
         {visible.length === 0 ? (
-          <EmptyState title={analyses.length === 0 ? t('empty') : t('emptyForFilter')} />
+          <div className="px-7 py-6">
+            <div className="rounded-n-md border border-dashed border-n-border-default bg-n-surface px-4 py-10 text-center font-n-mono text-[12px] text-n-faint">
+              {analyses.length === 0 ? t('empty') : t('emptyForFilter')}
+            </div>
+          </div>
         ) : (
           <ul className="flex flex-col">
             {visible.map((a) => (

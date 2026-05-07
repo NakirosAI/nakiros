@@ -14,13 +14,18 @@
   "titles": {
     "audit": "Audit",
     "fix": "Fix",
-    "create": "Créer un skill"
+    "create": "Créer un skill",
+    "edit": "Edit"
   },
   "unsupported": {
     "title": "Bientôt disponible",
     "body": "Ce type de run sera câblé dans une prochaine PR."
   },
   "panels": {
+    "edit": {
+      "title": "Session Edit",
+      "titleClaudemd": "Edit CLAUDE.md"
+    },
     "eval": {
       "title": "Lot d'évals",
       "iteration": "Itération",
@@ -39,6 +44,14 @@
       "noBaseline": "Aucun run baseline dans ce lot.",
       "withSkill": "Avec skill",
       "baseline": "Baseline"
+    }
+  },
+  "audit": {
+    "report": {
+      "openInEdit": {
+        "button": "Ouvrir une session Edit",
+        "subtitle": "Édition interactive guidée par les findings"
+      }
     }
   },
   "interruptedBadge": "Interrompu",
@@ -74,5 +87,17 @@
       "Lecture…",
       "Travail en cours…"
     ]
+  },
+  "ide": {
+    "filesTitle": "Fichiers du workdir",
+    "noFiles": "Aucun fichier pour l'instant.",
+    "refresh": "Rafraîchir la liste",
+    "noFileSelected": "Aucun fichier sélectionné",
+    "loadingFile": "Chargement…",
+    "binaryFile": "Fichier binaire — aperçu indisponible.",
+    "emptyFile": "(fichier vide)",
+    "agentEditing": "L'agent modifie",
+    "quoteInChat": "Citer dans le chat",
+    "removeQuote": "Supprimer la citation"
   }
 }

@@ -5,8 +5,9 @@
 Skill iteration runner — backs BOTH `fix:*` (edit existing skill) and `create:*` (new skill from scratch). The agent always operates inside a temp workdir under `~/.nakiros/tmp-skills/<runId>/`; sync-back to the real skill only happens on {@link finishFix}. **The tmp_skill pattern is load-bearing** — it isolates in-progress edits from the real skill so evals can run against the candidate BEFORE it ships.
 
 Workdir layout differs per mode:
-- `fix` — seeded with a lean copy of the existing skill (source + latest audit + latest iteration). Skips older audits/iterations to keep the agent's context tight.
+- `fix` — seeded with a lean copy of the existing skill (source + latest audit + latest iteration). For non-skill targets (claudemd / rules / subagents / hooks / permissions / mcp / output-styles) the latest archived audit is copied to `outputs/audit-report.md` via `copyLatestNonSkillAudit`. Skips older audits/iterations to keep the agent's context tight.
 - `create` — empty. Agent writes SKILL.md + friends from scratch.
+- `edit` — same sandbox seeding as `fix` but no audit findings; the user's chat is the spec.
 
 Boot recovery rehydrates in-flight workdirs into `waiting_for_input` + `interruptedByReboot=true` (driving the "Reprendre" button) when the Claude session file at `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl` still exists, or collapses the run to `stopped` when the session file is gone — without that defensive check the user's `--resume` would surface "No conversation found with session ID …". The event log is restored from `events.jsonl` so the tail of the interrupted turn re-renders on reopen.
 
@@ -16,10 +17,10 @@ Built on top of the shared [`createRunner`](../services/runner-core/runner.md) f
 
 ### `type SkillAgentMode`
 
-Two flavors of skill-factory-driven runs: `fix` (edit existing) vs `create` (from scratch). They share runtime machinery (runner-core) and differ only in workdir seeding, first-turn prompt, and sync-back policy.
+Three flavors of skill-factory-driven runs: `fix` (edit existing, audit-seeded), `create` (from scratch), and `edit` (interactive user-driven edits, no audit findings). All share runtime machinery (runner-core) and differ only in workdir seeding, first-turn prompt, and sync-back policy.
 
 ```ts
-export type SkillAgentMode = 'fix' | 'create';
+export type SkillAgentMode = 'fix' | 'create' | 'edit';
 ```
 
 ### `function restoreOrCleanupTempWorkdirs`

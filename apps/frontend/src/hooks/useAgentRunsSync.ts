@@ -401,16 +401,18 @@ export function useAgentRunsSync(): void {
     // completed runs the daemon restored from disk and let the user
     // dismiss them once acknowledged. The store filters out anything in
     // its dismissed-ids localStorage entry on every upsert.
-    const [audits, fixes, creates, evals, classifyConvos] = await Promise.all([
+    const [audits, fixes, creates, edits, evals, classifyConvos] = await Promise.all([
       window.nakiros.listAllAuditRuns(),
       window.nakiros.listAllFixRuns(),
       window.nakiros.listAllCreateRuns(),
+      window.nakiros.listAllEditRuns(),
       window.nakiros.listEvalRuns(),
       window.nakiros.listAllClassifyConvoRuns(),
     ]);
     agentRunStore.syncKind('audit', audits.map((r) => auditLikeToAgentRun(r, 'audit', 'Audit')));
     agentRunStore.syncKind('fix', fixes.map((r) => auditLikeToAgentRun(r, 'fix', 'Fix')));
     agentRunStore.syncKind('create', creates.map((r) => auditLikeToAgentRun(r, 'create', 'Create')));
+    agentRunStore.syncKind('edit', edits.map((r) => auditLikeToAgentRun(r, 'edit', 'Edit')));
     agentRunStore.syncKind('eval', groupEvalRuns(evals));
     agentRunStore.syncKind('classify-convo', classifyConvos.map(classifyConvoToAgentRun));
   }, 2000);

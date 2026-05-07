@@ -23,7 +23,7 @@ import {
   evalMatrixRequestForIdentity,
   loadSkillByIdentity,
 } from '../lib/skill-identity';
-import { launchAudit, launchFix, type OpenRunTabCallback } from '../lib/run-launcher';
+import { launchAudit, launchEdit, launchFix, type OpenRunTabCallback } from '../lib/run-launcher';
 import { useActiveFixForSkill } from '../hooks/useAgentRun';
 
 interface Props {
@@ -99,6 +99,7 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
 
   const [isLaunchingAudit, setIsLaunchingAudit] = useState(false);
   const [isLaunchingFix, setIsLaunchingFix] = useState(false);
+  const [isLaunchingEdit, setIsLaunchingEdit] = useState(false);
   // True when a fix run is already in-flight for this skill — every Fix
   // trigger on this screen disables itself in that case to avoid stacking
   // sandboxes (only ONE fix per skill is supported by the runner today).
@@ -125,6 +126,18 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
       console.error('[skill] launchFix failed', err);
     } finally {
       setIsLaunchingFix(false);
+    }
+  };
+
+  const handleLaunchEdit = async () => {
+    if (!onOpenRunTab || isLaunchingEdit) return;
+    setIsLaunchingEdit(true);
+    try {
+      await launchEdit(identity, onOpenRunTab);
+    } catch (err) {
+      console.error('[skill] launchEdit failed', err);
+    } finally {
+      setIsLaunchingEdit(false);
     }
   };
 
@@ -200,6 +213,24 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
               : activeFix
                 ? t('fixRunning', { defaultValue: 'Fix running' })
                 : t('runFix', { defaultValue: 'Fix' })}
+          </button>
+          <button
+            type="button"
+            disabled={!onOpenRunTab || isLaunchingEdit}
+            onClick={handleLaunchEdit}
+            className={
+              'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
+              (onOpenRunTab && !isLaunchingEdit ? 'hover:bg-n-raised hover:text-n-fg' : 'opacity-60')
+            }
+          >
+            {isLaunchingEdit ? (
+              <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
+            ) : (
+              <Play size={12} strokeWidth={2} />
+            )}
+            {isLaunchingEdit
+              ? t('starting', { defaultValue: 'Starting…' })
+              : t('runEdit', { defaultValue: 'Edit' })}
           </button>
         </div>
       </div>

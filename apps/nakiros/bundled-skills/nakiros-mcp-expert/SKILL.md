@@ -360,3 +360,15 @@ Do NOT auto-create evals on `create`. Propose at the end.
 - **"eval run"** → Run tests, grade, produce benchmark
 - **"eval analyze"** → Analyze results, propose improvements
 - **"eval compare"** → Compare iterations (delta report)
+
+## Edit mode
+
+Triggered by `/nakiros-mcp-expert edit`. The user wants to **modify the existing `.mcp.json` conversationally**, without an audit driving the changes.
+
+1. Read the target `.mcp.json` at its project-root path to understand what currently exists.
+2. Wait for the user's first message describing what to change.
+3. Propose changes (Write/Edit tools directly on `.mcp.json` — Nakiros runs you with project-tree permissions), explain trade-offs, iterate. Always write valid JSON.
+4. Re-read the file after each substantive change to confirm the in-context view is current.
+5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
+
+No findings file, no audit manifest. The user's chat is the spec. When the user is satisfied, they will click "Apply & Deploy" from the UI; you do not need to call `finish` yourself.

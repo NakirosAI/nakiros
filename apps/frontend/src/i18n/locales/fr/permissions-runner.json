@@ -18,6 +18,8 @@
   "runAuditTitle": "Lancer nakiros-permissions-expert en mode audit sur les permissions de ce projet",
   "runFix": "Fix",
   "runFixTitle": "Lancer nakiros-permissions-expert en mode fix (consomme les résultats d'audit)",
+  "runEdit": "Edit",
+  "runEditTitle": "Ouvrir une session Edit interactive sur les permissions du projet",
   "runCreate": "Créer",
   "runCreateTitle": "Générer une configuration permissions pour ce projet via nakiros-permissions-expert",
   "runLaunching": "Lancement…",

@@ -14,13 +14,18 @@
   "titles": {
     "audit": "Audit",
     "fix": "Fix",
-    "create": "Create skill"
+    "create": "Create skill",
+    "edit": "Edit"
   },
   "unsupported": {
     "title": "Coming soon",
     "body": "This run kind is wired up in a follow-up PR."
   },
   "panels": {
+    "edit": {
+      "title": "Edit session",
+      "titleClaudemd": "Edit CLAUDE.md"
+    },
     "eval": {
       "title": "Eval batch",
       "iteration": "Iteration",
@@ -39,6 +44,14 @@
       "noBaseline": "No baseline runs in this batch.",
       "withSkill": "With skill",
       "baseline": "Baseline"
+    }
+  },
+  "audit": {
+    "report": {
+      "openInEdit": {
+        "button": "Open an Edit session",
+        "subtitle": "Interactive editing guided by the findings"
+      }
     }
   },
   "interruptedBadge": "Interrompu",
@@ -74,5 +87,17 @@
       "Reading…",
       "Working…"
     ]
+  },
+  "ide": {
+    "filesTitle": "Files in workdir",
+    "noFiles": "No files yet.",
+    "refresh": "Refresh file list",
+    "noFileSelected": "No file selected",
+    "loadingFile": "Loading…",
+    "binaryFile": "Binary file — preview unavailable.",
+    "emptyFile": "(empty file)",
+    "agentEditing": "Agent is editing",
+    "quoteInChat": "Quote in chat",
+    "removeQuote": "Remove quote"
   }
 }

@@ -1019,7 +1019,7 @@ export interface StartClassifyConvoRequest {
  * four entry-point commands; only the first three are launched as Nakiros
  * runs (improve is interactive and stays inside an existing run).
  */
-export type ClaudeMdRunMode = 'audit' | 'fix' | 'create';
+export type ClaudeMdRunMode = 'audit' | 'fix' | 'create' | 'edit';
 
 /**
  * Optional target descriptor for an audit / fix / create run that operates on
@@ -1237,7 +1237,7 @@ export interface AuditHistoryEntry {
  * Mode of a rules run. The bundled `nakiros-rules-expert` skill exposes
  * three entry-point commands.
  */
-export type RulesRunMode = 'audit' | 'fix' | 'create';
+export type RulesRunMode = 'audit' | 'fix' | 'create' | 'edit';
 
 /**
  * Optional target descriptor for an audit / fix / create run that operates on
@@ -1261,13 +1261,13 @@ export interface RulesTargetContext {
  * Mode of a subagents run. The bundled `nakiros-subagents-expert` skill
  * exposes three entry-point commands.
  */
-export type SubagentsRunMode = 'audit' | 'fix' | 'create';
+export type SubagentsRunMode = 'audit' | 'fix' | 'create' | 'edit';
 
 /**
  * Mode of a hooks run. The bundled `nakiros-hooks-expert` skill exposes
  * three entry-point commands.
  */
-export type HooksRunMode = 'audit' | 'fix' | 'create';
+export type HooksRunMode = 'audit' | 'fix' | 'create' | 'edit';
 
 /**
  * Optional target descriptor for an audit / fix / create run that operates on
@@ -1286,7 +1286,7 @@ export interface HooksTargetContext {
  * Run mode for the `nakiros-permissions-expert` bundled skill. Mirrors the
  * three entry-point commands.
  */
-export type PermissionsRunMode = 'audit' | 'fix' | 'create';
+export type PermissionsRunMode = 'audit' | 'fix' | 'create' | 'edit';
 
 /**
  * Which settings file the `nakiros-permissions-expert` targets.
@@ -1316,7 +1316,7 @@ export interface PermissionsTargetContext {
  * Mode of an mcp run. The bundled `nakiros-mcp-expert` skill exposes
  * three entry-point commands.
  */
-export type McpRunMode = 'audit' | 'fix' | 'create';
+export type McpRunMode = 'audit' | 'fix' | 'create' | 'edit';
 
 /**
  * Optional target descriptor for an audit / fix / create run that operates on
@@ -1353,7 +1353,7 @@ export interface SubagentsTargetContext {
  * Mode of an output-styles run. The bundled `nakiros-output-styles-expert`
  * skill exposes three entry-point commands.
  */
-export type OutputStylesRunMode = 'audit' | 'fix' | 'create';
+export type OutputStylesRunMode = 'audit' | 'fix' | 'create' | 'edit';
 
 /**
  * Optional target descriptor for an audit / fix / create run that operates on

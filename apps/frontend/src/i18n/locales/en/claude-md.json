@@ -15,6 +15,8 @@
   "runAuditTitle": "Run nakiros-claudemd-expert in audit mode against this CLAUDE.md",
   "runFix": "Fix",
   "runFixTitle": "Run nakiros-claudemd-expert in fix mode (consumes audit findings + project frictions)",
+  "runEdit": "Edit",
+  "runEditTitle": "Open an interactive edit session on this CLAUDE.md",
   "runCreate": "Create",
   "runCreateTitle": "Bootstrap a CLAUDE.md tailored to this project via nakiros-claudemd-expert",
   "runLaunching": "Launching…",

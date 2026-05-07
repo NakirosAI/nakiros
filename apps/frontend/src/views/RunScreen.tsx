@@ -43,6 +43,7 @@ import {
 import { ArrowLeft } from 'lucide-react';
 import type { SkillDiffFilePayload } from '@nakiros/shared';
 import type { LiveStreamEvent } from '../components/ConversationTurn';
+import IdeRunScreen from './IdeRunScreen';
 
 interface RunScreenProps {
   /** Run id from the agent run store. */
@@ -91,6 +92,12 @@ export default function RunScreen(props: RunScreenProps) {
         onOpenRunTab={props.onOpenRunTab}
       />
     );
+  }
+  // edit / fix / create render the 3-pane IDE screen by default. Audit stays
+  // on AuditLikeRunScreen — it is read-only and does not benefit from the
+  // code viewer / quote-from-file workflow.
+  if (props.runKind === 'edit' || props.runKind === 'fix' || props.runKind === 'create') {
+    return <IdeRunScreen {...props} />;
   }
   return <AuditLikeRunScreen {...props} />;
 }
@@ -276,11 +283,11 @@ function RunScreenBody({
         setRun((r) => ({ ...r, targets }));
         return;
       }
-      // Fix/create — invalidate the diff cache when the agent edits a
+      // Fix/create/edit — invalidate the diff cache when the agent edits a
       // sandbox file so the open diff viewer re-fetches the new state.
-      // The sandbox panel's listFixDiff/listCreateDiff subscription
+      // The sandbox panel's listFixDiff/listCreateDiff/listEditDiff subscription
       // already refreshes its file list on the same trigger.
-      if (innerType === 'tool' && (runKind === 'fix' || runKind === 'create')) {
+      if (innerType === 'tool' && (runKind === 'fix' || runKind === 'create' || runKind === 'edit')) {
         const name = (inner as { name?: string }).name;
         if (name && DIFF_INVALIDATING_TOOLS.has(name)) {
           invalidateSkillDiffCache(`fix:${bootedRun.runId}`);
@@ -352,7 +359,7 @@ function RunScreenBody({
   // the on-mount fetch + the status/turns effect cover the rest.
   useEffect(() => {
     const useTimeline =
-      runKind === 'fix' || runKind === 'audit' || runKind === 'create';
+      runKind === 'fix' || runKind === 'audit' || runKind === 'create' || runKind === 'edit';
     if (!useTimeline) {
       setFixTimeline([]);
       return;
@@ -368,7 +375,9 @@ function RunScreenBody({
           ? window.nakiros.getAuditTimeline(run.runId)
           : runKind === 'create'
             ? window.nakiros.getCreateTimeline(run.runId)
-            : window.nakiros.getFixTimeline(run.runId);
+            : runKind === 'edit'
+              ? window.nakiros.getEditTimeline(run.runId)
+              : window.nakiros.getFixTimeline(run.runId);
       return promise
         .then((timeline) => {
           if (!cancelled) setFixTimeline(timeline);
@@ -401,7 +410,7 @@ function RunScreenBody({
   // batch-aggregated usage in the eval function below.
   const [fixUsage, setFixUsage] = useState<FixUsage | null>(null);
   useEffect(() => {
-    if (runKind !== 'fix' && runKind !== 'audit' && runKind !== 'create') return;
+    if (runKind !== 'fix' && runKind !== 'audit' && runKind !== 'create' && runKind !== 'edit') return;
     if (!run.sessionId) return;
     let cancelled = false;
     const fetchOnce = () => {
@@ -410,7 +419,9 @@ function RunScreenBody({
           ? window.nakiros.getAuditUsage(run.runId)
           : runKind === 'create'
             ? window.nakiros.getCreateUsage(run.runId)
-            : window.nakiros.getFixUsage(run.runId);
+            : runKind === 'edit'
+              ? window.nakiros.getEditUsage(run.runId)
+              : window.nakiros.getFixUsage(run.runId);
       return promise
         .then((u) => {
           if (!cancelled) setFixUsage(u);
@@ -445,7 +456,7 @@ function RunScreenBody({
   const [evalDiffFixTempOffset, setEvalDiffFixTempOffset] = useState<number | null>(null);
 
   const fixDiffIdentity = useMemo<RunScreenIdentity | null>(() => {
-    if (runKind !== 'fix' && runKind !== 'create') return null;
+    if (runKind !== 'fix' && runKind !== 'create' && runKind !== 'edit') return null;
     const auditRun = run as AuditRun;
     return {
       scope: auditRun.scope,
@@ -595,7 +606,7 @@ function RunScreenBody({
   // `run.tokensUsed` + wall-clock elapsed until it migrates.
   const stats: Array<{ label: string; value: string }> = [];
   const useSessionUsage =
-    (runKind === 'fix' || runKind === 'audit' || runKind === 'create') && fixUsage;
+    (runKind === 'fix' || runKind === 'audit' || runKind === 'create' || runKind === 'edit') && fixUsage;
   if (useSessionUsage) {
     stats.push({ label: 'Tokens', value: formatTokens(fixUsage.billedEquivalent) });
     // While the agent is generating, tick from the run's startedAt-anchored
@@ -681,12 +692,19 @@ function RunScreenBody({
                 <AuditMarkdownViewer content={reportContent} />
               </div>
             </div>
-          ) : (runKind === 'fix' || runKind === 'create') && selectedDiffFile ? (
+          ) : (runKind === 'fix' || runKind === 'create' || runKind === 'edit') && selectedDiffFile ? (
             <FixFileDiffView
               runId={run.runId}
               relativePath={selectedDiffFile}
               cacheScope={diffCacheScope}
               onBack={() => setSelectedDiffFile(null)}
+              readDiffFile={
+                runKind === 'edit'
+                  ? window.nakiros.readEditDiffFile
+                  : runKind === 'create'
+                    ? window.nakiros.readCreateDiffFile
+                    : window.nakiros.readFixDiffFile
+              }
             />
           ) : (
             <RunStream
@@ -694,13 +712,13 @@ function RunScreenBody({
               liveEvents={liveEvents}
               isStreaming={isRunning}
               timeline={
-                runKind === 'fix' || runKind === 'audit' || runKind === 'create'
+                runKind === 'fix' || runKind === 'audit' || runKind === 'create' || runKind === 'edit'
                   ? fixTimeline
                   : undefined
               }
               onOpenEvalDiff={runKind === 'fix' ? setEvalDiffResult : undefined}
               skillName={
-                runKind === 'fix' || runKind === 'create'
+                runKind === 'fix' || runKind === 'create' || runKind === 'edit'
                   ? (run as AuditRun).skillName
                   : undefined
               }
@@ -715,28 +733,28 @@ function RunScreenBody({
           kind={runKind}
           run={run as AuditRun}
           reportContent={reportContent}
-          onReject={runKind === 'fix' || runKind === 'create' ? handleReject : undefined}
+          onReject={runKind === 'fix' || runKind === 'create' || runKind === 'edit' ? handleReject : undefined}
           isRejecting={isRejecting}
           // Apply/Finish: surfaces the green "Apply & deploy" button in the
           // FixPanel. The handler chain (`handleFinish` → `api.actions.finish`
-          // → `fix:finish` / `create:finish` → `runner.finish` →
+          // → `fix:finish` / `create:finish` / `edit:finish` → `runner.finish` →
           // `spec.cleanupOnTerminal` → `cleanupRunWorkdir`) takes care of the
           // sync-back (into `.claude/skills-draft/<name>/` for create), tmp
           // workdir teardown AND the matching `~/.claude/projects/<encoded>/`
           // entry deletion.
-          onFinish={runKind === 'fix' || runKind === 'create' ? handleFinish : undefined}
+          onFinish={runKind === 'fix' || runKind === 'create' || runKind === 'edit' ? handleFinish : undefined}
           isFinishing={isFinishing}
           selectedDiffFile={
-            runKind === 'fix' || runKind === 'create' ? selectedDiffFile : null
+            runKind === 'fix' || runKind === 'create' || runKind === 'edit' ? selectedDiffFile : null
           }
           onSelectDiffFile={
-            runKind === 'fix' || runKind === 'create' ? setSelectedDiffFile : undefined
+            runKind === 'fix' || runKind === 'create' || runKind === 'edit' ? setSelectedDiffFile : undefined
           }
           // CLAUDE.md and rules runs don't have a skill-eval suite — hide
           // the "Run evals" button entirely. The bundled expert isn't
           // graded here, the user's CLAUDE.md / rule file is.
           onLaunchEval={
-            (runKind === 'fix' || runKind === 'create') && onOpenRunTab && !display.isClaudemd && !display.isRules
+            (runKind === 'fix' || runKind === 'create' || runKind === 'edit') && onOpenRunTab && !display.isClaudemd && !display.isRules
               ? handleLaunchEval
               : undefined
           }
@@ -872,11 +890,14 @@ function FixFileDiffView({
   relativePath,
   cacheScope,
   onBack,
+  readDiffFile = window.nakiros.readFixDiffFile,
 }: {
   runId: string;
   relativePath: string;
   cacheScope: string;
   onBack(): void;
+  /** IPC channel to read a single diff file. Defaults to fix. Pass edit/create variant when needed. */
+  readDiffFile?: (runId: string, relativePath: string) => Promise<SkillDiffFilePayload>;
 }) {
   const { t } = useTranslation('runs');
   const { t: tFix } = useTranslation('fix');
@@ -884,7 +905,7 @@ function FixFileDiffView({
   const fetchDiff = useMemo(
     () =>
       async (path: string): Promise<SkillDiffFileContent> => {
-        const payload: SkillDiffFilePayload = await window.nakiros.readFixDiffFile(runId, path);
+        const payload: SkillDiffFilePayload = await readDiffFile(runId, path);
         return {
           originalContent: payload.originalContent,
           modifiedContent: payload.modifiedContent,
@@ -1869,6 +1890,7 @@ function composeTitle(kind: AgentRunKind, run: AuditLikeRun, t: ReturnType<typeo
     audit: t('titles.audit', { defaultValue: 'Audit' }),
     fix: t('titles.fix', { defaultValue: 'Fix' }),
     create: t('titles.create', { defaultValue: 'Create skill' }),
+    edit: t('titles.edit', { defaultValue: 'Edit' }),
     'classify-convo': t('titles.classifyConvo', { defaultValue: 'Classify' }),
   };
   const prefix = labelByKind[kind] ?? kind;

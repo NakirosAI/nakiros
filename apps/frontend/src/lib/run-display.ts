@@ -38,7 +38,7 @@ export interface RunDisplayContext {
   /** Short label for the kind chip (ex "Audit", "Audit CLAUDE.md", "Fix CLAUDE.md"). */
   kindLabel: string;
   /** Bare action verb localised for the current run kind. */
-  actionVerb: 'Audit' | 'Fix' | 'Create' | 'Eval' | 'Analyze' | 'Classify';
+  actionVerb: 'Audit' | 'Fix' | 'Create' | 'Edit' | 'Eval' | 'Analyze' | 'Classify';
   /** What the run operates on, in user-facing prose. */
   targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp' | 'output style';
   /**
@@ -91,6 +91,7 @@ const ACTION_BY_KIND: Record<AgentRunKind, RunDisplayContext['actionVerb']> = {
   audit: 'Audit',
   fix: 'Fix',
   create: 'Create',
+  edit: 'Edit',
   eval: 'Eval',
   'analyze-convo': 'Analyze',
   'classify-convo': 'Classify',

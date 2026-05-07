@@ -148,7 +148,7 @@ export default function NewRunHeader({
           <>
             <span className="h-3.5 w-px bg-n-border-subtle" />
             <div className="flex flex-shrink-0 gap-1.5">
-              {onStop && (status === 'running' || status === 'pending') && (
+              {onStop && (status === 'running' || status === 'pending' || status === 'awaiting_input') && (
                 <ActionButton
                   icon={
                     isStopping ? (
@@ -167,11 +167,11 @@ export default function NewRunHeader({
                   disabled={isStopping}
                 />
               )}
-              {onFinish && status === 'done' && (
+              {onFinish && (status === 'awaiting_input' || status === 'done') && (
                 <ActionButton
                   icon={<CheckCircle size={12} strokeWidth={2.25} />}
                   label={
-                    kind === 'fix'
+                    kind === 'fix' || kind === 'edit'
                       ? t('finishAndDeploy', { defaultValue: 'Finish & deploy' })
                       : t('finish', { defaultValue: 'Finish' })
                   }
@@ -274,6 +274,8 @@ function kindVisual(kind: AgentRunKind): { Icon: LucideIcon; color: string; labe
       return { Icon: FlaskConical, color: 'var(--n-accent)', label: 'Eval run' };
     case 'fix':
       return { Icon: Wrench, color: 'var(--n-violet)', label: 'Fix session' };
+    case 'edit':
+      return { Icon: Wrench, color: 'var(--n-info)', label: 'Edit session' };
     case 'create':
       return { Icon: Plus, color: 'var(--n-healthy)', label: 'Create skill' };
     case 'analyze-convo':

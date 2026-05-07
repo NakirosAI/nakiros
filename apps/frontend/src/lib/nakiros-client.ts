@@ -337,7 +337,7 @@ const client = {
   listAllFixRuns: () => invoke(C['fix:listAll']),
   getFixBufferedEvents: (runId: string) => invoke(C['fix:getBufferedEvents'], runId),
   onFixEvent: (cb: (event: unknown) => void) => subscribe(C['fix:event'], cb),
-  listFixDiff: (runId: string) => invoke(C['fix:listDiff'], runId),
+  listFixDiff: (runId: string, opts?: { includeUnchanged?: boolean }) => invoke(C['fix:listDiff'], runId, opts),
   readFixDiffFile: (runId: string, relativePath: string) => invoke(C['fix:readDiffFile'], runId, relativePath),
   getFixEditsHistory: (runId: string) => invoke(C['fix:getEditsHistory'], runId),
   getFixTimeline: (runId: string) => invoke(C['fix:getTimeline'], runId),
@@ -354,7 +354,7 @@ const client = {
   listAllCreateRuns: () => invoke(C['create:listAll']),
   getCreateBufferedEvents: (runId: string) => invoke(C['create:getBufferedEvents'], runId),
   onCreateEvent: (cb: (event: unknown) => void) => subscribe(C['create:event'], cb),
-  listCreateDiff: (runId: string) => invoke(C['create:listDiff'], runId),
+  listCreateDiff: (runId: string, opts?: { includeUnchanged?: boolean }) => invoke(C['create:listDiff'], runId, opts),
   readCreateDiffFile: (runId: string, relativePath: string) => invoke(C['create:readDiffFile'], runId, relativePath),
   getCreateTimeline: (runId: string) => invoke(C['create:getTimeline'], runId),
   getCreateUsage: (runId: string) => invoke(C['create:getUsage'], runId),
@@ -620,6 +620,23 @@ const client = {
   listOutputStylesAudits: (projectId: string, styleName: string) =>
     invoke(C['outputStyles:listAudits'], projectId, styleName),
   readOutputStylesAudit: (path: string) => invoke(C['outputStyles:readAudit'], path),
+
+  // Edit
+  startEdit: (request: unknown) => invoke(C['edit:start'], request),
+  stopEdit: (runId: string) => invoke(C['edit:stopRun'], runId),
+  getEditRun: (runId: string) => invoke(C['edit:getRun'], runId),
+  sendEditUserMessage: (runId: string, message: string) => invoke(C['edit:sendUserMessage'], runId, message),
+  finishEdit: (runId: string) => invoke(C['edit:finish'], runId),
+  listActiveEditRuns: () => invoke(C['edit:listActive']),
+  listAllEditRuns: () => invoke(C['edit:listAll']),
+  getEditBufferedEvents: (runId: string) => invoke(C['edit:getBufferedEvents'], runId),
+  onEditEvent: (cb: (event: unknown) => void) => subscribe(C['edit:event'], cb),
+  listEditDiff: (runId: string, opts?: { includeUnchanged?: boolean }) => invoke(C['edit:listDiff'], runId, opts),
+  readEditDiffFile: (runId: string, relativePath: string) => invoke(C['edit:readDiffFile'], runId, relativePath),
+  getEditTimeline: (runId: string) => invoke(C['edit:getTimeline'], runId),
+  getEditUsage: (runId: string) => invoke(C['edit:getUsage'], runId),
+  runEditEvals: (request: { runId: string; evalNames?: string[]; includeBaseline?: boolean }) =>
+    invoke(C['edit:runEvals'], request),
 
   // Conversation friction-classifier runner (classify-convo)
   startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),

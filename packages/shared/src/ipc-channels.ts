@@ -167,6 +167,25 @@ export const IPC_CHANNELS = {
   'create:getUsage': 'create:getUsage',
   'create:runEvals': 'create:runEvals',
 
+  // Edit runner — user-driven edit of an existing entity (skill / claudemd /
+  // rules / subagents / hooks / permissions / mcp / output-styles). Mirrors
+  // fix:* with the same workdir seeding (entity → workdir) but no audit-driven
+  // findings. For skills, supports eval iterations like fix does.
+  'edit:start': 'edit:start',
+  'edit:stopRun': 'edit:stopRun',
+  'edit:getRun': 'edit:getRun',
+  'edit:sendUserMessage': 'edit:sendUserMessage',
+  'edit:finish': 'edit:finish',
+  'edit:event': 'edit:event',
+  'edit:listActive': 'edit:listActive',
+  'edit:listAll': 'edit:listAll',
+  'edit:getBufferedEvents': 'edit:getBufferedEvents',
+  'edit:listDiff': 'edit:listDiff',
+  'edit:readDiffFile': 'edit:readDiffFile',
+  'edit:getTimeline': 'edit:getTimeline',
+  'edit:getUsage': 'edit:getUsage',
+  'edit:runEvals': 'edit:runEvals',
+
   // Draft files (shared by fix + create — reads from the run's temp workdir)
   'skillAgent:listTempFiles': 'skillAgent:listTempFiles',
   'skillAgent:readTempFile': 'skillAgent:readTempFile',

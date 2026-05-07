@@ -105,7 +105,7 @@ export default function RunSidePanel({
   targetNoun = 'skill',
 }: RunSidePanelProps) {
   if (kind === 'audit') return <AuditPanel run={run} reportContent={reportContent} />;
-  if (kind === 'fix' || kind === 'create')
+  if (kind === 'fix' || kind === 'create' || kind === 'edit')
     return (
       <FixPanel
         kind={kind}
@@ -354,7 +354,7 @@ function FixPanel({
   isLaunchingEval,
   targetNoun,
 }: {
-  kind: 'fix' | 'create';
+  kind: 'fix' | 'create' | 'edit';
   run: AuditRun;
   onReject?: () => void;
   isRejecting?: boolean;
@@ -376,7 +376,11 @@ function FixPanel({
   useEffect(() => {
     let cancelled = false;
     const listDiff =
-      kind === 'create' ? window.nakiros.listCreateDiff : window.nakiros.listFixDiff;
+      kind === 'create'
+        ? window.nakiros.listCreateDiff
+        : kind === 'edit'
+          ? window.nakiros.listEditDiff
+          : window.nakiros.listFixDiff;
     const fetchDiff = () =>
       listDiff(run.runId)
         .then((entries) => {
@@ -389,7 +393,11 @@ function FixPanel({
     void fetchDiff();
 
     const subscribe =
-      kind === 'create' ? window.nakiros.onCreateEvent : window.nakiros.onFixEvent;
+      kind === 'create'
+        ? window.nakiros.onCreateEvent
+        : kind === 'edit'
+          ? window.nakiros.onEditEvent
+          : window.nakiros.onFixEvent;
     const unsubscribe = subscribe((envelope) => {
       const e = envelope as { runId: string; event: { type: string; name?: string } };
       if (e.runId !== run.runId) return;
@@ -418,12 +426,16 @@ function FixPanel({
   const panelTitle = isDirectEdit
     ? kind === 'create'
       ? t('panels.create.titleClaudemd', { defaultValue: 'Création CLAUDE.md' })
-      : t('panels.fix.titleClaudemd', { defaultValue: 'Fix CLAUDE.md' })
+      : kind === 'edit'
+        ? t('panels.edit.titleClaudemd', { defaultValue: 'Edit' })
+        : t('panels.fix.titleClaudemd', { defaultValue: 'Fix CLAUDE.md' })
     : kind === 'create'
       ? t('panels.create.title', { defaultValue: 'Skill creation' })
-      : t('panels.fix.title', { defaultValue: 'Fix sandbox' });
+      : kind === 'edit'
+        ? t('panels.edit.title', { defaultValue: 'Edit sandbox' })
+        : t('panels.fix.title', { defaultValue: 'Fix sandbox' });
   const panelIcon = kind === 'create' ? Plus : Wrench;
-  const panelTone = kind === 'create' ? 'healthy' : 'violet';
+  const panelTone = kind === 'create' ? 'healthy' : kind === 'edit' ? 'info' : 'violet';
 
   // Wording overrides for CLAUDE.md / rules targets — the bundled expert writes
   // to the user's file directly, there's no sandbox to deploy or discard.

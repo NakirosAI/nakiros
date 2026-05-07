@@ -14,6 +14,7 @@ import { comparisonHandlers } from './comparison.js';
 import { auditHandlers } from './audit.js';
 import { fixHandlers } from './fix.js';
 import { createHandlers } from './create.js';
+import { editHandlers } from './edit.js';
 import { skillAgentHandlers } from './skill-agent.js';
 import { analyzeConvoHandlers } from './analyze-convo.js';
 import { classifyConvoHandlers } from './classify-convo.js';
@@ -65,6 +66,7 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...auditHandlers,
     ...fixHandlers,
     ...createHandlers,
+    ...editHandlers,
     ...skillAgentHandlers,
     ...analyzeConvoHandlers,
     ...classifyConvoHandlers,

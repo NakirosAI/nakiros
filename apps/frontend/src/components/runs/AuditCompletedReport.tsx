@@ -6,12 +6,13 @@ import {
   ExternalLink,
   FileText,
   FlaskConical,
+  Play,
   Wrench,
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
 import type { AuditCheckSeverity, AuditRun, Skill } from '@nakiros/shared';
-import { launchEvalBatch, launchFix, type OpenRunTabCallback } from '../../lib/run-launcher';
+import { launchEdit, launchEvalBatch, launchFix, type OpenRunTabCallback } from '../../lib/run-launcher';
 import { useActiveFixForSkill } from '../../hooks/useAgentRun';
 import type { SkillTabIdentity } from '../../hooks/useTabs';
 import { runDisplayContext } from '../../lib/run-display';
@@ -69,6 +70,7 @@ export default function AuditCompletedReport({
   }, [run, hideEval]);
   const [isLaunchingEval, setIsLaunchingEval] = useState(false);
   const [isLaunchingFix, setIsLaunchingFix] = useState(false);
+  const [isLaunchingEdit, setIsLaunchingEdit] = useState(false);
 
   // Memoised so it doesn't re-create the identity object on every render —
   // `useActiveFixForSkill` short-circuits on referential equality.
@@ -104,6 +106,20 @@ export default function AuditCompletedReport({
       console.error('[audit-completed] launchFix failed', err);
     } finally {
       setIsLaunchingFix(false);
+    }
+  }
+
+  // Edit run — only relevant for .claude/ entity targets (hideEval is true).
+  const canLaunchEdit = Boolean(hideEval && identity && onOpenRunTab && !isLaunchingEdit);
+  async function handleLaunchEdit(): Promise<void> {
+    if (!identity || !onOpenRunTab) return;
+    setIsLaunchingEdit(true);
+    try {
+      await launchEdit(identity, onOpenRunTab);
+    } catch (err) {
+      console.error('[audit-completed] launchEdit failed', err);
+    } finally {
+      setIsLaunchingEdit(false);
     }
   }
 
@@ -259,6 +275,19 @@ export default function AuditCompletedReport({
             onClick={onOpenReport}
             disabled={!onOpenReport}
           />
+          {hideEval && (
+            <NextStepRow
+              icon={Play}
+              label={t('audit.report.openInEdit.button', {
+                defaultValue: 'Ouvrir une session Edit',
+              })}
+              subtitle={t('audit.report.openInEdit.subtitle', {
+                defaultValue: 'Édition interactive guidée par les findings',
+              })}
+              onClick={canLaunchEdit ? handleLaunchEdit : undefined}
+              disabled={!canLaunchEdit}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -333,6 +362,7 @@ function FindingRow({
 function NextStepRow({
   icon: Icon,
   label,
+  subtitle,
   primary = false,
   disabled = false,
   onClick,
@@ -340,6 +370,7 @@ function NextStepRow({
 }: {
   icon: LucideIcon;
   label: string;
+  subtitle?: string;
   primary?: boolean;
   disabled?: boolean;
   onClick?: () => void;
@@ -364,7 +395,12 @@ function NextStepRow({
         strokeWidth={2}
         className={primary ? 'text-n-accent' : 'text-n-muted'}
       />
-      <span className="flex-1">{label}</span>
+      <span className="flex-1">
+        {label}
+        {subtitle && (
+          <span className="mt-0.5 block font-n-mono text-[11px] text-n-muted">{subtitle}</span>
+        )}
+      </span>
       <ExternalLink
         size={12}
         strokeWidth={2}

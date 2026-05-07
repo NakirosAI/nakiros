@@ -366,3 +366,15 @@ Do NOT auto-create evals on `create`. Propose at the end.
 - **"eval run"** → Run tests, grade, produce benchmark
 - **"eval analyze"** → Analyze results, propose improvements
 - **"eval compare"** → Compare iterations (delta report)
+
+## Edit mode
+
+Triggered by `/nakiros-subagents-expert edit`. The user wants to **modify an existing subagent conversationally**, without an audit driving the changes.
+
+1. Read the seeded subagent content at `./draft.md` to understand what currently exists.
+2. Wait for the user's first message describing what to change.
+3. Propose changes (Write/Edit tools on `./draft.md` only — Claude Code blocks writes inside `.claude/**`), explain trade-offs, iterate.
+4. Re-read `./draft.md` after each substantive change to confirm the in-context view is current.
+5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
+
+No findings file, no audit manifest. The user's chat is the spec. Nakiros copies `./draft.md` to the final destination when the user clicks "Apply & Deploy"; you do not need to call `finish` yourself.

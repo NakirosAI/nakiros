@@ -13,6 +13,8 @@
   "runAuditTitle": "Lancer un audit sur ce style de sortie",
   "runFix": "Fix",
   "runFixTitle": "Lancer un fix sur ce style de sortie",
+  "runEdit": "Edit",
+  "runEditTitle": "Ouvrir une session Edit interactive sur ce style de sortie",
   "runCreate": "Créer",
   "runCreateTitle": "Générer ce style de sortie avec l'IA",
   "runLaunching": "Lancement…",

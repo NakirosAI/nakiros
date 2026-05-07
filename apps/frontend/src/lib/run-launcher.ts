@@ -1,4 +1,4 @@
-import type { AuditRun, ClaudeMdRunMode, HooksRunMode, McpRunMode, OutputStylesRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode } from '@nakiros/shared';
+import type { AuditRun, ClaudeMdRunMode, HooksRunMode, McpRunMode, OutputStylesRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode, StartAuditRequest } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import { computeEvalRunId } from './eval-batch-key';
 
@@ -21,7 +21,7 @@ import { computeEvalRunId } from './eval-batch-key';
 /** Callback fired with the resolved run identity once the start succeeds. */
 export type OpenRunTabCallback = (params: {
   runId: string;
-  runKind: 'audit' | 'fix' | 'create' | 'eval' | 'classify-convo';
+  runKind: 'audit' | 'fix' | 'create' | 'edit' | 'eval' | 'classify-convo';
   label: string;
 }) => void;
 
@@ -92,6 +92,23 @@ export async function launchCreate(
 }
 
 /**
+ * Start a free-form edit run against a skill (or any entity whose skill
+ * identity is known). The agent is seeded with the current content; the user
+ * drives the conversation ("change X", "add Y"). Apply & deploy when done.
+ */
+export async function launchEdit(
+  identity: SkillTabIdentity,
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const run = await window.nakiros.startEdit(identityToRequest(identity) as StartAuditRequest);
+  openRunTab({
+    runId: run.runId,
+    runKind: 'edit',
+    label: `Edit · ${identity.skillName}`,
+  });
+}
+
+/**
  * Start an audit / fix / create run that targets the project-root `./CLAUDE.md`
  * via the bundled `nakiros-claudemd-expert`. Reuses the same `startAudit` /
  * `startFix` / `startCreate` IPC channels as skill runs — only the request
@@ -119,6 +136,9 @@ export async function launchClaudemd(
   } else if (request.mode === 'fix') {
     const run = await window.nakiros.startFix(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · CLAUDE.md' });
+  } else if (request.mode === 'edit') {
+    const run = await window.nakiros.startEdit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'edit', label: 'Edit · CLAUDE.md' });
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · CLAUDE.md' });
@@ -155,6 +175,9 @@ export async function launchRules(
   } else if (request.mode === 'fix') {
     const run = await window.nakiros.startFix(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${shortName}` });
+  } else if (request.mode === 'edit') {
+    const run = await window.nakiros.startEdit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'edit', label: `Edit · ${shortName}` });
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${shortName}` });
@@ -191,6 +214,9 @@ export async function launchSubagents(
   } else if (request.mode === 'fix') {
     const run = await window.nakiros.startFix(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${shortName}` });
+  } else if (request.mode === 'edit') {
+    const run = await window.nakiros.startEdit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'edit', label: `Edit · ${shortName}` });
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${shortName}` });
@@ -226,6 +252,9 @@ export async function launchHooks(
   } else if (request.mode === 'fix') {
     const run = await window.nakiros.startFix(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · Hooks' });
+  } else if (request.mode === 'edit') {
+    const run = await window.nakiros.startEdit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'edit', label: 'Edit · Hooks' });
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · Hooks' });
@@ -263,6 +292,9 @@ export async function launchPermissions(
   } else if (request.mode === 'fix') {
     const run = await window.nakiros.startFix(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · Permissions${scopeSuffix}` });
+  } else if (request.mode === 'edit') {
+    const run = await window.nakiros.startEdit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'edit', label: `Edit · Permissions${scopeSuffix}` });
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: `Create · Permissions${scopeSuffix}` });
@@ -298,6 +330,9 @@ export async function launchMcp(
   } else if (request.mode === 'fix') {
     const run = await window.nakiros.startFix(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · MCP' });
+  } else if (request.mode === 'edit') {
+    const run = await window.nakiros.startEdit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'edit', label: 'Edit · MCP' });
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · MCP' });
@@ -340,6 +375,9 @@ export async function launchOutputStyles(
   } else if (request.mode === 'fix') {
     const run = await window.nakiros.startFix(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${shortName}` });
+  } else if (request.mode === 'edit') {
+    const run = await window.nakiros.startEdit(baseRequest);
+    openRunTab({ runId: run.runId, runKind: 'edit', label: `Edit · ${shortName}` });
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
     openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${shortName}` });

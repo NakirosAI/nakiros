@@ -8,6 +8,7 @@ import { buildHandlerRegistry } from './handlers/index.js';
 import { eventBus } from './event-bus.js';
 import {
   listAllCreateRuns,
+  listAllEditRuns,
   listAllFixRuns,
   restoreOrCleanupTempWorkdirs,
   sweepFixTempArtifacts,
@@ -89,6 +90,9 @@ function collectLiveProjectEntryNames(): Set<string> {
     if (isActiveRunStatus(run.status)) add(run.workdir);
   }
   for (const run of listAllCreateRuns()) {
+    if (isActiveRunStatus(run.status)) add(run.workdir);
+  }
+  for (const run of listAllEditRuns()) {
     if (isActiveRunStatus(run.status)) add(run.workdir);
   }
   for (const run of listAllAnalyzeConvoRuns()) {

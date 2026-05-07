@@ -324,7 +324,7 @@ declare global {
       listAllFixRuns(): Promise<AuditRun[]>;
       getFixBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onFixEvent(cb: (event: AuditRunEvent) => void): () => void;
-      listFixDiff(runId: string): Promise<SkillDiffEntry[]>;
+      listFixDiff(runId: string, opts?: { includeUnchanged?: boolean }): Promise<SkillDiffEntry[]>;
       getFixEditsHistory(runId: string): Promise<FixEdit[]>;
       getFixTimeline(runId: string): Promise<FixTimelineEntry[]>;
       getFixTempMatrix(runId: string): Promise<EvalMatrix>;
@@ -341,7 +341,7 @@ declare global {
       listAllCreateRuns(): Promise<AuditRun[]>;
       getCreateBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onCreateEvent(cb: (event: AuditRunEvent) => void): () => void;
-      listCreateDiff(runId: string): Promise<SkillDiffEntry[]>;
+      listCreateDiff(runId: string, opts?: { includeUnchanged?: boolean }): Promise<SkillDiffEntry[]>;
       readCreateDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
       getCreateTimeline(runId: string): Promise<FixTimelineEntry[]>;
       getCreateUsage(runId: string): Promise<FixUsage>;
@@ -548,7 +548,7 @@ declare global {
       listAllEditRuns(): Promise<AuditRun[]>;
       getEditBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
       onEditEvent(cb: (event: AuditRunEvent) => void): () => void;
-      listEditDiff(runId: string): Promise<SkillDiffEntry[]>;
+      listEditDiff(runId: string, opts?: { includeUnchanged?: boolean }): Promise<SkillDiffEntry[]>;
       readEditDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
       getEditTimeline(runId: string): Promise<FixTimelineEntry[]>;
       getEditUsage(runId: string): Promise<FixUsage>;

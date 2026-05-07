@@ -87,5 +87,17 @@
       "Reading…",
       "Working…"
     ]
+  },
+  "ide": {
+    "filesTitle": "Files in workdir",
+    "noFiles": "No files yet.",
+    "refresh": "Refresh file list",
+    "noFileSelected": "No file selected",
+    "loadingFile": "Loading…",
+    "binaryFile": "Binary file — preview unavailable.",
+    "emptyFile": "(empty file)",
+    "agentEditing": "Agent is editing",
+    "quoteInChat": "Quote in chat",
+    "removeQuote": "Remove quote"
   }
 }

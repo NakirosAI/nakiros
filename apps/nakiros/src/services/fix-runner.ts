@@ -899,13 +899,19 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           languageLine,
           `- You are in **edit mode** for CLAUDE.md.`,
           `- Project root: ${ct.projectPath}`,
-          `- Target file: ${targetPath} (${exists ? 'exists — read it first' : 'does not exist yet'})`,
+          `- Target file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
           '',
-          `- The user will tell you what to change in the next message — wait for their instructions, then propose edits, run any tools you need, and write back to the target file directly (Nakiros runs you with permissions on the project tree).`,
-          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
+          `**First-turn protocol — do these in order before asking the user anything:**`,
+          exists
+            ? `1. Read \`${targetPath}\` so you have the current CLAUDE.md content in context.`
+            : `1. Note that \`${targetPath}\` does not exist yet — you will create it from scratch.`,
+          `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit \`CLAUDE.md\`. What would you like to change?" / "Prêt à éditer \`CLAUDE.md\`. Que veux-tu modifier ?"`,
+          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read the file after each substantive change.`,
+          '',
+          `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
           `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- Reference: \`/${CLAUDEMD_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
-          `- For now: ${exists ? 'read the current CLAUDE.md to understand what\'s there, then ask the user what they want to modify.' : 'the file does not exist — ask the user what they want to create.'}`,
         ].join('\n');
       }
       const command = req.mode === 'fix' ? 'fix' : 'create';
@@ -935,13 +941,18 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           `- You are in **edit mode** for rule \`${rt.ruleName}\`.`,
           `- Final destination: ${finalPath} (managed by Nakiros — DO NOT write there yourself).`,
           `- Project root: ${rt.projectPath}`,
+          `- Draft file (your working copy): ${draftPath}`,
+          '',
+          `**First-turn protocol — do these in order before asking the user anything:**`,
+          seeded
+            ? `1. Read \`${draftPath}\` so you have the current rule content in context.`
+            : `1. Note that \`${draftPath}\` does not exist yet — you will create it from scratch.`,
+          `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit rule \`${rt.ruleName}\`. What would you like to change?" / "Prêt à éditer la règle \`${rt.ruleName}\`. Que veux-tu modifier ?"`,
+          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read \`./draft.md\` after each substantive change.`,
           '',
           `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit ONLY at \`./draft.md\` (absolute: ${draftPath}). Nakiros will copy it to the final destination when the user clicks "Apply & Deploy".`,
-          seeded
-            ? `- The current rule was seeded at ./draft.md — read it first to understand what's there.`
-            : `- ./draft.md does not exist yet — ask the user what rule to create.`,
-          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
           `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- Reference: \`/${RULES_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
         ].join('\n');
       }
@@ -975,13 +986,18 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           `- You are in **edit mode** for subagent \`${st.subagentName}\`.`,
           `- Final destination: ${finalPath} (managed by Nakiros — DO NOT write there yourself).`,
           `- Project root: ${st.projectPath}`,
+          `- Draft file (your working copy): ${draftPath}`,
+          '',
+          `**First-turn protocol — do these in order before asking the user anything:**`,
+          seeded
+            ? `1. Read \`${draftPath}\` so you have the current subagent content in context.`
+            : `1. Note that \`${draftPath}\` does not exist yet — you will create it from scratch.`,
+          `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit subagent \`${st.subagentName}\`. What would you like to change?" / "Prêt à éditer le subagent \`${st.subagentName}\`. Que veux-tu modifier ?"`,
+          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read \`./draft.md\` after each substantive change.`,
           '',
           `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit ONLY at \`./draft.md\` (absolute: ${draftPath}). Nakiros will copy it to the final destination when the user clicks "Apply & Deploy".`,
-          seeded
-            ? `- The current subagent was seeded at ./draft.md — read it first to understand what's there.`
-            : `- ./draft.md does not exist yet — ask the user what subagent to create.`,
-          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
           `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- Reference: \`/${SUBAGENTS_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
         ].join('\n');
       }
@@ -1014,11 +1030,16 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           `- You are in **edit mode** for the hooks configuration.`,
           `- Final destination: ${settingsPath} (key "hooks" — managed by Nakiros — DO NOT write to settings.json yourself).`,
           `- Project root: ${ht.projectPath}`,
+          `- Draft file (your working copy): ${draftPath} — contains ONLY the "hooks" sub-block, not the full settings file.`,
           '',
-          `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY \`./draft.json\` (absolute: ${draftPath}). This file contains ONLY the "hooks" sub-block — not the full settings file. Write valid JSON. Nakiros merges it back when the user clicks "Apply & Deploy".`,
-          `- ./draft.json was pre-seeded with the current hooks block — read it first to understand what's there.`,
-          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
+          `**First-turn protocol — do these in order before asking the user anything:**`,
+          `1. Read \`${draftPath}\` so you have the current hooks configuration in context.`,
+          `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit the hooks configuration. What would you like to change?" / "Prêt à éditer la configuration des hooks. Que veux-tu modifier ?"`,
+          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read \`./draft.json\` after each substantive change.`,
+          '',
+          `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY \`./draft.json\` (absolute: ${draftPath}). Write valid JSON representing the hooks block only. Nakiros merges it back when the user clicks "Apply & Deploy".`,
           `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- Reference: \`/${HOOKS_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
         ].join('\n');
       }
@@ -1051,11 +1072,16 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           `- Final destination: ${settingsPath} (key "permissions" — managed by Nakiros — DO NOT write to ${filename} yourself).`,
           `- Project root: ${pt.projectPath}`,
           `- Scope: ${scope}`,
+          `- Draft file (your working copy): ${draftPath} — contains ONLY the "permissions" sub-block, not the full settings file.`,
           '',
-          `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY \`./draft.json\` (absolute: ${draftPath}). This file contains ONLY the "permissions" sub-block — not the full settings file. Write valid JSON. Nakiros merges it back when the user clicks "Apply & Deploy".`,
-          `- ./draft.json was pre-seeded with the current permissions block — read it first to understand what's there.`,
-          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
+          `**First-turn protocol — do these in order before asking the user anything:**`,
+          `1. Read \`${draftPath}\` so you have the current permissions configuration in context.`,
+          `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit the ${scope} permissions configuration. What would you like to change?" / "Prêt à éditer la configuration des permissions ${scope}. Que veux-tu modifier ?"`,
+          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read \`./draft.json\` after each substantive change.`,
+          '',
+          `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY \`./draft.json\` (absolute: ${draftPath}). Write valid JSON representing the permissions block only. Nakiros merges it back when the user clicks "Apply & Deploy".`,
           `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- Reference: \`/${PERMISSIONS_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
         ].join('\n');
       }
@@ -1085,14 +1111,19 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           languageLine,
           `- You are in **edit mode** for the MCP configuration.`,
           `- Project root: ${mt.projectPath}`,
-          `- Target file: ${mcpPath} (${exists ? 'exists — read it first' : 'does not exist yet'})`,
+          `- Target file: ${mcpPath} (${exists ? 'exists' : 'does not exist yet'})`,
+          '',
+          `**First-turn protocol — do these in order before asking the user anything:**`,
+          exists
+            ? `1. Read \`${mcpPath}\` so you have the current MCP configuration in context.`
+            : `1. Note that \`${mcpPath}\` does not exist yet — you will create it from scratch.`,
+          `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit \`.mcp.json\`. What would you like to change?" / "Prêt à éditer \`.mcp.json\`. Que veux-tu modifier ?"`,
+          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read the file after each substantive change.`,
           '',
           `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
-          `- The user will tell you what to change in the next message — wait for their instructions, then propose edits, run any tools you need, and write back to ${mcpPath}.`,
-          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- Reference: \`/${MCP_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
-          `- For now: ${exists ? 'read the current .mcp.json to understand what\'s there, then ask the user what they want to modify.' : 'the file does not exist — ask the user what MCP servers to configure.'}`,
         ].join('\n');
       }
       const command = req.mode === 'fix' ? 'fix' : 'create';
@@ -1122,13 +1153,18 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           `- You are in **edit mode** for output style \`${ost.styleName}\`.`,
           `- Final destination: ${finalPath} (managed by Nakiros — DO NOT write there yourself).`,
           `- Project root: ${ost.projectPath}`,
+          `- Draft file (your working copy): ${draftPath}`,
+          '',
+          `**First-turn protocol — do these in order before asking the user anything:**`,
+          seeded
+            ? `1. Read \`${draftPath}\` so you have the current output style content in context.`
+            : `1. Note that \`${draftPath}\` does not exist yet — you will create it from scratch.`,
+          `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit output style \`${ost.styleName}\`. What would you like to change?" / "Prêt à éditer le style de sortie \`${ost.styleName}\`. Que veux-tu modifier ?"`,
+          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read \`./draft.md\` after each substantive change.`,
           '',
           `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit ONLY at \`./draft.md\` (absolute: ${draftPath}). Nakiros will copy it to the final destination when the user clicks "Apply & Deploy".`,
-          seeded
-            ? `- The current output style was seeded at ./draft.md — read it first to understand what's there.`
-            : `- ./draft.md does not exist yet — ask the user what output style to create.`,
-          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
           `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- Reference: \`/${OUTPUT_STYLES_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
         ].join('\n');
       }
@@ -1155,20 +1191,27 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         : '- No prior eval iteration in this workdir.';
       const seedIter = extras.latestIteration ?? 0;
       const nextIterHint = seedIter > 0 ? seedIter + 1 : 1;
-      return `/${FACTORY_SKILL_NAME} edit ${req.skillName}
-
-You are in **edit mode** for skill \`${req.skillName}\`. The current content has been seeded into your working directory (\`${workdir}\`).
-${languageLine}
-- The user will tell you what to change in the next message — wait for their instructions, then propose edits, run any tools you need, and write back to the relevant files.
-- All paths are relative to cwd: \`SKILL.md\`, \`references/\`, \`assets/\`, \`evals/\`, etc.
-- IMPORTANT: before declaring any file missing, run \`ls -la <dir>/\` (or Glob) RECURSIVELY. Do not overwrite existing files without reading them first — the copy of the skill is complete.
-${iterLine}
-- Between your turns, the user may click "Run evals" to re-run the eval suite against your in-progress edits. The first fresh iteration will appear in \`./evals/workspace/iteration-${nextIterHint}/\`. Before you declare the edit done, suggest running evals and read the latest benchmark.json to confirm no regression.
-- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.
-- No audit findings, no audit manifest. The user's chat is the spec.
-- Do not modify \`.claude/settings.local.json\` in this workdir — it's Nakiros's runtime config.
-
-Reference: \`/${FACTORY_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure. For now: read the seeded content to understand what's there, then ask the user what they want to modify.`;
+      return [
+        `/${FACTORY_SKILL_NAME} edit ${req.skillName}`,
+        '',
+        languageLine,
+        `- You are in **edit mode** for skill \`${req.skillName}\`.`,
+        `- Working directory (full skill copy): ${workdir}`,
+        `- All paths are relative to cwd: \`SKILL.md\`, \`references/\`, \`assets/\`, \`evals/\`, etc.`,
+        '',
+        `**First-turn protocol — do these in order before asking the user anything:**`,
+        `1. Read \`${workdir}/SKILL.md\` so you have the current skill definition in context. If \`evals/evals.json\` exists, read it too for context on the eval suite.`,
+        `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit skill \`${req.skillName}\`. What would you like to change?" / "Prêt à éditer le skill \`${req.skillName}\`. Que veux-tu modifier ?"`,
+        `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read the relevant files after each substantive change.`,
+        '',
+        `- IMPORTANT: before declaring any file missing, run \`ls -la <dir>/\` (or Glob) RECURSIVELY. Do not overwrite existing files without reading them first — the copy of the skill is complete.`,
+        iterLine,
+        `- Between your turns, the user may click "Run evals" to re-run the eval suite against your in-progress edits. The first fresh iteration will appear in \`./evals/workspace/iteration-${nextIterHint}/\`. Before you declare the edit done, suggest running evals and read the latest benchmark.json to confirm no regression.`,
+        `- No audit findings, no audit manifest. The user's chat is the spec.`,
+        `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
+        `- Do not modify \`.claude/settings.local.json\` in this workdir — it's Nakiros's runtime config.`,
+        `- Reference: \`/${FACTORY_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
+      ].join('\n');
     }
 
     if (req.mode === 'fix') {
@@ -1629,14 +1672,14 @@ ${languageLine}
     // otherwise we collapse to `stopped` so the user can dismiss the
     // half-applied sandbox.
     //
-    // Create: ALWAYS restore to `waiting_for_input` regardless of sessionId.
-    // The sandbox under `~/.nakiros/tmp-skills/<runId>/` is the user's draft —
-    // marking it terminal here would (1) hide it from the listing and
-    // (2) drop the cwd from `collectLiveProjectEntryNames`, letting the
-    // boot sweep wipe `~/.claude/projects/<encoded>/<sessionId>.jsonl` and
+    // Create AND Edit: ALWAYS restore to `waiting_for_input` regardless of
+    // sessionId. The sandbox under `~/.nakiros/tmp-skills/<runId>/` is the
+    // user's draft — marking it terminal here would (1) hide it from the
+    // listing and (2) drop the cwd from `collectLiveProjectEntryNames`, letting
+    // the boot sweep wipe `~/.claude/projects/<encoded>/<sessionId>.jsonl` and
     // erase the conversation history. Keeping it active preserves the tmp,
-    // the Claude session jsonl, and lets the user resume on the next
-    // message (with `--resume` if sessionId is recovered, fresh turn otherwise).
+    // the Claude session jsonl, and lets the user resume on the next message
+    // (with `--resume` if sessionId is recovered, fresh turn otherwise).
     const wasActive = blob.status === 'starting' || blob.status === 'running';
     // run.json may not have flushed sessionId before the crash. Recover it
     // from the most recent `*.jsonl` Claude wrote under the cwd-encoded
@@ -1656,7 +1699,7 @@ ${languageLine}
       !wasActive ||
       (Boolean(recoveredSessionId) && sessionFile !== null && existsSync(sessionFile));
     const restoredStatus: AuditRun['status'] =
-      mode === 'create' || canResume ? 'waiting_for_input' : 'stopped';
+      mode === 'create' || mode === 'edit' || canResume ? 'waiting_for_input' : 'stopped';
     const restoredRun: AuditRun = {
       runId: blob.runId,
       scope: blob.scope,
@@ -2936,16 +2979,17 @@ function readPair(relativePath: string, originalDir: string | null, modifiedDir:
  * diff preview panel. Entries carry `inOriginal` / `inModified` flags so
  * created / deleted / modified states render distinctly.
  */
-export function listFixDiff(runId: string): SkillDiffEntry[] {
+export function listFixDiff(runId: string, opts?: { includeUnchanged?: boolean }): SkillDiffEntry[] {
   const entry = runner.registry().get(runId);
   if (!entry) return [];
+  const includeUnchanged = opts?.includeUnchanged === true;
 
   // Non-skill targets (claudemd / rules / subagents / hooks / permissions /
   // mcp / output-styles) compare against a frozen snapshot under
   // `<workdir>/.snapshot/`, not the bundled-expert directory.
   const nonSkillSpec = getNonSkillTargetDiffSpec(entry.run);
   if (nonSkillSpec) {
-    return listNonSkillTargetDiff(nonSkillSpec);
+    return listNonSkillTargetDiff(nonSkillSpec, includeUnchanged);
   }
 
   const realDir = entry.extras.realSkillDir;
@@ -2968,8 +3012,11 @@ export function listFixDiff(runId: string): SkillDiffEntry[] {
       try {
         const a = readFileSync(join(realDir, rel));
         const b = readFileSync(join(tempDir, rel));
-        if (a.equals(b)) continue;
-        if (isLikelyBinary(a) || isLikelyBinary(b)) {
+        if (a.equals(b)) {
+          if (!includeUnchanged) continue;
+          // includeUnchanged: surface the entry with zero deltas so the IDE
+          // file list can show the file as a navigable, unmodified entry.
+        } else if (isLikelyBinary(a) || isLikelyBinary(b)) {
           // Binary — surface as modified but no line counts.
         } else {
           const stats = countLineDiff(a.toString('utf8'), b.toString('utf8'));
@@ -3007,7 +3054,10 @@ export function listFixDiff(runId: string): SkillDiffEntry[] {
  * Returns an empty array when both sides are absent or identical so the
  * UI doesn't render a stale row.
  */
-function listNonSkillTargetDiff(spec: NonSkillTargetDiffSpec): SkillDiffEntry[] {
+function listNonSkillTargetDiff(
+  spec: NonSkillTargetDiffSpec,
+  includeUnchanged = false,
+): SkillDiffEntry[] {
   const inOriginal = spec.snapshotPath !== null && existsSync(spec.snapshotPath);
   const inModified = existsSync(spec.modifiedPath);
   if (!inOriginal && !inModified) return [];
@@ -3019,8 +3069,12 @@ function listNonSkillTargetDiff(spec: NonSkillTargetDiffSpec): SkillDiffEntry[] 
     try {
       const a = readFileSync(spec.snapshotPath!);
       const b = readFileSync(spec.modifiedPath);
-      if (a.equals(b)) return [];
-      if (!isLikelyBinary(a) && !isLikelyBinary(b)) {
+      if (a.equals(b)) {
+        // Identical: hide from the existing workspace panel (which only
+        // surfaces changed files), but surface for the IDE file list which
+        // wants to show the entity even before any edit happens.
+        if (!includeUnchanged) return [];
+      } else if (!isLikelyBinary(a) && !isLikelyBinary(b)) {
         const stats = countLineDiff(a.toString('utf8'), b.toString('utf8'));
         addedLines = stats.added;
         removedLines = stats.removed;

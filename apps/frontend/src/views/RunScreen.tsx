@@ -43,6 +43,8 @@ import {
 import { ArrowLeft } from 'lucide-react';
 import type { SkillDiffFilePayload } from '@nakiros/shared';
 import type { LiveStreamEvent } from '../components/ConversationTurn';
+import { IDE_RUN_LAYOUT } from '../lib/feature-flags';
+import IdeRunScreen from './IdeRunScreen';
 
 interface RunScreenProps {
   /** Run id from the agent run store. */
@@ -91,6 +93,16 @@ export default function RunScreen(props: RunScreenProps) {
         onOpenRunTab={props.onOpenRunTab}
       />
     );
+  }
+  // IDE layout feature flag: when `?runs=ide` is in the URL, edit / fix /
+  // create runs render the 3-pane IDE screen instead of AuditLikeRunScreen.
+  // Audit stays on the current screen regardless — it is read-only and does
+  // not benefit from the code viewer.
+  if (
+    IDE_RUN_LAYOUT &&
+    (props.runKind === 'edit' || props.runKind === 'fix' || props.runKind === 'create')
+  ) {
+    return <IdeRunScreen {...props} />;
   }
   return <AuditLikeRunScreen {...props} />;
 }

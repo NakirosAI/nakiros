@@ -87,5 +87,17 @@
       "Lecture…",
       "Travail en cours…"
     ]
+  },
+  "ide": {
+    "filesTitle": "Fichiers du workdir",
+    "noFiles": "Aucun fichier pour l'instant.",
+    "refresh": "Rafraîchir la liste",
+    "noFileSelected": "Aucun fichier sélectionné",
+    "loadingFile": "Chargement…",
+    "binaryFile": "Fichier binaire — aperçu indisponible.",
+    "emptyFile": "(fichier vide)",
+    "agentEditing": "L'agent modifie",
+    "quoteInChat": "Citer dans le chat",
+    "removeQuote": "Supprimer la citation"
   }
 }

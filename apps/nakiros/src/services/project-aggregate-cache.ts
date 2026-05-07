@@ -4,7 +4,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import type {
   ConversationAnalysis,
@@ -17,6 +17,11 @@ import { eventBus } from '../daemon/event-bus.js';
 import { listConversations } from './conversation-parser.js';
 import { getProject } from './project-scanner.js';
 import { getOrComputeAnalysis } from './conversation-analysis-cache.js';
+import {
+  ensureProjectIndexed,
+  ensureCoworkProjectIndexed,
+  listSessionsForProject,
+} from './conversation-ingest/index.js';
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'aggregates');
@@ -76,15 +81,40 @@ async function computeAggregate(projectId: string): Promise<ProjectAggregate | n
   const project = getProject(projectId);
   if (!project) return null;
 
-  const convs = listConversations(project.providerProjectDir, projectId);
+  // Trigger lazy ingest so the aggregate is always based on up-to-date data,
+  // even when the HomeScreen card is opened before the user navigates into the
+  // project (which is the only place ensureIndexed was previously called).
+  if (project.provider === 'cowork') {
+    ensureCoworkProjectIndexed(project.providerProjectDir, project.projectPath);
+  } else {
+    ensureProjectIndexed(project.providerProjectDir);
+  }
+
   const analyses: ConversationAnalysis[] = [];
-  for (const conv of convs) {
-    const a = getOrComputeAnalysis(
-      project.providerProjectDir,
-      conv.sessionId,
-      projectId,
-    );
-    if (a) analyses.push(a);
+
+  // Prefer the ingest store: for Cowork projects, the JSONL files do NOT live
+  // directly under providerProjectDir, so listConversations() would return 0
+  // results and the aggregate would be empty.  Use the per-session
+  // transcriptPath (via dirname) to locate the correct JSONL folder.
+  const sessions = listSessionsForProject(project.projectPath);
+  if (sessions.length > 0) {
+    for (const s of sessions) {
+      const analysisDir = dirname(s.transcriptPath);
+      const a = getOrComputeAnalysis(analysisDir, s.sessionId, projectId);
+      if (a) analyses.push(a);
+    }
+  } else {
+    // Fallback for projects not yet indexed (fresh daemon boot, manual wipe,
+    // or pre-ingest non-cowork projects).
+    const convs = listConversations(project.providerProjectDir, projectId);
+    for (const conv of convs) {
+      const a = getOrComputeAnalysis(
+        project.providerProjectDir,
+        conv.sessionId,
+        projectId,
+      );
+      if (a) analyses.push(a);
+    }
   }
 
   const aggregate = aggregateAnalyses(projectId, analyses);

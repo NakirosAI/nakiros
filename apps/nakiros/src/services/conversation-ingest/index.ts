@@ -31,6 +31,7 @@ export {
   purgeIngestData,
   readSessionBody,
   toProjectConversation,
+  getSessionTranscriptDir,
 } from './project-store.js';
 export {
   getIngestHookScriptPath,

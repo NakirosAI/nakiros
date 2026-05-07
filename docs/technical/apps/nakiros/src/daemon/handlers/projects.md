@@ -34,6 +34,8 @@ Registers the `project:*` IPC channels — project scanning, conversation metada
 - `provider === 'cowork'` → `ensureCoworkProjectIndexed(providerProjectDir, projectPath)`
 - all others → `ensureProjectIndexed(providerProjectDir)`
 
+For analysis channels (`analyzeConversation`, `listConversationsWithAnalysis`, `deepAnalyzeConversation`), the JSONL directory is resolved per-session via `getSessionTranscriptDir(project.projectPath, sessionId)`, which returns `dirname(session.transcriptPath)` from the ingest store. This handles the Cowork layout where the JSONL lives under `<userDir>/local_<uuid>/.claude/projects/<encoded>/` rather than directly under `providerProjectDir`. Falls back to `project.providerProjectDir` when the session is not found in the store.
+
 ## Exports
 
 ### `const projectHandlers`

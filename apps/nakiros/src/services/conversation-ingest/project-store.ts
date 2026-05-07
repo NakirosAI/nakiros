@@ -6,7 +6,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import type {
   ConversationIngestProject,
@@ -279,6 +279,30 @@ export function readSessionBody(projectPath: string, sessionId: string): Session
   } catch {
     return null;
   }
+}
+
+/**
+ * Return the directory containing the source JSONL for a given session, by
+ * looking up the session's `transcriptPath` in the ingest store.
+ *
+ * Use this instead of `project.providerProjectDir` for providers (e.g.
+ * `'cowork'`) where the JSONL does not live directly under
+ * `providerProjectDir` — the session's `transcriptPath` is the authoritative
+ * absolute path recorded at ingest time.
+ *
+ * Returns `null` when the session is not found in the store (e.g. it was
+ * purged since the last ingest pass).
+ */
+export function getSessionTranscriptDir(
+  projectPath: string,
+  sessionId: string,
+): string | null {
+  const index = readIndex();
+  const project = index.projects[projectPath];
+  if (!project) return null;
+  const session = project.sessions[sessionId];
+  if (!session) return null;
+  return dirname(session.transcriptPath);
 }
 
 /**

@@ -1,3 +1,5 @@
+import { dirname } from 'node:path';
+
 import {
   scan as scanProjects,
   listProjects,
@@ -16,6 +18,7 @@ import {
   loadDigest,
   readSessionBody,
   toProjectConversation,
+  getSessionTranscriptDir,
 } from '../../services/conversation-ingest/index.js';
 import {
   loadProjectAggregate,
@@ -119,7 +122,9 @@ export const projectHandlers: HandlerRegistry = {
   'project:analyzeConversation': createTypedHandler((projectId: string, sessionId: string) => {
     const project = getProject(projectId);
     if (!project) return null;
-    return getOrComputeAnalysis(project.providerProjectDir, sessionId, projectId);
+    const analysisDir =
+      getSessionTranscriptDir(project.projectPath, sessionId) ?? project.providerProjectDir;
+    return getOrComputeAnalysis(analysisDir, sessionId, projectId);
   }),
 
   'project:listConversationsWithAnalysis': createTypedHandler((projectId: string) => {
@@ -127,13 +132,23 @@ export const projectHandlers: HandlerRegistry = {
     if (!project) return [];
     ensureIndexed(project);
     const sessions = listSessionsForProject(project.projectPath);
-    const convs =
-      sessions.length > 0
-        ? sessions.map((s) => toProjectConversation(s, projectId))
-        : listConversations(project.providerProjectDir, projectId);
     // Carry the `kind` tag from the ingest store onto each analysis so the
     // ConversationsScreen can hide synthetic runs by default without a
     // second IPC round-trip.
+    if (sessions.length > 0) {
+      return sessions
+        .map((s) => {
+          // For providers like 'cowork', the JSONL does not live directly under
+          // providerProjectDir — use the per-session transcriptPath instead.
+          const analysisDir = dirname(s.transcriptPath);
+          const analysis = getOrComputeAnalysis(analysisDir, s.sessionId, projectId);
+          if (!analysis) return null;
+          return s.kind ? { ...analysis, kind: s.kind } : analysis;
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+    }
+    // Fallback: not yet indexed — read live JSONL directly (non-cowork only).
+    const convs = listConversations(project.providerProjectDir, projectId);
     return convs
       .map((c) => {
         const analysis = getOrComputeAnalysis(project.providerProjectDir, c.sessionId, projectId);
@@ -159,7 +174,9 @@ export const projectHandlers: HandlerRegistry = {
     async (projectId: string, sessionId: string) => {
       const project = getProject(projectId);
       if (!project) throw new Error(`Project ${projectId} not found`);
-      return runDeepAnalysis(project.providerProjectDir, sessionId, projectId);
+      const analysisDir =
+        getSessionTranscriptDir(project.projectPath, sessionId) ?? project.providerProjectDir;
+      return runDeepAnalysis(analysisDir, sessionId, projectId);
     },
   ),
 

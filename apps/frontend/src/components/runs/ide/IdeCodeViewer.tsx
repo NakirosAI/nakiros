@@ -1,8 +1,106 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentRunKind } from '@nakiros/shared';
+import { Prism, themes } from 'prism-react-renderer';
+import type { Token } from 'prism-react-renderer';
 import { computeLineDiff, type DiffLine } from '../../../lib/line-diff';
 import type { QuoteSelection } from './types';
+
+// ─── Theme ────────────────────────────────────────────────────────────────────
+
+const codeTheme = themes.vsDark;
+
+// Build a quick lookup map: token type → CSS color string, from the theme.
+const tokenColorMap: Record<string, string> = {};
+for (const entry of codeTheme.styles) {
+  if (entry.style.color) {
+    for (const type of entry.types) {
+      tokenColorMap[type] = entry.style.color;
+    }
+  }
+}
+
+/** Resolve the color for a token given its types array (last match wins, like CSS). */
+function tokenColor(types: string[]): string | undefined {
+  for (let i = types.length - 1; i >= 0; i--) {
+    const c = tokenColorMap[types[i]];
+    if (c) return c;
+  }
+  return undefined;
+}
+
+// ─── Language detection ───────────────────────────────────────────────────────
+
+/**
+ * Detect a Prism language name from a file path.
+ * Handles synthetic paths like `.claude/settings.json (hooks)` by stripping
+ * the trailing parenthetical before checking the extension.
+ */
+function detectLanguage(filePath: string): string {
+  // Strip trailing annotation like " (hooks)" or " (permissions)".
+  const cleanPath = filePath.replace(/\s*\([^)]*\)\s*$/, '');
+  const lower = cleanPath.toLowerCase();
+  if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
+  if (lower.endsWith('.tsx')) return 'tsx';
+  if (lower.endsWith('.ts')) return 'typescript';
+  if (lower.endsWith('.jsx')) return 'jsx';
+  if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) return 'javascript';
+  if (lower.endsWith('.json')) return 'json';
+  if (lower.endsWith('.yaml') || lower.endsWith('.yml')) return 'yaml';
+  if (lower.endsWith('.sh') || lower.endsWith('.bash') || lower.endsWith('.zsh')) return 'bash';
+  if (lower.endsWith('.css')) return 'css';
+  if (lower.endsWith('.html')) return 'markup';
+  return 'plain';
+}
+
+// ─── Large-file threshold ─────────────────────────────────────────────────────
+
+/**
+ * If a file exceeds this line count we skip syntax highlighting and fall back
+ * to plain text rendering.  Prism is synchronous and fast for normal .claude/
+ * files, but we don't want to block the render thread on huge generated files.
+ */
+const MAX_HIGHLIGHTED_LINES = 3000;
+
+// ─── Token-line renderer ──────────────────────────────────────────────────────
+
+/**
+ * Render a single array of Prism tokens as inline <span> elements.
+ * Each token gets its theme color via an inline style; the outer wrapper
+ * carries data-line-text so the quote handler can collect plain text.
+ */
+function TokenizedLineContent({
+  tokens,
+  plainText,
+  className,
+}: {
+  tokens: Token[] | null;
+  plainText: string;
+  className: string;
+}) {
+  if (!tokens) {
+    return (
+      <span data-line-text className={className}>
+        {plainText}
+      </span>
+    );
+  }
+
+  return (
+    <span data-line-text className={className}>
+      {tokens.map((token, i) => {
+        const color = tokenColor(token.types);
+        return (
+          <span key={i} style={color ? { color } : undefined}>
+            {token.content}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface IdeCodeViewerProps {
   runId: string;
@@ -57,6 +155,98 @@ function FloatingQuoteButton({ label, position, onClick }: FloatingQuoteButtonPr
   );
 }
 
+// ─── Line row sub-components ──────────────────────────────────────────────────
+
+interface LineRowProps {
+  dl: DiffLine;
+  /** Pre-computed token array for this line, or null to fall back to plain text. */
+  tokens: Token[] | null;
+}
+
+function LineRow({ dl, tokens }: LineRowProps) {
+  const isAdded = dl.kind === 'added';
+  const isRemoved = dl.kind === 'removed';
+
+  const lineTextClass = isAdded
+    ? 'flex-1 whitespace-pre-wrap break-all text-emerald-200'
+    : isRemoved
+    ? 'flex-1 whitespace-pre-wrap break-all text-red-200'
+    : 'flex-1 whitespace-pre-wrap break-all text-n-fg';
+
+  return (
+    <span
+      data-lineno={dl.lineNo}
+      className={
+        isAdded
+          ? 'flex bg-emerald-500/10'
+          : isRemoved
+          ? 'flex bg-red-500/10'
+          : 'flex'
+      }
+    >
+      {/* Gutter */}
+      <span
+        aria-hidden
+        className="w-12 shrink-0 select-none pr-4 text-right font-n-mono text-[11px] text-n-faint"
+        style={{ userSelect: 'none' }}
+      >
+        {dl.lineNo}
+      </span>
+      {/* Change sigil — echoes the row highlight colour */}
+      <span
+        aria-hidden
+        className={
+          isAdded
+            ? 'w-4 shrink-0 select-none font-n-mono text-[11px] text-emerald-400'
+            : isRemoved
+            ? 'w-4 shrink-0 select-none font-n-mono text-[11px] text-red-400'
+            : 'w-4 shrink-0 select-none font-n-mono text-[11px]'
+        }
+        style={{ userSelect: 'none' }}
+      >
+        {isAdded ? '+' : isRemoved ? '−' : ' '}
+      </span>
+      {/* Line text — tokenized if available, plain otherwise */}
+      <TokenizedLineContent
+        tokens={tokens}
+        plainText={dl.line}
+        className={lineTextClass}
+      />
+      {/* Trailing newline to preserve copy–paste behaviour */}
+      {'\n'}
+    </span>
+  );
+}
+
+function PlainLineRow({
+  lineNo,
+  line,
+  tokens,
+}: {
+  lineNo: number;
+  line: string;
+  tokens: Token[] | null;
+}) {
+  return (
+    <span data-lineno={lineNo} className="flex">
+      <span
+        aria-hidden
+        className="w-12 shrink-0 select-none pr-4 text-right font-n-mono text-[11px] text-n-faint"
+        style={{ userSelect: 'none' }}
+      >
+        {lineNo}
+      </span>
+      <span className="w-4 shrink-0 select-none text-[11px]" aria-hidden> </span>
+      <TokenizedLineContent
+        tokens={tokens}
+        plainText={line}
+        className="flex-1 whitespace-pre-wrap break-all text-n-fg"
+      />
+      {'\n'}
+    </span>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 /**
@@ -64,6 +254,8 @@ function FloatingQuoteButton({ label, position, onClick }: FloatingQuoteButtonPr
  * currently-selected file with:
  * - Line numbers in a gutter.
  * - Green background for added lines, red struck-through for removed lines.
+ * - Syntax highlighting via `prism-react-renderer` (vsDark theme), tokenizing
+ *   the full file for correct multi-line context.
  * - A floating "Quote in chat" button that appears when the user selects text,
  *   reporting back the file path, line range, and snippet.
  *
@@ -155,6 +347,50 @@ export default function IdeCodeViewer({
     const original = content.originalContent ?? '';
     return computeLineDiff(original, modified);
   }, [content]);
+
+  // ── Syntax highlighting ─────────────────────────────────────────────────
+
+  const language = useMemo(
+    () => (selectedFile ? detectLanguage(selectedFile) : 'plain'),
+    [selectedFile],
+  );
+
+  /**
+   * Tokenize the FULL original and modified content separately so multi-line
+   * syntax constructs (string literals, JSX blocks, etc.) are handled correctly.
+   * Returns null when the file is too large (> MAX_HIGHLIGHTED_LINES) or the
+   * language is 'plain' — callers fall back to plain text rendering.
+   */
+  const originalTokenLines = useMemo<Token[][] | null>(() => {
+    if (language === 'plain' || !content?.originalContent) return null;
+    const lineCount = content.originalContent.split('\n').length;
+    if (lineCount > MAX_HIGHLIGHTED_LINES) return null;
+    try {
+      // useTokenize is exported as a hook but the implementation is a pure
+      // synchronous call — we call it outside of a hook via the underlying
+      // Prism.tokenize path instead to avoid React rules-of-hooks issues.
+      const grammar = Prism.languages[language];
+      if (!grammar) return null;
+      const rawTokens = Prism.tokenize(content.originalContent, grammar);
+      return normalizeTokenLines(rawTokens);
+    } catch {
+      return null;
+    }
+  }, [content?.originalContent, language]);
+
+  const modifiedTokenLines = useMemo<Token[][] | null>(() => {
+    if (language === 'plain' || !content?.modifiedContent) return null;
+    const lineCount = content.modifiedContent.split('\n').length;
+    if (lineCount > MAX_HIGHLIGHTED_LINES) return null;
+    try {
+      const grammar = Prism.languages[language];
+      if (!grammar) return null;
+      const rawTokens = Prism.tokenize(content.modifiedContent, grammar);
+      return normalizeTokenLines(rawTokens);
+    } catch {
+      return null;
+    }
+  }, [content?.modifiedContent, language]);
 
   // ── Selection → quote handler ───────────────────────────────────────────
 
@@ -289,14 +525,27 @@ export default function IdeCodeViewer({
           className="m-0 min-h-full p-0 font-n-mono text-[12px] leading-[1.6]"
           style={{ tabSize: 2 }}
         >
-          {diffLines?.map((dl) => (
-            <LineRow key={`${dl.kind}-${dl.lineNo}-${dl.line.slice(0, 20)}`} dl={dl} />
-          ))}
+          {diffLines?.map((dl) => {
+            // For removed lines look up originalTokenLines; for added/unchanged use modifiedTokenLines.
+            const tokenLines = dl.kind === 'removed' ? originalTokenLines : modifiedTokenLines;
+            // lineNo is 1-based; token arrays are 0-indexed.
+            const lineTokens = tokenLines?.[dl.lineNo - 1] ?? null;
+            return (
+              <LineRow
+                key={`${dl.kind}-${dl.lineNo}-${dl.line.slice(0, 20)}`}
+                dl={dl}
+                tokens={lineTokens}
+              />
+            );
+          })}
           {/* Fallback: if originalContent is null (new file) render modifiedContent directly */}
           {!diffLines && content?.modifiedContent != null && (
-            content.modifiedContent.split('\n').map((line, idx) => (
-              <PlainLineRow key={idx} lineNo={idx + 1} line={line} />
-            ))
+            content.modifiedContent.split('\n').map((line, idx) => {
+              const lineTokens = modifiedTokenLines?.[idx] ?? null;
+              return (
+                <PlainLineRow key={idx} lineNo={idx + 1} line={line} tokens={lineTokens} />
+              );
+            })
           )}
           {!diffLines && !content?.modifiedContent && (
             <span className="px-4 font-n-mono text-[11px] text-n-faint">
@@ -318,79 +567,61 @@ export default function IdeCodeViewer({
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function LineRow({ dl }: { dl: DiffLine }) {
-  const isAdded = dl.kind === 'added';
-  const isRemoved = dl.kind === 'removed';
+/**
+ * Convert Prism's flat token array (returned by `Prism.tokenize`) into a
+ * 2-D array of lines, where each inner array is the list of tokens on that
+ * line.  Plain string tokens are promoted to `Token` objects with type
+ * `['plain-text']`.
+ *
+ * This mirrors what `normalizeTokens` from `prism-react-renderer` does, but
+ * we call it outside of React so we can use it in `useMemo` without needing
+ * to render a `<Highlight>` element.
+ */
+function normalizeTokenLines(
+  rawTokens: (string | import('prismjs').Token)[],
+): Token[][] {
+  const lines: Token[][] = [[]];
 
-  return (
-    <span
-      data-lineno={dl.lineNo}
-      className={
-        isAdded
-          ? 'flex bg-emerald-500/10'
-          : isRemoved
-          ? 'flex bg-red-500/10'
-          : 'flex'
+  function processToken(token: string | import('prismjs').Token, inheritedTypes: string[] = []): void {
+    if (typeof token === 'string') {
+      // A plain string — may span multiple lines; split on '\n'.
+      const parts = token.split('\n');
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0) {
+          // New line.
+          lines.push([]);
+        }
+        if (parts[i]) {
+          lines[lines.length - 1].push({
+            types: [...inheritedTypes, 'plain-text'],
+            content: parts[i],
+          });
+        }
       }
-    >
-      {/* Gutter */}
-      <span
-        aria-hidden
-        className="w-12 shrink-0 select-none pr-4 text-right font-n-mono text-[11px] text-n-faint"
-        style={{ userSelect: 'none' }}
-      >
-        {dl.lineNo}
-      </span>
-      {/* Change sigil — echoes the row highlight colour */}
-      <span
-        aria-hidden
-        className={
-          isAdded
-            ? 'w-4 shrink-0 select-none font-n-mono text-[11px] text-emerald-400'
-            : isRemoved
-            ? 'w-4 shrink-0 select-none font-n-mono text-[11px] text-red-400'
-            : 'w-4 shrink-0 select-none font-n-mono text-[11px]'
+    } else {
+      const types = [...inheritedTypes, token.type];
+      const { content } = token;
+      if (typeof content === 'string') {
+        const parts = content.split('\n');
+        for (let i = 0; i < parts.length; i++) {
+          if (i > 0) lines.push([]);
+          if (parts[i]) {
+            lines[lines.length - 1].push({ types, content: parts[i] });
+          }
         }
-        style={{ userSelect: 'none' }}
-      >
-        {isAdded ? '+' : isRemoved ? '−' : ' '}
-      </span>
-      {/* Line text */}
-      <span
-        data-line-text
-        className={
-          isAdded
-            ? 'flex-1 whitespace-pre-wrap break-all text-emerald-200'
-            : isRemoved
-            ? 'flex-1 whitespace-pre-wrap break-all text-red-200'
-            : 'flex-1 whitespace-pre-wrap break-all text-n-fg'
+      } else if (Array.isArray(content)) {
+        for (const child of content) {
+          processToken(child as string | import('prismjs').Token, types);
         }
-      >
-        {dl.line}
-      </span>
-      {/* Trailing newline to preserve copy–paste behaviour */}
-      {'\n'}
-    </span>
-  );
-}
+      }
+    }
+  }
 
-function PlainLineRow({ lineNo, line }: { lineNo: number; line: string }) {
-  return (
-    <span data-lineno={lineNo} className="flex">
-      <span
-        aria-hidden
-        className="w-12 shrink-0 select-none pr-4 text-right font-n-mono text-[11px] text-n-faint"
-        style={{ userSelect: 'none' }}
-      >
-        {lineNo}
-      </span>
-      <span className="w-4 shrink-0 select-none text-[11px]" aria-hidden> </span>
-      <span data-line-text className="flex-1 whitespace-pre-wrap break-all text-n-fg">
-        {line}
-      </span>
-      {'\n'}
-    </span>
-  );
+  for (const token of rawTokens) {
+    processToken(token);
+  }
+
+  return lines;
 }

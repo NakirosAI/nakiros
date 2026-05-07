@@ -90,7 +90,7 @@ export default function NewShell({
    */
   const handleOpenRunByIds = (params: {
     runId: string;
-    runKind: 'audit' | 'fix' | 'create' | 'eval' | 'classify-convo';
+    runKind: 'audit' | 'fix' | 'create' | 'edit' | 'eval' | 'classify-convo';
     label: string;
   }) => {
     openTab({ kind: 'run', runId: params.runId, runKind: params.runKind, label: params.label });

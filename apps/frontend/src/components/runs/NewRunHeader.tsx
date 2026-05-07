@@ -171,7 +171,7 @@ export default function NewRunHeader({
                 <ActionButton
                   icon={<CheckCircle size={12} strokeWidth={2.25} />}
                   label={
-                    kind === 'fix'
+                    kind === 'fix' || kind === 'edit'
                       ? t('finishAndDeploy', { defaultValue: 'Finish & deploy' })
                       : t('finish', { defaultValue: 'Finish' })
                   }
@@ -274,6 +274,8 @@ function kindVisual(kind: AgentRunKind): { Icon: LucideIcon; color: string; labe
       return { Icon: FlaskConical, color: 'var(--n-accent)', label: 'Eval run' };
     case 'fix':
       return { Icon: Wrench, color: 'var(--n-violet)', label: 'Fix session' };
+    case 'edit':
+      return { Icon: Wrench, color: 'var(--n-info)', label: 'Edit session' };
     case 'create':
       return { Icon: Plus, color: 'var(--n-healthy)', label: 'Create skill' };
     case 'analyze-convo':

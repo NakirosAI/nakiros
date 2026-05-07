@@ -354,3 +354,15 @@ Do NOT auto-create evals on `create`. Propose at the end.
 - **"eval run"** → Run tests, grade, produce benchmark
 - **"eval analyze"** → Analyze results, propose improvements
 - **"eval compare"** → Compare iterations (delta report)
+
+## Edit mode
+
+Triggered by `/nakiros-permissions-expert edit`. The user wants to **modify the existing permissions configuration conversationally**, without an audit driving the changes.
+
+1. Read the seeded permissions block at `./draft.json` to understand what currently exists. This file contains ONLY the `"permissions"` sub-block, not the full settings file.
+2. Wait for the user's first message describing what to change.
+3. Propose changes (Write/Edit tools on `./draft.json` only — Claude Code blocks writes inside `.claude/**`), explain trade-offs, iterate. Always write valid JSON.
+4. Re-read `./draft.json` after each substantive change to confirm the in-context view is current.
+5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
+
+No findings file, no audit manifest. The user's chat is the spec. Nakiros merges `./draft.json` back into the scoped settings file (preserving all other keys) when the user clicks "Apply & Deploy"; you do not need to call `finish` yourself.

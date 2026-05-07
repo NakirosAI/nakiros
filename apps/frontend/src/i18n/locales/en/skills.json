@@ -9,6 +9,7 @@
   "notFound": "Skill not found",
   "runAudit": "Audit",
   "runFix": "Fix",
+  "runEdit": "Edit",
   "runEvalsStarting": "Starting…",
   "starting": "Starting…",
   "auditTab": {

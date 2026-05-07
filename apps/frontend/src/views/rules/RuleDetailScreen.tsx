@@ -327,6 +327,23 @@ export default function RuleDetailScreen({
                 )}
                 {launchingMode === 'fix' ? t('detail.runLaunching') : t('detail.runFix')}
               </button>
+              <button
+                type="button"
+                disabled={launchingMode !== null}
+                onClick={() => void handleLaunchRun('edit')}
+                className={
+                  'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
+                  (launchingMode === null ? 'hover:bg-n-raised hover:text-n-fg' : 'opacity-60')
+                }
+                title={t('detail.runEditTitle')}
+              >
+                {launchingMode === 'edit' ? (
+                  <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
+                ) : (
+                  <Play size={12} strokeWidth={2} />
+                )}
+                {launchingMode === 'edit' ? t('detail.runLaunching') : t('detail.runEdit')}
+              </button>
             </>
           )}
           {onOpenRunTab && !exists && (

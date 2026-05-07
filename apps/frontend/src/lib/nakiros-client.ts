@@ -621,6 +621,23 @@ const client = {
     invoke(C['outputStyles:listAudits'], projectId, styleName),
   readOutputStylesAudit: (path: string) => invoke(C['outputStyles:readAudit'], path),
 
+  // Edit
+  startEdit: (request: unknown) => invoke(C['edit:start'], request),
+  stopEdit: (runId: string) => invoke(C['edit:stopRun'], runId),
+  getEditRun: (runId: string) => invoke(C['edit:getRun'], runId),
+  sendEditUserMessage: (runId: string, message: string) => invoke(C['edit:sendUserMessage'], runId, message),
+  finishEdit: (runId: string) => invoke(C['edit:finish'], runId),
+  listActiveEditRuns: () => invoke(C['edit:listActive']),
+  listAllEditRuns: () => invoke(C['edit:listAll']),
+  getEditBufferedEvents: (runId: string) => invoke(C['edit:getBufferedEvents'], runId),
+  onEditEvent: (cb: (event: unknown) => void) => subscribe(C['edit:event'], cb),
+  listEditDiff: (runId: string) => invoke(C['edit:listDiff'], runId),
+  readEditDiffFile: (runId: string, relativePath: string) => invoke(C['edit:readDiffFile'], runId, relativePath),
+  getEditTimeline: (runId: string) => invoke(C['edit:getTimeline'], runId),
+  getEditUsage: (runId: string) => invoke(C['edit:getUsage'], runId),
+  runEditEvals: (request: { runId: string; evalNames?: string[]; includeBaseline?: boolean }) =>
+    invoke(C['edit:runEvals'], request),
+
   // Conversation friction-classifier runner (classify-convo)
   startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),
   stopClassifyConvo: (runId: string) => invoke(C['classifyConvo:stopRun'], runId),

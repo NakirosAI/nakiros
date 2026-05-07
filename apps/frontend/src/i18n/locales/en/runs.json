@@ -14,13 +14,18 @@
   "titles": {
     "audit": "Audit",
     "fix": "Fix",
-    "create": "Create skill"
+    "create": "Create skill",
+    "edit": "Edit"
   },
   "unsupported": {
     "title": "Coming soon",
     "body": "This run kind is wired up in a follow-up PR."
   },
   "panels": {
+    "edit": {
+      "title": "Edit session",
+      "titleClaudemd": "Edit CLAUDE.md"
+    },
     "eval": {
       "title": "Eval batch",
       "iteration": "Iteration",
@@ -39,6 +44,14 @@
       "noBaseline": "No baseline runs in this batch.",
       "withSkill": "With skill",
       "baseline": "Baseline"
+    }
+  },
+  "audit": {
+    "report": {
+      "openInEdit": {
+        "button": "Open an Edit session",
+        "subtitle": "Interactive editing guided by the findings"
+      }
     }
   },
   "interruptedBadge": "Interrompu",

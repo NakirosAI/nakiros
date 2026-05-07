@@ -13,6 +13,8 @@
   "runAuditTitle": "Run an audit on this output style",
   "runFix": "Fix",
   "runFixTitle": "Run a fix pass on this output style",
+  "runEdit": "Edit",
+  "runEditTitle": "Open an interactive edit session on this output style",
   "runCreate": "Create",
   "runCreateTitle": "Generate this output style with AI",
   "runLaunching": "Launching…",

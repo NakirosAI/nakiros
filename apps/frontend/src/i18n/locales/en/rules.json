@@ -14,6 +14,8 @@
     "runAuditTitle": "Run an audit on this rule",
     "runFix": "Fix",
     "runFixTitle": "Run a fix pass on this rule",
+    "runEdit": "Edit",
+    "runEditTitle": "Open an interactive edit session on this rule",
     "runCreate": "Create",
     "runCreateTitle": "Generate this rule with AI",
     "runLaunching": "Launching…",

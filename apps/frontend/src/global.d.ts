@@ -538,6 +538,22 @@ declare global {
       ): Promise<OutputStylesAuditHistoryEntry[]>;
       readOutputStylesAudit(path: string): Promise<string | null>;
 
+      // Edit
+      startEdit(request: StartAuditRequest): Promise<AuditRun>;
+      stopEdit(runId: string): Promise<void>;
+      getEditRun(runId: string): Promise<AuditRun | null>;
+      sendEditUserMessage(runId: string, message: string): Promise<void>;
+      finishEdit(runId: string): Promise<void>;
+      listActiveEditRuns(): Promise<AuditRun[]>;
+      listAllEditRuns(): Promise<AuditRun[]>;
+      getEditBufferedEvents(runId: string): Promise<AuditRunEvent['event'][]>;
+      onEditEvent(cb: (event: AuditRunEvent) => void): () => void;
+      listEditDiff(runId: string): Promise<SkillDiffEntry[]>;
+      readEditDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
+      getEditTimeline(runId: string): Promise<FixTimelineEntry[]>;
+      getEditUsage(runId: string): Promise<FixUsage>;
+      runEditEvals(request: { runId: string; evalNames?: string[]; includeBaseline?: boolean }): Promise<StartEvalRunResponse>;
+
       // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
       getConversationIngestStatus(): Promise<ConversationIngestStatus>;
       previewConversationIngestHookDiff(): Promise<ConversationIngestHookDiff>;

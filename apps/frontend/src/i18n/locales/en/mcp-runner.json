@@ -10,6 +10,8 @@
   "runAuditTitle": "Run nakiros-mcp-expert in audit mode against this project's MCP config",
   "runFix": "Fix",
   "runFixTitle": "Run nakiros-mcp-expert in fix mode (consumes audit findings)",
+  "runEdit": "Edit",
+  "runEditTitle": "Open an interactive edit session on the project's MCP config",
   "runCreate": "Create",
   "runCreateTitle": "Bootstrap .mcp.json for this project via nakiros-mcp-expert",
   "runLaunching": "Launching…",

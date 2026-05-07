@@ -72,17 +72,21 @@ const MCP_EXPERT_SKILL_NAME = 'nakiros-mcp-expert';
 const OUTPUT_STYLES_EXPERT_SKILL_NAME = 'nakiros-output-styles-expert';
 
 /**
- * Two flavors of skill-factory-driven runs:
+ * Three flavors of skill-factory-driven runs:
  * - `fix`    : the skill exists; copy it into a temp workdir, let the agent edit,
  *              sync back to the existing location on confirmation.
  * - `create` : the skill does NOT exist yet; start the agent with an empty temp
  *              workdir, sync back to the target location only if it still doesn't
  *              exist (to avoid clobbering).
+ * - `edit`   : user-driven interactive editing of an existing entity (skill or
+ *              .claude/ config). Same sandbox seeding as `fix` but NO audit
+ *              findings — the user's chat is the spec. The agent waits for the
+ *              user's first message describing what to change.
  *
- * Both share the same runtime machinery via `createRunner`. They differ only in
- * workdir seeding, first-turn prompt, and sync-back policy.
+ * All three share the same runtime machinery via `createRunner`. They differ
+ * only in workdir seeding, first-turn prompt, and sync-back policy.
  */
-export type SkillAgentMode = 'fix' | 'create';
+export type SkillAgentMode = 'fix' | 'create' | 'edit';
 
 interface SkillAgentExtras {
   mode: SkillAgentMode;
@@ -231,6 +235,7 @@ function isRuntimeOnlyPath(rel: string): boolean {
   if (rel === 'run.json' || rel === 'events.jsonl') return true;
   if (rel === 'audits' || rel.startsWith('audits/')) return true;
   if (rel === '.claude' || rel.startsWith('.claude/')) return true;
+  if (rel === '.snapshot' || rel.startsWith('.snapshot/')) return true;
   if (rel.startsWith('evals/workspace/') || rel === 'evals/workspace') return true;
   // `.fix-temp/` is the per-fix-session segregated workspace on the real
   // skill side. It is NEVER copied into the tmp workdir at fix start
@@ -245,6 +250,118 @@ function isRuntimeOnlyPath(rel: string): boolean {
   // a workdir-only surface — never sync it back to the real skill.
   if (rel === 'outputs' || rel.startsWith('outputs/')) return true;
   return false;
+}
+
+// ─── Non-skill diff snapshots ──────────────────────────────────────────────
+//
+// For runs that target a non-skill entity (CLAUDE.md, rules, subagents,
+// hooks, permissions, mcp, output-styles), the workdir is NOT a copy of
+// the entity — it only contains a symlink to the bundled expert plus a
+// `draft.<ext>` file (or nothing, when the agent edits the project file
+// directly). To render a clean diff in the workspace panel, we freeze a
+// "before" snapshot at run start under `<workdir>/.snapshot/` and the
+// diff functions compare it against the live "after" location.
+
+const SNAPSHOT_DIR_NAME = '.snapshot';
+
+interface NonSkillTargetDiffSpec {
+  /** Display path shown in the diff list (e.g. `CLAUDE.md`, `.claude/rules/i18n.md`). */
+  displayPath: string;
+  /** Absolute path to the frozen "before" snapshot, or `null` when the source did not exist at run start. */
+  snapshotPath: string | null;
+  /**
+   * Absolute path to the live "after" file. For direct-write targets
+   * (claudemd, mcp), this is the project file the agent edits in place.
+   * For draft-based targets (rules, subagents, output-styles, hooks,
+   * permissions), this is the workdir's `draft.<ext>`.
+   */
+  modifiedPath: string;
+}
+
+/**
+ * Copy `sourcePath` into `<workdir>/.snapshot/<snapshotName>` so the diff
+ * panel has a frozen "before" reference. Idempotent and silent on missing
+ * source (the diff just shows the after side as "new").
+ */
+function seedDiffSnapshot(workdir: string, snapshotName: string, sourcePath: string): void {
+  if (!existsSync(sourcePath)) return;
+  const snapDir = join(workdir, SNAPSHOT_DIR_NAME);
+  const dest = join(snapDir, snapshotName);
+  if (existsSync(dest)) return;
+  try {
+    mkdirSync(snapDir, { recursive: true });
+    copyFileSync(sourcePath, dest);
+  } catch (err) {
+    console.warn(`[fix-runner] Could not seed diff snapshot ${snapshotName}: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Resolve a non-skill diff spec from the persisted run record. Derived on
+ * demand (rather than cached in extras) so it survives daemon restart
+ * without rehydration plumbing. Returns `null` when the run targets a
+ * skill — callers fall back to the existing workdir-vs-realSkillDir walk.
+ */
+function getNonSkillTargetDiffSpec(run: AuditRun): NonSkillTargetDiffSpec | null {
+  const workdir = run.workdir;
+  const snapDir = join(workdir, SNAPSHOT_DIR_NAME);
+  const snapAt = (name: string): string | null => {
+    const abs = join(snapDir, name);
+    return existsSync(abs) ? abs : null;
+  };
+
+  if (run.claudemdTarget) {
+    return {
+      displayPath: 'CLAUDE.md',
+      snapshotPath: snapAt('CLAUDE.md'),
+      modifiedPath: join(run.claudemdTarget.projectPath, 'CLAUDE.md'),
+    };
+  }
+  if (run.rulesTarget) {
+    return {
+      displayPath: `.claude/rules/${run.rulesTarget.ruleName}`,
+      snapshotPath: snapAt('draft.md'),
+      modifiedPath: join(workdir, 'draft.md'),
+    };
+  }
+  if (run.subagentsTarget) {
+    return {
+      displayPath: `.claude/agents/${run.subagentsTarget.subagentName}`,
+      snapshotPath: snapAt('draft.md'),
+      modifiedPath: join(workdir, 'draft.md'),
+    };
+  }
+  if (run.hooksTarget) {
+    return {
+      displayPath: '.claude/settings.json (hooks)',
+      snapshotPath: snapAt('draft.json'),
+      modifiedPath: join(workdir, 'draft.json'),
+    };
+  }
+  if (run.permissionsTarget) {
+    const scope = run.permissionsTarget.scope ?? 'project';
+    const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
+    return {
+      displayPath: `.claude/${filename} (permissions)`,
+      snapshotPath: snapAt('draft.json'),
+      modifiedPath: join(workdir, 'draft.json'),
+    };
+  }
+  if (run.mcpTarget) {
+    return {
+      displayPath: '.mcp.json',
+      snapshotPath: snapAt('.mcp.json'),
+      modifiedPath: join(run.mcpTarget.projectPath, '.mcp.json'),
+    };
+  }
+  if (run.outputStylesTarget) {
+    return {
+      displayPath: `.claude/output-styles/${run.outputStylesTarget.styleName}`,
+      snapshotPath: snapAt('draft.md'),
+      modifiedPath: join(workdir, 'draft.md'),
+    };
+  }
+  return null;
 }
 
 function syncBackToSkill(tempDir: string, realSkillDir: string): { filesCopied: number } {
@@ -524,7 +641,10 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           console.warn(`[skill-agent-runner] Failed to symlink expert: ${(err as Error).message}`);
         }
       }
-    } else if (req.mode === 'fix') {
+    } else if (req.mode === 'fix' || req.mode === 'edit') {
+      // edit mode seeds the workdir identically to fix — same sandbox, same
+      // content copy. The difference is only in the first prompt (no audit
+      // findings) and that edit runs have no pre-existing findings to load.
       copySkillSourceForFix(req.skillDir, workdir);
       latestAuditFile = copyLatestAudit(req.skillDir, workdir);
       latestIteration = copyLatestIteration(req.skillDir, workdir);
@@ -548,6 +668,9 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json: ${(err as Error).message}`);
       }
+      // Snapshot the live CLAUDE.md so the workspace diff panel can show a
+      // clean before/after — the agent edits the project file in place.
+      seedDiffSnapshot(workdir, 'CLAUDE.md', join(req.claudemdTarget.projectPath, 'CLAUDE.md'));
     }
 
     // For rules fix/create runs, write the same cross-entity snapshot so the
@@ -641,6 +764,9 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for mcp: ${(err as Error).message}`);
       }
+      // Snapshot the live .mcp.json so the workspace diff panel can show a
+      // clean before/after — the agent edits the project file in place.
+      seedDiffSnapshot(workdir, '.mcp.json', join(req.mcpTarget.projectPath, '.mcp.json'));
     }
 
     // For rules fix/create runs, seed `<workdir>/draft.md` from the existing
@@ -655,6 +781,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         if (existsSync(sourcePath)) {
           copyFileSync(sourcePath, draftPath);
         }
+        seedDiffSnapshot(workdir, 'draft.md', sourcePath);
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not seed rules draft: ${(err as Error).message}`);
       }
@@ -671,6 +798,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         if (existsSync(sourcePath)) {
           copyFileSync(sourcePath, draftPath);
         }
+        seedDiffSnapshot(workdir, 'draft.md', sourcePath);
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not seed subagents draft: ${(err as Error).message}`);
       }
@@ -685,6 +813,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         const ht = req.hooksTarget;
         const { content } = readHooksBlock(ht.projectPath);
         writeFileSync(join(workdir, 'draft.json'), content, 'utf8');
+        seedDiffSnapshot(workdir, 'draft.json', join(workdir, 'draft.json'));
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not seed hooks draft: ${(err as Error).message}`);
       }
@@ -699,6 +828,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         const scope = pt.scope ?? 'project';
         const { content } = readPermissionsBlock(pt.projectPath, scope);
         writeFileSync(join(workdir, 'draft.json'), content, 'utf8');
+        seedDiffSnapshot(workdir, 'draft.json', join(workdir, 'draft.json'));
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not seed permissions draft: ${(err as Error).message}`);
       }
@@ -731,6 +861,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         if (existsSync(sourcePath)) {
           copyFileSync(sourcePath, draftPath);
         }
+        seedDiffSnapshot(workdir, 'draft.md', sourcePath);
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not seed output-style draft: ${(err as Error).message}`);
       }
@@ -761,6 +892,22 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       const ct = req.claudemdTarget;
       const targetPath = join(ct.projectPath, 'CLAUDE.md');
       const exists = existsSync(targetPath);
+      if (req.mode === 'edit') {
+        return [
+          `/${CLAUDEMD_EXPERT_SKILL_NAME} edit`,
+          '',
+          languageLine,
+          `- You are in **edit mode** for CLAUDE.md.`,
+          `- Project root: ${ct.projectPath}`,
+          `- Target file: ${targetPath} (${exists ? 'exists — read it first' : 'does not exist yet'})`,
+          '',
+          `- The user will tell you what to change in the next message — wait for their instructions, then propose edits, run any tools you need, and write back to the target file directly (Nakiros runs you with permissions on the project tree).`,
+          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
+          `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- Reference: \`/${CLAUDEMD_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
+          `- For now: ${exists ? 'read the current CLAUDE.md to understand what\'s there, then ask the user what they want to modify.' : 'the file does not exist — ask the user what they want to create.'}`,
+        ].join('\n');
+      }
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${CLAUDEMD_EXPERT_SKILL_NAME} ${command}`,
@@ -780,6 +927,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       const finalPath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
       const draftPath = join(workdir, 'draft.md');
       const seeded = existsSync(draftPath);
+      if (req.mode === 'edit') {
+        return [
+          `/${RULES_EXPERT_SKILL_NAME} edit`,
+          '',
+          languageLine,
+          `- You are in **edit mode** for rule \`${rt.ruleName}\`.`,
+          `- Final destination: ${finalPath} (managed by Nakiros — DO NOT write there yourself).`,
+          `- Project root: ${rt.projectPath}`,
+          '',
+          `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit ONLY at \`./draft.md\` (absolute: ${draftPath}). Nakiros will copy it to the final destination when the user clicks "Apply & Deploy".`,
+          seeded
+            ? `- The current rule was seeded at ./draft.md — read it first to understand what's there.`
+            : `- ./draft.md does not exist yet — ask the user what rule to create.`,
+          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
+          `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- Reference: \`/${RULES_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
+        ].join('\n');
+      }
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${RULES_EXPERT_SKILL_NAME} ${command}`,
@@ -802,6 +967,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       const finalPath = join(st.projectPath, '.claude', 'agents', st.subagentName);
       const draftPath = join(workdir, 'draft.md');
       const seeded = existsSync(draftPath);
+      if (req.mode === 'edit') {
+        return [
+          `/${SUBAGENTS_EXPERT_SKILL_NAME} edit`,
+          '',
+          languageLine,
+          `- You are in **edit mode** for subagent \`${st.subagentName}\`.`,
+          `- Final destination: ${finalPath} (managed by Nakiros — DO NOT write there yourself).`,
+          `- Project root: ${st.projectPath}`,
+          '',
+          `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit ONLY at \`./draft.md\` (absolute: ${draftPath}). Nakiros will copy it to the final destination when the user clicks "Apply & Deploy".`,
+          seeded
+            ? `- The current subagent was seeded at ./draft.md — read it first to understand what's there.`
+            : `- ./draft.md does not exist yet — ask the user what subagent to create.`,
+          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
+          `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- Reference: \`/${SUBAGENTS_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
+        ].join('\n');
+      }
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${SUBAGENTS_EXPERT_SKILL_NAME} ${command}`,
@@ -823,6 +1006,22 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       const ht = req.hooksTarget;
       const settingsPath = join(ht.projectPath, '.claude', 'settings.json');
       const draftPath = join(workdir, 'draft.json');
+      if (req.mode === 'edit') {
+        return [
+          `/${HOOKS_EXPERT_SKILL_NAME} edit`,
+          '',
+          languageLine,
+          `- You are in **edit mode** for the hooks configuration.`,
+          `- Final destination: ${settingsPath} (key "hooks" — managed by Nakiros — DO NOT write to settings.json yourself).`,
+          `- Project root: ${ht.projectPath}`,
+          '',
+          `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY \`./draft.json\` (absolute: ${draftPath}). This file contains ONLY the "hooks" sub-block — not the full settings file. Write valid JSON. Nakiros merges it back when the user clicks "Apply & Deploy".`,
+          `- ./draft.json was pre-seeded with the current hooks block — read it first to understand what's there.`,
+          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
+          `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- Reference: \`/${HOOKS_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
+        ].join('\n');
+      }
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${HOOKS_EXPERT_SKILL_NAME} ${command}`,
@@ -843,6 +1042,23 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
       const settingsPath = join(pt.projectPath, '.claude', filename);
       const draftPath = join(workdir, 'draft.json');
+      if (req.mode === 'edit') {
+        return [
+          `/${PERMISSIONS_EXPERT_SKILL_NAME} edit`,
+          '',
+          languageLine,
+          `- You are in **edit mode** for the permissions configuration (scope: ${scope}).`,
+          `- Final destination: ${settingsPath} (key "permissions" — managed by Nakiros — DO NOT write to ${filename} yourself).`,
+          `- Project root: ${pt.projectPath}`,
+          `- Scope: ${scope}`,
+          '',
+          `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY \`./draft.json\` (absolute: ${draftPath}). This file contains ONLY the "permissions" sub-block — not the full settings file. Write valid JSON. Nakiros merges it back when the user clicks "Apply & Deploy".`,
+          `- ./draft.json was pre-seeded with the current permissions block — read it first to understand what's there.`,
+          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
+          `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- Reference: \`/${PERMISSIONS_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
+        ].join('\n');
+      }
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${PERMISSIONS_EXPERT_SKILL_NAME} ${command}`,
@@ -862,6 +1078,23 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       const mt = req.mcpTarget;
       const mcpPath = join(mt.projectPath, '.mcp.json');
       const exists = existsSync(mcpPath);
+      if (req.mode === 'edit') {
+        return [
+          `/${MCP_EXPERT_SKILL_NAME} edit`,
+          '',
+          languageLine,
+          `- You are in **edit mode** for the MCP configuration.`,
+          `- Project root: ${mt.projectPath}`,
+          `- Target file: ${mcpPath} (${exists ? 'exists — read it first' : 'does not exist yet'})`,
+          '',
+          `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+          `- The user will tell you what to change in the next message — wait for their instructions, then propose edits, run any tools you need, and write back to ${mcpPath}.`,
+          `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
+          `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- Reference: \`/${MCP_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
+          `- For now: ${exists ? 'read the current .mcp.json to understand what\'s there, then ask the user what they want to modify.' : 'the file does not exist — ask the user what MCP servers to configure.'}`,
+        ].join('\n');
+      }
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${MCP_EXPERT_SKILL_NAME} ${command}`,
@@ -881,6 +1114,24 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       const finalPath = join(ost.projectPath, '.claude', 'output-styles', ost.styleName);
       const draftPath = join(workdir, 'draft.md');
       const seeded = existsSync(draftPath);
+      if (req.mode === 'edit') {
+        return [
+          `/${OUTPUT_STYLES_EXPERT_SKILL_NAME} edit`,
+          '',
+          languageLine,
+          `- You are in **edit mode** for output style \`${ost.styleName}\`.`,
+          `- Final destination: ${finalPath} (managed by Nakiros — DO NOT write there yourself).`,
+          `- Project root: ${ost.projectPath}`,
+          '',
+          `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit ONLY at \`./draft.md\` (absolute: ${draftPath}). Nakiros will copy it to the final destination when the user clicks "Apply & Deploy".`,
+          seeded
+            ? `- The current output style was seeded at ./draft.md — read it first to understand what's there.`
+            : `- ./draft.md does not exist yet — ask the user what output style to create.`,
+          `- The user will tell you what to change in the next message — wait for their instructions, then iterate.`,
+          `- No findings file, no audit manifest. The user's chat is the spec.`,
+          `- Reference: \`/${OUTPUT_STYLES_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
+        ].join('\n');
+      }
       const command = req.mode === 'fix' ? 'fix' : 'create';
       return [
         `/${OUTPUT_STYLES_EXPERT_SKILL_NAME} ${command}`,
@@ -896,6 +1147,28 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           : `- ./draft.md does not exist yet — create it with the generated content.`,
         `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.md\` as the target instead of any \`.claude/output-styles/\` path.`,
       ].join('\n');
+    }
+
+    if (req.mode === 'edit') {
+      const iterLine = extras.latestIteration !== null && extras.latestIteration !== undefined
+        ? `- Latest eval iteration was copied to \`./evals/workspace/iteration-${extras.latestIteration}/\`. You may read it for context.`
+        : '- No prior eval iteration in this workdir.';
+      const seedIter = extras.latestIteration ?? 0;
+      const nextIterHint = seedIter > 0 ? seedIter + 1 : 1;
+      return `/${FACTORY_SKILL_NAME} edit ${req.skillName}
+
+You are in **edit mode** for skill \`${req.skillName}\`. The current content has been seeded into your working directory (\`${workdir}\`).
+${languageLine}
+- The user will tell you what to change in the next message — wait for their instructions, then propose edits, run any tools you need, and write back to the relevant files.
+- All paths are relative to cwd: \`SKILL.md\`, \`references/\`, \`assets/\`, \`evals/\`, etc.
+- IMPORTANT: before declaring any file missing, run \`ls -la <dir>/\` (or Glob) RECURSIVELY. Do not overwrite existing files without reading them first — the copy of the skill is complete.
+${iterLine}
+- Between your turns, the user may click "Run evals" to re-run the eval suite against your in-progress edits. The first fresh iteration will appear in \`./evals/workspace/iteration-${nextIterHint}/\`. Before you declare the edit done, suggest running evals and read the latest benchmark.json to confirm no regression.
+- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.
+- No audit findings, no audit manifest. The user's chat is the spec.
+- Do not modify \`.claude/settings.local.json\` in this workdir — it's Nakiros's runtime config.
+
+Reference: \`/${FACTORY_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure. For now: read the seeded content to understand what's there, then ask the user what they want to modify.`;
     }
 
     if (req.mode === 'fix') {
@@ -1637,6 +1910,40 @@ export const getCreateRun = getFixRun;
 export const getCreateTempWorkdir = getFixTempWorkdir;
 export const getCreateRealSkillDir = getFixRealSkillDir;
 export const getCreateBufferedEvents = getFixBufferedEvents;
+
+/**
+ * Start (or resume) an edit run for an existing skill or .claude/ entity.
+ * Seeds the temp workdir identically to fix (source + latest audit + latest
+ * iteration for skills) but the first prompt invites user-driven editing —
+ * no audit findings, no fix targets. Sync-back on Apply is identical to fix.
+ */
+export function startEdit(request: StartAuditRequest, opts: ExternalRunOpts): AuditRun {
+  return runner.start({ ...request, mode: 'edit', skillDir: opts.skillDir }, asInternalOpts(opts));
+}
+
+// Edit runs share the same registry and lifecycle as fix/create. The runner
+// spec branches on `mode === 'edit'` only in the first-prompt builder. All
+// other operations (sendUserMessage, finish, stop, diff, timeline, usage)
+// are identical and reuse the fix path directly.
+export const finishEdit = finishFix;
+export const stopEdit = stopFix;
+export const sendEditUserMessage = sendFixUserMessage;
+export const getEditRun = getFixRun;
+export const getEditTempWorkdir = getFixTempWorkdir;
+export const getEditRealSkillDir = getFixRealSkillDir;
+export const getEditBufferedEvents = getFixBufferedEvents;
+/** Alias of {@link registerFixEvalBatch} for edit runs (same registry, same batch watcher). */
+export const registerEditEvalBatch = registerFixEvalBatch;
+/** Alias of {@link listFixEditsHistory} for edit runs (same session jsonl parsing). */
+export const listEditEditsHistory = listFixEditsHistory;
+/** Alias of {@link getFixTimeline} for edit runs (same session jsonl parsing). */
+export const getEditTimeline = getFixTimeline;
+/** Alias of {@link getFixUsage} for edit runs (same session jsonl billing). */
+export const getEditUsage = getFixUsage;
+/** Alias of {@link listFixDiff} for edit runs (same workdir diff logic). */
+export const listEditDiff = listFixDiff;
+/** Alias of {@link readFixDiffFile} for edit runs (same workdir diff logic). */
+export const readEditDiffFile = readFixDiffFile;
 
 /** Look up a fix or create run by id. Both run kinds share the registry. */
 export function getFixRun(runId: string): AuditRun | null {
@@ -2547,6 +2854,16 @@ export function listAllCreateRuns(): AuditRun[] {
   return listByMode('create', { activeOnly: false });
 }
 
+/** List every non-terminal edit run (starting / running / waiting_for_input). */
+export function listActiveEditRuns(): AuditRun[] {
+  return listByMode('edit', { activeOnly: true });
+}
+
+/** List every edit run currently in memory — active **and** terminal — for the runs center. */
+export function listAllEditRuns(): AuditRun[] {
+  return listByMode('edit', { activeOnly: false });
+}
+
 // ─── Review diff API ─────────────────────────────────────────────────────────
 
 /**
@@ -2622,6 +2939,15 @@ function readPair(relativePath: string, originalDir: string | null, modifiedDir:
 export function listFixDiff(runId: string): SkillDiffEntry[] {
   const entry = runner.registry().get(runId);
   if (!entry) return [];
+
+  // Non-skill targets (claudemd / rules / subagents / hooks / permissions /
+  // mcp / output-styles) compare against a frozen snapshot under
+  // `<workdir>/.snapshot/`, not the bundled-expert directory.
+  const nonSkillSpec = getNonSkillTargetDiffSpec(entry.run);
+  if (nonSkillSpec) {
+    return listNonSkillTargetDiff(nonSkillSpec);
+  }
+
   const realDir = entry.extras.realSkillDir;
   const tempDir = entry.run.workdir;
   const isCreate = entry.extras.mode === 'create';
@@ -2675,6 +3001,61 @@ export function listFixDiff(runId: string): SkillDiffEntry[] {
 }
 
 /**
+ * Build the single-entry diff list for a non-skill target. Compares the
+ * frozen snapshot taken at run start against the live "after" file (the
+ * project file for direct-write targets, the workdir draft for the rest).
+ * Returns an empty array when both sides are absent or identical so the
+ * UI doesn't render a stale row.
+ */
+function listNonSkillTargetDiff(spec: NonSkillTargetDiffSpec): SkillDiffEntry[] {
+  const inOriginal = spec.snapshotPath !== null && existsSync(spec.snapshotPath);
+  const inModified = existsSync(spec.modifiedPath);
+  if (!inOriginal && !inModified) return [];
+
+  let addedLines = 0;
+  let removedLines = 0;
+
+  if (inOriginal && inModified) {
+    try {
+      const a = readFileSync(spec.snapshotPath!);
+      const b = readFileSync(spec.modifiedPath);
+      if (a.equals(b)) return [];
+      if (!isLikelyBinary(a) && !isLikelyBinary(b)) {
+        const stats = countLineDiff(a.toString('utf8'), b.toString('utf8'));
+        addedLines = stats.added;
+        removedLines = stats.removed;
+      }
+    } catch {
+      // surface the entry anyway so the user sees something
+    }
+  } else if (inModified) {
+    try {
+      const buf = readFileSync(spec.modifiedPath);
+      if (!isLikelyBinary(buf)) addedLines = countLines(buf.toString('utf8'));
+    } catch {
+      // ignore
+    }
+  } else if (inOriginal) {
+    try {
+      const buf = readFileSync(spec.snapshotPath!);
+      if (!isLikelyBinary(buf)) removedLines = countLines(buf.toString('utf8'));
+    } catch {
+      // ignore
+    }
+  }
+
+  return [
+    {
+      relativePath: spec.displayPath,
+      inOriginal,
+      inModified,
+      addedLines,
+      removedLines,
+    },
+  ];
+}
+
+/**
  * Count added/removed lines between two text blobs via a basic LCS DP.
  * O(m*n) — fine for skill files (typically a few hundred lines max). For
  * very large files we cap the work and fall back to a coarse line-count
@@ -2717,10 +3098,45 @@ export function readFixDiffFile(runId: string, relativePath: string): SkillDiffF
   const entry = runner.registry().get(runId);
   if (!entry) throw new Error(`Unknown run: ${runId}`);
   if (relativePath.includes('..')) throw new Error(`Refused suspicious path: ${relativePath}`);
+
+  // Non-skill targets read the snapshot + the live "after" file directly.
+  // The relative path is the synthetic display label produced by listFixDiff.
+  const nonSkillSpec = getNonSkillTargetDiffSpec(entry.run);
+  if (nonSkillSpec) {
+    if (relativePath !== nonSkillSpec.displayPath) {
+      throw new Error(`Unknown diff entry: ${relativePath}`);
+    }
+    return readNonSkillTargetDiffFile(nonSkillSpec);
+  }
+
   if (isRuntimeOnlyPath(relativePath)) {
     throw new Error(`Refused runtime-only path: ${relativePath}`);
   }
   const realDir = entry.extras.realSkillDir;
   const originalDir = entry.extras.mode === 'create' ? null : existsSync(realDir) ? realDir : null;
   return readPair(relativePath, originalDir, entry.run.workdir);
+}
+
+function readNonSkillTargetDiffFile(spec: NonSkillTargetDiffSpec): SkillDiffFilePayload {
+  let originalContent: string | null = null;
+  let modifiedContent: string | null = null;
+  let isBinary = false;
+
+  if (spec.snapshotPath && existsSync(spec.snapshotPath)) {
+    const buf = readFileSync(spec.snapshotPath);
+    if (isLikelyBinary(buf)) isBinary = true;
+    else originalContent = buf.toString('utf8');
+  }
+  if (existsSync(spec.modifiedPath)) {
+    const buf = readFileSync(spec.modifiedPath);
+    if (isLikelyBinary(buf)) isBinary = true;
+    else modifiedContent = buf.toString('utf8');
+  }
+
+  return {
+    relativePath: spec.displayPath,
+    originalContent: isBinary ? null : originalContent,
+    modifiedContent: isBinary ? null : modifiedContent,
+    isBinary,
+  };
 }

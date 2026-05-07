@@ -100,6 +100,22 @@ export function getRunAPI(kind: AgentRunKind): KindRunAPI | null {
         },
         readReport: null,
       };
+    case 'edit':
+      return {
+        state: {
+          getRun: (id) => window.nakiros.getEditRun(id),
+          getBufferedEvents: (id) => window.nakiros.getEditBufferedEvents(id),
+          onEvent: window.nakiros.onEditEvent,
+        },
+        actions: {
+          sendUserMessage: (id, msg) => window.nakiros.sendEditUserMessage(id, msg),
+          stop: (id) => window.nakiros.stopEdit(id),
+          finish: (id) => window.nakiros.finishEdit(id),
+        },
+        // Edit runs don't write a markdown report — their artefact is the diff,
+        // rendered by the existing SkillDiffView (same as fix/create).
+        readReport: null,
+      };
     case 'eval':
     case 'analyze-convo':
       // Wired in later sub-PRs of Phase 4.

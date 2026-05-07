@@ -14,6 +14,8 @@
     "runAuditTitle": "Lancer un audit sur ce sous-agent",
     "runFix": "Fix",
     "runFixTitle": "Lancer un fix sur ce sous-agent",
+    "runEdit": "Edit",
+    "runEditTitle": "Ouvrir une session Edit interactive sur ce sous-agent",
     "runCreate": "Créer",
     "runCreateTitle": "Générer ce sous-agent avec l'IA",
     "runLaunching": "Lancement…",

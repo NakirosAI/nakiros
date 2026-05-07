@@ -346,3 +346,16 @@ Read `references/agentskills-evals.md` for the full methodology, workspace struc
 - **"eval run [name]"** → Run tests, grade, produce benchmark
 - **"eval analyze [name]"** → Analyze results, propose improvements
 - **"eval compare [name]"** → Compare iterations (delta report)
+
+## Edit mode
+
+Triggered by `/nakiros-skill-factory edit <name>`. The user wants to **modify an existing skill conversationally**, without an audit driving the changes.
+
+1. Read the seeded skill content at your current working directory (`./SKILL.md`, `./references/`, `./assets/`, etc.) to understand what currently exists. Run `ls -la` recursively before declaring any file missing.
+2. Wait for the user's first message describing what to change.
+3. Propose changes (Write/Edit tools on the workdir-relative paths), explain trade-offs, iterate.
+4. Re-read the affected files after each substantive change to confirm the in-context view is current.
+5. Between turns, the user may click "Run evals" to test your in-progress edits — read the new `benchmark.json` to confirm no regression before declaring the edit done.
+6. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
+
+No audit findings, no audit manifest. The user's chat is the spec. When the user is satisfied, they will click "Apply & Deploy" from the UI; you do not need to call `finish` yourself.

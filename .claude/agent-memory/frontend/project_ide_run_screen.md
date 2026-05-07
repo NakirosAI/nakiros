@@ -24,7 +24,7 @@ Audit reste toujours sur `AuditLikeRunScreen`.
 
 **Contraintes respectées :**
 - Zéro nouveau IPC — utilise listFixDiff/EditDiff/CreateDiff + readFixDiffFile/EditDiffFile/CreateDiffFile
-- Pas de Monaco/CodeMirror/react-syntax-highlighter — `<pre>` stylé uniquement
+- Pas de Monaco/CodeMirror/react-syntax-highlighter — `<pre>` stylé, syntax highlighting via `prism-react-renderer` (vsDark)
 - Composeur reconstruit natif (n-* tokens) — pas `HumanInteractionPanel` (legacy CSS vars)
 - Clés i18n `runs:ide.*` dans les 2 bundles (en+fr)
 
@@ -33,5 +33,7 @@ Sélection native dans le `<pre>` → `selectionchange` → FloatingQuoteButton 
 Serialisation : blocs fencés `> Context: \`file\` lines N-M\n> \`\`\`\n> snippet\n> \`\`\`` + texte libre.
 
 **Limitation LCS :** cap à 4M cellules (≈2k×2k lignes) — fallback remove-all/add-all pour les très gros fichiers.
+
+**Syntax highlighting :** `prism-react-renderer` v2 (thème vsDark). Tokenisation du fichier entier via `Prism.tokenize()` dans deux `useMemo` séparés (original + modified). Helper interne `normalizeTokenLines()` convertit le résultat flat en `Token[][]` (une sous-liste par ligne). Pour les lignes `removed` → originalTokenLines[lineNo-1] ; pour `added`/`unchanged` → modifiedTokenLines[lineNo-1]. Fallback plain text si > 3000 lignes ou grammaire absente. Les couleurs diff (bg-emerald-500/10 / bg-red-500/10) restent sur le wrapper externe — les tokens Prism ne colorent qu'avec `style.color` inline, sans affecter le background.
 
 **How to apply:** Toujours importer `IDE_RUN_LAYOUT` depuis `lib/feature-flags.ts` pour les gates ; ne pas re-lire URLSearchParams ailleurs.

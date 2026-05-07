@@ -56,8 +56,9 @@ interface IdeRunScreenProps {
 /**
  * IDE-style 3-pane run screen for edit / fix / create run kinds.
  *
- * Gated behind the `?runs=ide` URL flag — `RunScreen` dispatches here when
- * the flag is active AND `runKind` is one of `edit | fix | create`.
+ * `RunScreen` dispatches here for those kinds. Audit stays on
+ * `AuditLikeRunScreen` — it's read-only and doesn't benefit from the code
+ * viewer / quote-from-file workflow.
  *
  * Layout: `[Chat (1/4)] | [Code viewer (2/4)] | [File list (1/4)]`
  *

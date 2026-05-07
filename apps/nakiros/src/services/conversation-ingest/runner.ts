@@ -203,11 +203,21 @@ function isoFromStat(path: string, kind: 'birth' | 'mtime'): string {
 }
 
 /**
- * Parse a single Claude Code session JSONL and persist its turns under
- * `projects/<encoded>/sessions/<sessionId>.json`, updating the index.
+ * Parse a single Claude Code (or Cowork) session JSONL and persist its turns
+ * under `projects/<encoded>/sessions/<sessionId>.json`, updating the index.
  * Idempotent — re-ingesting the same transcript overwrites prior state.
+ *
+ * @param forcedProjectPath - When provided, overrides `rawMeta.cwd || cwdHint`.
+ *   Used for Cowork sessions where the `cwd` field inside the JSONL points to
+ *   the internal sandbox path (`<local_uuid>/outputs`) rather than the real
+ *   user-visible folder (`space.folders[0].path`).
  */
-export function ingestSession(sessionId: string, transcriptPath: string, cwdHint: string): IngestOutcome {
+export function ingestSession(
+  sessionId: string,
+  transcriptPath: string,
+  cwdHint: string,
+  forcedProjectPath?: string,
+): IngestOutcome {
   if (!existsSync(transcriptPath)) {
     return { sessionId, ok: false, reason: 'transcript-missing' };
   }
@@ -222,7 +232,8 @@ export function ingestSession(sessionId: string, transcriptPath: string, cwdHint
 
   // Resolve project path + raw header metadata in a single transcript pass.
   const rawMeta = readMetaFromTranscript(transcriptPath);
-  const projectPath = rawMeta.cwd || cwdHint;
+  // forcedProjectPath wins over the JSONL cwd (needed for Cowork sandboxes).
+  const projectPath = forcedProjectPath || rawMeta.cwd || cwdHint;
   if (!projectPath) {
     return { sessionId, ok: false, reason: 'project-path-unresolved' };
   }
@@ -465,6 +476,110 @@ export function ensureProjectIndexed(
     if (outcome.ok) ingested++;
   }
   return { ingested, total: files.length };
+}
+
+/**
+ * Lazy per-project indexer for Cowork sessions. Walks every `local_<uuid>`
+ * group directory under `userDir`, keeps only those whose sidecar
+ * `userSelectedFolders` contains `projectPath`, then ingests any JSONL files
+ * that are missing from or stale in the ingest store.
+ *
+ * The `forcedProjectPath` override is used so that sessions are keyed under
+ * `projectPath` (the real user-visible Cowork space folder) rather than the
+ * internal Cowork sandbox path recorded in the JSONL `cwd` field.
+ *
+ * @param userDir     - `<root>/<spaceId>/<userId>/` from the project registry
+ * @param projectPath - `space.folders[0].path` — the authoritative project path
+ */
+export function ensureCoworkProjectIndexed(
+  userDir: string,
+  projectPath: string,
+): { ingested: number; total: number } {
+  if (!existsSync(userDir)) return { ingested: 0, total: 0 };
+
+  // List all local_<uuid> group directories.
+  let groupDirs: string[];
+  try {
+    groupDirs = readdirSync(userDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.startsWith('local_'))
+      .map((e) => e.name);
+  } catch {
+    return { ingested: 0, total: 0 };
+  }
+
+  // Filter groups whose sidecar lists projectPath in userSelectedFolders.
+  const matchedGroups: string[] = [];
+  for (const groupName of groupDirs) {
+    const sidecarPath = join(userDir, `${groupName}.json`);
+    if (!existsSync(sidecarPath)) continue;
+    try {
+      const raw = readFileSync(sidecarPath, 'utf8');
+      const sidecar = JSON.parse(raw) as { userSelectedFolders?: string[] };
+      const selected: string[] = Array.isArray(sidecar.userSelectedFolders)
+        ? sidecar.userSelectedFolders
+        : [];
+      if (selected.includes(projectPath)) {
+        matchedGroups.push(groupName);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (matchedGroups.length === 0) return { ingested: 0, total: 0 };
+
+  // Collect all JSONL files from matched groups.
+  const allFiles: { sessionId: string; path: string; mtimeIso: string }[] = [];
+  for (const groupName of matchedGroups) {
+    const projectsBase = join(userDir, groupName, '.claude', 'projects');
+    if (!existsSync(projectsBase)) continue;
+    let encodedDirs: string[];
+    try {
+      encodedDirs = readdirSync(projectsBase, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+    } catch {
+      continue;
+    }
+    for (const enc of encodedDirs) {
+      const sessDir = join(projectsBase, enc);
+      let files: string[];
+      try {
+        files = readdirSync(sessDir).filter((f) => f.endsWith('.jsonl'));
+      } catch {
+        continue;
+      }
+      for (const f of files) {
+        const sessionId = f.replace(/\.jsonl$/, '');
+        const path = join(sessDir, f);
+        try {
+          const mtimeIso = statSync(path).mtime.toISOString();
+          allFiles.push({ sessionId, path, mtimeIso });
+        } catch {
+          continue;
+        }
+      }
+    }
+  }
+
+  // Build a sessionId → indexed entry map to skip up-to-date sessions.
+  const index = readIndex();
+  const indexBySessionId = new Map<string, ConversationIngestSession>();
+  for (const project of Object.values(index.projects)) {
+    for (const session of Object.values(project.sessions)) {
+      indexBySessionId.set(session.sessionId, session);
+    }
+  }
+
+  let ingested = 0;
+  for (const file of allFiles) {
+    const indexed = indexBySessionId.get(file.sessionId);
+    if (indexed && indexed.transcriptMtime === file.mtimeIso) continue;
+    const outcome = ingestSession(file.sessionId, file.path, '', projectPath);
+    if (outcome.ok) ingested++;
+  }
+
+  return { ingested, total: allFiles.length };
 }
 
 export { aggregateStats };

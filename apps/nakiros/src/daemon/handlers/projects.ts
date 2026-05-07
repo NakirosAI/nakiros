@@ -10,6 +10,7 @@ import { listConversations, getConversationMessages } from '../../services/conve
 import { getOrComputeAnalysis } from '../../services/conversation-analysis-cache.js';
 import {
   ensureProjectIndexed,
+  ensureCoworkProjectIndexed,
   listDigestsForProject,
   listSessionsForProject,
   loadDigest,
@@ -34,6 +35,21 @@ import {
 import { eventBus } from '../event-bus.js';
 import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
+import type { Project } from '@nakiros/shared';
+
+/**
+ * Route to the correct lazy indexer based on the project's provider.
+ * - `'cowork'`: uses `ensureCoworkProjectIndexed` which walks the Cowork
+ *   session groups and keys sessions under `projectPath`.
+ * - all others: uses `ensureProjectIndexed` against `providerProjectDir`.
+ */
+function ensureIndexed(project: Project): void {
+  if (project.provider === 'cowork') {
+    ensureCoworkProjectIndexed(project.providerProjectDir, project.projectPath);
+  } else {
+    ensureProjectIndexed(project.providerProjectDir);
+  }
+}
 
 /**
  * Registers the `project:*` IPC channels — project scanning, conversation
@@ -55,9 +71,9 @@ import type { HandlerRegistry } from './index.js';
  */
 export const projectHandlers: HandlerRegistry = {
   'project:scan': createTypedHandler(() =>
-    scanProjects((current, total, projectName) => {
+    scanProjects((provider, current, total, projectName) => {
       eventBus.broadcast('project:scanProgress', {
-        provider: 'claude',
+        provider,
         current,
         total,
         projectName,
@@ -82,7 +98,7 @@ export const projectHandlers: HandlerRegistry = {
   'project:listConversations': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
-    ensureProjectIndexed(project.providerProjectDir);
+    ensureIndexed(project);
     const sessions = listSessionsForProject(project.projectPath);
     if (sessions.length > 0) return sessions.map((s) => toProjectConversation(s, projectId));
     // Fallback: project hasn't been indexed (e.g. fresh after purge or the
@@ -93,7 +109,7 @@ export const projectHandlers: HandlerRegistry = {
   'project:getConversationMessages': createTypedHandler((projectId: string, sessionId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
-    ensureProjectIndexed(project.providerProjectDir);
+    ensureIndexed(project);
     const body = readSessionBody(project.projectPath, sessionId);
     if (body) return body.messages;
     // Fallback when the session was just deleted from the ingest store.
@@ -109,7 +125,7 @@ export const projectHandlers: HandlerRegistry = {
   'project:listConversationsWithAnalysis': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
-    ensureProjectIndexed(project.providerProjectDir);
+    ensureIndexed(project);
     const sessions = listSessionsForProject(project.projectPath);
     const convs =
       sessions.length > 0

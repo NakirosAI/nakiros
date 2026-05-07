@@ -26,7 +26,13 @@ Registers the `project:*` IPC channels — project scanning, conversation metada
 
 ## Broadcasts
 
-- `project:scanProgress` — fired via `eventBus.broadcast` while `project:scan` walks provider directories.
+- `project:scanProgress` — fired via `eventBus.broadcast` while `project:scan` walks provider directories. The `provider` field now reflects the actual provider being scanned (`'claude'` or `'cowork'`) instead of always being `'claude'`.
+
+## Routing
+
+`listConversations`, `getConversationMessages`, and `listConversationsWithAnalysis` route to provider-specific indexers via the internal `ensureIndexed` helper:
+- `provider === 'cowork'` → `ensureCoworkProjectIndexed(providerProjectDir, projectPath)`
+- all others → `ensureProjectIndexed(providerProjectDir)`
 
 ## Exports
 

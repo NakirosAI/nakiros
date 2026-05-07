@@ -6,7 +6,7 @@ import type { AuditCheckOutcome, AuditManifest } from './audit-checks.js';
 import type { FixEvalResult, FixFinding, FixTarget } from './fix-progress.js';
 
 /** Supported AI coding agents that Nakiros can scan for projects and skills. */
-export type ProviderType = 'claude' | 'gemini' | 'cursor' | 'codex';
+export type ProviderType = 'claude' | 'cowork' | 'gemini' | 'cursor' | 'codex';
 
 /** Lifecycle status of a project tracked by Nakiros. */
 export type ProjectStatus = 'active' | 'inactive' | 'dismissed';

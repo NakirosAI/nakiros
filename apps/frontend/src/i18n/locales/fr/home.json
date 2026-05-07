@@ -44,18 +44,26 @@
     "restore": "Restaurer"
   },
   "tabs": {
-    "projects": "Projets",
+    "projects": "Claude Code",
+    "cowork": "Cowork",
     "plugins": "Plugins",
     "globals": "Globaux",
     "nakiros": "Nakiros"
   },
   "searchPlaceholder": "Rechercher projets, skills, chemins…",
   "projectsTab": {
-    "heading": "Projets",
+    "heading": "Projets Claude Code",
     "found": "{{count}} trouvés",
     "scannedFrom": "scanné depuis ~/.claude/projects",
     "noMatch": "Aucun projet ne correspond à ta recherche.",
     "empty": "Aucun projet scanné."
+  },
+  "coworkTab": {
+    "heading": "Projets Cowork",
+    "found": "{{count}} trouvés",
+    "scannedFrom": "scanné depuis ~/Library/Application Support/Claude/local-agent-mode-sessions",
+    "noMatch": "Aucun projet Cowork ne correspond à ta recherche.",
+    "empty": "Aucun projet Cowork détecté."
   },
   "pluginsTab": {
     "heading": "Marketplaces",

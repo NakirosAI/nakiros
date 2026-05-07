@@ -17,6 +17,7 @@ export {
 export {
   drainQueue,
   ensureProjectIndexed,
+  ensureCoworkProjectIndexed,
   fullScan,
   ingestSession,
   getQueueLength,

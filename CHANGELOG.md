@@ -5,6 +5,123 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] — 2026-05-12
+
+Friction detection release. Nakiros stops trying to read user emotion
+and starts detecting when the user is **stuck on a topic** — clusters
+of related user messages within a short window, enriched by agent-side
+indicators (revert, tool errors, edit failures). The drawer is
+simplified to two tabs, the changelog gets its own modal, and the
+sentiment brick is gone for good.
+
+### Added
+
+- **Friction zones — stuck-cluster algorithm.** A friction is now detected
+  when 3+ user messages share tokens (Jaccard > 0.3, FR/EN stop words
+  filtered) within a 10-turn window, after the first 10 user turns
+  (which are treated as legitimate setup / exploration). The cluster
+  span is capped at 10 user turns so a slow conversation doesn't get
+  flagged. Each zone exposes `clusterSize`, `signalKinds`, and an
+  `agentContext` describing what the assistant did in the same window
+  (files touched, tool call count, errors, backtracked files, key
+  actions). Severity scales with cluster size (3 → medium, 5+ → high)
+  and is bumped one level when agent enrichments fire (S4 backtrack,
+  S5 tool error spike, S6 repeated edit failure).
+- **Sismograph background zones.** Each friction zone renders as a
+  red-tinted rectangle behind the cost / context / sentiment tracks,
+  with opacity proportional to severity (0.06 / 0.10 / 0.16). Hover
+  surfaces a compact tooltip with the agent stats and the friction kind.
+- **Timeline FrictionZonePanel.** Inline panel under the SVG shows the
+  agent context of each zone alongside its user reaction excerpt. A
+  severity-coloured left border (critical for high, warning for medium)
+  matches the sismograph rect. Signal-kind chips (Backtrack / Tool
+  errors / Edit failures) make the trigger combination explicit.
+- **Friction filter expansion in the timeline tab.** Selecting the
+  `friction` chip now shows every message inside any frictionZone —
+  user reaction, assistant turns, tool calls — with a faint amber
+  border on context messages and a strong red border on the reaction
+  itself. The agent's work that led to the user being stuck is no
+  longer hidden.
+- **Long-gap topic-change tip.** A new `ConversationTip` fires when a
+  30-minute+ gap between user messages combines with a topic change
+  (Jaccard < 0.2 vs the prior message). The drawer surfaces an
+  actionable suggestion: "you came back to a different topic, consider
+  starting a fresh conversation to keep the context clean".
+- **ChangelogModal in the version chip.** Clicking the version chip
+  when up-to-date opens a modal with the release notes for the running
+  version, rendered via `MarkdownViewer`. CHANGELOG.md is bundled into
+  the published package via `apps/nakiros/scripts/copy-frontend.mjs`.
+- **Auto-show on install / update.** On every new install or version
+  bump, the modal opens once. The current version is persisted in
+  `localStorage` under `nakiros:lastSeenVersion`; subsequent launches
+  with the same version stay silent. When an update is available AND
+  the user hasn't seen the current version yet, the UpdateModal takes
+  priority over the ChangelogModal.
+- **CHANGELOG backfill 0.7.0 → 0.11.0.** Five months of releases that
+  had been undocumented are now reconstructed from git history into
+  Keep-a-Changelog sections, so users opening the ChangelogModal on
+  any installed version see real release notes.
+
+### Changed
+
+- **Drawer trimmed to two tabs.** The conversation drawer now exposes
+  only Diagnostic and Timeline. The Transcript tab was redundant with
+  Timeline (which already renders user + assistant + tool + system
+  messages with filter chips), and the Frictions tab — output of the
+  V1.1 Haiku classifier — is superseded by the new in-drawer friction
+  zones in Diagnostic and Timeline.
+- **Purge confirm uses ConfirmModal.** Settings → "Purger les données
+  ingérées" no longer triggers `window.confirm()`. The action goes
+  through the new-design `ConfirmModal` with destructive styling,
+  loading spinner during purge, and full keyboard support (Esc /
+  Enter / click-outside) — matches the pattern already used on
+  ClaudeMdScreen, SubagentDetailScreen, etc.
+- **Timeline filter i18n hoisted.** `timeline.filter.*` keys were
+  nested inside `drawer.timeline` with a duplicate sibling `drawer.timeline`
+  string, so JSON dedup was silently dropping the structured filter
+  block. Keys are now at the top of the `conversations` namespace and
+  the filter chips render their proper labels.
+
+### Removed
+
+- **Sentiment brick.** `@xenova/transformers` and its bundled
+  `distilbert-base-multilingual-cased-sentiments-student` (then
+  `bert-base-multilingual-uncased-sentiment` after migration) are
+  removed from the daemon. Both models confused descriptive negation
+  ("we don't display X" — factual) with emotional negation ("X
+  sucks" — frustration) and produced too many false-positive frictions
+  on dev/agent dialog in French. The stuck-cluster algorithm detects
+  the same problems without per-message sentiment scoring. Side
+  effects: daemon RSS drops from ~1.4 GB to ~750 MB on first ingest,
+  the model cache under `~/.nakiros/models/` (~430 MB) can be deleted,
+  and the bundled package no longer pulls `sharp` + `onnxruntime-node`
+  native binaries.
+- **Sentiment dot row in the sismograph + recap block in the diagnostic
+  tab.** Both displayed sentiment results and confused users with
+  contradictory signals (a clearly positive message scored as
+  "Negative 0.84"). Replaced by the friction zones, which are honest
+  about what they detect.
+- **Transcript tab and Frictions (V1.1) tab.** See Changed above.
+
+### Fixed
+
+- **Synthetic ESC interrupts no longer cluster.** Claude Code injects
+  `[Request interrupted by user for tool use]` as a `user`-type message
+  when the user hits ESC mid-tool. Three of these in a session share
+  identical tokens (Jaccard 1.0) and would form a phantom cluster.
+  They are now filtered from the cluster algorithm (the user-message
+  counter still advances so the index alignment with downstream
+  analytics stays correct).
+- **`cwd` lookup walks JSONL entries.** The conversation analyzer was
+  reading `cwd` from `entries[0]`, but the first JSONL entry is often
+  a `{type:"last-prompt"}` metadata record with no `cwd`. The analyzer
+  now walks entries until it finds one that carries `cwd` (or its
+  legacy nested `payload.cwd`).
+- **ChangelogModal background.** The new modal was using `bg-n-bg` /
+  `border-n-line` — tokens that don't exist in `tokens.css`. Switched
+  to `bg-n-surface` / `border-n-border-default` aligned with
+  ConfirmModal; the modal now renders with an actual background.
+
 ## [0.11.0] — 2026-05-07
 
 Multi-provider release. Nakiros now scans, ingests and audits projects

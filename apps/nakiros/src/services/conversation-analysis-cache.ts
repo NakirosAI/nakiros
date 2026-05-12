@@ -73,8 +73,19 @@ interface CacheEntry {
  * found" errors on same file). Severity: 2 signals → medium, 3+ → high;
  * `low` is no longer emitted. New field `signalKinds` on each zone exposes
  * which signals fired. `frictionPoints[]` is unchanged.
+ *
+ * v10 (2026-05-12) — complete redesign of `frictionZones` to a stuck-cluster
+ * model. A zone now requires the user to be stuck on a topic: 3+ user messages
+ * with Jaccard > 0.3 within a 10-turn user-message window, after the first 10
+ * user messages (setup phase skip). Sentiment/backtrack/tool-errors become
+ * enrichments (signalKinds) that bump severity; they no longer create zones.
+ * S2 (repetition) removed from signalKinds union — superseded by the cluster
+ * algorithm. New field `clusterSize: number` on each zone. Severity: 3 msgs
+ * = medium, 5+ = high; bumped one level if any enrichment signal present.
+ * `frictionPoints[]` is unchanged (backward compat for badges + score).
+ * `matchedPattern` on zone's reactionPoint: `'stuck-cluster:<size>:<jaccardAvg>'`.
  */
-const CACHE_VERSION = 9;
+const CACHE_VERSION = 10;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

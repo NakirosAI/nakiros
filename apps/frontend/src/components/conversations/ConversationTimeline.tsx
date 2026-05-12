@@ -334,8 +334,8 @@ function FrictionZonePanel({
       <div className="mb-1 flex flex-wrap items-center gap-1.5 font-medium text-[var(--n-fg)]">
         <span>{t('drawer.frictionZone.title', { kind: kindLabel, severity: severityLabel })}</span>
         {signalKinds.map((k) => {
-          // S1, S2 = user signals (accent); S4, S5, S6 = agent signals (warning)
-          const isUserSignal = k === 'S1' || k === 'S2';
+          // S1 = user signal (accent); S4, S5, S6 = agent signals (warning). S2 removed in v10.
+          const isUserSignal = k === 'S1';
           const chipClass = isUserSignal
             ? 'bg-n-accent-soft text-n-accent-strong'
             : 'bg-n-warning-soft text-n-warning-strong';

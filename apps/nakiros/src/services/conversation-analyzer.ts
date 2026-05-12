@@ -717,6 +717,7 @@ export function analyzeConversation(
     toolUseTurnById,
     erroredToolUseIds,
     entries,
+    negativeUserIndices,
   });
 
   // --- Signal E: long-gap + topic change detection ---------------------------
@@ -1149,53 +1150,61 @@ function detectBacktracks(
 }
 
 // ---------------------------------------------------------------------------
-// Friction zones v9 — multi-signal convergence
+// Friction zones v10 — stuck-cluster algorithm
 // ---------------------------------------------------------------------------
 
 /**
- * Signal event: a single detected signal at a specific turn.
- * Turns are 1-indexed assistant turn counters or user message counters
- * depending on the signal kind, but for grouping purposes we normalize
- * them to an absolute timeline position.
+ * Stop words for Jaccard tokenization (FR + EN, case-insensitive).
+ * These common function words carry no topical meaning and would inflate
+ * similarity between unrelated messages.
  */
-interface SignalEvent {
-  /** Signal kind: S1 sentiment, S2 repetition, S4 backtrack, S5 tool-error-spike, S6 repeated-edit-failure. */
-  kind: 'S1' | 'S2' | 'S4' | 'S5' | 'S6';
-  /**
-   * Turn number used for the 5-turn window grouping. For user-side signals
-   * (S1, S2) this is the userMsgIdx (1-indexed). For agent-side signals
-   * (S4, S5, S6) this is the assistant turn number (1-indexed).
-   *
-   * Because user and assistant turns are interleaved on the same timeline,
-   * we normalize to an absolute entry index for proximity comparisons.
-   */
-  turn: number;
-  /** Absolute position in the full entry list — used for 5-turn window checks. */
-  absoluteIndex: number;
-  /** Associated timestamp (ISO string). */
-  timestamp: string;
-  /** Original frictionPoint or null for S5/S6 (no pre-existing frictionPoint). */
-  frictionPoint: ConversationFrictionPoint | null;
-  /** Dominant score for this signal (sentiment score for S1, Jaccard for S2, 0 for others). */
-  score: number;
-  /** For S4: file basename. For S5: empty. For S6: file path. */
-  detail: string;
+const STOP_WORDS = new Set([
+  // FR
+  'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'donc',
+  'car', 'que', 'qui', 'quoi', 'comment', 'pourquoi', 'tu', 'je', 'il',
+  'elle', 'on', 'nous', 'vous', 'ils', 'elles', 'ce', 'cette', 'ces',
+  'mon', 'ton', 'son', 'ma', 'ta', 'sa', 'mes', 'tes', 'ses', 'avec',
+  'sans', 'pour', 'par', 'dans', 'sur', 'sous', 'entre', 'aussi',
+  'pas', 'plus', 'moins', 'tout', 'tous', 'toute', 'toutes', 'fait',
+  'faire', 'voir', 'avoir', 'être', 'etre', 'pouvoir', 'falloir',
+  'vouloir', 'savoir', 'oui', 'non', 'peut', 'doit', 'va',
+  // EN
+  'the', 'a', 'an', 'and', 'or', 'but', 'so', 'because', 'that',
+  'this', 'these', 'those', 'is', 'are', 'was', 'were', 'be',
+  'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
+  'will', 'would', 'should', 'can', 'could', 'may', 'might',
+  'i', 'you', 'he', 'she', 'we', 'they', 'it', 'us',
+  'for', 'in', 'on', 'at', 'to', 'of', 'with', 'as', 'by',
+  'yes', 'no', 'not', 'just', 'only',
+]);
+
+/**
+ * Tokenizes a string for the cluster Jaccard algorithm:
+ * - Lowercase
+ * - Split on /\W+/
+ * - Drop tokens shorter than 3 chars
+ * - Drop stop words
+ */
+function tokenizeForCluster(text: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const t of text.toLowerCase().split(/\W+/)) {
+    if (t.length >= 3 && !STOP_WORDS.has(t)) tokens.add(t);
+  }
+  return tokens;
 }
 
 /**
- * Builds {@link ConversationFrictionZone} records using a multi-signal
- * convergence rule (v9). A zone is emitted only when at least 2 distinct
- * signal kinds fire within a 5-turn absolute-index window.
+ * Builds {@link ConversationFrictionZone} records using the stuck-cluster
+ * algorithm (v10).
  *
- * Signals:
- * - S1: User sentiment Negative with score > 0.60 (from frictionPoints)
- * - S2: User message repetition with Jaccard > 0.5 (from frictionPoints)
- * - S4: Agent backtrack (from frictionPoints)
- * - S5: ≥ 2 tool errors within 5 assistant turns
- * - S6: ≥ 2 "string not found"-like errors on same file
+ * A zone is created when 3+ user messages on the same topic cluster together
+ * within a 10-user-message window, after the first 10 user messages (setup
+ * phase). Topic similarity is measured by Jaccard > 0.3 on content-bearing
+ * tokens (stop words removed). Signals S1/S4/S5/S6 act as enrichments that
+ * bump severity, but do NOT create zones alone.
  *
- * Severity scales with signal count: 2 signals → medium, 3+ → high.
- * Single-signal events do NOT produce a zone.
+ * `frictionPoints[]` is left unchanged by this function — only `frictionZones[]`
+ * is affected.
  */
 function buildFrictionZones(args: {
   sessionId: string;
@@ -1206,6 +1215,7 @@ function buildFrictionZones(args: {
   toolUseTurnById: Map<string, number>;
   erroredToolUseIds: Set<string>;
   entries: Record<string, unknown>[];
+  negativeUserIndices: Map<number, number>;
 }): ConversationFrictionZone[] {
   const {
     sessionId,
@@ -1216,358 +1226,234 @@ function buildFrictionZones(args: {
     toolUseTurnById,
     erroredToolUseIds,
     entries,
+    negativeUserIndices,
   } = args;
+
+  if (userMessages.length < 3) return [];
 
   // Build an index: assistantTurn → AssistantTurnRecord for fast lookup.
   const assistantByTurn = new Map<number, AssistantTurnRecord>();
   for (const rec of assistantTurnRecords) assistantByTurn.set(rec.turn, rec);
 
-  // Build an index: userMsgIdx → userMessages position for fast lookup.
-  const userMsgByIdx = new Map<number, UserMessageRecord>();
-  for (const um of userMessages) userMsgByIdx.set(um.userMsgIdx, um);
+  // ---------------------------------------------------------------------------
+  // 1. Cluster user messages by topic using Jaccard adjacency + union-find
+  // ---------------------------------------------------------------------------
 
-  // Build an absolute index map: timestamp → entry position.
-  // Used to map signal timestamps to absolute positions in the timeline
-  // for proximity-window comparison.
+  const JACCARD_THRESHOLD = 0.3;
+  const USER_MSG_WINDOW = 10;   // max userMsgCounter gap between two cluster members
+  const MIN_CLUSTER_SIZE = 3;
+  const SETUP_SKIP = 10;        // ignore first N user messages (setup / orientation)
+  const CLUSTER_SPAN_MAX = 10;  // max(userMsgCounter) - min(userMsgCounter) in a cluster
+
+  // Pre-compute token sets for each user message.
+  const tokenSets: Array<{ idx: number; tokens: Set<string> }> = userMessages.map((um) => ({
+    idx: um.userMsgIdx,
+    tokens: tokenizeForCluster(um.text),
+  }));
+
+  // Union-Find (path-compression only — sufficient for this small n).
+  const parent = tokenSets.map((_, i) => i);
+  function find(x: number): number {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]]; // path halving
+      x = parent[x];
+    }
+    return x;
+  }
+  function union(x: number, y: number): void {
+    const rx = find(x);
+    const ry = find(y);
+    if (rx !== ry) parent[rx] = ry;
+  }
+
+  // Build adjacency: connect pairs (i, j) where j.userMsgCounter - i.userMsgCounter <= WINDOW
+  // and Jaccard(tokens_i, tokens_j) > THRESHOLD.
+  for (let i = 0; i < tokenSets.length; i++) {
+    const tsi = tokenSets[i];
+    if (tsi.tokens.size === 0) continue;
+    for (let j = i + 1; j < tokenSets.length; j++) {
+      const tsj = tokenSets[j];
+      if (tsj.idx - tsi.idx > USER_MSG_WINDOW) break;
+      if (tsj.tokens.size === 0) continue;
+      const sim = jaccard(tsi.tokens, tsj.tokens);
+      if (sim > JACCARD_THRESHOLD) union(i, j);
+    }
+  }
+
+  // Collect components: group indices by root.
+  const componentMap = new Map<number, number[]>();
+  for (let i = 0; i < tokenSets.length; i++) {
+    const root = find(i);
+    const arr = componentMap.get(root) ?? [];
+    arr.push(i);
+    componentMap.set(root, arr);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. Filter clusters
+  // ---------------------------------------------------------------------------
+
+  // For each surviving cluster, collect needed pairwise Jaccard to compute avg.
+  // We approximate with the average of all pairs that are within the window.
+  interface CandidateCluster {
+    indices: number[];      // positions in tokenSets[] / userMessages[]
+    jaccardAvg: number;
+  }
+
+  const candidates: CandidateCluster[] = [];
+
+  for (const indices of componentMap.values()) {
+    if (indices.length < MIN_CLUSTER_SIZE) continue;
+
+    const msgs = indices.map((i) => userMessages[i]);
+    const minCounter = Math.min(...msgs.map((m) => m.userMsgIdx));
+    const maxCounter = Math.max(...msgs.map((m) => m.userMsgIdx));
+
+    // Skip setup phase: the cluster must start after the first SETUP_SKIP messages.
+    if (minCounter <= SETUP_SKIP) continue;
+
+    // Cluster span: stay within CLUSTER_SPAN_MAX user-message turns.
+    if (maxCounter - minCounter > CLUSTER_SPAN_MAX) continue;
+
+    // Compute average Jaccard over all pairs within the window.
+    let jaccardSum = 0;
+    let jaccardCount = 0;
+    const sortedIndices = [...indices].sort((a, b) => tokenSets[a].idx - tokenSets[b].idx);
+    for (let pi = 0; pi < sortedIndices.length; pi++) {
+      for (let pj = pi + 1; pj < sortedIndices.length; pj++) {
+        const idxA = sortedIndices[pi];
+        const idxB = sortedIndices[pj];
+        if (tokenSets[idxB].idx - tokenSets[idxA].idx > USER_MSG_WINDOW) continue;
+        jaccardSum += jaccard(tokenSets[idxA].tokens, tokenSets[idxB].tokens);
+        jaccardCount++;
+      }
+    }
+    const jaccardAvg = jaccardCount > 0 ? jaccardSum / jaccardCount : 0;
+
+    candidates.push({ indices: sortedIndices, jaccardAvg });
+  }
+
+  if (candidates.length === 0) return [];
+
+  // ---------------------------------------------------------------------------
+  // 3. Build helpers for enrichment signals and agentContext
+  // ---------------------------------------------------------------------------
+
+  // Map absolute entry positions by timestamp (for assistant turn range lookup).
   const timestampToAbsIndex = new Map<string, number>();
   for (let i = 0; i < entries.length; i++) {
     const ts = entries[i]['timestamp'] as string | undefined;
     if (ts && !timestampToAbsIndex.has(ts)) timestampToAbsIndex.set(ts, i);
   }
 
-  function absIndexForTimestamp(ts: string): number {
-    return timestampToAbsIndex.get(ts) ?? 0;
+  // Map userMsgIdx → absolute entry index via timestamp.
+  const userMsgIdxToAbsIndex = new Map<number, number>();
+  for (const um of userMessages) {
+    const ai = timestampToAbsIndex.get(um.timestamp) ?? 0;
+    userMsgIdxToAbsIndex.set(um.userMsgIdx, ai);
   }
 
-  // ---------------------------------------------------------------------------
-  // 1. Detect each signal type independently as {turn, kind, detail} events
-  // ---------------------------------------------------------------------------
+  // Map userMsgIdx → absolute turn number in the entries list (for start/endTurn).
+  // We define "absolute turn" here as the 1-indexed position in the entries list
+  // (not the assistant turn counter), so startTurn/endTurn are consistent with
+  // the existing zone API (which uses absolute entry-level positions).
+  // Actually: per the spec, startTurn/endTurn are "absolute turn" of the FIRST/LAST
+  // user message in the cluster. We'll use the absoluteIndex (entries position + 1).
 
-  const signals: SignalEvent[] = [];
-
-  // S1: Negative sentiment frictionPoints
-  // S2: Repetition frictionPoints
-  // S4: Backtrack frictionPoints
-  for (const fp of frictionPoints) {
-    if (fp.matchedPattern.startsWith('sentiment:')) {
-      const score = parseFloat(fp.matchedPattern.slice('sentiment:'.length)) || 0;
-      // Find the userMsgIdx for this frictionPoint.
-      let userMsgIdx = -1;
-      for (const um of userMessages) {
-        if (um.timestamp === fp.timestamp && fp.snippet.startsWith(um.text.slice(0, 30))) {
-          userMsgIdx = um.userMsgIdx;
-          break;
-        }
-        if (!fp.timestamp && um.text.startsWith(fp.snippet.slice(0, 30))) {
-          userMsgIdx = um.userMsgIdx;
-          break;
-        }
-      }
-      if (userMsgIdx >= 0) {
-        signals.push({
-          kind: 'S1',
-          turn: userMsgIdx,
-          absoluteIndex: absIndexForTimestamp(fp.timestamp),
-          timestamp: fp.timestamp,
-          frictionPoint: fp,
-          score,
-          detail: '',
-        });
-      }
-    } else if (fp.matchedPattern.startsWith('repetition:')) {
-      const parts = fp.matchedPattern.split(':');
-      const score = parseFloat(parts[2] ?? '0') || 0;
-      let userMsgIdx = -1;
-      for (const um of userMessages) {
-        if (um.timestamp === fp.timestamp && fp.snippet.startsWith(um.text.slice(0, 30))) {
-          userMsgIdx = um.userMsgIdx;
-          break;
-        }
-        if (!fp.timestamp && um.text.startsWith(fp.snippet.slice(0, 30))) {
-          userMsgIdx = um.userMsgIdx;
-          break;
-        }
-      }
-      if (userMsgIdx >= 0) {
-        signals.push({
-          kind: 'S2',
-          turn: userMsgIdx,
-          absoluteIndex: absIndexForTimestamp(fp.timestamp),
-          timestamp: fp.timestamp,
-          frictionPoint: fp,
-          score,
-          detail: fp.matchedPattern,
-        });
-      }
-    } else if (fp.matchedPattern.startsWith('backtrack:')) {
-      const m = fp.matchedPattern.match(/^backtrack:(.+):T\d+->T(\d+)$/);
-      if (m) {
-        const laterTurn = parseInt(m[2], 10);
-        const aRec = assistantByTurn.get(laterTurn);
-        const ts = aRec?.timestamp ?? fp.timestamp;
-        signals.push({
-          kind: 'S4',
-          turn: laterTurn,
-          absoluteIndex: absIndexForTimestamp(ts),
-          timestamp: ts,
-          frictionPoint: fp,
-          score: 0,
-          detail: m[1], // file basename
-        });
-      }
-    }
-  }
-
-  // S5: tool error spike — emit one event at the turn where the 2nd error lands
-  // within a 5-turn (assistant turns) window.
-  {
-    // Collect errored assistant turns in order.
-    const errorTurns: number[] = [];
-    const errorTurnTimestamps = new Map<number, string>();
-
-    // Build a set of assistant turns that had at least one error.
-    const erroredAssistantTurns = new Set<number>();
-    for (const toolUseId of erroredToolUseIds) {
-      const turn = toolUseTurnById.get(toolUseId);
-      if (turn !== undefined) erroredAssistantTurns.add(turn);
-    }
-
-    for (const aRec of assistantTurnRecords) {
-      if (erroredAssistantTurns.has(aRec.turn)) {
-        errorTurns.push(aRec.turn);
-        errorTurnTimestamps.set(aRec.turn, aRec.timestamp);
-      }
-    }
-
-    // Sliding window: emit S5 when 2nd error lands and both are within 5 turns.
-    for (let i = 1; i < errorTurns.length; i++) {
-      const t2 = errorTurns[i];
-      const t1 = errorTurns[i - 1];
-      if (t2 - t1 <= 5) {
-        // Emit S5 at the turn of the 2nd error.
-        const ts = errorTurnTimestamps.get(t2) ?? '';
-        signals.push({
-          kind: 'S5',
-          turn: t2,
-          absoluteIndex: absIndexForTimestamp(ts),
-          timestamp: ts,
-          frictionPoint: null,
-          score: 0,
-          detail: '',
-        });
-        // Advance i to avoid duplicating for overlapping windows.
-        i++;
-      }
-    }
-  }
-
-  // S6: repeated edit failure — ≥ 2 "string not found"-like errors on same file.
-  {
-    // For each errored tool_use_id, determine if the error is "string not found".
-    // We need to re-scan the entries for tool_result content.
-    // Build: tool_use_id → file path (from the Edit tool_use that preceded it).
-    const toolUseIdToFilePath = new Map<string, string>();
-    // Also need: tool_use_id → error text, from tool_result entries.
-    const toolUseIdToErrorText = new Map<string, string>();
-
-    // Pass 1: collect tool_use_id → file_path from Edit tool_uses.
-    for (const entry of entries) {
-      if (entry['type'] !== 'assistant') continue;
-      const msg = entry['message'] as { content?: unknown[] } | undefined;
-      if (!Array.isArray(msg?.content)) continue;
-      for (const block of msg!.content) {
-        const b = block as { type?: string; id?: string; name?: string; input?: Record<string, unknown> };
-        if (b.type === 'tool_use' && b.id && (b.name === 'Edit' || b.name === 'MultiEdit')) {
-          const fp = (b.input?.['file_path']) as string | undefined;
-          if (fp) toolUseIdToFilePath.set(b.id, fp);
-        }
-      }
-    }
-
-    // Pass 2: collect error text from tool_result entries.
-    for (const entry of entries) {
-      if (entry['type'] !== 'user') continue;
-      const msg = entry['message'] as { content?: unknown } | undefined;
-      if (!Array.isArray(msg?.content)) continue;
-      for (const block of msg!.content) {
-        const b = block as { type?: string; tool_use_id?: string; is_error?: boolean; content?: unknown };
-        if (b.type !== 'tool_result' || !b.tool_use_id) continue;
-        if (!erroredToolUseIds.has(b.tool_use_id)) continue;
-        // Extract text content.
-        let errorText = '';
-        if (typeof b.content === 'string') {
-          errorText = b.content;
-        } else if (Array.isArray(b.content)) {
-          for (const part of b.content as Array<{ type?: string; text?: string }>) {
-            if (part.type === 'text' && part.text) { errorText = part.text; break; }
-          }
-        }
-        if (errorText) toolUseIdToErrorText.set(b.tool_use_id, errorText);
-      }
-    }
-
-    // Detect S6: group by file_path, find pairs where error matches /string not found|not_found_in_file/i.
-    const STRING_NOT_FOUND_RE = /string not found|not_found_in_file/i;
-    const notFoundByFile = new Map<string, Array<{ turn: number; ts: string }>>();
-    for (const toolUseId of erroredToolUseIds) {
-      const errorText = toolUseIdToErrorText.get(toolUseId) ?? '';
-      if (!STRING_NOT_FOUND_RE.test(errorText)) continue;
-      const filePath = toolUseIdToFilePath.get(toolUseId);
-      if (!filePath) continue;
-      const turn = toolUseTurnById.get(toolUseId);
-      if (turn === undefined) continue;
-      const ts = assistantByTurn.get(turn)?.timestamp ?? '';
-      const arr = notFoundByFile.get(filePath) ?? [];
-      arr.push({ turn, ts });
-      notFoundByFile.set(filePath, arr);
-    }
-
-    // Emit S6 at the 2nd occurrence per file (sorted by turn).
-    for (const [filePath, occurrences] of notFoundByFile) {
-      if (occurrences.length < 2) continue;
-      occurrences.sort((a, b) => a.turn - b.turn);
-      const second = occurrences[1];
-      signals.push({
-        kind: 'S6',
-        turn: second.turn,
-        absoluteIndex: absIndexForTimestamp(second.ts),
-        timestamp: second.ts,
-        frictionPoint: null,
-        score: 0,
-        detail: filePath,
-      });
-    }
-  }
-
-  if (signals.length === 0) return [];
-
-  // Sort signals by absolute index for stable processing.
-  signals.sort((a, b) => a.absoluteIndex - b.absoluteIndex);
-
-  // ---------------------------------------------------------------------------
-  // 2. Group signals into zones using a sliding 5-turn absolute-index window
-  // ---------------------------------------------------------------------------
-
-  // For each signal event at index I, find all OTHER signals whose
-  // absoluteIndex ∈ [I-WINDOW, I+WINDOW] and are a different kind.
-  const PROXIMITY_WINDOW = 5; // turns in the entry list (approximate — same scale as absoluteIndex)
-  // We use absoluteIndex differences as a proxy for "5-turn window". Since
-  // absoluteIndex is entry-based and entries include both user + assistant + system,
-  // we use a wider window: typically 1 user message + 2-4 assistant entries = ~5-10 entries.
-  // Use 30 entries as the proximity window (empirically covers 5 conversational turns).
-  const ABS_WINDOW = 30;
-
-  // Build adjacency: for each signal index, which other signal indices are within ABS_WINDOW?
-  const n = signals.length;
-  const adjacency: Set<number>[] = Array.from({ length: n }, () => new Set<number>());
-
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      if (signals[j].absoluteIndex - signals[i].absoluteIndex > ABS_WINDOW) break;
-      if (signals[i].kind !== signals[j].kind) {
-        adjacency[i].add(j);
-        adjacency[j].add(i);
-      }
-    }
-  }
-
-  // Find connected components (clusters) where each signal has at least one neighbour
-  // of a different kind within the window.
-  const visited = new Array<boolean>(n).fill(false);
-  const clusters: number[][] = [];
-
-  for (let i = 0; i < n; i++) {
-    if (visited[i] || adjacency[i].size === 0) continue;
-    // BFS over this component.
-    const component: number[] = [];
-    const queue = [i];
-    visited[i] = true;
-    while (queue.length > 0) {
-      const cur = queue.shift()!;
-      component.push(cur);
-      for (const nb of adjacency[cur]) {
-        if (!visited[nb]) {
-          visited[nb] = true;
-          queue.push(nb);
-        }
-      }
-    }
-    clusters.push(component);
-  }
-
-  if (clusters.length === 0) return [];
-
-  // ---------------------------------------------------------------------------
-  // 3. Build each zone from a cluster
-  // ---------------------------------------------------------------------------
-
-  // Build a map of backtrack turn → file basename (for zone agentContext).
+  // Backtrack map: assistant turn → file basename.
   const backtrackedTurnToBasename = new Map<number, string>();
   for (const fp of frictionPoints) {
     const m = fp.matchedPattern.match(/^backtrack:(.+):T\d+->T(\d+)$/);
-    if (m) {
-      const laterTurn = parseInt(m[2], 10);
-      backtrackedTurnToBasename.set(laterTurn, m[1]);
+    if (m) backtrackedTurnToBasename.set(parseInt(m[2], 10), m[1]);
+  }
+
+  // Build tool-error enrichment maps for S5/S6 detection.
+  // S5: ≥ 2 tool errors in the zone.
+  // S6: ≥ 2 "string not found" errors on same file in the zone.
+  const STRING_NOT_FOUND_RE = /string not found|not_found_in_file/i;
+
+  // tool_use_id → file path (for S6).
+  const toolUseIdToFilePath = new Map<string, string>();
+  for (const entry of entries) {
+    if (entry['type'] !== 'assistant') continue;
+    const msg = entry['message'] as { content?: unknown[] } | undefined;
+    if (!Array.isArray(msg?.content)) continue;
+    for (const block of msg!.content) {
+      const b = block as { type?: string; id?: string; name?: string; input?: Record<string, unknown> };
+      if (b.type === 'tool_use' && b.id && (b.name === 'Edit' || b.name === 'MultiEdit')) {
+        const fp = b.input?.['file_path'] as string | undefined;
+        if (fp) toolUseIdToFilePath.set(b.id, fp);
+      }
     }
   }
 
+  // tool_use_id → error text (for S6).
+  const toolUseIdToErrorText = new Map<string, string>();
+  for (const entry of entries) {
+    if (entry['type'] !== 'user') continue;
+    const msg = entry['message'] as { content?: unknown } | undefined;
+    if (!Array.isArray(msg?.content)) continue;
+    for (const block of msg!.content) {
+      const b = block as { type?: string; tool_use_id?: string; is_error?: boolean; content?: unknown };
+      if (b.type !== 'tool_result' || !b.tool_use_id) continue;
+      if (!erroredToolUseIds.has(b.tool_use_id)) continue;
+      let errorText = '';
+      if (typeof b.content === 'string') {
+        errorText = b.content;
+      } else if (Array.isArray(b.content)) {
+        for (const part of b.content as Array<{ type?: string; text?: string }>) {
+          if (part.type === 'text' && part.text) { errorText = part.text; break; }
+        }
+      }
+      if (errorText) toolUseIdToErrorText.set(b.tool_use_id, errorText);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. For each candidate cluster → build a ConversationFrictionZone
+  // ---------------------------------------------------------------------------
+
   const zones: ConversationFrictionZone[] = [];
 
-  for (const cluster of clusters) {
-    const clusterSignals = cluster.map((i) => signals[i]);
-    const signalKinds = [...new Set(clusterSignals.map((s) => s.kind))].sort() as Array<'S1' | 'S2' | 'S4' | 'S5' | 'S6'>;
+  for (const { indices, jaccardAvg } of candidates) {
+    const clusterMsgs = indices.map((i) => userMessages[i]);
+    const clusterSize = clusterMsgs.length;
 
-    // Zone span: min→max absoluteIndex signals.
-    const minAbsIdx = Math.min(...clusterSignals.map((s) => s.absoluteIndex));
-    const maxAbsIdx = Math.max(...clusterSignals.map((s) => s.absoluteIndex));
+    // startTurn / endTurn: absolute entry index (1-based) of first/last cluster message.
+    const firstMsg = clusterMsgs[0];
+    const lastMsg = clusterMsgs[clusterMsgs.length - 1];
+    const startTurn = (timestampToAbsIndex.get(firstMsg.timestamp) ?? 0) + 1;
+    const endTurn = (timestampToAbsIndex.get(lastMsg.timestamp) ?? 0) + 1;
+    const startTimestamp = firstMsg.timestamp;
+    const endTimestamp = lastMsg.timestamp;
 
-    // Find the assistant turn range for agentContext.
-    // Include all assistant turns that are within [minAbsIdx, maxAbsIdx].
-    let startTurn = Infinity;
-    let endTurn = 0;
+    // Determine assistant turn range spanning this zone (for agentContext).
+    // Include all assistant turns whose absolute index is in [startTurn-1, endTurn-1].
+    const absStart = startTurn - 1;
+    const absEnd = endTurn - 1;
+    let aStartTurn = Infinity;
+    let aEndTurn = 0;
     for (const aRec of assistantTurnRecords) {
-      const absIdx = absIndexForTimestamp(aRec.timestamp);
-      if (absIdx >= minAbsIdx && absIdx <= maxAbsIdx) {
-        if (aRec.turn < startTurn) startTurn = aRec.turn;
-        if (aRec.turn > endTurn) endTurn = aRec.turn;
+      const ai = timestampToAbsIndex.get(aRec.timestamp) ?? 0;
+      if (ai >= absStart && ai <= absEnd) {
+        if (aRec.turn < aStartTurn) aStartTurn = aRec.turn;
+        if (aRec.turn > aEndTurn) aEndTurn = aRec.turn;
       }
     }
-    if (startTurn === Infinity || endTurn === 0) {
-      // Fallback for clusters with no direct assistant turn match (e.g. pure S1+S2
-      // where signal.absoluteIndex may fall between two assistant turns due to
-      // timestamp resolution). Use the assistant turns closest to the zone window.
-      // Strategy: find the assistant turn whose absolute index is closest to
-      // [minAbsIdx, maxAbsIdx] from outside or within the range.
-      let closestStart = Infinity;
-      let closestEnd = 0;
-      let closestStartDist = Infinity;
-      let closestEndDist = Infinity;
-      for (const aRec of assistantTurnRecords) {
-        const absIdx = absIndexForTimestamp(aRec.timestamp);
-        const distToMin = Math.abs(absIdx - minAbsIdx);
-        const distToMax = Math.abs(absIdx - maxAbsIdx);
-        if (distToMin < closestStartDist) { closestStartDist = distToMin; closestStart = aRec.turn; }
-        if (distToMax < closestEndDist) { closestEndDist = distToMax; closestEnd = aRec.turn; }
-      }
-      startTurn = isFinite(closestStart) ? closestStart : 1;
-      endTurn = closestEnd > 0 ? closestEnd : (assistantTurnRecords.length > 0 ? assistantTurnRecords[assistantTurnRecords.length - 1].turn : 1);
-      // Ensure start <= end.
-      if (startTurn > endTurn) startTurn = endTurn;
+    // Fallback when no assistant turns land precisely in the range.
+    if (!isFinite(aStartTurn)) {
+      aStartTurn = 1;
+      aEndTurn = assistantTurnRecords.length > 0 ? assistantTurnRecords[assistantTurnRecords.length - 1].turn : 1;
     }
 
-    const firstSignal = clusterSignals.reduce((a, b) => a.absoluteIndex <= b.absoluteIndex ? a : b);
-    const lastSignal = clusterSignals.reduce((a, b) => a.absoluteIndex >= b.absoluteIndex ? a : b);
-    const startTimestamp = firstSignal.timestamp;
-    const endTimestamp = lastSignal.timestamp;
-
-    // Compute agentContext for turns [startTurn, endTurn].
+    // Compute agentContext over [aStartTurn, aEndTurn].
     const filesTouchedSet: string[] = [];
     const filesTouchedSeen = new Set<string>();
     let toolCallsCount = 0;
     let toolErrorsCount = 0;
     const editCountsByFile = new Map<string, number>();
 
-    for (let t = startTurn; t <= endTurn; t++) {
+    for (let t = aStartTurn; t <= aEndTurn; t++) {
       const aRec = assistantByTurn.get(t);
       if (!aRec) continue;
       toolCallsCount += aRec.toolUses.length;
@@ -1576,42 +1462,38 @@ function buildFrictionZones(args: {
           filesTouchedSeen.add(tu.filePath);
           filesTouchedSet.push(tu.filePath);
         }
-        if (tu.filePath && (tu.toolName === 'Edit' || tu.toolName === 'Write' || tu.toolName === 'MultiEdit')) {
+        if (
+          tu.filePath &&
+          (tu.toolName === 'Edit' || tu.toolName === 'Write' || tu.toolName === 'MultiEdit')
+        ) {
           editCountsByFile.set(tu.filePath, (editCountsByFile.get(tu.filePath) ?? 0) + 1);
         }
       }
     }
 
-    // Count errors within the zone range.
+    // Count errors within the zone.
     for (const toolUseId of erroredToolUseIds) {
       const turn = toolUseTurnById.get(toolUseId);
-      if (turn !== undefined && turn >= startTurn && turn <= endTurn) {
-        toolErrorsCount++;
-      }
+      if (turn !== undefined && turn >= aStartTurn && turn <= aEndTurn) toolErrorsCount++;
     }
 
-    // backtrackedFiles: files where a backtrack was detected within [startTurn, endTurn].
+    // backtrackedFiles.
     const backtrackedFiles: string[] = [];
     for (const [laterTurn, bn] of backtrackedTurnToBasename) {
-      if (laterTurn >= startTurn && laterTurn <= endTurn) {
+      if (laterTurn >= aStartTurn && laterTurn <= aEndTurn) {
         const fullPath = filesTouchedSet.find((p) => p.endsWith('/' + bn) || p === bn);
-        if (fullPath && !backtrackedFiles.includes(fullPath)) {
-          backtrackedFiles.push(fullPath);
-        } else if (!fullPath && !backtrackedFiles.includes(bn)) {
-          backtrackedFiles.push(bn);
-        }
+        const target = fullPath ?? bn;
+        if (!backtrackedFiles.includes(target)) backtrackedFiles.push(target);
       }
     }
 
-    // keyActions: up to 5 labels.
+    // keyActions.
     const keyActions: string[] = [];
-
-    // Priority 1: errored tools.
     if (toolErrorsCount > 0) {
       const errorToolCounts = new Map<string, number>();
       for (const toolUseId of erroredToolUseIds) {
         const turn = toolUseTurnById.get(toolUseId);
-        if (turn !== undefined && turn >= startTurn && turn <= endTurn) {
+        if (turn !== undefined && turn >= aStartTurn && turn <= aEndTurn) {
           const aRec = assistantByTurn.get(turn);
           if (aRec && aRec.toolUses.length > 0) {
             const lastName = aRec.toolUses[aRec.toolUses.length - 1].toolName;
@@ -1624,81 +1506,86 @@ function buildFrictionZones(args: {
         keyActions.push(`${toolName} failed ×${count}`);
       }
     }
-
-    // Priority 2: high-count edits.
     const sortedEdits = Array.from(editCountsByFile.entries())
       .filter(([, c]) => c >= 2)
       .sort((a, b) => b[1] - a[1]);
     for (const [fp, count] of sortedEdits) {
       if (keyActions.length >= 5) break;
-      const bn = fp.split('/').pop() ?? fp;
-      keyActions.push(`Edit ${bn} ×${count}`);
+      keyActions.push(`Edit ${fp.split('/').pop() ?? fp} ×${count}`);
     }
-
-    // Priority 3: notable single tool calls.
     if (keyActions.length < 5) {
       const notableTools = new Set(['Bash', 'Read', 'WebFetch', 'WebSearch']);
       const seenNotable = new Set<string>();
-      for (let t = startTurn; t <= endTurn && keyActions.length < 5; t++) {
+      for (let t = aStartTurn; t <= aEndTurn && keyActions.length < 5; t++) {
         const aRec = assistantByTurn.get(t);
         if (!aRec) continue;
         for (const tu of aRec.toolUses) {
-          if (!notableTools.has(tu.toolName)) continue;
-          if (seenNotable.has(tu.toolName)) continue;
+          if (!notableTools.has(tu.toolName) || seenNotable.has(tu.toolName)) continue;
           seenNotable.add(tu.toolName);
-          if (tu.toolName === 'Bash' && tu.bashCommand) {
-            keyActions.push(`Bash: ${tu.bashCommand.slice(0, 40)}`);
-          } else {
-            keyActions.push(tu.toolName);
-          }
-          if (keyActions.length >= 5) break;
+          keyActions.push(
+            tu.toolName === 'Bash' && tu.bashCommand
+              ? `Bash: ${tu.bashCommand.slice(0, 40)}`
+              : tu.toolName,
+          );
         }
       }
     }
 
-    // Severity: 2 signals → medium, 3+ → high.
-    const severity: ConversationFrictionZone['severity'] = signalKinds.length >= 3 ? 'high' : 'medium';
+    // ---------------------------------------------------------------------------
+    // 5. Enrichment signals (S1/S4/S5/S6) — bumps severity, used as badges.
+    // ---------------------------------------------------------------------------
 
-    // Dominant reactionPoint: priority order S1 > S2 > S4 > S5 > S6.
-    const PRIORITY: Record<string, number> = { S1: 0, S2: 1, S4: 2, S5: 3, S6: 4 };
-    const dominantSignal = clusterSignals.reduce((a, b) =>
-      (PRIORITY[a.kind] ?? 99) <= (PRIORITY[b.kind] ?? 99) ? a : b
-    );
-    const dominantKind = dominantSignal.kind;
+    const enrichSignals = new Set<'S1' | 'S4' | 'S5' | 'S6'>();
 
-    // Build a reactionPoint. If the dominant signal has a frictionPoint, use it.
-    // Otherwise synthesise one (S5/S6).
-    let reactionPoint: ConversationFrictionPoint;
-    if (dominantSignal.frictionPoint) {
-      reactionPoint = dominantSignal.frictionPoint;
-    } else {
-      // Synthesise a frictionPoint for S5/S6 (no pre-existing one).
-      let synthPattern = '';
-      if (dominantKind === 'S5') {
-        synthPattern = `multi:${signalKinds.join('+')}`;
-      } else {
-        synthPattern = `multi:${signalKinds.join('+')}:${dominantSignal.detail}`;
+    // S1: any cluster message has Negative sentiment > threshold.
+    for (const um of clusterMsgs) {
+      if (negativeUserIndices.has(um.userMsgIdx)) {
+        enrichSignals.add('S1');
+        break;
       }
-      // Find preceding tool at this turn.
-      const aRec = assistantByTurn.get(dominantSignal.turn);
-      const precedingTool = aRec && aRec.toolUses.length > 0
-        ? aRec.toolUses[aRec.toolUses.length - 1].toolName
-        : null;
-      reactionPoint = {
-        offsetPct: 0,
-        timestamp: dominantSignal.timestamp,
-        snippet: '',
-        matchedPattern: synthPattern,
-        precedingTool,
-      };
     }
 
-    // Zone id: <sessionId>:<startTurn>:<endTurn>:<signal_codes_sorted>
-    const zoneId = `${sessionId}:${isFinite(startTurn) ? startTurn : 0}:${endTurn}:${signalKinds.join('+')}`;
+    // S4: any backtrack within the assistant zone.
+    if (backtrackedFiles.length > 0) enrichSignals.add('S4');
+
+    // S5: ≥ 2 tool errors in the zone.
+    if (toolErrorsCount >= 2) enrichSignals.add('S5');
+
+    // S6: ≥ 2 "string not found" errors on same file in the zone.
+    const notFoundByFile = new Map<string, number>();
+    for (const toolUseId of erroredToolUseIds) {
+      const turn = toolUseTurnById.get(toolUseId);
+      if (turn === undefined || turn < aStartTurn || turn > aEndTurn) continue;
+      const errorText = toolUseIdToErrorText.get(toolUseId) ?? '';
+      if (!STRING_NOT_FOUND_RE.test(errorText)) continue;
+      const filePath = toolUseIdToFilePath.get(toolUseId);
+      if (!filePath) continue;
+      notFoundByFile.set(filePath, (notFoundByFile.get(filePath) ?? 0) + 1);
+    }
+    if ([...notFoundByFile.values()].some((c) => c >= 2)) enrichSignals.add('S6');
+
+    const signalKinds = [...enrichSignals].sort() as Array<'S1' | 'S4' | 'S5' | 'S6'>;
+
+    // Severity: base = cluster size (3 → medium, 5+ → high). Bump if any enrichment.
+    let severity: ConversationFrictionZone['severity'] =
+      clusterSize >= 5 ? 'high' : 'medium';
+    if (severity === 'medium' && signalKinds.length > 0) severity = 'high';
+
+    // reactionPoint: last cluster message, with stuck-cluster pattern.
+    const reactionPoint: ConversationFrictionPoint = {
+      offsetPct: lastMsg.offsetPct,
+      timestamp: lastMsg.timestamp,
+      snippet: lastMsg.text.slice(0, 200),
+      matchedPattern: `stuck-cluster:${clusterSize}:${jaccardAvg.toFixed(2)}`,
+      precedingTool: null,
+    };
+
+    // Zone id.
+    const zoneId = `${sessionId}:${startTurn}:${endTurn}:cluster${clusterSize}`;
 
     zones.push({
       id: zoneId,
-      startTurn: isFinite(startTurn) ? startTurn : 1,
+      startTurn,
       endTurn,
       startTimestamp,
       endTimestamp,
@@ -1710,8 +1597,9 @@ function buildFrictionZones(args: {
         backtrackedFiles,
         keyActions,
       },
+      clusterSize,
       severity,
-      signalKinds,
+      signalKinds: signalKinds.length > 0 ? signalKinds : undefined,
     });
   }
 

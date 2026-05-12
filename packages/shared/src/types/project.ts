@@ -111,33 +111,34 @@ export interface ConversationFrictionPoint {
 }
 
 /**
- * Richer friction view: a span of time where the agent did something
- * problematic and the user reacted. Built by `analyzeConversation` from
- * the flat `frictionPoints` array — one zone per user-reaction friction,
- * walking back through the preceding assistant turns to compute the
- * agent context.
+ * Richer friction view: a span of time where the user was stuck on the same
+ * topic, sending 3+ messages on it within a 10-user-message window. Built by
+ * `analyzeConversation` using a Jaccard-based cluster algorithm (v10).
  *
  * Frontend renders zones as background rectangles in the sismograph and
  * as expandable sections in the timeline.
  */
 export interface ConversationFrictionZone {
   /**
-   * Stable id (`<sessionId>:<endTurn>:<reactionKind>`), useful for React
-   * keys and dedup across re-analyses.
+   * Stable id (`<sessionId>:<startTurn>:<endTurn>:<signalCodes>`), useful for
+   * React keys and dedup across re-analyses.
    */
   id: string;
   /**
-   * 1-indexed turn where the zone starts — the FIRST assistant tool_use
-   * that we consider part of the agent run that led to the reaction.
+   * 1-indexed absolute turn of the FIRST user message in the stuck cluster.
    */
   startTurn: number;
-  /** 1-indexed turn of the user reaction that closes the zone. */
+  /** 1-indexed absolute turn of the LAST user message in the stuck cluster. */
   endTurn: number;
   startTimestamp: string;
   endTimestamp: string;
-  /** The original friction point that triggered building this zone. */
+  /**
+   * The last user message in the cluster, annotated with the cluster summary.
+   * `matchedPattern` format: `'stuck-cluster:<size>:<jaccardAvg>'`
+   * (e.g. `'stuck-cluster:4:0.48'`).
+   */
   reactionPoint: ConversationFrictionPoint;
-  /** Summary of what the agent did in `[startTurn, endTurn-1]`. */
+  /** Summary of what the agent did in `[startTurn, endTurn]`. */
   agentContext: {
     /** Unique file paths touched by Edit/Write/MultiEdit/NotebookEdit, in order of first appearance. */
     filesTouched: string[];
@@ -154,21 +155,31 @@ export interface ConversationFrictionZone {
      */
     keyActions: string[];
   };
-  /** Drives the background rect colour and drawer badge. */
-  severity: 'low' | 'medium' | 'high';
   /**
-   * Which signals fired in this zone, sorted alphabetically. Used by the UI
-   * to render the badge cluster. At least 2 distinct signal kinds are present
-   * in zones produced by v9+ (single-signal events no longer produce a zone).
-   * Optional for backward-compat with cached analyses from v8.
-   *
-   * - S1: User sentiment Negative with score > 0.60
-   * - S2: User message repetition (Jaccard > 0.5 within 5-turn window)
-   * - S4: Agent backtrack (Edit/Write reverts its own prior output on same file)
-   * - S5: Tool error spike (≥ 2 tool errors within 5-turn window)
-   * - S6: Repeated edit failure (≥ 2 "string not found"-like errors on same file)
+   * Number of user messages grouped into this stuck cluster.
+   * Frontend can display: "4 messages on the same topic".
    */
-  signalKinds?: Array<'S1' | 'S2' | 'S4' | 'S5' | 'S6'>;
+  clusterSize: number;
+  /**
+   * Drives the background rect colour and drawer badge. Never `'low'` — the
+   * cluster is already the minimum bar. Base: 3 msgs = medium, 5+ = high.
+   * Bumped one level when any enrichment signal (S1/S4/S5/S6) is present.
+   */
+  severity: 'medium' | 'high';
+  /**
+   * Enrichment signals present inside the zone. These no longer create the
+   * zone (the cluster does), but they bump severity and render as badges.
+   * Optional for backward-compat with cached analyses from v9 and earlier.
+   *
+   * - S1: User sentiment Negative with score > 0.60 in cluster messages
+   * - S4: Agent backtrack (Edit/Write reverts its own prior output on same file)
+   * - S5: Tool error spike (≥ 2 tool errors within zone)
+   * - S6: Repeated edit failure (≥ 2 "string not found"-like errors on same file)
+   *
+   * Note: S2 (repetition) has been removed — the cluster algorithm already
+   * captures the stuck-on-topic signal directly; S2 would be redundant.
+   */
+  signalKinds?: Array<'S1' | 'S4' | 'S5' | 'S6'>;
 }
 
 /**

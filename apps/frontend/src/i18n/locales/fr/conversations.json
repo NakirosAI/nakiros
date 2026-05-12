@@ -47,7 +47,10 @@
     "wasted": "GASPILLÉ",
     "compaction": "Compaction",
     "pause": "Pause",
-    "friction": "Friction"
+    "friction": "Friction",
+    "frictionSentiment": "Sentiment négatif",
+    "frictionBacktrack": "Agent revert",
+    "frictionRepetition": "Répétition"
   },
   "drawer": {
     "title": "Diagnostic",
@@ -179,6 +182,10 @@
     "consider-custom-skill": {
       "title": "Créer un skill dédié à ce workflow",
       "body": "Session de {{durationMin}} min avec frictions et aucun skill invoqué. Si ce type de tâche revient, créer un skill (via nakiros-skill-factory) standardise les bonnes pratiques et réduit les corrections."
+    },
+    "long-gap-topic-change": {
+      "title": "Changement de sujet après une longue pause",
+      "body": "Tu es revenu après {{gapMin}}min sur un sujet différent. Crée une nouvelle conversation pour garder le contexte propre."
     }
   }
 }

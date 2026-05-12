@@ -44,7 +44,10 @@
     "wasted": "WASTED",
     "compaction": "Compaction",
     "pause": "Pause",
-    "friction": "Friction"
+    "friction": "Friction",
+    "frictionSentiment": "Negative sentiment",
+    "frictionBacktrack": "Agent backtrack",
+    "frictionRepetition": "Repetition"
   },
   "diagnostic": {
     "healthy": "Healthy conversation — no notable signal"
@@ -177,6 +180,10 @@
     "consider-custom-skill": {
       "title": "Create a dedicated skill for this workflow",
       "body": "{{durationMin}} min session with frictions and no skill invoked. If this kind of task recurs, a skill (via nakiros-skill-factory) standardises good practice and reduces corrections."
+    },
+    "long-gap-topic-change": {
+      "title": "Topic changed after a long gap",
+      "body": "You came back after {{gapMin}}min with a different topic. Consider starting a fresh conversation to keep the context focused."
     }
   }
 }

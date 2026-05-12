@@ -187,7 +187,14 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
     }
     for (const f of analysis.frictionPoints) {
       const tMs = new Date(f.timestamp).getTime() - new Date(analysis.startedAt).getTime();
-      all.push({ kind: 'friction', tMs, label: t('hover.friction'), detail: `"${f.snippet.slice(0, 60)}…"` });
+      const kind = frictionKindFromPattern(f.matchedPattern);
+      const label =
+        kind === 'sentiment' ? t('hover.frictionSentiment') :
+        kind === 'backtrack' ? t('hover.frictionBacktrack') :
+        kind === 'repetition' ? t('hover.frictionRepetition') :
+        t('hover.friction');
+      const detail = frictionDetail(kind, f.matchedPattern, f.snippet);
+      all.push({ kind: 'friction', tMs, label, detail });
     }
     let nearest: (M & { d: number }) | null = null;
     for (const m of all) {
@@ -728,6 +735,57 @@ function Row({ color, label, value }: { color: string; label: string; value: str
       <span className="tabular-nums text-[var(--n-fg)]">{value}</span>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Friction helpers
+// ---------------------------------------------------------------------------
+
+/** Classify a `matchedPattern` string into one of the known friction families. */
+export function frictionKindFromPattern(matchedPattern: string): 'sentiment' | 'backtrack' | 'repetition' | 'other' {
+  if (matchedPattern.startsWith('sentiment:')) return 'sentiment';
+  if (matchedPattern.startsWith('backtrack:')) return 'backtrack';
+  if (matchedPattern.startsWith('repetition:')) return 'repetition';
+  return 'other';
+}
+
+function parseBacktrack(matchedPattern: string): { file: string; from: string; to: string } | null {
+  const m = matchedPattern.match(/^backtrack:(.+):T(\d+)→T(\d+)$/);
+  return m ? { file: m[1], from: m[2], to: m[3] } : null;
+}
+
+function parseRepetition(matchedPattern: string): { turn: string; jaccard: number } | null {
+  const m = matchedPattern.match(/^repetition:T(\d+):([\d.]+)$/);
+  return m ? { turn: m[1], jaccard: parseFloat(m[2]) } : null;
+}
+
+/**
+ * Build a human-readable tooltip detail line for a friction point.
+ * - sentiment: show the snippet (user message text is informative)
+ * - backtrack: show the file basename and turn range
+ * - repetition: show the turn and similarity percentage
+ * - other: fall back to the snippet
+ */
+function frictionDetail(
+  kind: 'sentiment' | 'backtrack' | 'repetition' | 'other',
+  matchedPattern: string,
+  snippet: string,
+): string {
+  if (kind === 'backtrack') {
+    const parsed = parseBacktrack(matchedPattern);
+    if (parsed) {
+      const basename = parsed.file.split('/').pop() ?? parsed.file;
+      return `${basename} · T${parsed.from}→T${parsed.to}`;
+    }
+  }
+  if (kind === 'repetition') {
+    const parsed = parseRepetition(matchedPattern);
+    if (parsed) {
+      return `turn T${parsed.turn} · ${Math.round(parsed.jaccard * 100)}% similar`;
+    }
+  }
+  // sentiment + other: snippet is the most informative detail
+  return `"${snippet.slice(0, 60)}…"`;
 }
 
 // ---------------------------------------------------------------------------

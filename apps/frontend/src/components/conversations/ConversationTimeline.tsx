@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { ConversationAnalysis } from '@nakiros/shared';
+import { frictionKindFromPattern } from './Sismograph';
 
 interface Props {
   analysis: ConversationAnalysis;
@@ -238,6 +239,12 @@ export function ConversationTimeline({ analysis }: Props) {
         {analysis.frictionPoints.map((f, i) => {
           const x = xFor(f.offsetPct);
           const y = PAD_TOP + plotH + 3;
+          const kind = frictionKindFromPattern(f.matchedPattern);
+          const kindLabel =
+            kind === 'sentiment' ? 'Negative sentiment' :
+            kind === 'backtrack' ? 'Agent backtrack' :
+            kind === 'repetition' ? 'Repetition' :
+            'Friction';
           return (
             <g key={'f' + i}>
               <polygon
@@ -245,7 +252,7 @@ export function ConversationTimeline({ analysis }: Props) {
                 fill="var(--danger)"
               />
               <title>
-                {f.matchedPattern}: {f.snippet.slice(0, 120)}
+                {kindLabel}: {f.snippet.slice(0, 120)}
               </title>
             </g>
           );

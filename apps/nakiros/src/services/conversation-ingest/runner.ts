@@ -299,15 +299,20 @@ export function ingestSession(
             onError: (err, idx) =>
               console.warn(`[sentiment] msg ${idx} failed:`, (err as Error).message),
           });
+          const inputByIndex = new Map(userInputs.map((u) => [u.messageIndex, u.text]));
+          const entriesWithExcerpt = entries.map((e) => ({
+            ...e,
+            excerpt: buildExcerpt(inputByIndex.get(e.messageIndex) ?? ''),
+          }));
           persistSentimentTrace({
             sessionId,
             projectPath,
             transcriptMtime,
             generatedAt: new Date().toISOString(),
             model: SENTIMENT_MODEL_ID,
-            entries,
+            entries: entriesWithExcerpt,
             observed: userInputs.length,
-            skipped: userInputs.length - entries.length,
+            skipped: userInputs.length - entriesWithExcerpt.length,
           });
         }
       } catch (err) {
@@ -619,6 +624,17 @@ export function ensureCoworkProjectIndexed(
   }
 
   return { ingested, total: allFiles.length };
+}
+
+/**
+ * Build a 120-character excerpt of a user message: trim whitespace, collapse
+ * runs of internal whitespace into single spaces, then slice. Adds an ellipsis
+ * only when the source was actually truncated.
+ */
+function buildExcerpt(text: string): string {
+  const cleaned = text.trim().replace(/\s+/g, ' ');
+  if (cleaned.length <= 120) return cleaned;
+  return cleaned.slice(0, 119) + '…';
 }
 
 export { aggregateStats };

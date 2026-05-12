@@ -14,6 +14,13 @@ export interface SentimentEntry {
   label: SentimentLabel;
   /** Model confidence in `[0, 1]` for the top-1 label. */
   score: number;
+  /**
+   * First 120 characters of the original user message, used by the UI to
+   * render tooltips and recap lists without re-reading the session body.
+   * Optional for backward compatibility with traces written before this
+   * field was introduced.
+   */
+  excerpt?: string;
 }
 
 export interface SentimentTrace {

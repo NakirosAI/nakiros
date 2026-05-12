@@ -1179,6 +1179,21 @@ const STOP_WORDS = new Set([
 ]);
 
 /**
+ * Synthetic "user" messages injected by Claude Code when the user hits ESC
+ * to interrupt a tool. They are NOT real user turns and must never seed a
+ * stuck-cluster. We keep them in `userMsgCounter` so the index alignment
+ * with the sentiment trace's `messageIndex` stays correct.
+ */
+const SYNTHETIC_USER_TEXTS = new Set([
+  '[Request interrupted by user for tool use]',
+  '[Request interrupted by user]',
+]);
+
+function isSyntheticUserMessage(text: string): boolean {
+  return SYNTHETIC_USER_TEXTS.has(text.trim());
+}
+
+/**
  * Tokenizes a string for the cluster Jaccard algorithm:
  * - Lowercase
  * - Split on /\W+/
@@ -1245,11 +1260,17 @@ function buildFrictionZones(args: {
   const SETUP_SKIP = 10;        // ignore first N user messages (setup / orientation)
   const CLUSTER_SPAN_MAX = 10;  // max(userMsgCounter) - min(userMsgCounter) in a cluster
 
-  // Pre-compute token sets for each user message.
-  const tokenSets: Array<{ idx: number; tokens: Set<string> }> = userMessages.map((um) => ({
-    idx: um.userMsgIdx,
-    tokens: tokenizeForCluster(um.text),
-  }));
+  // Pre-compute token sets for each user message. Drop Claude-Code synthetic
+  // interrupt messages — they're identical strings that would Jaccard 1.0 and
+  // form a phantom cluster (3+ ESC presses in a session = false-positive
+  // friction). userMsgCounter alignment with sentiment trace stays intact
+  // because we filter here, not at userMessages collection time.
+  const tokenSets: Array<{ idx: number; tokens: Set<string> }> = userMessages
+    .filter((um) => !isSyntheticUserMessage(um.text))
+    .map((um) => ({
+      idx: um.userMsgIdx,
+      tokens: tokenizeForCluster(um.text),
+    }));
 
   // Union-Find (path-compression only — sufficient for this small n).
   const parent = tokenSets.map((_, i) => i);

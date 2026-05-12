@@ -305,7 +305,7 @@ function ChangelogModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[640px] max-h-[80vh] overflow-y-auto rounded-2xl border border-n-line bg-n-bg p-5 shadow-2xl"
+        className="w-full max-w-[640px] max-h-[80vh] overflow-y-auto rounded-n-lg border border-n-border-default bg-n-surface p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -314,7 +314,7 @@ function ChangelogModal({
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-n-fg-muted hover:bg-n-bg-soft hover:text-n-text"
+            className="rounded-lg p-1 text-n-fg-muted hover:bg-n-raised hover:text-n-text"
             aria-label={t('dismiss')}
           >
             <X size={14} />
@@ -332,7 +332,7 @@ function ChangelogModal({
         <div className="mt-4 flex justify-end">
           <button
             onClick={onClose}
-            className="rounded-lg bg-n-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+            className="rounded-n-sm border border-n-accent-line bg-n-accent-soft px-3 py-1.5 font-n-mono text-[11.5px] text-n-accent hover:bg-n-accent-line hover:text-n-canvas"
           >
             {t('changelogGotIt')}
           </button>

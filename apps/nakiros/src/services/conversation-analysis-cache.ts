@@ -40,7 +40,7 @@ interface CacheEntry {
  * (Negative && score > 0.85) instead of lexical regex patterns.
  * `matchedPattern` field is now `'sentiment:<score>'` (e.g. `'sentiment:0.92'`).
  */
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

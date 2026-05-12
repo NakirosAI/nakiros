@@ -118,13 +118,26 @@ export function analyzeConversation(
   if (entries.length === 0) return null;
 
   // --- Sentiment trace lookup ---
-  // `cwd` is recorded on every JSONL entry; read it from the first one. The
-  // field layout has evolved: try the top-level key first, then the nested
-  // payload (older format). If absent, fall back gracefully — the session will
-  // have no sentiment-derived friction points until the trace is generated.
-  const cwd = (entries[0]?.['cwd'] as string | undefined)
-    ?? (entries[0]?.['payload'] as Record<string, unknown> | undefined)?.['cwd'] as string | undefined
-    ?? null;
+  // `cwd` is NOT on every JSONL entry — leading metadata entries like
+  // `{"type":"last-prompt", ...}` have no cwd at all. Walk entries until we
+  // find one. Try top-level first, then nested payload (older format). If
+  // none exists, fall back gracefully — the session will have no
+  // sentiment-derived friction points until the trace is generated.
+  let cwd: string | null = null;
+  for (const entry of entries) {
+    const direct = entry['cwd'] as string | undefined;
+    if (direct) {
+      cwd = direct;
+      break;
+    }
+    const nested = (entry['payload'] as Record<string, unknown> | undefined)?.['cwd'] as
+      | string
+      | undefined;
+    if (nested) {
+      cwd = nested;
+      break;
+    }
+  }
   const sentimentTrace = cwd ? loadSentimentTrace(cwd, sessionId) : null;
   // Map from 1-indexed user-message counter to confidence score.
   const negativeUserIndices = new Map<number, number>();

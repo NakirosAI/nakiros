@@ -9,6 +9,8 @@ import { FrictionsTab } from './FrictionsTab';
 
 interface Props {
   analysis: ConversationAnalysis;
+  /** Absolute path to the project root — needed by the sentiment trace fetch. */
+  projectPath: string;
   onClose(): void;
   /** Threaded down from `NewShell` so the Frictions tab can open run tabs. */
   onOpenRunTab?: import('../../lib/run-launcher').OpenRunTabCallback;
@@ -36,7 +38,7 @@ const TABS: TabDef[] = [
  * are wired; the Export tab from the mockup is deferred (no MD/PDF/Slack
  * export endpoint exists yet).
  */
-export function ConvDrawer({ analysis, onClose, onOpenRunTab }: Props) {
+export function ConvDrawer({ analysis, projectPath, onClose, onOpenRunTab }: Props) {
   const { t } = useTranslation('conversations');
   const tone = toneFor(analysis.healthZone);
   const [tab, setTab] = useState<DrawerTab>('diagnostic');
@@ -132,7 +134,7 @@ export function ConvDrawer({ analysis, onClose, onOpenRunTab }: Props) {
         </nav>
 
         <div className="flex-1 overflow-y-auto">
-          {tab === 'diagnostic' && <DiagnosticTab analysis={analysis} />}
+          {tab === 'diagnostic' && <DiagnosticTab analysis={analysis} projectPath={projectPath} />}
           {tab === 'timeline' && <TimelineTab analysis={analysis} />}
           {tab === 'transcript' && <TranscriptTab analysis={analysis} />}
           {tab === 'frictions' && (

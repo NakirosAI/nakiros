@@ -1,13 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
-import type { ConversationAnalysis, ConversationCostSample } from '@nakiros/shared';
+import type { ConversationAnalysis, ConversationCostSample, SentimentTrace, SentimentLabel } from '@nakiros/shared';
 import { useTranslation } from 'react-i18next';
 
 interface Props {
   analysis: ConversationAnalysis;
+  /** Optional sentiment trace from the sentiment pre-pass service. */
+  sentimentTrace?: SentimentTrace | null;
 }
 
 const W = 920;
-const H = 360;
 const PAD_L = 70;
 const PAD_R = 18;
 const PAD_T = 6;
@@ -15,11 +16,18 @@ const EVENT_LANE_H = 28;
 const COST_H = 200;
 const GAP = 10;
 const CTX_H = 80;
+/** Thin dot row for the sentiment track — placed below the ctx track. */
+const SENTIMENT_GAP = 8;
+const SENTIMENT_H = 20;
 const PAD_B = 36;
 
 const Y_COST_BASE = PAD_T + EVENT_LANE_H + COST_H;
 const Y_CTX_TOP = Y_COST_BASE + GAP;
 const Y_CTX_BASE = Y_CTX_TOP + CTX_H;
+const Y_SENTIMENT_TOP = Y_CTX_BASE + SENTIMENT_GAP;
+const Y_SENTIMENT_MID = Y_SENTIMENT_TOP + SENTIMENT_H / 2;
+const Y_SENTIMENT_BASE = Y_SENTIMENT_TOP + SENTIMENT_H;
+const H = Y_SENTIMENT_BASE + PAD_B;
 const INNER_W = W - PAD_L - PAD_R;
 
 const HEALTHY_PCT = 0.25;
@@ -59,7 +67,7 @@ interface StackPoint {
  * and tool-error are accessible via the hover tooltip and the Impact panel
  * (kept off the chart to reduce visual noise).
  */
-export function Sismograph({ analysis }: Props) {
+export function Sismograph({ analysis, sentimentTrace }: Props) {
   const { t } = useTranslation('conversations');
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
@@ -186,6 +194,24 @@ export function Sismograph({ analysis }: Props) {
     return nearest;
   }, [hoverT, analysis, durationMs, t]);
 
+  // Build sentiment dot positions — X is estimated from messageIndex proportional to duration;
+  // Y is the label-signed confidence score mapped into the SENTIMENT_H band.
+  const sentimentDots = useMemo(() => {
+    const entries = sentimentTrace?.entries ?? [];
+    const msgCount = analysis.messageCount > 0 ? analysis.messageCount : 1;
+    return entries.map((e) => {
+      // Estimate tMs by distributing user messages uniformly across the session duration.
+      const tMs = (e.messageIndex / msgCount) * durationMs;
+      const x = xFor(tMs);
+      // Positive → above mid, Negative → below mid, Neutral → at mid.
+      const amplitude = scoreToAmplitude(e.label, e.score);
+      const y = Y_SENTIMENT_MID - amplitude * (SENTIMENT_H / 2);
+      return { x, y, color: labelToColor(e.label) };
+    });
+    // xFor depends on durationMs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentimentTrace, analysis.messageCount, durationMs]);
+
   if ((analysis.costSamples ?? []).length === 0) {
     return (
       <div className="flex h-40 items-center justify-center text-sm text-[var(--n-fg-muted)]">
@@ -238,17 +264,31 @@ export function Sismograph({ analysis }: Props) {
         >
           ctx
         </text>
+        {sentimentDots.length > 0 && (
+          <text
+            x={PAD_L - 12}
+            y={Y_SENTIMENT_MID + 3}
+            textAnchor="end"
+            fontFamily="var(--n-font-mono)"
+            fontSize={9}
+            fill="var(--n-fg-faint)"
+            style={{ letterSpacing: '0.6px', textTransform: 'uppercase' }}
+          >
+            {t('drawer.sentimentTrack')}
+          </text>
+        )}
 
         {/* Vertical tick gridlines */}
         {ticks.map((m, i) => {
           const x = xFor(m * 60_000);
+          const gridBottom = sentimentDots.length > 0 ? Y_SENTIMENT_BASE : Y_CTX_BASE;
           return (
             <line
               key={i}
               x1={x}
               x2={x}
               y1={PAD_T + EVENT_LANE_H}
-              y2={Y_CTX_BASE}
+              y2={gridBottom}
               stroke="var(--n-border-subtle)"
               strokeDasharray="1 4"
               opacity="0.6"
@@ -392,6 +432,31 @@ export function Sismograph({ analysis }: Props) {
           strokeLinecap="round"
         />
 
+        {/* Sentiment track — thin dot row below ctx, one dot per scored user message */}
+        {sentimentDots.length > 0 && (
+          <>
+            <line
+              x1={PAD_L}
+              x2={W - PAD_R}
+              y1={Y_SENTIMENT_MID}
+              y2={Y_SENTIMENT_MID}
+              stroke="var(--n-border-subtle)"
+              strokeDasharray="1 3"
+              opacity={0.4}
+            />
+            {sentimentDots.map((d, i) => (
+              <circle
+                key={i}
+                cx={d.x}
+                cy={d.y}
+                r={3}
+                fill={d.color}
+                opacity={0.75}
+              />
+            ))}
+          </>
+        )}
+
         {/* Markers (drop-pins on event lane) */}
         {analysis.compactions.map((c, i) => {
           const tMs = new Date(c.timestamp).getTime() - new Date(analysis.startedAt).getTime();
@@ -419,29 +484,30 @@ export function Sismograph({ analysis }: Props) {
             x1={PAD_L + hoverT * INNER_W}
             x2={PAD_L + hoverT * INNER_W}
             y1={PAD_T}
-            y2={Y_CTX_BASE}
+            y2={sentimentDots.length > 0 ? Y_SENTIMENT_BASE : Y_CTX_BASE}
             stroke="var(--n-fg)"
             strokeWidth={1}
             opacity={0.5}
           />
         )}
 
-        {/* X-axis ticks */}
+        {/* X-axis ticks — anchored below sentiment lane if present, else below ctx */}
         {ticks.map((m, i) => {
           const x = xFor(m * 60_000);
           const isEdge = i === 0 || i === ticks.length - 1;
+          const axisY = sentimentDots.length > 0 ? Y_SENTIMENT_BASE : Y_CTX_BASE;
           return (
             <g key={`tick${m}`}>
               <line
                 x1={x}
                 x2={x}
-                y1={Y_CTX_BASE}
-                y2={Y_CTX_BASE + 4}
+                y1={axisY}
+                y2={axisY + 4}
                 stroke="var(--n-border-default)"
               />
               <text
                 x={x}
-                y={Y_CTX_BASE + 14}
+                y={axisY + 14}
                 textAnchor="middle"
                 fontFamily="var(--n-font-mono)"
                 fontSize={9.5}
@@ -452,7 +518,7 @@ export function Sismograph({ analysis }: Props) {
               {startClock && (
                 <text
                   x={x}
-                  y={Y_CTX_BASE + 25}
+                  y={axisY + 25}
                   textAnchor="middle"
                   fontFamily="var(--n-font-mono)"
                   fontSize={8.5}
@@ -701,6 +767,20 @@ function fmtTokensShort(v: number): string {
   if (v >= 10_000) return `${Math.round(v / 1000)}k`;
   if (v >= 1_000) return `${(v / 1000).toFixed(1)}k`;
   return Math.round(v).toString();
+}
+
+function scoreToAmplitude(label: SentimentLabel, score: number): number {
+  if (label === 'Negative') return -score;
+  if (label === 'Positive') return score;
+  return 0;
+}
+
+function labelToColor(label: SentimentLabel): string {
+  // Use existing palette: --n-critical (red-leaning) for Negative,
+  // --n-healthy (green-leaning) for Positive, --n-fg-faint for Neutral.
+  if (label === 'Negative') return 'var(--n-critical)';
+  if (label === 'Positive') return 'var(--n-healthy)';
+  return 'var(--n-fg-faint)';
 }
 
 function markerColor(kind: string): string {

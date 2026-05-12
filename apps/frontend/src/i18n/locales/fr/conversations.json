@@ -59,6 +59,7 @@
       "frictions": "Frictions"
     },
     "markers": "Événements",
+    "sentimentTrack": "Sentiment utilisateur",
     "readingGuide": "Lecture",
     "readingGuideBody": "La bande colorée suit le contexte par tour rapporté à la fenêtre {{window}} — vert sain, ambre vigilance, rouge dégradé. Les barres violettes verticales marquent les compactions. Les triangles rouges sous l'axe marquent les frictions user détectées.",
     "timeline": {

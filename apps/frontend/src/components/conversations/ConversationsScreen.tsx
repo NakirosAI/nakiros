@@ -182,6 +182,7 @@ export default function ConversationsScreen({ project, onOpenRunTab }: Props) {
       {open && (
         <ConvDrawer
           analysis={open}
+          projectPath={project.projectPath}
           onClose={() => setOpen(null)}
           onOpenRunTab={onOpenRunTab}
         />

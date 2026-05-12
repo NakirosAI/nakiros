@@ -59,6 +59,7 @@
       "frictions": "Frictions"
     },
     "markers": "Markers",
+    "sentimentTrack": "User sentiment",
     "readingGuide": "How to read",
     "readingGuideBody": "The coloured band tracks per-turn context against the {{window}} window — green is healthy, amber watch, red degraded. Vertical purple bars mark compactions. Red triangles below the axis mark detected user friction.",
     "timeline": {

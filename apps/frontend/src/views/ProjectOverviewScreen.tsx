@@ -31,7 +31,7 @@ import type { ProjectTabView } from '../hooks/useTabs';
 interface Props {
   /** Project whose conversation analyses are aggregated. */
   project: Project;
-  /** Threaded down from `NewShell` so the drawer's Frictions tab can open run tabs. */
+  /** Passed from `NewShell`; reserved for future run-launch actions within the overview. */
   onOpenRunTab?: import('../lib/run-launcher').OpenRunTabCallback;
   /** Navigate to a project sub-view (sidebar). */
   onNavigate?: (view: ProjectTabView) => void;
@@ -586,7 +586,6 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
         <ConvDrawer
           analysis={selected}
           onClose={() => setSelected(null)}
-          onOpenRunTab={onOpenRunTab}
         />
       )}
     </div>

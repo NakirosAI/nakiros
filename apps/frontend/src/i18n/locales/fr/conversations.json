@@ -57,9 +57,7 @@
     "close": "Fermer",
     "tabs": {
       "diagnostic": "Diagnostic",
-      "timeline": "Timeline",
-      "transcript": "Transcript",
-      "frictions": "Frictions"
+      "timeline": "Timeline"
     },
     "markers": "Événements",
     "frictionZone": {
@@ -91,12 +89,6 @@
         "friction": "Friction"
       },
       "empty": "Aucun message ne correspond à ce filtre."
-    },
-    "transcript": {
-      "searchPlaceholder": "Rechercher dans le transcript…",
-      "clearSearch": "Effacer",
-      "records": "records",
-      "empty": "Aucun record ne correspond à ce filtre."
     },
     "timeline": "Chronologie du contexte",
     "timelineLegend": "tokens par tour · compactions · frictions · erreurs outils",

@@ -186,7 +186,7 @@ export default function NewShell({
                     />
                   )}
                   {view === 'convs' && (
-                    <ConversationsScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
+                    <ConversationsScreen key={project.id} project={project} />
                   )}
                   {view === 'rules' && (
                     <RulesScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />

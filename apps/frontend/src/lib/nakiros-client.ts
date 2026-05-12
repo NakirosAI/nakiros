@@ -363,6 +363,7 @@ const client = {
 
   // Meta
   getVersionInfo: (options?: { force?: boolean }) => invoke(C['meta:getVersionInfo'], options ?? {}),
+  getChangelog: () => invoke(C['meta:getChangelog']),
 
   // Skill agent temp files
   listSkillAgentTempFiles: (runId: string) => invoke(C['skillAgent:listTempFiles'], runId),

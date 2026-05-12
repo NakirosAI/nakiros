@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import type { ConversationAnalysis, ConversationCostSample, SentimentTrace, SentimentLabel } from '@nakiros/shared';
+import type { ConversationAnalysis, ConversationCostSample, SentimentTrace, SentimentEntry, SentimentLabel } from '@nakiros/shared';
 import { useTranslation } from 'react-i18next';
 
 interface Props {
@@ -71,6 +71,11 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
   const { t } = useTranslation('conversations');
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
+  const [hoverSentiment, setHoverSentiment] = useState<{
+    entry: SentimentEntry;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Downsample for paths (keeps SVG light on huge sessions).
   const samples = useMemo(
@@ -210,7 +215,7 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
       // Positive → above mid, Negative → below mid, Neutral → at mid.
       const amplitude = scoreToAmplitude(e.label, e.score);
       const y = Y_SENTIMENT_MID - amplitude * (SENTIMENT_H / 2);
-      return { x, y, color: labelToColor(e.label) };
+      return { x, y, color: labelToColor(e.label), entry: e };
     });
     // xFor depends on durationMs
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -456,7 +461,12 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
                 r={3}
                 fill={d.color}
                 opacity={0.75}
-              />
+                style={{ cursor: 'default' }}
+                onMouseEnter={() => setHoverSentiment({ entry: d.entry, x: d.x, y: d.y })}
+                onMouseLeave={() => setHoverSentiment(null)}
+              >
+                <title>{`#${d.entry.messageIndex} · ${d.entry.label} ${d.entry.score.toFixed(2)}`}</title>
+              </circle>
             ))}
           </>
         )}
@@ -565,6 +575,33 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
           contextWindow={analysis.contextWindow}
           t={t}
         />
+      )}
+
+      {/* Sentiment dot tooltip */}
+      {hoverSentiment && (
+        <div
+          className="pointer-events-none absolute z-20 max-w-xs rounded-md border border-[var(--n-border-default)] bg-[var(--n-bg-surface)] px-3 py-2 text-xs shadow-md"
+          style={{
+            // Project SVG x coordinate to % of container width, then offset right
+            left: `calc(${(hoverSentiment.x / W) * 100}% + 8px)`,
+            // Project SVG y coordinate to % of container height.
+            // H is the total SVG height; the container maps H to 100% height.
+            top: `calc(${(hoverSentiment.y / H) * 100}% - 4px)`,
+          }}
+        >
+          <div className="font-medium text-[var(--n-fg)]">
+            {t('drawer.sentimentTooltip.title', {
+              index: hoverSentiment.entry.messageIndex,
+              label: t(`drawer.sentimentTooltip.labels.${hoverSentiment.entry.label.toLowerCase()}`),
+              score: hoverSentiment.entry.score.toFixed(2),
+            })}
+          </div>
+          {hoverSentiment.entry.excerpt && (
+            <div className="mt-1 whitespace-pre-wrap break-words text-[var(--n-fg-muted)]">
+              {hoverSentiment.entry.excerpt}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

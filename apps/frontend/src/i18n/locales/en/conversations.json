@@ -60,6 +60,20 @@
     },
     "markers": "Markers",
     "sentimentTrack": "User sentiment",
+    "sentimentTooltip": {
+      "title": "#{{index}} · {{label}} {{score}}",
+      "labels": {
+        "positive": "Positive",
+        "neutral": "Neutral",
+        "negative": "Negative"
+      }
+    },
+    "sentimentRecap": {
+      "title": "User sentiment",
+      "stats": "{{count}} user messages · {{positivePct}}% positive · {{neutralPct}}% neutral · {{negativePct}}% negative",
+      "topNegatives": "Top negative moments",
+      "noExcerpt": "(excerpt unavailable)"
+    },
     "readingGuide": "How to read",
     "readingGuideBody": "The coloured band tracks per-turn context against the {{window}} window — green is healthy, amber watch, red degraded. Vertical purple bars mark compactions. Red triangles below the axis mark detected user friction.",
     "timeline": {

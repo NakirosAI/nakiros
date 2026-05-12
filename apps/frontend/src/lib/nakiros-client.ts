@@ -650,6 +650,10 @@ const client = {
   getClassifyConvoBufferedEvents: (runId: string) =>
     invoke(C['classifyConvo:getBufferedEvents'], runId),
   onClassifyConvoEvent: (cb: (event: unknown) => void) => subscribe(C['classifyConvo:event'], cb),
+
+  // Sentiment pre-pass trace reader
+  getSentimentTrace: (projectPath: string, sessionId: string) =>
+    invoke(C['sentiment:getTrace'], { projectPath, sessionId }),
 };
 
 // Install on window. We cast via `unknown` because the full type surface in

@@ -320,6 +320,10 @@ export const IPC_CHANNELS = {
   'analyzeConvo:listAll': 'analyzeConvo:listAll',
   'analyzeConvo:getBufferedEvents': 'analyzeConvo:getBufferedEvents',
 
+  // Sentiment pre-pass trace reader — returns the persisted SentimentTrace for a
+  // given ingest session, or null if no trace has been produced yet.
+  'sentiment:getTrace': 'sentiment:getTrace',
+
   // Conversation friction-classifier runner (classify-convo Run kind, V1.1)
   'classifyConvo:start': 'classifyConvo:start',
   'classifyConvo:stopRun': 'classifyConvo:stopRun',

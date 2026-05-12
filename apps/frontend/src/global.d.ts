@@ -125,6 +125,7 @@ import type {
   ConversationIngestProject,
   ConversationIngestSession,
   ConversationIngestProgressEvent,
+  SentimentTrace,
 } from '@nakiros/shared';
 
 declare global {
@@ -553,6 +554,12 @@ declare global {
       getEditTimeline(runId: string): Promise<FixTimelineEntry[]>;
       getEditUsage(runId: string): Promise<FixUsage>;
       runEditEvals(request: { runId: string; evalNames?: string[]; includeBaseline?: boolean }): Promise<StartEvalRunResponse>;
+
+      // Sentiment pre-pass trace reader
+      getSentimentTrace(
+        projectPath: string,
+        sessionId: string,
+      ): Promise<{ ok: true; trace: SentimentTrace | null } | { ok: false; error: string }>;
 
       // Conversation ingest (Phase A V1 — opt-in Stop-hook pipeline)
       getConversationIngestStatus(): Promise<ConversationIngestStatus>;

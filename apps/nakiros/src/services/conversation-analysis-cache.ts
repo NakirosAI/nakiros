@@ -56,8 +56,16 @@ interface CacheEntry {
  * Signal E (long-gap topic change): ConversationTip emitted when 30min+ gap
  * between user messages combines with Jaccard < 0.2 — suggests new topic,
  * benefit from a fresh conversation. id='long-gap-topic-change'.
+ *
+ * v8 (2026-05-12) — added `frictionZones: ConversationFrictionZone[]`. Each
+ * zone spans from the first preceding assistant turn (after the previous user
+ * message) up to the user-reaction turn, and carries an `agentContext`
+ * summarising files touched, tool calls, errors, backtracks, and keyActions.
+ * Backtrack-only frictionPoints without a downstream user reaction within 5
+ * user turns produce `severity: 'low'` zones. `frictionPoints[]` is unchanged
+ * for backward compatibility.
  */
-const CACHE_VERSION = 7;
+const CACHE_VERSION = 8;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

@@ -111,6 +111,54 @@ export interface ConversationFrictionPoint {
 }
 
 /**
+ * Richer friction view: a span of time where the agent did something
+ * problematic and the user reacted. Built by `analyzeConversation` from
+ * the flat `frictionPoints` array — one zone per user-reaction friction,
+ * walking back through the preceding assistant turns to compute the
+ * agent context.
+ *
+ * Frontend renders zones as background rectangles in the sismograph and
+ * as expandable sections in the timeline.
+ */
+export interface ConversationFrictionZone {
+  /**
+   * Stable id (`<sessionId>:<endTurn>:<reactionKind>`), useful for React
+   * keys and dedup across re-analyses.
+   */
+  id: string;
+  /**
+   * 1-indexed turn where the zone starts — the FIRST assistant tool_use
+   * that we consider part of the agent run that led to the reaction.
+   */
+  startTurn: number;
+  /** 1-indexed turn of the user reaction that closes the zone. */
+  endTurn: number;
+  startTimestamp: string;
+  endTimestamp: string;
+  /** The original friction point that triggered building this zone. */
+  reactionPoint: ConversationFrictionPoint;
+  /** Summary of what the agent did in `[startTurn, endTurn-1]`. */
+  agentContext: {
+    /** Unique file paths touched by Edit/Write/MultiEdit/NotebookEdit, in order of first appearance. */
+    filesTouched: string[];
+    /** Total number of tool_uses by the assistant within the zone. */
+    toolCallsCount: number;
+    /** Count of tool_uses whose result was an error. */
+    toolErrorsCount: number;
+    /** Subset of `filesTouched` where the agent reverted its own modification. */
+    backtrackedFiles: string[];
+    /**
+     * Up to 5 short human-readable labels describing key actions.
+     * Examples: `["Edit auth.ts ×4", "Bash npm test failed", "Read package.json"]`.
+     * Ordered by relevance: errors first, then high-count edits, then notable singles.
+     */
+    keyActions: string[];
+  };
+  /** Drives the background rect colour and drawer badge. */
+  severity: 'low' | 'medium' | 'high';
+}
+
+/**
  * One assistant turn's cost breakdown — drives the sismograph cost-stacked
  * track. All token fields are raw (input-token-equivalent multipliers are
  * applied to compute `billed` and `cumBilled`).
@@ -256,6 +304,8 @@ export interface ConversationAnalysis {
 
   // --- Friction ---
   frictionPoints: ConversationFrictionPoint[];
+  /** Richer friction view: one zone per user-reaction, with agent context spanning the preceding assistant turns. */
+  frictionZones: ConversationFrictionZone[];
 
   // --- Tool use ---
   toolStats: Record<string, ConversationToolStats>;

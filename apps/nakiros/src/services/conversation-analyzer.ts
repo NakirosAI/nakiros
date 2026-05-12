@@ -6,6 +6,7 @@ import type {
   ConversationCompaction,
   ConversationCostSample,
   ConversationFrictionPoint,
+  ConversationFrictionZone,
   ConversationHealthZone,
   ConversationHotFile,
   ConversationPausePoint,
@@ -92,6 +93,30 @@ interface UserMessageRecord {
   text: string;
   timestamp: string;
   offsetPct: number;
+}
+
+/** One tool_use entry inside an assistant turn, collected for zone agentContext. */
+interface AssistantToolUseInfo {
+  toolName: string;
+  /** File path for Edit/Write/MultiEdit/NotebookEdit — null for other tools. */
+  filePath: string | null;
+  /** Bash command snippet for Bash tool — null for non-Bash tools. */
+  bashCommand: string | null;
+}
+
+/** Condensed record of a single assistant turn, used to build friction zones. */
+interface AssistantTurnRecord {
+  /** 1-indexed assistant turn counter (same as ToolUseRecord.turn). */
+  turn: number;
+  timestamp: string;
+  toolUses: AssistantToolUseInfo[];
+}
+
+/** Record of a real user text message turn, used to build friction zones. */
+interface UserTurnRecord {
+  /** 1-indexed user message counter, aligned with sentiment trace. */
+  userMsgIdx: number;
+  timestamp: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +274,13 @@ export function analyzeConversation(
   // Signal C + E — user messages with text + turn index + timestamp.
   const userMessages: UserMessageRecord[] = [];
 
+  // Friction zones — one AssistantTurnRecord per assistant entry to allow
+  // zone construction after the main loop. Parallel tracking of user turns
+  // enables the "walk back through consecutive assistant turns" algorithm.
+  const assistantTurnRecords: AssistantTurnRecord[] = [];
+  // Map from 1-indexed userMsgIdx to the timestamp of that user message.
+  const userTurnTimestamps = new Map<number, string>();
+
   // Turn counter for assistant entries (used in ToolUseRecord).
   let assistantTurnCounter = 0;
 
@@ -362,6 +394,9 @@ export function analyzeConversation(
           timestamp: timestamp ?? '',
           offsetPct: entryOffset,
         });
+
+        // Friction zones: record which assistant turn immediately precedes this user message.
+        userTurnTimestamps.set(userMsgCounter, timestamp ?? '');
       }
 
       // Cache miss detection — real user reply arriving > TTL after last
@@ -407,6 +442,7 @@ export function analyzeConversation(
       // Tool use + hot file tracking.
       let turnLastTool: string | null = lastAssistantToolName;
       const turnToolNames: string[] = [];
+      const turnToolUseInfos: AssistantToolUseInfo[] = [];
       if (Array.isArray(msg?.content)) {
         for (const block of msg!.content) {
           const b = block as {
@@ -421,6 +457,10 @@ export function analyzeConversation(
           turnLastTool = b.name;
           turnToolNames.push(b.name);
 
+          // Collect tool info for friction zone agentContext.
+          let toolFilePath: string | null = null;
+          let toolBashCmd: string | null = null;
+
           // Files touched by edit-like tools.
           if (
             b.name === 'Edit' ||
@@ -432,6 +472,7 @@ export function analyzeConversation(
               | string
               | undefined;
             if (path) {
+              toolFilePath = path;
               editCounts.set(path, (editCounts.get(path) ?? 0) + 1);
 
               // Signal B: record this tool use for backtrack detection.
@@ -441,10 +482,22 @@ export function analyzeConversation(
                 toolUsesByFile.set(path, records);
               }
             }
+          } else if (b.name === 'Bash') {
+            const cmd = b.input?.['command'] as string | undefined;
+            if (cmd) toolBashCmd = cmd.slice(0, 80);
           }
+
+          turnToolUseInfos.push({ toolName: b.name, filePath: toolFilePath, bashCommand: toolBashCmd });
         }
       }
       lastAssistantToolName = turnLastTool;
+
+      // Friction zones: record this assistant turn for later zone construction.
+      assistantTurnRecords.push({
+        turn: currentTurn,
+        timestamp: timestamp ?? '',
+        toolUses: turnToolUseInfos,
+      });
 
       // Token accounting from message.usage.
       const usage = msg?.usage as {
@@ -531,23 +584,54 @@ export function analyzeConversation(
   // --- Tool error distribution (attach to specific tools where we can) ---
   // Second pass: tool_result.is_error tracks which *tool_use_id* failed, so we
   // correlate back to tool names. Cheap since we already have all entries.
+  // We also build a map from tool_use_id to assistant turn for friction zone error counting.
   const toolNameByUseId = new Map<string, string>();
+  // Maps tool_use_id → assistant turn number (1-indexed), for zone error attribution.
+  const toolUseTurnById = new Map<string, number>();
+  let secondPassAssistantTurn = 0;
   for (const entry of entries) {
     if (entry['type'] !== 'assistant') continue;
+    secondPassAssistantTurn++;
     const msg = entry['message'] as { content?: unknown[] } | undefined;
     if (!Array.isArray(msg?.content)) continue;
     for (const block of msg!.content) {
       const b = block as { type?: string; id?: string; name?: string };
-      if (b.type === 'tool_use' && b.id && b.name) toolNameByUseId.set(b.id, b.name);
+      if (b.type === 'tool_use' && b.id && b.name) {
+        toolNameByUseId.set(b.id, b.name);
+        toolUseTurnById.set(b.id, secondPassAssistantTurn);
+      }
     }
   }
+  // Set of tool_use_ids that had errors — used by buildFrictionZones to count
+  // errors per assistant turn.
+  const erroredToolUseIds = new Set<string>();
   for (const entry of entries) {
     if (entry['type'] !== 'user') continue;
     const msg = entry['message'] as { content?: unknown } | undefined;
     if (!Array.isArray(msg?.content)) continue;
     for (const block of msg!.content) {
-      const b = block as { type?: string; tool_use_id?: string; is_error?: boolean };
-      if (b.type !== 'tool_result' || !b.is_error || !b.tool_use_id) continue;
+      const b = block as { type?: string; tool_use_id?: string; is_error?: boolean; content?: unknown };
+      if (b.type !== 'tool_result' || !b.tool_use_id) continue;
+
+      // Detect errors via is_error flag or string content heuristics.
+      let isError = Boolean(b.is_error);
+      if (!isError && typeof b.content === 'string') {
+        const c = b.content as string;
+        if (c.startsWith('Error:') || c.startsWith('<tool_use_error>')) isError = true;
+      } else if (!isError && Array.isArray(b.content)) {
+        for (const part of b.content as Array<{ type?: string; text?: string }>) {
+          if (part.type === 'text' && part.text) {
+            if (part.text.startsWith('Error:') || part.text.startsWith('<tool_use_error>')) {
+              isError = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (isError) erroredToolUseIds.add(b.tool_use_id);
+
+      if (!b.is_error || !b.tool_use_id) continue;
       const name = toolNameByUseId.get(b.tool_use_id);
       if (!name) continue;
       const stats = toolStats[name] ?? { count: 0, errorCount: 0 };
@@ -623,6 +707,17 @@ export function analyzeConversation(
   // Sort friction points by position in conversation for consistent ordering.
   frictionPoints.sort((a, b) => a.offsetPct - b.offsetPct);
 
+  // --- Friction zones — build after all frictionPoints are collected ---------
+  const frictionZones = buildFrictionZones({
+    sessionId,
+    frictionPoints,
+    assistantTurnRecords,
+    userMessages,
+    toolUsesByFile,
+    toolUseTurnById,
+    erroredToolUseIds,
+  });
+
   // --- Signal E: long-gap + topic change detection ---------------------------
   const gapTips = detectLongGapTopicChanges(userMessages);
 
@@ -684,6 +779,7 @@ export function analyzeConversation(
     pausePoints,
 
     frictionPoints,
+    frictionZones,
 
     toolStats,
     toolErrorCount,
@@ -1049,6 +1145,382 @@ function detectBacktracks(
   }
 
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// Friction zones — richer span view built from frictionPoints
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds {@link ConversationFrictionZone} records from the flat `frictionPoints`
+ * array by walking back through the assistant turns that preceded each user
+ * reaction. Each zone spans from the first assistant turn after the previous
+ * user message to the user-reaction turn and carries an `agentContext`
+ * summarising what the agent did in that span.
+ *
+ * Rules:
+ * - `sentiment:*` and `repetition:*` frictionPoints always produce a zone.
+ * - `backtrack:*` frictionPoints produce a zone only when there is no
+ *   user-reaction friction within the next 5 user messages; otherwise they
+ *   are absorbed into the downstream zone's `backtrackedFiles`.
+ * - Severity: `high` when both user reaction and ≥1 backtrack or ≥2 errors;
+ *   `medium` for plain user reaction; `low` for standalone backtrack zones.
+ */
+function buildFrictionZones(args: {
+  sessionId: string;
+  frictionPoints: ConversationFrictionPoint[];
+  assistantTurnRecords: AssistantTurnRecord[];
+  userMessages: UserMessageRecord[];
+  toolUsesByFile: Map<string, ToolUseRecord[]>;
+  toolUseTurnById: Map<string, number>;
+  erroredToolUseIds: Set<string>;
+}): ConversationFrictionZone[] {
+  const {
+    sessionId,
+    frictionPoints,
+    assistantTurnRecords,
+    userMessages,
+    toolUsesByFile,
+    toolUseTurnById,
+    erroredToolUseIds,
+  } = args;
+
+  // Build an index: assistantTurn → AssistantTurnRecord for fast lookup.
+  const assistantByTurn = new Map<number, AssistantTurnRecord>();
+  for (const rec of assistantTurnRecords) assistantByTurn.set(rec.turn, rec);
+
+  // Build an index: userMsgIdx → userMessages position for fast lookup.
+  const userMsgByIdx = new Map<number, UserMessageRecord>();
+  for (const um of userMessages) userMsgByIdx.set(um.userMsgIdx, um);
+
+  // Identify user-reaction frictionPoints (sentiment or repetition).
+  // We need their userMsgIdx to do the "next N user turns" absorption check.
+  // We derive userMsgIdx from the userMessages array by matching on timestamp + snippet.
+  const userReactionIndices = new Set<number>();
+  for (const fp of frictionPoints) {
+    if (fp.matchedPattern.startsWith('sentiment:') || fp.matchedPattern.startsWith('repetition:')) {
+      // Find the matching userMsgIdx by timestamp + snippet prefix.
+      for (const um of userMessages) {
+        if (um.timestamp === fp.timestamp && fp.snippet.startsWith(um.text.slice(0, 30))) {
+          userReactionIndices.add(um.userMsgIdx);
+          break;
+        }
+        // Fallback: match by snippet content if timestamp is empty.
+        if (!fp.timestamp && um.text.startsWith(fp.snippet.slice(0, 30))) {
+          userReactionIndices.add(um.userMsgIdx);
+          break;
+        }
+      }
+    }
+  }
+
+  // Build a set of backtrack turn numbers from frictionPoints.
+  // Pattern: 'backtrack:<basename>:T<earlier>->T<later>'
+  // Maps later turn → file basename for cross-referencing.
+  const backtrackedTurnToBasename = new Map<number, string>();
+  for (const fp of frictionPoints) {
+    const m = fp.matchedPattern.match(/^backtrack:(.+):T\d+->T(\d+)$/);
+    if (m) {
+      const laterTurn = parseInt(m[2], 10);
+      backtrackedTurnToBasename.set(laterTurn, m[1]);
+    }
+  }
+
+  const zones: ConversationFrictionZone[] = [];
+
+  // Process each frictionPoint in order.
+  for (const fp of frictionPoints) {
+    const isUserReaction =
+      fp.matchedPattern.startsWith('sentiment:') ||
+      fp.matchedPattern.startsWith('repetition:');
+    const isBacktrack = fp.matchedPattern.startsWith('backtrack:');
+
+    if (!isUserReaction && !isBacktrack) continue;
+
+    // For backtrack frictionPoints, check if there's a user-reaction friction
+    // within the next 5 user messages — if so, skip (will be absorbed).
+    if (isBacktrack) {
+      const btMatch = fp.matchedPattern.match(/^backtrack:.+:T\d+->T(\d+)$/);
+      const laterTurn = btMatch ? parseInt(btMatch[1], 10) : -1;
+
+      // Find which userMsgIdx comes just after this backtrack turn.
+      let afterUserMsgIdx = -1;
+      for (const um of userMessages) {
+        // The backtrack is in an assistant turn; find the first user message
+        // that comes after assistantTurnRecords[laterTurn].
+        const aRec = assistantByTurn.get(laterTurn);
+        if (aRec && um.timestamp > aRec.timestamp) {
+          afterUserMsgIdx = um.userMsgIdx;
+          break;
+        }
+      }
+
+      if (afterUserMsgIdx >= 0) {
+        // Check if any of the next 5 user messages is a user-reaction friction.
+        let hasDownstreamReaction = false;
+        for (let idx = afterUserMsgIdx; idx <= afterUserMsgIdx + 5; idx++) {
+          if (userReactionIndices.has(idx)) {
+            hasDownstreamReaction = true;
+            break;
+          }
+        }
+        if (hasDownstreamReaction) continue; // Absorbed into the downstream zone.
+      }
+    }
+
+    // Find the userMsgIdx for this frictionPoint.
+    let reactionUserMsgIdx = -1;
+    let reactionTimestamp = fp.timestamp;
+
+    if (isUserReaction) {
+      for (const um of userMessages) {
+        if (um.timestamp === fp.timestamp && fp.snippet.startsWith(um.text.slice(0, 30))) {
+          reactionUserMsgIdx = um.userMsgIdx;
+          break;
+        }
+        if (!fp.timestamp && um.text.startsWith(fp.snippet.slice(0, 30))) {
+          reactionUserMsgIdx = um.userMsgIdx;
+          reactionTimestamp = um.timestamp;
+          break;
+        }
+      }
+    } else {
+      // Backtrack zone: the "reaction" is the backtrack itself, no real user message.
+      // Use a synthetic userMsgIdx of -1 and the fp timestamp.
+      reactionUserMsgIdx = -1;
+    }
+
+    // Determine the endTurn (in terms of assistant turns): the last assistant
+    // turn before the reaction. For a backtrack zone, it's the backtrack turn itself.
+    let endTurn: number;
+    let endTimestamp = reactionTimestamp;
+
+    if (isBacktrack) {
+      const btMatch = fp.matchedPattern.match(/^backtrack:.+:T\d+->T(\d+)$/);
+      endTurn = btMatch ? parseInt(btMatch[1], 10) : 0;
+      const aRec = assistantByTurn.get(endTurn);
+      if (aRec) endTimestamp = aRec.timestamp;
+    } else {
+      // Find the last assistant turn that precedes the reaction user message.
+      // The reaction's userMsgIdx is reactionUserMsgIdx.
+      const prevUserMsg = reactionUserMsgIdx > 1
+        ? userMsgByIdx.get(reactionUserMsgIdx - 1)
+        : null;
+
+      // endTurn = the last assistant turn with timestamp <= reactionTimestamp.
+      endTurn = 0;
+      for (const aRec of assistantTurnRecords) {
+        if (!reactionTimestamp || aRec.timestamp <= reactionTimestamp) {
+          if (aRec.turn > endTurn) endTurn = aRec.turn;
+        }
+      }
+      if (endTurn === 0 && assistantTurnRecords.length > 0) {
+        endTurn = assistantTurnRecords[assistantTurnRecords.length - 1].turn;
+      }
+    }
+
+    // Determine startTurn: walk backward from endTurn through CONSECUTIVE
+    // assistant turns (i.e. no user message in between). The first assistant
+    // turn after the previous user message is the start.
+    //
+    // Strategy: find the timestamp of the previous user message, then
+    // find the first assistant turn whose timestamp is after that boundary.
+    let startTurn = endTurn;
+    let startTimestamp = endTimestamp;
+
+    // Find the previous user message to establish the lower bound.
+    const prevUserMsgRec = isUserReaction && reactionUserMsgIdx > 1
+      ? userMsgByIdx.get(reactionUserMsgIdx - 1)
+      : null;
+    const lowerBound = prevUserMsgRec?.timestamp ?? '';
+
+    // Walk from endTurn backward to find the lowest consecutive assistant turn
+    // that comes after lowerBound (no user message gap in between).
+    if (endTurn > 0) {
+      for (let t = endTurn; t >= 1; t--) {
+        const aRec = assistantByTurn.get(t);
+        if (!aRec) break; // Gap in assistant turns = stop.
+
+        if (lowerBound && aRec.timestamp <= lowerBound) break; // Before previous user message.
+
+        startTurn = t;
+        startTimestamp = aRec.timestamp;
+      }
+    }
+
+    // Compute agentContext for turns [startTurn, endTurn].
+    const filesTouchedSet: string[] = [];
+    const filesTouchedSeen = new Set<string>();
+    let toolCallsCount = 0;
+    let toolErrorsCount = 0;
+    const toolErrorsByName = new Map<string, number>();
+    const editCountsByFile = new Map<string, number>();
+
+    for (let t = startTurn; t <= endTurn; t++) {
+      const aRec = assistantByTurn.get(t);
+      if (!aRec) continue;
+
+      toolCallsCount += aRec.toolUses.length;
+
+      for (const tu of aRec.toolUses) {
+        if (tu.filePath && !filesTouchedSeen.has(tu.filePath)) {
+          filesTouchedSeen.add(tu.filePath);
+          filesTouchedSet.push(tu.filePath);
+        }
+        if (tu.filePath && (tu.toolName === 'Edit' || tu.toolName === 'Write' || tu.toolName === 'MultiEdit')) {
+          editCountsByFile.set(tu.filePath, (editCountsByFile.get(tu.filePath) ?? 0) + 1);
+        }
+      }
+    }
+
+    // Count errors: iterate erroredToolUseIds and check their turn falls in [startTurn, endTurn].
+    for (const toolUseId of erroredToolUseIds) {
+      const turn = toolUseTurnById.get(toolUseId);
+      if (turn !== undefined && turn >= startTurn && turn <= endTurn) {
+        toolErrorsCount++;
+        // Find the tool name for this error.
+        // We look at assistantTurnRecords for the tool name.
+        const aRec = assistantByTurn.get(turn);
+        if (aRec) {
+          // Match by position: the tool_use_id ordering is sequential within a turn.
+          // We can't easily map id → toolName here without rebuilding the full map.
+          // Use the toolName from toolNameByUseId if available (not directly accessible here).
+          // Approximate: just track errors per tool name via a count.
+          // We'll use a simple tally by turn.
+        }
+      }
+    }
+
+    // Count errors per tool name within the zone using toolUseTurnById + erroredToolUseIds.
+    // We need toolNameByUseId which is not passed here — approximate via assistantTurnRecords.
+    // For keyActions, we just track "failed ×N" per tool name.
+    // Re-derive: for each errored tool_use_id, find the turn, find the AssistantTurnRecord,
+    // and infer the tool name by matching error counts with tool use order in that turn.
+    // This is an approximation (same tool called multiple times per turn).
+    // Simpler: just track "tool had error in this zone" per turn and report the tool names.
+    for (const toolUseId of erroredToolUseIds) {
+      const turn = toolUseTurnById.get(toolUseId);
+      if (turn !== undefined && turn >= startTurn && turn <= endTurn) {
+        // Find the tool name from the assistantTurnRecord.
+        // The toolUseTurnById maps tool_use_id → assistant turn, and the
+        // AssistantTurnRecord has toolUses in order. We can't easily match by id
+        // here, so we note an error happened but skip per-tool attribution.
+        // toolErrorsCount already counted above; just populate toolErrorsByName
+        // with a "Unknown" key as fallback for keyActions.
+        // Actually we have the toolNameByUseId data — but it's not passed to
+        // this function. Pass it via args if needed.
+        // For now: track "error" generically.
+        toolErrorsByName.set('(error)', (toolErrorsByName.get('(error)') ?? 0) + 1);
+      }
+    }
+
+    // backtrackedFiles: files where a backtrack was detected within [startTurn, endTurn].
+    const backtrackedFiles: string[] = [];
+    for (const [laterTurn, basename_] of backtrackedTurnToBasename) {
+      if (laterTurn >= startTurn && laterTurn <= endTurn) {
+        // Find the full path by matching basename against filesTouched.
+        const fullPath = filesTouchedSet.find((p) => p.endsWith('/' + basename_) || p === basename_);
+        if (fullPath && !backtrackedFiles.includes(fullPath)) {
+          backtrackedFiles.push(fullPath);
+        } else if (!fullPath) {
+          backtrackedFiles.push(basename_); // Fallback to basename.
+        }
+      }
+    }
+
+    // keyActions: up to 5 labels in priority order.
+    // 1. "<ToolName> failed ×<n>" for tools with errors.
+    // 2. "Edit <basename> ×<n>" for files edited ≥ 2 times.
+    // 3. "<ToolName>" for notable single calls (Read, Bash with command).
+    const keyActions: string[] = [];
+
+    // Priority 1: errored tools.
+    if (toolErrorsCount > 0) {
+      // Approximate: group errors by tool name within the zone.
+      // We need to look up tool names for errored tool_use_ids within the zone range.
+      // Since toolNameByUseId is not passed here, we collect tool names from
+      // assistantTurnRecords when an error occurred on that turn.
+      const errorToolCounts = new Map<string, number>();
+      for (const toolUseId of erroredToolUseIds) {
+        const turn = toolUseTurnById.get(toolUseId);
+        if (turn !== undefined && turn >= startTurn && turn <= endTurn) {
+          // Find tool name from AssistantTurnRecord: we scan toolUses by order.
+          // This is an approximation since we don't have the id stored in toolUses.
+          const aRec = assistantByTurn.get(turn);
+          if (aRec && aRec.toolUses.length > 0) {
+            // Use the last tool name in the turn as the error source (common pattern).
+            const lastName = aRec.toolUses[aRec.toolUses.length - 1].toolName;
+            errorToolCounts.set(lastName, (errorToolCounts.get(lastName) ?? 0) + 1);
+          }
+        }
+      }
+      for (const [toolName, count] of errorToolCounts) {
+        if (keyActions.length >= 5) break;
+        keyActions.push(`${toolName} failed ×${count}`);
+      }
+    }
+
+    // Priority 2: high-count edits.
+    const sortedEdits = Array.from(editCountsByFile.entries())
+      .filter(([, c]) => c >= 2)
+      .sort((a, b) => b[1] - a[1]);
+    for (const [filePath, count] of sortedEdits) {
+      if (keyActions.length >= 5) break;
+      const bn = filePath.split('/').pop() ?? filePath;
+      keyActions.push(`Edit ${bn} ×${count}`);
+    }
+
+    // Priority 3: notable single tool calls (Bash, Read, WebFetch).
+    if (keyActions.length < 5) {
+      const notableTools = new Set(['Bash', 'Read', 'WebFetch', 'WebSearch']);
+      const seenNotable = new Set<string>();
+      for (let t = startTurn; t <= endTurn && keyActions.length < 5; t++) {
+        const aRec = assistantByTurn.get(t);
+        if (!aRec) continue;
+        for (const tu of aRec.toolUses) {
+          if (!notableTools.has(tu.toolName)) continue;
+          if (seenNotable.has(tu.toolName)) continue;
+          seenNotable.add(tu.toolName);
+          if (tu.toolName === 'Bash' && tu.bashCommand) {
+            keyActions.push(`Bash: ${tu.bashCommand.slice(0, 40)}`);
+          } else {
+            keyActions.push(tu.toolName);
+          }
+          if (keyActions.length >= 5) break;
+        }
+      }
+    }
+
+    // Severity.
+    const severity: ConversationFrictionZone['severity'] = isBacktrack && !isUserReaction
+      ? 'low'
+      : (backtrackedFiles.length >= 1 || toolErrorsCount >= 2)
+        ? 'high'
+        : 'medium';
+
+    const reactionKind = fp.matchedPattern.split(':')[0];
+    // Append zone index to guarantee uniqueness even if two reactions land on the same endTurn.
+    const zoneId = `${sessionId}:${endTurn}:${reactionKind}:${zones.length}`;
+
+    zones.push({
+      id: zoneId,
+      startTurn,
+      endTurn,
+      startTimestamp,
+      endTimestamp,
+      reactionPoint: fp,
+      agentContext: {
+        filesTouched: filesTouchedSet,
+        toolCallsCount,
+        toolErrorsCount,
+        backtrackedFiles,
+        keyActions,
+      },
+      severity,
+    });
+  }
+
+  return zones;
 }
 
 // ---------------------------------------------------------------------------

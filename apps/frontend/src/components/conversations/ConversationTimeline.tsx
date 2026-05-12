@@ -334,15 +334,11 @@ function FrictionZonePanel({
       <div className="mb-1 flex flex-wrap items-center gap-1.5 font-medium text-[var(--n-fg)]">
         <span>{t('drawer.frictionZone.title', { kind: kindLabel, severity: severityLabel })}</span>
         {signalKinds.map((k) => {
-          // S1 = user signal (accent); S4, S5, S6 = agent signals (warning). S2 removed in v10.
-          const isUserSignal = k === 'S1';
-          const chipClass = isUserSignal
-            ? 'bg-n-accent-soft text-n-accent-strong'
-            : 'bg-n-warning-soft text-n-warning-strong';
+          // S4, S5, S6 = agent signals (warning). S1 and S2 removed.
           return (
             <span
               key={k}
-              className={`inline-flex items-center rounded-full border border-n-border-default px-2 py-0.5 font-n-mono text-[10px] ${chipClass}`}
+              className="inline-flex items-center rounded-full border border-n-border-default px-2 py-0.5 font-n-mono text-[10px] bg-n-warning-soft text-n-warning-strong"
             >
               {t(`drawer.frictionZone.signalKinds.${k}` as Parameters<typeof t>[0])}
             </span>

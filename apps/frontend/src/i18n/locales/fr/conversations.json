@@ -48,7 +48,6 @@
     "compaction": "Compaction",
     "pause": "Pause",
     "friction": "Friction",
-    "frictionSentiment": "Sentiment négatif",
     "frictionBacktrack": "Agent revert",
     "frictionRepetition": "Répétition",
     "zoneAgentContext": "Agent : {{calls}} tool calls dont {{errors}} erreurs, {{filesCount}} fichiers"
@@ -63,21 +62,6 @@
       "frictions": "Frictions"
     },
     "markers": "Événements",
-    "sentimentTrack": "Sentiment utilisateur",
-    "sentimentTooltip": {
-      "title": "#{{index}} · {{label}} {{score}}",
-      "labels": {
-        "positive": "Positif",
-        "neutral": "Neutre",
-        "negative": "Négatif"
-      }
-    },
-    "sentimentRecap": {
-      "title": "Sentiment utilisateur",
-      "stats": "{{count}} messages user · {{positivePct}}% positifs · {{neutralPct}}% neutres · {{negativePct}}% négatifs",
-      "topNegatives": "Top moments négatifs",
-      "noExcerpt": "(extrait indisponible)"
-    },
     "frictionZone": {
       "title": "Friction · {{kind}} · sévérité {{severity}}",
       "preamble": "Avant cette réaction (T{{start}}→T{{end}}) :",
@@ -90,8 +74,6 @@
       "severityMedium": "moyenne",
       "severityLow": "faible",
       "signalKinds": {
-        "S1": "Sentiment",
-        "S2": "Répétition",
         "S4": "Revert agent",
         "S5": "Erreurs tools",
         "S6": "Échecs édit"

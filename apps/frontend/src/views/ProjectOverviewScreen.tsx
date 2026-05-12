@@ -585,7 +585,6 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
       {selected && (
         <ConvDrawer
           analysis={selected}
-          projectPath={project.projectPath}
           onClose={() => setSelected(null)}
           onOpenRunTab={onOpenRunTab}
         />

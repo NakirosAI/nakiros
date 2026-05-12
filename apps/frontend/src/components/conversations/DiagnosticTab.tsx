@@ -1,44 +1,22 @@
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ConversationAnalysis, ConversationTip, SentimentTrace } from '@nakiros/shared';
+import type { ConversationAnalysis, ConversationTip } from '@nakiros/shared';
 import { AlertTriangle, Zap, Info } from 'lucide-react';
 import { Sismograph } from './Sismograph';
 import { formatLongDuration } from '../../utils/format';
 
 interface Props {
   analysis: ConversationAnalysis;
-  projectPath: string;
 }
 
 /**
  * Diagnostic tab body of the conversation drawer. Mirrors the layout of the
  * mockup `ConvDrawer.diagnostic` (`apps/Nakiros-new-design/screens-conversations.jsx`):
- * narrative card, recommendations, sismograph (1-track in PR10a — uplift to
- * 5-tracks lands in PR10c), reading guide, KPI grid, cache efficiency, and a
- * 1fr/1fr split for top tools and hot files. Reads `ConversationAnalysis`
- * straight from IPC — no derived/mocked data.
+ * narrative card, recommendations, sismograph (cost-stacked + ctx), reading
+ * guide, KPI grid, cache efficiency, and a 1fr/1fr split for top tools and
+ * hot files. Reads `ConversationAnalysis` straight from IPC — no derived/mocked data.
  */
-export function DiagnosticTab({ analysis, projectPath }: Props) {
+export function DiagnosticTab({ analysis }: Props) {
   const { t } = useTranslation('conversations');
-
-  // Fetch sentiment trace in parallel with render. Fire-and-forget: if the
-  // trace is not ready yet (returns null), we simply render no sentiment dots.
-  const [sentimentTrace, setSentimentTrace] = useState<SentimentTrace | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    window.nakiros
-      .getSentimentTrace(projectPath, analysis.sessionId)
-      .then((result) => {
-        if (cancelled) return;
-        if (result.ok && result.trace) setSentimentTrace(result.trace);
-      })
-      .catch(() => {
-        // Trace unavailable — render without sentiment track.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectPath, analysis.sessionId]);
 
   const totalK = formatTokensK(analysis.totalTokens);
   const peakK = formatTokensK(analysis.maxContextTokens);
@@ -145,23 +123,11 @@ export function DiagnosticTab({ analysis, projectPath }: Props) {
             <MarkerLegend dot="bg-n-info" label={t('badge.compactions', { count: compactions })} />
             <MarkerLegend dot="bg-n-critical" label={t('badge.friction', { count: frictions })} />
             <MarkerLegend dot="bg-n-watch" label={t('badge.toolErrors', { count: toolErrors })} />
-            {sentimentTrace && sentimentTrace.entries.length > 0 && (
-              <>
-                <span className="text-n-faint">·</span>
-                <MarkerLegend
-                  dot="bg-n-healthy"
-                  label={`${t('drawer.sentimentTrack')} (${sentimentTrace.entries.length})`}
-                />
-              </>
-            )}
           </div>
           <div className="px-3 pb-3 pt-2">
-            <Sismograph analysis={analysis} sentimentTrace={sentimentTrace} />
+            <Sismograph analysis={analysis} />
           </div>
         </Card>
-        {sentimentTrace && sentimentTrace.entries.length > 0 && (
-          <SentimentRecap trace={sentimentTrace} />
-        )}
         <div className="mt-2 rounded-n-md bg-n-sunken px-3.5 py-2.5">
           <div className="font-n-mono text-[10px] uppercase tracking-[0.6px] text-n-faint">
             {t('drawer.readingGuide')}
@@ -400,33 +366,6 @@ function iconForCategory(category: ConversationTip['category']) {
   if (category === 'workflow' || category === 'skills') return Zap;
   if (category === 'context' || category === 'cache') return Info;
   return AlertTriangle;
-}
-
-function SentimentRecap({ trace }: { trace: SentimentTrace }) {
-  const { t } = useTranslation('conversations');
-
-  const total = trace.entries.length;
-  const positiveCount = trace.entries.filter((e) => e.label === 'Positive').length;
-  const neutralCount = trace.entries.filter((e) => e.label === 'Neutral').length;
-  const negativeCount = trace.entries.filter((e) => e.label === 'Negative').length;
-
-  const positivePct = Math.round((positiveCount / total) * 100);
-  const neutralPct = Math.round((neutralCount / total) * 100);
-  const negativePct = Math.round((negativeCount / total) * 100);
-
-  return (
-    <div className="mt-2 rounded-n-md border border-n-border-subtle bg-n-surface px-4 py-3">
-      <SectionLabel>{t('drawer.sentimentRecap.title')}</SectionLabel>
-      <p className="mt-2 font-n-mono text-[11.5px] text-n-muted">
-        {t('drawer.sentimentRecap.stats', {
-          count: total,
-          positivePct,
-          neutralPct,
-          negativePct,
-        })}
-      </p>
-    </div>
-  );
 }
 
 function formatTokensK(tokens: number): string {

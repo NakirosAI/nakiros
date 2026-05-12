@@ -1,11 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
-import type { ConversationAnalysis, ConversationCostSample, ConversationFrictionZone, SentimentTrace, SentimentEntry, SentimentLabel } from '@nakiros/shared';
+import type { ConversationAnalysis, ConversationCostSample, ConversationFrictionZone } from '@nakiros/shared';
 import { useTranslation } from 'react-i18next';
 
 interface Props {
   analysis: ConversationAnalysis;
-  /** Optional sentiment trace from the sentiment pre-pass service. */
-  sentimentTrace?: SentimentTrace | null;
 }
 
 const W = 920;
@@ -16,18 +14,12 @@ const EVENT_LANE_H = 28;
 const COST_H = 200;
 const GAP = 10;
 const CTX_H = 80;
-/** Thin dot row for the sentiment track — placed below the ctx track. */
-const SENTIMENT_GAP = 8;
-const SENTIMENT_H = 20;
 const PAD_B = 36;
 
 const Y_COST_BASE = PAD_T + EVENT_LANE_H + COST_H;
 const Y_CTX_TOP = Y_COST_BASE + GAP;
 const Y_CTX_BASE = Y_CTX_TOP + CTX_H;
-const Y_SENTIMENT_TOP = Y_CTX_BASE + SENTIMENT_GAP;
-const Y_SENTIMENT_MID = Y_SENTIMENT_TOP + SENTIMENT_H / 2;
-const Y_SENTIMENT_BASE = Y_SENTIMENT_TOP + SENTIMENT_H;
-const H = Y_SENTIMENT_BASE + PAD_B;
+const H = Y_CTX_BASE + PAD_B;
 const INNER_W = W - PAD_L - PAD_R;
 
 const HEALTHY_PCT = 0.25;
@@ -67,15 +59,10 @@ interface StackPoint {
  * and tool-error are accessible via the hover tooltip and the Impact panel
  * (kept off the chart to reduce visual noise).
  */
-export function Sismograph({ analysis, sentimentTrace }: Props) {
+export function Sismograph({ analysis }: Props) {
   const { t } = useTranslation('conversations');
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
-  const [hoverSentiment, setHoverSentiment] = useState<{
-    entry: SentimentEntry;
-    x: number;
-    y: number;
-  } | null>(null);
   const [hoverZone, setHoverZone] = useState<{
     zone: ConversationFrictionZone;
     x: number;
@@ -210,31 +197,6 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
     return nearest;
   }, [hoverT, analysis, durationMs, t]);
 
-  // Build sentiment dot positions — X is estimated from messageIndex proportional to duration;
-  // Y is the label-signed confidence score mapped into the SENTIMENT_H band.
-  const sentimentDots = useMemo(() => {
-    const entries = sentimentTrace?.entries ?? [];
-    // Denominator MUST be the user-message count (matches messageIndex's 1..N
-    // user numbering), not the total message count — using total clusters dots
-    // at the start because user messages are typically fewer than assistant ones.
-    const userMsgCount =
-      sentimentTrace && sentimentTrace.observed > 0 ? sentimentTrace.observed : 1;
-    return entries.map((e) => {
-      // Estimate tMs by distributing user messages uniformly across the session duration.
-      const tMs = (e.messageIndex / userMsgCount) * durationMs;
-      const x = xFor(tMs);
-      // Positive → above mid, Negative → below mid, Neutral → at mid.
-      const amplitude = scoreToAmplitude(e.label, e.score);
-      const y = Y_SENTIMENT_MID - amplitude * (SENTIMENT_H / 2);
-      // Opacity gradient — low-confidence dots fade into the background, high-confidence
-      // dots stand out. Clamp to [0.25, 1.0] so even low-score dots remain visible.
-      const opacity = Math.max(0.25, Math.min(1.0, e.score));
-      return { x, y, color: labelToColor(e.label), opacity, entry: e };
-    });
-    // xFor depends on durationMs
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sentimentTrace, durationMs]);
-
   if ((analysis.costSamples ?? []).length === 0) {
     return (
       <div className="flex h-40 items-center justify-center text-sm text-[var(--n-fg-muted)]">
@@ -287,20 +249,6 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
         >
           ctx
         </text>
-        {sentimentDots.length > 0 && (
-          <text
-            x={PAD_L - 12}
-            y={Y_SENTIMENT_MID + 3}
-            textAnchor="end"
-            fontFamily="var(--n-font-mono)"
-            fontSize={9}
-            fill="var(--n-fg-faint)"
-            style={{ letterSpacing: '0.6px', textTransform: 'uppercase' }}
-          >
-            {t('drawer.sentimentTrack')}
-          </text>
-        )}
-
         {/* Friction zone background rectangles — rendered first (lowest z-order) */}
         {(analysis.frictionZones ?? []).map((zone, i) => {
           const zoneStartMs = new Date(zone.startTimestamp).getTime() - new Date(analysis.startedAt).getTime();
@@ -308,7 +256,7 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
           const x1 = xFor(zoneStartMs);
           const x2 = xFor(zoneEndMs);
           const rectWidth = Math.max(2, x2 - x1);
-          const rectHeight = Y_SENTIMENT_BASE - PAD_T;
+          const rectHeight = Y_CTX_BASE - PAD_T;
           const fillOpacity = zone.severity === 'high' ? 0.16 : zone.severity === 'medium' ? 0.10 : 0.06;
           return (
             <rect
@@ -329,14 +277,13 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
         {/* Vertical tick gridlines */}
         {ticks.map((m, i) => {
           const x = xFor(m * 60_000);
-          const gridBottom = sentimentDots.length > 0 ? Y_SENTIMENT_BASE : Y_CTX_BASE;
           return (
             <line
               key={i}
               x1={x}
               x2={x}
               y1={PAD_T + EVENT_LANE_H}
-              y2={gridBottom}
+              y2={Y_CTX_BASE}
               stroke="var(--n-border-subtle)"
               strokeDasharray="1 4"
               opacity="0.6"
@@ -480,36 +427,6 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
           strokeLinecap="round"
         />
 
-        {/* Sentiment track — thin dot row below ctx, one dot per scored user message */}
-        {sentimentDots.length > 0 && (
-          <>
-            <line
-              x1={PAD_L}
-              x2={W - PAD_R}
-              y1={Y_SENTIMENT_MID}
-              y2={Y_SENTIMENT_MID}
-              stroke="var(--n-border-subtle)"
-              strokeDasharray="1 3"
-              opacity={0.4}
-            />
-            {sentimentDots.map((d, i) => (
-              <circle
-                key={i}
-                cx={d.x}
-                cy={d.y}
-                r={3}
-                fill={d.color}
-                fillOpacity={d.opacity}
-                style={{ cursor: 'default' }}
-                onMouseEnter={() => setHoverSentiment({ entry: d.entry, x: d.x, y: d.y })}
-                onMouseLeave={() => setHoverSentiment(null)}
-              >
-                <title>{`#${d.entry.messageIndex} · ${d.entry.label} ${d.entry.score.toFixed(2)}`}</title>
-              </circle>
-            ))}
-          </>
-        )}
-
         {/* Markers (drop-pins on event lane) */}
         {analysis.compactions.map((c, i) => {
           const tMs = new Date(c.timestamp).getTime() - new Date(analysis.startedAt).getTime();
@@ -537,18 +454,18 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
             x1={PAD_L + hoverT * INNER_W}
             x2={PAD_L + hoverT * INNER_W}
             y1={PAD_T}
-            y2={sentimentDots.length > 0 ? Y_SENTIMENT_BASE : Y_CTX_BASE}
+            y2={Y_CTX_BASE}
             stroke="var(--n-fg)"
             strokeWidth={1}
             opacity={0.5}
           />
         )}
 
-        {/* X-axis ticks — anchored below sentiment lane if present, else below ctx */}
+        {/* X-axis ticks — anchored below ctx */}
         {ticks.map((m, i) => {
           const x = xFor(m * 60_000);
           const isEdge = i === 0 || i === ticks.length - 1;
-          const axisY = sentimentDots.length > 0 ? Y_SENTIMENT_BASE : Y_CTX_BASE;
+          const axisY = Y_CTX_BASE;
           return (
             <g key={`tick${m}`}>
               <line
@@ -616,35 +533,8 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
         />
       )}
 
-      {/* Sentiment dot tooltip */}
-      {hoverSentiment && (
-        <div
-          className="pointer-events-none absolute z-20 max-w-xs rounded-md border border-[var(--n-border-default)] bg-[var(--n-bg-surface)] px-3 py-2 text-xs shadow-md"
-          style={{
-            // Project SVG x coordinate to % of container width, then offset right
-            left: `calc(${(hoverSentiment.x / W) * 100}% + 8px)`,
-            // Project SVG y coordinate to % of container height.
-            // H is the total SVG height; the container maps H to 100% height.
-            top: `calc(${(hoverSentiment.y / H) * 100}% - 4px)`,
-          }}
-        >
-          <div className="font-medium text-[var(--n-fg)]">
-            {t('drawer.sentimentTooltip.title', {
-              index: hoverSentiment.entry.messageIndex,
-              label: t(`drawer.sentimentTooltip.labels.${hoverSentiment.entry.label.toLowerCase()}`),
-              score: hoverSentiment.entry.score.toFixed(2),
-            })}
-          </div>
-          {hoverSentiment.entry.excerpt && (
-            <div className="mt-1 whitespace-pre-wrap break-words text-[var(--n-fg-muted)]">
-              {hoverSentiment.entry.excerpt}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Friction zone hover tooltip */}
-      {hoverZone && !hoverSentiment && (
+      {hoverZone && (
         <div
           className="pointer-events-none absolute z-20 max-w-xs rounded-md border border-[var(--n-border-default)] bg-[var(--n-bg-surface)] px-3 py-2 text-xs shadow-md"
           style={{
@@ -938,20 +828,6 @@ function fmtTokensShort(v: number): string {
   if (v >= 10_000) return `${Math.round(v / 1000)}k`;
   if (v >= 1_000) return `${(v / 1000).toFixed(1)}k`;
   return Math.round(v).toString();
-}
-
-function scoreToAmplitude(label: SentimentLabel, score: number): number {
-  if (label === 'Negative') return -score;
-  if (label === 'Positive') return score;
-  return 0;
-}
-
-function labelToColor(label: SentimentLabel): string {
-  // Use existing palette: --n-critical (red-leaning) for Negative,
-  // --n-healthy (green-leaning) for Positive, --n-fg-faint for Neutral.
-  if (label === 'Negative') return 'var(--n-critical)';
-  if (label === 'Positive') return 'var(--n-healthy)';
-  return 'var(--n-fg-faint)';
 }
 
 function markerColor(kind: string): string {

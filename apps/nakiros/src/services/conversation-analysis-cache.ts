@@ -84,8 +84,13 @@ interface CacheEntry {
  * = medium, 5+ = high; bumped one level if any enrichment signal present.
  * `frictionPoints[]` is unchanged (backward compat for badges + score).
  * `matchedPattern` on zone's reactionPoint: `'stuck-cluster:<size>:<jaccardAvg>'`.
+ *
+ * v11 (2026-05-12) — removed S1 (sentiment) enrichment signal from
+ * `signalKinds` union. The bert-nlptown model produced too many false positives
+ * on French dev/agent dialog. `signalKinds` now only covers `'S4' | 'S5' | 'S6'`.
+ * `frictionPoints[]` no longer includes sentiment-derived entries.
  */
-const CACHE_VERSION = 10;
+const CACHE_VERSION = 11;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

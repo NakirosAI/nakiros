@@ -13,9 +13,6 @@ import type {
   ConversationTip,
   ConversationToolStats,
 } from '@nakiros/shared';
-import { SENTIMENT_FRICTION_THRESHOLD } from '@nakiros/shared';
-
-import { loadSentimentTrace } from './sentiment/sentiment-store.js';
 
 // Billed-equivalent multipliers (tokens of input-equivalent).
 const M_INPUT = 1;
@@ -49,13 +46,6 @@ const EXTENDED_WINDOW_TRIGGER = 250_000;
 // "lost in the middle" curve: low pressure, watch, degraded.
 const HEALTHY_ZONE_PCT = 0.25;
 const WATCH_ZONE_PCT = 0.75;
-
-// SENTIMENT_FRICTION_THRESHOLD is imported from @nakiros/shared — shared with
-// the frontend so the displayed signals are always aligned with the friction
-// detection logic. Calibration notes: bert-nlptown 5-class model with summed
-// probabilities P(Negative) = P(1★) + P(2★). At 0.60 the threshold captures
-// genuine frustration/corrections; the model's Neutral bucket (~49% of real
-// session messages) keeps the false-positive rate low at this level.
 
 // Score weights — tuned to put real problem conversations in the 60-100 range
 // and leave clean ones under 20. Revisit after running on a batch.
@@ -132,10 +122,8 @@ interface UserTurnRecord {
  *
  * Health zones scale with the detected context window (200k standard,
  * auto-detected 1M when peak usage crosses ~250k). Friction detection uses
- * the session sentiment trace: messages where `label === 'Negative' && score > 0.60`
- * are recorded as friction points (calibrated for bert-nlptown summed probabilities) —
- * sessions without a trace produce empty friction.
- * Cache waste
+ * signal-based heuristics (backtrack, repetition) and the stuck-cluster
+ * algorithm (v11 — sentiment removed). Cache waste
  * is attributed to `cache_creation_input_tokens` written on turns arriving
  * more than 5 minutes (Anthropic default TTL) after the last assistant reply.
  *
@@ -167,38 +155,6 @@ export function analyzeConversation(
 
   if (entries.length === 0) return null;
 
-  // --- Sentiment trace lookup ---
-  // `cwd` is NOT on every JSONL entry — leading metadata entries like
-  // `{"type":"last-prompt", ...}` have no cwd at all. Walk entries until we
-  // find one. Try top-level first, then nested payload (older format). If
-  // none exists, fall back gracefully — the session will have no
-  // sentiment-derived friction points until the trace is generated.
-  let cwd: string | null = null;
-  for (const entry of entries) {
-    const direct = entry['cwd'] as string | undefined;
-    if (direct) {
-      cwd = direct;
-      break;
-    }
-    const nested = (entry['payload'] as Record<string, unknown> | undefined)?.['cwd'] as
-      | string
-      | undefined;
-    if (nested) {
-      cwd = nested;
-      break;
-    }
-  }
-  const sentimentTrace = cwd ? loadSentimentTrace(cwd, sessionId) : null;
-  // Map from 1-indexed user-message counter to confidence score.
-  const negativeUserIndices = new Map<number, number>();
-  if (sentimentTrace) {
-    for (const e of sentimentTrace.entries) {
-      if (e.label === 'Negative' && e.score > SENTIMENT_FRICTION_THRESHOLD) {
-        negativeUserIndices.set(e.messageIndex, e.score);
-      }
-    }
-  }
-
   // --- Pre-scan: detect dominant cache mode (5m vs 1h beta) ---
   // Claude Code uses the 1h beta cache by default since 2026-04, but we detect
   // per-session to stay honest. The TTL drives `cacheMissTurns` and
@@ -225,8 +181,7 @@ export function analyzeConversation(
   let gitBranch: string | null = null;
   let summary = '';
   let messageCount = 0;
-  // 1-indexed counter of real user text messages (skips <command-name> messages),
-  // aligned with the messageIndex convention used by the sentiment scorer.
+  // 1-indexed counter of real user text messages (skips <command-name> messages).
   let userMsgCounter = 0;
 
   const compactions: ConversationCompaction[] = [];
@@ -370,22 +325,9 @@ export function analyzeConversation(
       const slashMatch = text.match(/<command-name>([^<]+)<\/command-name>/);
       if (slashMatch) slashCommandSet.add(slashMatch[1].trim());
 
-      // User-message friction — derived from high-confidence Negative sentiment.
-      // Mirror the runner's `getConversationMessages()` filter exactly: skip
-      // BOTH `<command-name>` and `<local-command-…>` messages so the counter
-      // stays in sync with the trace's `messageIndex`.
+      // Skip <command-name> and <local-command-…> messages — not real user text.
       if (!text.includes('<command-name>') && !text.includes('<local-command-')) {
         userMsgCounter += 1;
-        const score = negativeUserIndices.get(userMsgCounter);
-        if (score !== undefined) {
-          frictionPoints.push({
-            offsetPct: entryOffset,
-            timestamp: timestamp ?? '',
-            snippet: text.slice(0, 200),
-            matchedPattern: `sentiment:${score.toFixed(2)}`,
-            precedingTool: lastAssistantToolName,
-          });
-        }
 
         // Collect for Signal C (repetition) and Signal E (long-gap + topic change).
         userMessages.push({
@@ -717,7 +659,6 @@ export function analyzeConversation(
     toolUseTurnById,
     erroredToolUseIds,
     entries,
-    negativeUserIndices,
   });
 
   // --- Signal E: long-gap + topic change detection ---------------------------
@@ -1181,8 +1122,7 @@ const STOP_WORDS = new Set([
 /**
  * Synthetic "user" messages injected by Claude Code when the user hits ESC
  * to interrupt a tool. They are NOT real user turns and must never seed a
- * stuck-cluster. We keep them in `userMsgCounter` so the index alignment
- * with the sentiment trace's `messageIndex` stays correct.
+ * stuck-cluster.
  */
 const SYNTHETIC_USER_TEXTS = new Set([
   '[Request interrupted by user for tool use]',
@@ -1210,12 +1150,12 @@ function tokenizeForCluster(text: string): Set<string> {
 
 /**
  * Builds {@link ConversationFrictionZone} records using the stuck-cluster
- * algorithm (v10).
+ * algorithm (v11 — sentiment removed).
  *
  * A zone is created when 3+ user messages on the same topic cluster together
  * within a 10-user-message window, after the first 10 user messages (setup
  * phase). Topic similarity is measured by Jaccard > 0.3 on content-bearing
- * tokens (stop words removed). Signals S1/S4/S5/S6 act as enrichments that
+ * tokens (stop words removed). Signals S4/S5/S6 act as enrichments that
  * bump severity, but do NOT create zones alone.
  *
  * `frictionPoints[]` is left unchanged by this function — only `frictionZones[]`
@@ -1230,7 +1170,6 @@ function buildFrictionZones(args: {
   toolUseTurnById: Map<string, number>;
   erroredToolUseIds: Set<string>;
   entries: Record<string, unknown>[];
-  negativeUserIndices: Map<number, number>;
 }): ConversationFrictionZone[] {
   const {
     sessionId,
@@ -1241,7 +1180,6 @@ function buildFrictionZones(args: {
     toolUseTurnById,
     erroredToolUseIds,
     entries,
-    negativeUserIndices,
   } = args;
 
   if (userMessages.length < 3) return [];
@@ -1553,18 +1491,10 @@ function buildFrictionZones(args: {
     }
 
     // ---------------------------------------------------------------------------
-    // 5. Enrichment signals (S1/S4/S5/S6) — bumps severity, used as badges.
+    // 5. Enrichment signals (S4/S5/S6) — bumps severity, used as badges.
     // ---------------------------------------------------------------------------
 
-    const enrichSignals = new Set<'S1' | 'S4' | 'S5' | 'S6'>();
-
-    // S1: any cluster message has Negative sentiment > threshold.
-    for (const um of clusterMsgs) {
-      if (negativeUserIndices.has(um.userMsgIdx)) {
-        enrichSignals.add('S1');
-        break;
-      }
-    }
+    const enrichSignals = new Set<'S4' | 'S5' | 'S6'>();
 
     // S4: any backtrack within the assistant zone.
     if (backtrackedFiles.length > 0) enrichSignals.add('S4');
@@ -1585,7 +1515,7 @@ function buildFrictionZones(args: {
     }
     if ([...notFoundByFile.values()].some((c) => c >= 2)) enrichSignals.add('S6');
 
-    const signalKinds = [...enrichSignals].sort() as Array<'S1' | 'S4' | 'S5' | 'S6'>;
+    const signalKinds = [...enrichSignals].sort() as Array<'S4' | 'S5' | 'S6'>;
 
     // Severity: base = cluster size (3 → medium, 5+ → high). Bump if any enrichment.
     let severity: ConversationFrictionZone['severity'] =

@@ -169,17 +169,17 @@ export interface ConversationFrictionZone {
   /**
    * Enrichment signals present inside the zone. These no longer create the
    * zone (the cluster does), but they bump severity and render as badges.
-   * Optional for backward-compat with cached analyses from v9 and earlier.
+   * Optional for backward-compat with cached analyses from v10 and earlier.
    *
-   * - S1: User sentiment Negative with score > 0.60 in cluster messages
    * - S4: Agent backtrack (Edit/Write reverts its own prior output on same file)
    * - S5: Tool error spike (≥ 2 tool errors within zone)
    * - S6: Repeated edit failure (≥ 2 "string not found"-like errors on same file)
    *
-   * Note: S2 (repetition) has been removed — the cluster algorithm already
-   * captures the stuck-on-topic signal directly; S2 would be redundant.
+   * Note: S1 (sentiment) was removed in v11 — the bert model produced too many
+   * false positives on French dev/agent dialog. S2 (repetition) was removed
+   * earlier — the cluster algorithm already captures the stuck-on-topic signal.
    */
-  signalKinds?: Array<'S1' | 'S4' | 'S5' | 'S6'>;
+  signalKinds?: Array<'S4' | 'S5' | 'S6'>;
 }
 
 /**

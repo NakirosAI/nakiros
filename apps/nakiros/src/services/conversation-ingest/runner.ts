@@ -20,8 +20,6 @@ import { IPC_CHANNELS } from '@nakiros/shared';
 
 import { eventBus } from '../../daemon/event-bus.js';
 import { getConversationMessages } from '../conversation-parser.js';
-import { scoreBatch, SENTIMENT_MODEL_ID } from '../sentiment/index.js';
-import { loadSentimentTrace, persistSentimentTrace } from '../sentiment/sentiment-store.js';
 import {
   classifySessionKind,
   getIngestQueueDir,
@@ -279,47 +277,6 @@ export function ingestSession(
     toolsUsed,
   };
   upsertSession(meta);
-
-  // Sentiment scoring — best-effort, never blocks ingest. Only user sessions
-  // carry real human messages; synthetic sessions are Nakiros internal sandboxes.
-  if (kind === 'user') {
-    void (async () => {
-      try {
-        const existing = loadSentimentTrace(projectPath, sessionId);
-        if (!existing || existing.transcriptMtime !== transcriptMtime) {
-          const userInputs: Array<{ messageIndex: number; text: string }> = [];
-          let userIdx = 0;
-          for (const msg of messages) {
-            if (msg.type !== 'user') continue;
-            userIdx += 1;
-            const text = msg.content?.trim() ?? '';
-            if (text) userInputs.push({ messageIndex: userIdx, text });
-          }
-          const entries = await scoreBatch(userInputs, {
-            onError: (err, idx) =>
-              console.warn(`[sentiment] msg ${idx} failed:`, (err as Error).message),
-          });
-          const inputByIndex = new Map(userInputs.map((u) => [u.messageIndex, u.text]));
-          const entriesWithExcerpt = entries.map((e) => ({
-            ...e,
-            excerpt: buildExcerpt(inputByIndex.get(e.messageIndex) ?? ''),
-          }));
-          persistSentimentTrace({
-            sessionId,
-            projectPath,
-            transcriptMtime,
-            generatedAt: new Date().toISOString(),
-            model: SENTIMENT_MODEL_ID,
-            entries: entriesWithExcerpt,
-            observed: userInputs.length,
-            skipped: userInputs.length - entriesWithExcerpt.length,
-          });
-        }
-      } catch (err) {
-        console.warn(`[sentiment] session ${sessionId} failed:`, (err as Error).message);
-      }
-    })();
-  }
 
   return { sessionId, ok: true };
 }
@@ -624,17 +581,6 @@ export function ensureCoworkProjectIndexed(
   }
 
   return { ingested, total: allFiles.length };
-}
-
-/**
- * Build a 120-character excerpt of a user message: trim whitespace, collapse
- * runs of internal whitespace into single spaces, then slice. Adds an ellipsis
- * only when the source was actually truncated.
- */
-function buildExcerpt(text: string): string {
-  const cleaned = text.trim().replace(/\s+/g, ' ');
-  if (cleaned.length <= 120) return cleaned;
-  return cleaned.slice(0, 119) + '…';
 }
 
 export { aggregateStats };

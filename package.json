@@ -25,7 +25,8 @@
       "esbuild",
       "fs-xattr",
       "macos-alias",
-      "node-pty"
+      "node-pty",
+      "sharp"
     ],
     "overrides": {
       "uuid": "^14.0.0",

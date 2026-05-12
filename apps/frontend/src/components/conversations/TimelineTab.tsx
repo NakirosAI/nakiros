@@ -87,6 +87,7 @@ const FILTERS: TimelineFilter[] = ['all', 'user', 'assistant', 'tools', 'system'
 
 interface EnrichedMessage extends ConversationMessage {
   isFriction: boolean;
+  isInFrictionZone: boolean;
   isCompaction: boolean;
   compactionPre?: number;
   compactionPost?: number;
@@ -98,6 +99,11 @@ interface EnrichedMessage extends ConversationMessage {
  * Match is by closest timestamp within a 2-second window; that's loose
  * enough for clock skew between the JSONL sample and the analyzer pass,
  * tight enough that two distinct events never collide.
+ *
+ * Also marks messages whose timestamp falls within any frictionZone
+ * [startTimestamp, endTimestamp] range as `isInFrictionZone=true`, so the
+ * 'friction' filter can expose the agent context (assistant turns, tool calls)
+ * that preceded the user reaction — not just the reaction itself.
  */
 function enrichMessages(
   messages: ConversationMessage[],
@@ -117,16 +123,25 @@ function enrichMessages(
     if (!Number.isNaN(ts)) frictionByTs.set(ts, f);
   }
 
+  // Pre-compute zone ranges as [startMs, endMs] pairs once — avoids
+  // re-parsing ISO strings in the inner loop over messages.
+  const zoneRanges: Array<[number, number]> = (analysis.frictionZones ?? [])
+    .map((z) => [Date.parse(z.startTimestamp), Date.parse(z.endTimestamp)] as [number, number])
+    .filter(([s, e]) => !Number.isNaN(s) && !Number.isNaN(e));
+
   return messages.map((m) => {
     const ts = Date.parse(m.timestamp);
     const compaction = nearest(compactionByTs, ts, 2000);
     const friction = nearest(frictionByTs, ts, 2000);
+    const isInFrictionZone =
+      !Number.isNaN(ts) && zoneRanges.some(([s, e]) => ts >= s && ts <= e);
     return {
       ...m,
       isCompaction: !!compaction,
       compactionPre: compaction?.preTokens,
       compactionPost: compaction?.postTokens,
       isFriction: !!friction,
+      isInFrictionZone,
       frictionPattern: friction?.matchedPattern,
     };
   });
@@ -158,7 +173,7 @@ function countByFilter(messages: EnrichedMessage[]): Record<TimelineFilter, numb
     else if (m.type === 'assistant') out.assistant++;
     else if (m.type === 'system') out.system++;
     if (m.toolUse && m.toolUse.length > 0) out.tools++;
-    if (m.isFriction) out.friction++;
+    if (m.isFriction || m.isInFrictionZone) out.friction++;
   }
   return out;
 }
@@ -166,7 +181,7 @@ function countByFilter(messages: EnrichedMessage[]): Record<TimelineFilter, numb
 function filterMatch(filter: TimelineFilter): (m: EnrichedMessage) => boolean {
   if (filter === 'all') return () => true;
   if (filter === 'tools') return (m) => !!m.toolUse && m.toolUse.length > 0;
-  if (filter === 'friction') return (m) => m.isFriction;
+  if (filter === 'friction') return (m) => m.isFriction || m.isInFrictionZone;
   return (m) => m.type === filter;
 }
 
@@ -202,15 +217,20 @@ function MessageCard({ m }: { m: EnrichedMessage }) {
 
   const isUser = m.type === 'user';
   const isFriction = m.isFriction;
+  const isZoneContext = m.isInFrictionZone && !m.isFriction;
 
   const wrapperClass = isFriction
     ? 'border-n-critical bg-n-critical-soft'
-    : 'border-n-border-subtle bg-n-surface';
+    : isZoneContext
+      ? 'border-n-border-subtle bg-n-surface'
+      : 'border-n-border-subtle bg-n-surface';
   const accentClass = isFriction
     ? 'before:bg-n-critical'
-    : isUser
-      ? 'before:bg-n-accent'
-      : 'before:bg-n-track-tokens';
+    : isZoneContext
+      ? 'before:bg-n-warning/40'
+      : isUser
+        ? 'before:bg-n-accent'
+        : 'before:bg-n-track-tokens';
 
   return (
     <div

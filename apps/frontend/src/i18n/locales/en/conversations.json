@@ -87,7 +87,14 @@
       "noBacktracks": "",
       "severityHigh": "high",
       "severityMedium": "medium",
-      "severityLow": "low"
+      "severityLow": "low",
+      "signalKinds": {
+        "S1": "Sentiment",
+        "S2": "Repetition",
+        "S4": "Backtrack",
+        "S5": "Tool errors",
+        "S6": "Edit failures"
+      }
     },
     "readingGuide": "How to read",
     "readingGuideBody": "The coloured band tracks per-turn context against the {{window}} window — green is healthy, amber watch, red degraded. Vertical purple bars mark compactions. Red triangles below the axis mark detected user friction.",

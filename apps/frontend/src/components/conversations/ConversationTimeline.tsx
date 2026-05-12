@@ -327,10 +327,27 @@ function FrictionZonePanel({
       (backtrackedFiles.length > MAX_FILES ? ` +${backtrackedFiles.length - MAX_FILES}` : '')
     : '';
 
+  const signalKinds = zone.signalKinds ?? [];
+
   return (
     <div className={`mt-1 rounded-r-md pl-3 pr-3 py-2 text-xs ${borderClass}`}>
-      <div className="mb-1 font-medium text-[var(--n-fg)]">
-        {t('drawer.frictionZone.title', { kind: kindLabel, severity: severityLabel })}
+      <div className="mb-1 flex flex-wrap items-center gap-1.5 font-medium text-[var(--n-fg)]">
+        <span>{t('drawer.frictionZone.title', { kind: kindLabel, severity: severityLabel })}</span>
+        {signalKinds.map((k) => {
+          // S1, S2 = user signals (accent); S4, S5, S6 = agent signals (warning)
+          const isUserSignal = k === 'S1' || k === 'S2';
+          const chipClass = isUserSignal
+            ? 'bg-n-accent-soft text-n-accent-strong'
+            : 'bg-n-warning-soft text-n-warning-strong';
+          return (
+            <span
+              key={k}
+              className={`inline-flex items-center rounded-full border border-n-border-default px-2 py-0.5 font-n-mono text-[10px] ${chipClass}`}
+            >
+              {t(`drawer.frictionZone.signalKinds.${k}` as Parameters<typeof t>[0])}
+            </span>
+          );
+        })}
       </div>
       <div className="mb-1 text-[var(--n-fg-muted)]">
         {t('drawer.frictionZone.preamble', { start: zone.startTurn, end: zone.endTurn })}

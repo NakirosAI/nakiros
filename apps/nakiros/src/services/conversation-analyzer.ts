@@ -13,6 +13,8 @@ import type {
   ConversationToolStats,
 } from '@nakiros/shared';
 
+import { loadSentimentTrace } from './sentiment/sentiment-store.js';
+
 // Billed-equivalent multipliers (tokens of input-equivalent).
 const M_INPUT = 1;
 const M_OUTPUT = 5;
@@ -46,24 +48,11 @@ const EXTENDED_WINDOW_TRIGGER = 250_000;
 const HEALTHY_ZONE_PCT = 0.25;
 const WATCH_ZONE_PCT = 0.75;
 
-// User-message patterns that indicate friction. Matched case-insensitively on
-// a lowercased prefix of the message to catch the common tip-of-the-tongue
-// corrections. Kept deliberately tight — false positives pollute scores.
-const FRICTION_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /\bno\s+wait\b/i, label: 'no wait' },
-  { pattern: /\bnon\b/i, label: 'non' },
-  { pattern: /\bstop\b/i, label: 'stop' },
-  { pattern: /\barr[êe]te\b/i, label: 'arrête' },
-  { pattern: /\bdon'?t\b/i, label: "don't" },
-  { pattern: /\bne\s+fais\s+pas\b/i, label: 'ne fais pas' },
-  { pattern: /\bpas\s+(ça|ca)\b/i, label: 'pas ça' },
-  { pattern: /\brevert\b/i, label: 'revert' },
-  { pattern: /\bundo\b/i, label: 'undo' },
-  { pattern: /\bwrong\b/i, label: 'wrong' },
-  { pattern: /\bthat'?s\s+not\b/i, label: "that's not" },
-  { pattern: /\bactually\b/i, label: 'actually' },
-  { pattern: /\bc'?est\s+pas\s+(ça|ca|bon)\b/i, label: "c'est pas ça" },
-];
+// Minimum sentiment score for a Negative-labelled message to be counted as a
+// friction point. Tuned high to keep precision: the multilingual model assigns
+// "Negative" to ≈48% of real messages at all confidence levels; only the
+// high-confidence tail is genuinely adversarial (corrections, frustration).
+const SENTIMENT_FRICTION_THRESHOLD = 0.85;
 
 // Score weights — tuned to put real problem conversations in the 60-100 range
 // and leave clean ones under 20. Revisit after running on a batch.
@@ -94,7 +83,9 @@ const SCORE_WEIGHTS = {
  *
  * Health zones scale with the detected context window (200k standard,
  * auto-detected 1M when peak usage crosses ~250k). Friction detection uses
- * a curated FR/EN pattern list anchored to user messages only. Cache waste
+ * the session sentiment trace: messages where `label === 'Negative' && score > 0.85`
+ * are recorded as friction points — sessions without a trace produce empty friction.
+ * Cache waste
  * is attributed to `cache_creation_input_tokens` written on turns arriving
  * more than 5 minutes (Anthropic default TTL) after the last assistant reply.
  *
@@ -126,6 +117,25 @@ export function analyzeConversation(
 
   if (entries.length === 0) return null;
 
+  // --- Sentiment trace lookup ---
+  // `cwd` is recorded on every JSONL entry; read it from the first one. The
+  // field layout has evolved: try the top-level key first, then the nested
+  // payload (older format). If absent, fall back gracefully — the session will
+  // have no sentiment-derived friction points until the trace is generated.
+  const cwd = (entries[0]?.['cwd'] as string | undefined)
+    ?? (entries[0]?.['payload'] as Record<string, unknown> | undefined)?.['cwd'] as string | undefined
+    ?? null;
+  const sentimentTrace = cwd ? loadSentimentTrace(cwd, sessionId) : null;
+  // Map from 1-indexed user-message counter to confidence score.
+  const negativeUserIndices = new Map<number, number>();
+  if (sentimentTrace) {
+    for (const e of sentimentTrace.entries) {
+      if (e.label === 'Negative' && e.score > SENTIMENT_FRICTION_THRESHOLD) {
+        negativeUserIndices.set(e.messageIndex, e.score);
+      }
+    }
+  }
+
   // --- Pre-scan: detect dominant cache mode (5m vs 1h beta) ---
   // Claude Code uses the 1h beta cache by default since 2026-04, but we detect
   // per-session to stay honest. The TTL drives `cacheMissTurns` and
@@ -152,6 +162,9 @@ export function analyzeConversation(
   let gitBranch: string | null = null;
   let summary = '';
   let messageCount = 0;
+  // 1-indexed counter of real user text messages (skips <command-name> messages),
+  // aligned with the messageIndex convention used by the sentiment scorer.
+  let userMsgCounter = 0;
 
   const compactions: ConversationCompaction[] = [];
   const frictionPoints: ConversationFrictionPoint[] = [];
@@ -278,19 +291,24 @@ export function analyzeConversation(
       const slashMatch = text.match(/<command-name>([^<]+)<\/command-name>/);
       if (slashMatch) slashCommandSet.add(slashMatch[1].trim());
 
-      // Friction detection — only on real user text, skip command messages.
+      // User-message friction — derived from high-confidence Negative sentiment.
+      // NOTE: the ingest runner (runner.ts) builds userInputs from
+      // getConversationMessages() which filters BOTH <command-name> AND
+      // <local-command-> messages. This counter only excludes <command-name>,
+      // so <local-command-> messages increment userMsgCounter without being
+      // scored. The index may drift by the number of <local-command-> messages
+      // in the session — accepted, see DONE_WITH_CONCERNS below.
       if (!text.includes('<command-name>')) {
-        for (const { pattern, label } of FRICTION_PATTERNS) {
-          if (pattern.test(text)) {
-            frictionPoints.push({
-              offsetPct: entryOffset,
-              timestamp: timestamp ?? '',
-              snippet: text.slice(0, 200),
-              matchedPattern: label,
-              precedingTool: lastAssistantToolName,
-            });
-            break; // one friction flag per message is enough
-          }
+        userMsgCounter += 1;
+        const score = negativeUserIndices.get(userMsgCounter);
+        if (score !== undefined) {
+          frictionPoints.push({
+            offsetPct: entryOffset,
+            timestamp: timestamp ?? '',
+            snippet: text.slice(0, 200),
+            matchedPattern: `sentiment:${score.toFixed(2)}`,
+            precedingTool: lastAssistantToolName,
+          });
         }
       }
 

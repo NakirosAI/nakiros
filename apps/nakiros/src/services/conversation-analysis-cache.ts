@@ -35,8 +35,12 @@ interface CacheEntry {
  * v3 (2026-04-30) — `totalTokens` now excludes cache_read (matches Claude
  * Code's "consumed" counter). Old caches inflated this by 50× on heavy-cache
  * sessions.
+ *
+ * v4 (2026-05-12) — `frictionPoints` now derived from sentiment trace
+ * (Negative && score > 0.85) instead of lexical regex patterns.
+ * `matchedPattern` field is now `'sentiment:<score>'` (e.g. `'sentiment:0.92'`).
  */
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

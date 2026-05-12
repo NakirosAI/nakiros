@@ -6,6 +6,7 @@ import type {
   ConversationIngestProject,
   ConversationIngestStatus,
 } from '@nakiros/shared';
+import ConfirmModal from '../components/ConfirmModal';
 
 /**
  * Settings panel for the opt-in conversation-ingest pipeline. The user
@@ -161,8 +162,11 @@ export default function ConversationIngestPanel() {
     }
   };
 
-  const handlePurge = async () => {
-    if (!window.confirm(t('purgeConfirm'))) return;
+  const [purgeConfirmOpen, setPurgeConfirmOpen] = useState(false);
+
+  const handlePurge = () => setPurgeConfirmOpen(true);
+
+  const confirmPurge = async () => {
     setBusy(true);
     setError(null);
     try {
@@ -177,6 +181,7 @@ export default function ConversationIngestPanel() {
       setError(t('errorPurgeFailed', { message: err instanceof Error ? err.message : String(err) }));
     } finally {
       setBusy(false);
+      setPurgeConfirmOpen(false);
     }
   };
 
@@ -294,6 +299,17 @@ export default function ConversationIngestPanel() {
           onConfirm={() => void confirmEnable()}
         />
       )}
+
+      <ConfirmModal
+        open={purgeConfirmOpen}
+        title={t('purgeConfirmTitle')}
+        body={t('purgeConfirm')}
+        confirmLabel={busy ? t('purgeButtonBusy') : t('purgeButton')}
+        cancelLabel={t('purgeCancel')}
+        loading={busy}
+        onConfirm={() => void confirmPurge()}
+        onCancel={() => setPurgeConfirmOpen(false)}
+      />
     </div>
   );
 }

@@ -20,6 +20,8 @@ import { IPC_CHANNELS } from '@nakiros/shared';
 
 import { eventBus } from '../../daemon/event-bus.js';
 import { getConversationMessages } from '../conversation-parser.js';
+import { scoreBatch, SENTIMENT_MODEL_ID } from '../sentiment/index.js';
+import { loadSentimentTrace, persistSentimentTrace } from '../sentiment/sentiment-store.js';
 import {
   classifySessionKind,
   getIngestQueueDir,
@@ -277,6 +279,43 @@ export function ingestSession(
     toolsUsed,
   };
   upsertSession(meta);
+
+  // Sentiment scoring — best-effort, never blocks ingest. Only user sessions
+  // carry real human messages; synthetic sessions are Nakiros internal sandboxes.
+  if (kind === 'user') {
+    void (async () => {
+      try {
+        const existing = loadSentimentTrace(projectPath, sessionId);
+        if (!existing || existing.transcriptMtime !== transcriptMtime) {
+          const userInputs: Array<{ messageIndex: number; text: string }> = [];
+          let userIdx = 0;
+          for (const msg of messages) {
+            if (msg.type !== 'user') continue;
+            userIdx += 1;
+            const text = msg.content?.trim() ?? '';
+            if (text) userInputs.push({ messageIndex: userIdx, text });
+          }
+          const entries = await scoreBatch(userInputs, {
+            onError: (err, idx) =>
+              console.warn(`[sentiment] msg ${idx} failed:`, (err as Error).message),
+          });
+          persistSentimentTrace({
+            sessionId,
+            projectPath,
+            transcriptMtime,
+            generatedAt: new Date().toISOString(),
+            model: SENTIMENT_MODEL_ID,
+            entries,
+            observed: userInputs.length,
+            skipped: userInputs.length - entries.length,
+          });
+        }
+      } catch (err) {
+        console.warn(`[sentiment] session ${sessionId} failed:`, (err as Error).message);
+      }
+    })();
+  }
+
   return { sessionId, ok: true };
 }
 

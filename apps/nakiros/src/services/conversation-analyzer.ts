@@ -12,6 +12,7 @@ import type {
   ConversationTip,
   ConversationToolStats,
 } from '@nakiros/shared';
+import { SENTIMENT_FRICTION_THRESHOLD } from '@nakiros/shared';
 
 import { loadSentimentTrace } from './sentiment/sentiment-store.js';
 
@@ -48,13 +49,12 @@ const EXTENDED_WINDOW_TRIGGER = 250_000;
 const HEALTHY_ZONE_PCT = 0.25;
 const WATCH_ZONE_PCT = 0.75;
 
-// Minimum sentiment score for a Negative-labelled message to be counted as a
-// friction point. Calibrated for the bert-nlptown 5-class model with summed
-// probabilities: P(Negative) = P(1*) + P(2*). A summed score of 0.60 captures
-// genuine frustration/corrections without over-triggering on neutral messages —
-// the model's Neutral bucket is healthy (~49% of real session messages) so
-// false-positive rate stays low at this threshold.
-const SENTIMENT_FRICTION_THRESHOLD = 0.60;
+// SENTIMENT_FRICTION_THRESHOLD is imported from @nakiros/shared — shared with
+// the frontend so the displayed signals are always aligned with the friction
+// detection logic. Calibration notes: bert-nlptown 5-class model with summed
+// probabilities P(Negative) = P(1★) + P(2★). At 0.60 the threshold captures
+// genuine frustration/corrections; the model's Neutral bucket (~49% of real
+// session messages) keeps the false-positive rate low at this level.
 
 // Score weights — tuned to put real problem conversations in the 60-100 range
 // and leave clean ones under 20. Revisit after running on a batch.

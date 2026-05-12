@@ -71,7 +71,6 @@
     "sentimentRecap": {
       "title": "User sentiment",
       "stats": "{{count}} user messages · {{positivePct}}% positive · {{neutralPct}}% neutral · {{negativePct}}% negative",
-      "topNegatives": "Top negative moments",
       "noExcerpt": "(excerpt unavailable)"
     },
     "readingGuide": "How to read",

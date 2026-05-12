@@ -414,12 +414,6 @@ function SentimentRecap({ trace }: { trace: SentimentTrace }) {
   const neutralPct = Math.round((neutralCount / total) * 100);
   const negativePct = Math.round((negativeCount / total) * 100);
 
-  // Top 3 most negative: Negative label only, sorted by score desc.
-  const topNegatives = trace.entries
-    .filter((e) => e.label === 'Negative')
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
-
   return (
     <div className="mt-2 rounded-n-md border border-n-border-subtle bg-n-surface px-4 py-3">
       <SectionLabel>{t('drawer.sentimentRecap.title')}</SectionLabel>
@@ -431,28 +425,6 @@ function SentimentRecap({ trace }: { trace: SentimentTrace }) {
           negativePct,
         })}
       </p>
-      {topNegatives.length > 0 && (
-        <div className="mt-3">
-          <div className="font-n-mono text-[10px] uppercase tracking-[0.6px] text-n-faint">
-            {t('drawer.sentimentRecap.topNegatives')}
-          </div>
-          <ul className="mt-1.5 space-y-2">
-            {topNegatives.map((e) => (
-              <li
-                key={e.messageIndex}
-                className="rounded-n-sm border border-n-border-subtle/60 bg-n-sunken px-3 py-2"
-              >
-                <div className="font-n-mono text-[11px] text-n-critical">
-                  #{e.messageIndex} · score {e.score.toFixed(2)}
-                </div>
-                <div className="mt-0.5 whitespace-pre-wrap break-words font-n-mono text-[11px] text-n-muted">
-                  {e.excerpt ?? t('drawer.sentimentRecap.noExcerpt')}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

@@ -215,7 +215,10 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
       // Positive → above mid, Negative → below mid, Neutral → at mid.
       const amplitude = scoreToAmplitude(e.label, e.score);
       const y = Y_SENTIMENT_MID - amplitude * (SENTIMENT_H / 2);
-      return { x, y, color: labelToColor(e.label), entry: e };
+      // Opacity gradient — low-confidence dots fade into the background, high-confidence
+      // dots stand out. Clamp to [0.25, 1.0] so even low-score dots remain visible.
+      const opacity = Math.max(0.25, Math.min(1.0, e.score));
+      return { x, y, color: labelToColor(e.label), opacity, entry: e };
     });
     // xFor depends on durationMs
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -460,7 +463,7 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
                 cy={d.y}
                 r={3}
                 fill={d.color}
-                opacity={0.75}
+                fillOpacity={d.opacity}
                 style={{ cursor: 'default' }}
                 onMouseEnter={() => setHoverSentiment({ entry: d.entry, x: d.x, y: d.y })}
                 onMouseLeave={() => setHoverSentiment(null)}

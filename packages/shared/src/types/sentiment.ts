@@ -41,3 +41,18 @@ export interface SentimentTrace {
 }
 
 export type SentimentTraceStatus = 'absent' | 'running' | 'ready' | 'failed';
+
+/**
+ * Minimum confidence score for a Negative-labelled message to be treated as a
+ * genuine friction point. Calibrated for the bert-nlptown 5-class multilingual
+ * sentiment model with summed probabilities: P(Negative) = P(1★) + P(2★).
+ *
+ * At 0.60 the model captures real user frustration and corrections while
+ * keeping the false-positive rate low — the Neutral bucket covers ~49% of
+ * real session messages, so descriptive negation and short colloquial phrases
+ * typically land below this threshold.
+ *
+ * Both the backend analyzer and the frontend UI import this constant so the
+ * displayed signals are always aligned with the friction-point detection logic.
+ */
+export const SENTIMENT_FRICTION_THRESHOLD = 0.60;

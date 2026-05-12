@@ -47,7 +47,8 @@
     "friction": "Friction",
     "frictionSentiment": "Negative sentiment",
     "frictionBacktrack": "Agent backtrack",
-    "frictionRepetition": "Repetition"
+    "frictionRepetition": "Repetition",
+    "zoneAgentContext": "Agent: {{calls}} tool calls, {{errors}} errors, {{filesCount}} files"
   },
   "diagnostic": {
     "healthy": "Healthy conversation — no notable signal"
@@ -75,6 +76,18 @@
       "title": "User sentiment",
       "stats": "{{count}} user messages · {{positivePct}}% positive · {{neutralPct}}% neutral · {{negativePct}}% negative",
       "noExcerpt": "(excerpt unavailable)"
+    },
+    "frictionZone": {
+      "title": "Friction · {{kind}} · severity {{severity}}",
+      "preamble": "Before this reaction (T{{start}}→T{{end}}):",
+      "stats": "{{calls}} tool calls including {{errors}} errors",
+      "files": "Files: {{files}} ({{count}})",
+      "backtracks": "Reverts: {{files}}",
+      "noFiles": "No files touched",
+      "noBacktracks": "",
+      "severityHigh": "high",
+      "severityMedium": "medium",
+      "severityLow": "low"
     },
     "readingGuide": "How to read",
     "readingGuideBody": "The coloured band tracks per-turn context against the {{window}} window — green is healthy, amber watch, red degraded. Vertical purple bars mark compactions. Red triangles below the axis mark detected user friction.",

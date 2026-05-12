@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import type { ConversationAnalysis } from '@nakiros/shared';
+import type { ConversationAnalysis, ConversationFrictionZone } from '@nakiros/shared';
+import { useTranslation } from 'react-i18next';
 import { frictionKindFromPattern } from './Sismograph';
 
 interface Props {
@@ -35,6 +36,7 @@ const MAX_SAMPLES = 180;
  * you can eyeball whether frustration lined up with a dangerous zone.
  */
 export function ConversationTimeline({ analysis }: Props) {
+  const { t } = useTranslation('conversations');
   const plotW = WIDTH - PAD_X * 2;
   const plotH = HEIGHT - PAD_TOP - PAD_BOTTOM;
   const yMax = analysis.contextWindow;
@@ -81,6 +83,18 @@ export function ConversationTimeline({ analysis }: Props) {
   const bandBottom = PAD_TOP + plotH;
 
   const windowLabel = yMax >= 1_000_000 ? '1M' : `${Math.round(yMax / 1000)}k`;
+
+  // Build a lookup: endTurn → friction zone (for inline panel insertion).
+  // The panel anchors at the endTurn position (the user reaction turn).
+  const zonesByEndTurn = useMemo(() => {
+    const map = new Map<number, ConversationFrictionZone[]>();
+    for (const zone of analysis.frictionZones ?? []) {
+      const existing = map.get(zone.endTurn) ?? [];
+      existing.push(zone);
+      map.set(zone.endTurn, existing);
+    }
+    return map;
+  }, [analysis.frictionZones]);
 
   return (
     <div className="w-full overflow-x-auto">
@@ -258,6 +272,93 @@ export function ConversationTimeline({ analysis }: Props) {
           );
         })}
       </svg>
+      {/* Friction zone expanded panels — one per zone, anchored below the reaction turn */}
+      {(analysis.frictionZones ?? []).map((zone, i) => (
+        <FrictionZonePanel key={`fzp${i}`} zone={zone} t={t} />
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Friction zone inline panel
+// ---------------------------------------------------------------------------
+
+function FrictionZonePanel({
+  zone,
+  t,
+}: {
+  zone: ConversationFrictionZone;
+  t: ReturnType<typeof useTranslation>[0];
+}) {
+  const kind = frictionKindFromPattern(zone.reactionPoint.matchedPattern);
+  const kindLabel =
+    kind === 'sentiment' ? t('hover.frictionSentiment')
+    : kind === 'backtrack' ? t('hover.frictionBacktrack')
+    : kind === 'repetition' ? t('hover.frictionRepetition')
+    : t('hover.friction');
+
+  const severityLabel =
+    zone.severity === 'high' ? t('drawer.frictionZone.severityHigh')
+    : zone.severity === 'medium' ? t('drawer.frictionZone.severityMedium')
+    : t('drawer.frictionZone.severityLow');
+
+  const borderClass =
+    zone.severity === 'high'
+      ? 'border-l-4 border-l-[var(--n-critical)] bg-[var(--n-bg-soft)]'
+      : zone.severity === 'medium'
+      ? 'border-l-4 border-l-[var(--n-warning)] bg-[var(--n-bg-soft)]'
+      : 'border-l-2 border-l-[var(--n-fg-muted)] bg-[var(--n-bg)]';
+
+  const { filesTouched, toolCallsCount, toolErrorsCount, backtrackedFiles, keyActions } =
+    zone.agentContext;
+
+  // Show up to 5 files, then "+N more"
+  const MAX_FILES = 5;
+  const shownFiles = filesTouched.slice(0, MAX_FILES);
+  const extraFiles = filesTouched.length > MAX_FILES ? filesTouched.length - MAX_FILES : 0;
+  const filesDisplay =
+    filesTouched.length === 0
+      ? t('drawer.frictionZone.noFiles')
+      : `${shownFiles.join(', ')}${extraFiles > 0 ? ` +${extraFiles}` : ''}`;
+
+  const backtracksDisplay = backtrackedFiles.length > 0
+    ? backtrackedFiles.slice(0, MAX_FILES).join(', ') +
+      (backtrackedFiles.length > MAX_FILES ? ` +${backtrackedFiles.length - MAX_FILES}` : '')
+    : '';
+
+  return (
+    <div className={`mt-1 rounded-r-md pl-3 pr-3 py-2 text-xs ${borderClass}`}>
+      <div className="mb-1 font-medium text-[var(--n-fg)]">
+        {t('drawer.frictionZone.title', { kind: kindLabel, severity: severityLabel })}
+      </div>
+      <div className="mb-1 text-[var(--n-fg-muted)]">
+        {t('drawer.frictionZone.preamble', { start: zone.startTurn, end: zone.endTurn })}
+      </div>
+      <ul className="space-y-0.5 text-[var(--n-fg-subtle)]">
+        <li>
+          {'• '}
+          {t('drawer.frictionZone.stats', { calls: toolCallsCount, errors: toolErrorsCount })}
+        </li>
+        <li>
+          {'• '}
+          {filesTouched.length === 0
+            ? t('drawer.frictionZone.noFiles')
+            : t('drawer.frictionZone.files', {
+                files: filesDisplay,
+                count: filesTouched.length,
+              })}
+        </li>
+        {backtracksDisplay && (
+          <li>
+            {'• '}
+            {t('drawer.frictionZone.backtracks', { files: backtracksDisplay })}
+          </li>
+        )}
+        {keyActions.map((action, i) => (
+          <li key={i}>{'• '}{action}</li>
+        ))}
+      </ul>
     </div>
   );
 }

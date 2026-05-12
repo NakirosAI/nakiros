@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import type { ConversationAnalysis, ConversationCostSample, SentimentTrace, SentimentEntry, SentimentLabel } from '@nakiros/shared';
+import type { ConversationAnalysis, ConversationCostSample, ConversationFrictionZone, SentimentTrace, SentimentEntry, SentimentLabel } from '@nakiros/shared';
 import { useTranslation } from 'react-i18next';
 
 interface Props {
@@ -75,6 +75,10 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
     entry: SentimentEntry;
     x: number;
     y: number;
+  } | null>(null);
+  const [hoverZone, setHoverZone] = useState<{
+    zone: ConversationFrictionZone;
+    x: number;
   } | null>(null);
 
   // Downsample for paths (keeps SVG light on huge sessions).
@@ -296,6 +300,31 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
             {t('drawer.sentimentTrack')}
           </text>
         )}
+
+        {/* Friction zone background rectangles — rendered first (lowest z-order) */}
+        {(analysis.frictionZones ?? []).map((zone, i) => {
+          const zoneStartMs = new Date(zone.startTimestamp).getTime() - new Date(analysis.startedAt).getTime();
+          const zoneEndMs = new Date(zone.endTimestamp).getTime() - new Date(analysis.startedAt).getTime();
+          const x1 = xFor(zoneStartMs);
+          const x2 = xFor(zoneEndMs);
+          const rectWidth = Math.max(2, x2 - x1);
+          const rectHeight = Y_SENTIMENT_BASE - PAD_T;
+          const fillOpacity = zone.severity === 'high' ? 0.16 : zone.severity === 'medium' ? 0.10 : 0.06;
+          return (
+            <rect
+              key={`fz${i}`}
+              x={x1}
+              y={PAD_T}
+              width={rectWidth}
+              height={rectHeight}
+              fill="var(--n-critical, #e0405a)"
+              fillOpacity={fillOpacity}
+              style={{ cursor: 'default' }}
+              onMouseEnter={() => setHoverZone({ zone, x: (x1 + x2) / 2 })}
+              onMouseLeave={() => setHoverZone(null)}
+            />
+          );
+        })}
 
         {/* Vertical tick gridlines */}
         {ticks.map((m, i) => {
@@ -611,6 +640,46 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
               {hoverSentiment.entry.excerpt}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Friction zone hover tooltip */}
+      {hoverZone && !hoverSentiment && (
+        <div
+          className="pointer-events-none absolute z-20 max-w-xs rounded-md border border-[var(--n-border-default)] bg-[var(--n-bg-surface)] px-3 py-2 text-xs shadow-md"
+          style={{
+            left: `calc(${(hoverZone.x / W) * 100}% + 8px)`,
+            top: 28,
+          }}
+        >
+          <div className="mb-1 flex items-center gap-1.5">
+            <span
+              className="inline-block rounded-sm px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white"
+              style={{
+                background: 'var(--n-critical, #e0405a)',
+                letterSpacing: '0.6px',
+              }}
+            >
+              {hoverZone.zone.severity}
+            </span>
+            <span className="text-[var(--n-fg-muted)]">
+              {(() => {
+                const kind = frictionKindFromPattern(hoverZone.zone.reactionPoint.matchedPattern);
+                return kind === 'sentiment' ? t('hover.frictionSentiment')
+                  : kind === 'backtrack' ? t('hover.frictionBacktrack')
+                  : kind === 'repetition' ? t('hover.frictionRepetition')
+                  : t('hover.friction');
+              })()}
+            </span>
+          </div>
+          <div className="text-[var(--n-fg-muted)]">
+            {t('hover.zoneAgentContext', {
+              calls: hoverZone.zone.agentContext.toolCallsCount,
+              errors: hoverZone.zone.agentContext.toolErrorsCount,
+              filesCount: hoverZone.zone.agentContext.filesTouched.length,
+              defaultValue: `Agent: {{calls}} tool calls, {{errors}} errors, {{filesCount}} files`,
+            })}
+          </div>
         </div>
       )}
     </div>

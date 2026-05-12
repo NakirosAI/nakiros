@@ -1,5 +1,4 @@
 import type { SentimentEntry, SentimentLabel } from '@nakiros/shared';
-import type { TextClassificationSingle } from '@xenova/transformers';
 
 import { getSentimentPipeline, SENTIMENT_MODEL_ID } from './pipeline.js';
 import { shouldSkipForSentiment } from './skip-rules.js';
@@ -18,24 +17,45 @@ export async function warmupSentiment(): Promise<void> {
 }
 
 /**
- * Score a single text. Returns `null` if the text is skipped by skip-rules.
- * Throws on inference errors so the caller can decide to retry or drop the
- * trace entirely.
+ * Score a single text using the 5-class star rating model (nlptown bert). Sums
+ * per-star probabilities into a 3-class distribution:
+ *   - Negative = P(1*) + P(2*)
+ *   - Neutral  = P(3*)
+ *   - Positive = P(4*) + P(5*)
+ * Picks the top class and returns its summed probability as the score. Returns
+ * null if the text is skipped by skip-rules.
  */
 export async function scoreText(
   text: string,
 ): Promise<{ label: SentimentLabel; score: number } | null> {
   if (shouldSkipForSentiment(text)) return null;
   const pipe = await getSentimentPipeline();
-  // We pass a single string so the runtime returns TextClassificationOutput
-  // (i.e. TextClassificationSingle[]). Cast through unknown to satisfy the
-  // union return type TextClassificationOutput | TextClassificationOutput[].
-  const result = (await pipe(text, { topk: 1 })) as unknown as TextClassificationSingle[];
-  const top = result[0];
-  return {
-    label: normalizeLabel(top?.label),
-    score: typeof top?.score === 'number' ? top.score : 0,
-  };
+  // topk:5 to retrieve all 5 star probabilities and build the 3-class
+  // distribution via summed probabilities — more calibrated than topk:1 direct.
+  const result = (await pipe(text, { topk: 5 })) as unknown as Array<{
+    label: string;
+    score: number;
+  }>;
+  const buckets = { Negative: 0, Neutral: 0, Positive: 0 } as Record<SentimentLabel, number>;
+  for (const r of result) {
+    const stars = parseStarLabel(r.label);
+    if (stars === null) continue;
+    if (stars <= 2) buckets.Negative += r.score;
+    else if (stars === 3) buckets.Neutral += r.score;
+    else buckets.Positive += r.score;
+  }
+  // Pick the top class.
+  let topLabel: SentimentLabel = 'Neutral';
+  let topScore = buckets.Neutral;
+  if (buckets.Negative > topScore) {
+    topLabel = 'Negative';
+    topScore = buckets.Negative;
+  }
+  if (buckets.Positive > topScore) {
+    topLabel = 'Positive';
+    topScore = buckets.Positive;
+  }
+  return { label: topLabel, score: topScore };
 }
 
 /**
@@ -62,9 +82,14 @@ export async function scoreBatch(
   return out;
 }
 
-function normalizeLabel(raw: unknown): SentimentLabel {
-  const value = typeof raw === 'string' ? raw.toLowerCase() : '';
-  if (value.startsWith('pos')) return 'Positive';
-  if (value.startsWith('neg')) return 'Negative';
-  return 'Neutral';
+/**
+ * Parse a label like "1 star", "4 stars" into 1-5. Returns null on garbage —
+ * the caller skips the bucket.
+ */
+function parseStarLabel(raw: unknown): number | null {
+  if (typeof raw !== 'string') return null;
+  const match = raw.match(/^(\d)\s*stars?$/i);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return n >= 1 && n <= 5 ? n : null;
 }

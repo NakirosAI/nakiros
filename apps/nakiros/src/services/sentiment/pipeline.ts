@@ -3,7 +3,7 @@ import type { TextClassificationPipeline } from '@xenova/transformers';
 import { getModelsDir } from './paths.js';
 
 export const SENTIMENT_MODEL_ID =
-  'Xenova/distilbert-base-multilingual-cased-sentiments-student';
+  'Xenova/bert-base-multilingual-uncased-sentiment';
 
 let cached: TextClassificationPipeline | null = null;
 let pending: Promise<TextClassificationPipeline> | null = null;

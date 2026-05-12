@@ -49,10 +49,12 @@ const HEALTHY_ZONE_PCT = 0.25;
 const WATCH_ZONE_PCT = 0.75;
 
 // Minimum sentiment score for a Negative-labelled message to be counted as a
-// friction point. Tuned high to keep precision: the multilingual model assigns
-// "Negative" to ≈48% of real messages at all confidence levels; only the
-// high-confidence tail is genuinely adversarial (corrections, frustration).
-const SENTIMENT_FRICTION_THRESHOLD = 0.85;
+// friction point. Calibrated for the bert-nlptown 5-class model with summed
+// probabilities: P(Negative) = P(1*) + P(2*). A summed score of 0.60 captures
+// genuine frustration/corrections without over-triggering on neutral messages —
+// the model's Neutral bucket is healthy (~49% of real session messages) so
+// false-positive rate stays low at this threshold.
+const SENTIMENT_FRICTION_THRESHOLD = 0.60;
 
 // Score weights — tuned to put real problem conversations in the 60-100 range
 // and leave clean ones under 20. Revisit after running on a batch.
@@ -83,8 +85,9 @@ const SCORE_WEIGHTS = {
  *
  * Health zones scale with the detected context window (200k standard,
  * auto-detected 1M when peak usage crosses ~250k). Friction detection uses
- * the session sentiment trace: messages where `label === 'Negative' && score > 0.85`
- * are recorded as friction points — sessions without a trace produce empty friction.
+ * the session sentiment trace: messages where `label === 'Negative' && score > 0.60`
+ * are recorded as friction points (calibrated for bert-nlptown summed probabilities) —
+ * sessions without a trace produce empty friction.
  * Cache waste
  * is attributed to `cache_creation_input_tokens` written on turns arriving
  * more than 5 minutes (Anthropic default TTL) after the last assistant reply.

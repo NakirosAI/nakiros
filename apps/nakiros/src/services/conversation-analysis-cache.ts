@@ -39,8 +39,15 @@ interface CacheEntry {
  * v4 (2026-05-12) — `frictionPoints` now derived from sentiment trace
  * (Negative && score > 0.85) instead of lexical regex patterns.
  * `matchedPattern` field is now `'sentiment:<score>'` (e.g. `'sentiment:0.92'`).
+ *
+ * v5 (2026-05-12) — A/B test; intermediate version for distilbert baseline.
+ *
+ * v6 (2026-05-12) — switched sentiment model to bert-multilingual-uncased-sentiment
+ * (nlptown 5-class star rating). Labels now from summed probabilities
+ * (Neg=P(1*)+P(2*), Neu=P(3*), Pos=P(4*)+P(5*)). Friction threshold lowered
+ * to 0.60 to match the new score scale.
  */
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

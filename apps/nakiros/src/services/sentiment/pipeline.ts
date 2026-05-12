@@ -1,20 +1,12 @@
-import { pipeline, env } from '@xenova/transformers';
+import { pipeline, env, type TextClassificationPipeline } from '@xenova/transformers';
 
 import { getModelsDir } from './paths.js';
 
 export const SENTIMENT_MODEL_ID =
   'Xenova/distilbert-base-multilingual-cased-sentiments-student';
 
-/**
- * The resolved pipeline type. `pipeline()` returns a discriminated union
- * (`AllTasks[T]`). By using `Awaited<ReturnType<typeof pipeline>>` we capture
- * the full union without importing the internal `Pipeline` base class, which
- * is not stable across @xenova/transformers minor versions.
- */
-type AnyPipeline = Awaited<ReturnType<typeof pipeline>>;
-
-let cached: AnyPipeline | null = null;
-let pending: Promise<AnyPipeline> | null = null;
+let cached: TextClassificationPipeline | null = null;
+let pending: Promise<TextClassificationPipeline> | null = null;
 
 function configureEnv(): void {
   env.cacheDir = getModelsDir();
@@ -27,13 +19,13 @@ function configureEnv(): void {
  * model into `~/.nakiros/models/`; subsequent calls reuse the in-memory
  * instance. Concurrent calls during the initial load share the same promise.
  */
-export async function getSentimentPipeline(): Promise<AnyPipeline> {
+export async function getSentimentPipeline(): Promise<TextClassificationPipeline> {
   if (cached) return cached;
   if (pending) return pending;
   configureEnv();
   pending = pipeline('text-classification', SENTIMENT_MODEL_ID, { quantized: true })
     .then((p) => {
-      cached = p;
+      cached = p as TextClassificationPipeline;
       pending = null;
       return cached;
     })

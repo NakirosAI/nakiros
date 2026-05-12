@@ -1,11 +1,12 @@
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 
 import type {
   ConversationAnalysis,
   ConversationCompaction,
   ConversationCostSample,
   ConversationFrictionPoint,
+  ConversationFrictionZone,
   ConversationHealthZone,
   ConversationHotFile,
   ConversationPausePoint,
@@ -46,25 +47,6 @@ const EXTENDED_WINDOW_TRIGGER = 250_000;
 const HEALTHY_ZONE_PCT = 0.25;
 const WATCH_ZONE_PCT = 0.75;
 
-// User-message patterns that indicate friction. Matched case-insensitively on
-// a lowercased prefix of the message to catch the common tip-of-the-tongue
-// corrections. Kept deliberately tight — false positives pollute scores.
-const FRICTION_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /\bno\s+wait\b/i, label: 'no wait' },
-  { pattern: /\bnon\b/i, label: 'non' },
-  { pattern: /\bstop\b/i, label: 'stop' },
-  { pattern: /\barr[êe]te\b/i, label: 'arrête' },
-  { pattern: /\bdon'?t\b/i, label: "don't" },
-  { pattern: /\bne\s+fais\s+pas\b/i, label: 'ne fais pas' },
-  { pattern: /\bpas\s+(ça|ca)\b/i, label: 'pas ça' },
-  { pattern: /\brevert\b/i, label: 'revert' },
-  { pattern: /\bundo\b/i, label: 'undo' },
-  { pattern: /\bwrong\b/i, label: 'wrong' },
-  { pattern: /\bthat'?s\s+not\b/i, label: "that's not" },
-  { pattern: /\bactually\b/i, label: 'actually' },
-  { pattern: /\bc'?est\s+pas\s+(ça|ca|bon)\b/i, label: "c'est pas ça" },
-];
-
 // Score weights — tuned to put real problem conversations in the 60-100 range
 // and leave clean ones under 20. Revisit after running on a batch.
 const SCORE_WEIGHTS = {
@@ -82,6 +64,52 @@ const SCORE_WEIGHTS = {
 };
 
 // ---------------------------------------------------------------------------
+// Internal intermediate types (used across analyzeConversation + helpers)
+// ---------------------------------------------------------------------------
+
+/** Tool-use record collected per file during the first pass (Signal B). */
+interface ToolUseRecord {
+  /** 1-indexed assistant turn number. */
+  turn: number;
+  toolName: string;
+  filePath: string;
+  input: Record<string, unknown>;
+}
+
+/** User text message collected during the first pass (Signals C + E). */
+interface UserMessageRecord {
+  /** 1-indexed, aligned with sentiment trace messageIndex. */
+  userMsgIdx: number;
+  text: string;
+  timestamp: string;
+  offsetPct: number;
+}
+
+/** One tool_use entry inside an assistant turn, collected for zone agentContext. */
+interface AssistantToolUseInfo {
+  toolName: string;
+  /** File path for Edit/Write/MultiEdit/NotebookEdit — null for other tools. */
+  filePath: string | null;
+  /** Bash command snippet for Bash tool — null for non-Bash tools. */
+  bashCommand: string | null;
+}
+
+/** Condensed record of a single assistant turn, used to build friction zones. */
+interface AssistantTurnRecord {
+  /** 1-indexed assistant turn counter (same as ToolUseRecord.turn). */
+  turn: number;
+  timestamp: string;
+  toolUses: AssistantToolUseInfo[];
+}
+
+/** Record of a real user text message turn, used to build friction zones. */
+interface UserTurnRecord {
+  /** 1-indexed user message counter, aligned with sentiment trace. */
+  userMsgIdx: number;
+  timestamp: string;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -94,7 +122,8 @@ const SCORE_WEIGHTS = {
  *
  * Health zones scale with the detected context window (200k standard,
  * auto-detected 1M when peak usage crosses ~250k). Friction detection uses
- * a curated FR/EN pattern list anchored to user messages only. Cache waste
+ * signal-based heuristics (backtrack, repetition) and the stuck-cluster
+ * algorithm (v11 — sentiment removed). Cache waste
  * is attributed to `cache_creation_input_tokens` written on turns arriving
  * more than 5 minutes (Anthropic default TTL) after the last assistant reply.
  *
@@ -152,6 +181,8 @@ export function analyzeConversation(
   let gitBranch: string | null = null;
   let summary = '';
   let messageCount = 0;
+  // 1-indexed counter of real user text messages (skips <command-name> messages).
+  let userMsgCounter = 0;
 
   const compactions: ConversationCompaction[] = [];
   const frictionPoints: ConversationFrictionPoint[] = [];
@@ -191,6 +222,22 @@ export function analyzeConversation(
     }
   }
   const totalConvEntries = Math.max(convIndex, 1);
+
+  // Signal B — per-file tool-use history (Edit / Write / MultiEdit).
+  const toolUsesByFile = new Map<string, ToolUseRecord[]>();
+
+  // Signal C + E — user messages with text + turn index + timestamp.
+  const userMessages: UserMessageRecord[] = [];
+
+  // Friction zones — one AssistantTurnRecord per assistant entry to allow
+  // zone construction after the main loop. Parallel tracking of user turns
+  // enables the "walk back through consecutive assistant turns" algorithm.
+  const assistantTurnRecords: AssistantTurnRecord[] = [];
+  // Map from 1-indexed userMsgIdx to the timestamp of that user message.
+  const userTurnTimestamps = new Map<number, string>();
+
+  // Turn counter for assistant entries (used in ToolUseRecord).
+  let assistantTurnCounter = 0;
 
   for (const entry of entries) {
     const type = entry['type'] as string | undefined;
@@ -278,20 +325,20 @@ export function analyzeConversation(
       const slashMatch = text.match(/<command-name>([^<]+)<\/command-name>/);
       if (slashMatch) slashCommandSet.add(slashMatch[1].trim());
 
-      // Friction detection — only on real user text, skip command messages.
-      if (!text.includes('<command-name>')) {
-        for (const { pattern, label } of FRICTION_PATTERNS) {
-          if (pattern.test(text)) {
-            frictionPoints.push({
-              offsetPct: entryOffset,
-              timestamp: timestamp ?? '',
-              snippet: text.slice(0, 200),
-              matchedPattern: label,
-              precedingTool: lastAssistantToolName,
-            });
-            break; // one friction flag per message is enough
-          }
-        }
+      // Skip <command-name> and <local-command-…> messages — not real user text.
+      if (!text.includes('<command-name>') && !text.includes('<local-command-')) {
+        userMsgCounter += 1;
+
+        // Collect for Signal C (repetition) and Signal E (long-gap + topic change).
+        userMessages.push({
+          userMsgIdx: userMsgCounter,
+          text,
+          timestamp: timestamp ?? '',
+          offsetPct: entryOffset,
+        });
+
+        // Friction zones: record which assistant turn immediately precedes this user message.
+        userTurnTimestamps.set(userMsgCounter, timestamp ?? '');
       }
 
       // Cache miss detection — real user reply arriving > TTL after last
@@ -320,6 +367,8 @@ export function analyzeConversation(
     // --- Assistant messages -------------------------------------------------
     if (type === 'assistant') {
       messageCount++;
+      assistantTurnCounter++;
+      const currentTurn = assistantTurnCounter;
       const msg = entry['message'] as
         | {
             content?: unknown[];
@@ -335,6 +384,7 @@ export function analyzeConversation(
       // Tool use + hot file tracking.
       let turnLastTool: string | null = lastAssistantToolName;
       const turnToolNames: string[] = [];
+      const turnToolUseInfos: AssistantToolUseInfo[] = [];
       if (Array.isArray(msg?.content)) {
         for (const block of msg!.content) {
           const b = block as {
@@ -349,6 +399,10 @@ export function analyzeConversation(
           turnLastTool = b.name;
           turnToolNames.push(b.name);
 
+          // Collect tool info for friction zone agentContext.
+          let toolFilePath: string | null = null;
+          let toolBashCmd: string | null = null;
+
           // Files touched by edit-like tools.
           if (
             b.name === 'Edit' ||
@@ -359,11 +413,33 @@ export function analyzeConversation(
             const path = (b.input?.['file_path'] ?? b.input?.['notebook_path']) as
               | string
               | undefined;
-            if (path) editCounts.set(path, (editCounts.get(path) ?? 0) + 1);
+            if (path) {
+              toolFilePath = path;
+              editCounts.set(path, (editCounts.get(path) ?? 0) + 1);
+
+              // Signal B: record this tool use for backtrack detection.
+              if (b.name === 'Edit' || b.name === 'Write' || b.name === 'MultiEdit') {
+                const records = toolUsesByFile.get(path) ?? [];
+                records.push({ turn: currentTurn, toolName: b.name, filePath: path, input: b.input ?? {} });
+                toolUsesByFile.set(path, records);
+              }
+            }
+          } else if (b.name === 'Bash') {
+            const cmd = b.input?.['command'] as string | undefined;
+            if (cmd) toolBashCmd = cmd.slice(0, 80);
           }
+
+          turnToolUseInfos.push({ toolName: b.name, filePath: toolFilePath, bashCommand: toolBashCmd });
         }
       }
       lastAssistantToolName = turnLastTool;
+
+      // Friction zones: record this assistant turn for later zone construction.
+      assistantTurnRecords.push({
+        turn: currentTurn,
+        timestamp: timestamp ?? '',
+        toolUses: turnToolUseInfos,
+      });
 
       // Token accounting from message.usage.
       const usage = msg?.usage as {
@@ -450,23 +526,54 @@ export function analyzeConversation(
   // --- Tool error distribution (attach to specific tools where we can) ---
   // Second pass: tool_result.is_error tracks which *tool_use_id* failed, so we
   // correlate back to tool names. Cheap since we already have all entries.
+  // We also build a map from tool_use_id to assistant turn for friction zone error counting.
   const toolNameByUseId = new Map<string, string>();
+  // Maps tool_use_id → assistant turn number (1-indexed), for zone error attribution.
+  const toolUseTurnById = new Map<string, number>();
+  let secondPassAssistantTurn = 0;
   for (const entry of entries) {
     if (entry['type'] !== 'assistant') continue;
+    secondPassAssistantTurn++;
     const msg = entry['message'] as { content?: unknown[] } | undefined;
     if (!Array.isArray(msg?.content)) continue;
     for (const block of msg!.content) {
       const b = block as { type?: string; id?: string; name?: string };
-      if (b.type === 'tool_use' && b.id && b.name) toolNameByUseId.set(b.id, b.name);
+      if (b.type === 'tool_use' && b.id && b.name) {
+        toolNameByUseId.set(b.id, b.name);
+        toolUseTurnById.set(b.id, secondPassAssistantTurn);
+      }
     }
   }
+  // Set of tool_use_ids that had errors — used by buildFrictionZones to count
+  // errors per assistant turn.
+  const erroredToolUseIds = new Set<string>();
   for (const entry of entries) {
     if (entry['type'] !== 'user') continue;
     const msg = entry['message'] as { content?: unknown } | undefined;
     if (!Array.isArray(msg?.content)) continue;
     for (const block of msg!.content) {
-      const b = block as { type?: string; tool_use_id?: string; is_error?: boolean };
-      if (b.type !== 'tool_result' || !b.is_error || !b.tool_use_id) continue;
+      const b = block as { type?: string; tool_use_id?: string; is_error?: boolean; content?: unknown };
+      if (b.type !== 'tool_result' || !b.tool_use_id) continue;
+
+      // Detect errors via is_error flag or string content heuristics.
+      let isError = Boolean(b.is_error);
+      if (!isError && typeof b.content === 'string') {
+        const c = b.content as string;
+        if (c.startsWith('Error:') || c.startsWith('<tool_use_error>')) isError = true;
+      } else if (!isError && Array.isArray(b.content)) {
+        for (const part of b.content as Array<{ type?: string; text?: string }>) {
+          if (part.type === 'text' && part.text) {
+            if (part.text.startsWith('Error:') || part.text.startsWith('<tool_use_error>')) {
+              isError = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (isError) erroredToolUseIds.add(b.tool_use_id);
+
+      if (!b.is_error || !b.tool_use_id) continue;
       const name = toolNameByUseId.get(b.tool_use_id);
       if (!name) continue;
       const stats = toolStats[name] ?? { count: 0, errorCount: 0 };
@@ -531,6 +638,32 @@ export function analyzeConversation(
 
   const score = Math.max(0, Math.min(100, Math.round(100 - penalty)));
 
+  // --- Signal B: backtrack detection ----------------------------------------
+  const backtracks = detectBacktracks(toolUsesByFile);
+  for (const fp of backtracks) frictionPoints.push(fp);
+
+  // --- Signal C: user-message repetition detection --------------------------
+  const repetitions = detectRepetitions(userMessages);
+  for (const fp of repetitions) frictionPoints.push(fp);
+
+  // Sort friction points by position in conversation for consistent ordering.
+  frictionPoints.sort((a, b) => a.offsetPct - b.offsetPct);
+
+  // --- Friction zones — build after all frictionPoints are collected ---------
+  const frictionZones = buildFrictionZones({
+    sessionId,
+    frictionPoints,
+    assistantTurnRecords,
+    userMessages,
+    toolUsesByFile,
+    toolUseTurnById,
+    erroredToolUseIds,
+    entries,
+  });
+
+  // --- Signal E: long-gap + topic change detection ---------------------------
+  const gapTips = detectLongGapTopicChanges(userMessages);
+
   const diagnostic = buildDiagnostic({
     compactions,
     healthZone,
@@ -558,6 +691,7 @@ export function analyzeConversation(
     durationMs,
     slashCommands: Array.from(slashCommandSet),
     sidechainCount,
+    extraTips: gapTips,
   });
 
   return {
@@ -588,6 +722,7 @@ export function analyzeConversation(
     pausePoints,
 
     frictionPoints,
+    frictionZones,
 
     toolStats,
     toolErrorCount,
@@ -688,6 +823,7 @@ function buildTips(args: {
   durationMs: number;
   slashCommands: string[];
   sidechainCount: number;
+  extraTips: ConversationTip[];
 }): ConversationTip[] {
   const tips: ConversationTip[] = [];
   const ctxPct = Math.round((args.maxContextTokens / args.contextWindow) * 100);
@@ -828,6 +964,9 @@ function buildTips(args: {
     });
   }
 
+  // Append signal-E tips (long-gap + topic change) before sorting.
+  for (const t of args.extraTips) tips.push(t);
+
   // Sort by economy potential first (descending tokens economisable), then by
   // severity. Tips without an `economyTokens` data field fall to the bottom of
   // their severity bucket.
@@ -846,4 +985,734 @@ function buildTips(args: {
 function shortenFile(path: string): string {
   const parts = path.split('/').filter(Boolean);
   return parts.length <= 2 ? path : parts.slice(-2).join('/');
+}
+
+// ---------------------------------------------------------------------------
+// Signal B — backtrack detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalizes a string for backtrack comparison: trims leading/trailing
+ * whitespace and collapses internal runs of whitespace to a single space.
+ */
+function normalizeForBacktrack(s: string): string {
+  return s.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Detects agent backtracks: cases where an Edit/Write/MultiEdit on file F
+ * at turn N reverts content that the agent itself produced at an earlier turn
+ * (i.e. `current.new_string` matches a prior `old_string` after normalization).
+ *
+ * Emits one {@link ConversationFrictionPoint} per confirmed backtrack, at the
+ * position of the LATER edit. `matchedPattern` format:
+ * `'backtrack:<file_basename>:T<earlier_turn>->T<later_turn>'`.
+ *
+ * Min-length guard: strings shorter than 20 chars after normalization are
+ * skipped (too generic — high false-positive risk). Fuzzy matching is out of
+ * scope (V1).
+ */
+function detectBacktracks(
+  toolUsesByFile: Map<string, ToolUseRecord[]>,
+): ConversationFrictionPoint[] {
+  const MIN_LEN = 20;
+  const results: ConversationFrictionPoint[] = [];
+
+  for (const [filePath, records] of toolUsesByFile) {
+    // Accumulate prior strings as we scan forward.
+    // We track {turn, normalized string} for each old_string / content seen.
+    const priorStrings: Array<{ turn: number; value: string }> = [];
+
+    for (let i = 0; i < records.length; i++) {
+      const rec = records[i];
+
+      // Collect the "new_string" candidates for the current op.
+      const newStrings: Array<{ value: string }> = [];
+
+      if (rec.toolName === 'Edit') {
+        const ns = rec.input['new_string'] as string | undefined;
+        if (ns) newStrings.push({ value: ns });
+      } else if (rec.toolName === 'Write') {
+        const content = rec.input['content'] as string | undefined;
+        if (content) newStrings.push({ value: content });
+      } else if (rec.toolName === 'MultiEdit') {
+        const edits = rec.input['edits'] as Array<{ old_string?: string; new_string?: string }> | undefined;
+        if (Array.isArray(edits)) {
+          for (const e of edits) {
+            if (e.new_string) newStrings.push({ value: e.new_string });
+          }
+        }
+      }
+
+      // Check each new_string against all prior old_strings.
+      for (const { value: rawNew } of newStrings) {
+        const normNew = normalizeForBacktrack(rawNew);
+        if (normNew.length < MIN_LEN) continue;
+
+        for (const prior of priorStrings) {
+          if (prior.value.length < MIN_LEN) continue;
+          if (normNew === prior.value) {
+            results.push({
+              offsetPct: 0, // Will be patched below if we track offsetPct per record.
+              timestamp: '',
+              snippet: rawNew.slice(0, 200),
+              matchedPattern: `backtrack:${basename(filePath)}:T${prior.turn}->T${rec.turn}`,
+              precedingTool: rec.toolName,
+            });
+            // Only flag once per new_string (first match is sufficient).
+            break;
+          }
+        }
+      }
+
+      // Add the old_string(s) of the current op to priorStrings for future comparisons.
+      if (rec.toolName === 'Edit') {
+        const os = rec.input['old_string'] as string | undefined;
+        if (os) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(os) });
+        // Also add new_string — a future edit could revert back to it.
+        const ns = rec.input['new_string'] as string | undefined;
+        if (ns) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(ns) });
+      } else if (rec.toolName === 'Write') {
+        const content = rec.input['content'] as string | undefined;
+        if (content) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(content) });
+      } else if (rec.toolName === 'MultiEdit') {
+        const edits = rec.input['edits'] as Array<{ old_string?: string; new_string?: string }> | undefined;
+        if (Array.isArray(edits)) {
+          for (const e of edits) {
+            if (e.old_string) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(e.old_string) });
+            if (e.new_string) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(e.new_string) });
+          }
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Friction zones v10 — stuck-cluster algorithm
+// ---------------------------------------------------------------------------
+
+/**
+ * Stop words for Jaccard tokenization (FR + EN, case-insensitive).
+ * These common function words carry no topical meaning and would inflate
+ * similarity between unrelated messages.
+ */
+const STOP_WORDS = new Set([
+  // FR
+  'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'donc',
+  'car', 'que', 'qui', 'quoi', 'comment', 'pourquoi', 'tu', 'je', 'il',
+  'elle', 'on', 'nous', 'vous', 'ils', 'elles', 'ce', 'cette', 'ces',
+  'mon', 'ton', 'son', 'ma', 'ta', 'sa', 'mes', 'tes', 'ses', 'avec',
+  'sans', 'pour', 'par', 'dans', 'sur', 'sous', 'entre', 'aussi',
+  'pas', 'plus', 'moins', 'tout', 'tous', 'toute', 'toutes', 'fait',
+  'faire', 'voir', 'avoir', 'être', 'etre', 'pouvoir', 'falloir',
+  'vouloir', 'savoir', 'oui', 'non', 'peut', 'doit', 'va',
+  // EN
+  'the', 'a', 'an', 'and', 'or', 'but', 'so', 'because', 'that',
+  'this', 'these', 'those', 'is', 'are', 'was', 'were', 'be',
+  'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
+  'will', 'would', 'should', 'can', 'could', 'may', 'might',
+  'i', 'you', 'he', 'she', 'we', 'they', 'it', 'us',
+  'for', 'in', 'on', 'at', 'to', 'of', 'with', 'as', 'by',
+  'yes', 'no', 'not', 'just', 'only',
+]);
+
+/**
+ * Synthetic "user" messages injected by Claude Code when the user hits ESC
+ * to interrupt a tool. They are NOT real user turns and must never seed a
+ * stuck-cluster.
+ */
+const SYNTHETIC_USER_TEXTS = new Set([
+  '[Request interrupted by user for tool use]',
+  '[Request interrupted by user]',
+]);
+
+function isSyntheticUserMessage(text: string): boolean {
+  return SYNTHETIC_USER_TEXTS.has(text.trim());
+}
+
+/**
+ * Tokenizes a string for the cluster Jaccard algorithm:
+ * - Lowercase
+ * - Split on /\W+/
+ * - Drop tokens shorter than 3 chars
+ * - Drop stop words
+ */
+function tokenizeForCluster(text: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const t of text.toLowerCase().split(/\W+/)) {
+    if (t.length >= 3 && !STOP_WORDS.has(t)) tokens.add(t);
+  }
+  return tokens;
+}
+
+/**
+ * Builds {@link ConversationFrictionZone} records using the stuck-cluster
+ * algorithm (v11 — sentiment removed).
+ *
+ * A zone is created when 3+ user messages on the same topic cluster together
+ * within a 10-user-message window, after the first 10 user messages (setup
+ * phase). Topic similarity is measured by Jaccard > 0.3 on content-bearing
+ * tokens (stop words removed). Signals S4/S5/S6 act as enrichments that
+ * bump severity, but do NOT create zones alone.
+ *
+ * `frictionPoints[]` is left unchanged by this function — only `frictionZones[]`
+ * is affected.
+ */
+function buildFrictionZones(args: {
+  sessionId: string;
+  frictionPoints: ConversationFrictionPoint[];
+  assistantTurnRecords: AssistantTurnRecord[];
+  userMessages: UserMessageRecord[];
+  toolUsesByFile: Map<string, ToolUseRecord[]>;
+  toolUseTurnById: Map<string, number>;
+  erroredToolUseIds: Set<string>;
+  entries: Record<string, unknown>[];
+}): ConversationFrictionZone[] {
+  const {
+    sessionId,
+    frictionPoints,
+    assistantTurnRecords,
+    userMessages,
+    toolUsesByFile,
+    toolUseTurnById,
+    erroredToolUseIds,
+    entries,
+  } = args;
+
+  if (userMessages.length < 3) return [];
+
+  // Build an index: assistantTurn → AssistantTurnRecord for fast lookup.
+  const assistantByTurn = new Map<number, AssistantTurnRecord>();
+  for (const rec of assistantTurnRecords) assistantByTurn.set(rec.turn, rec);
+
+  // ---------------------------------------------------------------------------
+  // 1. Cluster user messages by topic using Jaccard adjacency + union-find
+  // ---------------------------------------------------------------------------
+
+  const JACCARD_THRESHOLD = 0.3;
+  const USER_MSG_WINDOW = 10;   // max userMsgCounter gap between two cluster members
+  const MIN_CLUSTER_SIZE = 3;
+  const SETUP_SKIP = 10;        // ignore first N user messages (setup / orientation)
+  const CLUSTER_SPAN_MAX = 10;  // max(userMsgCounter) - min(userMsgCounter) in a cluster
+
+  // Pre-compute token sets for each user message. Drop Claude-Code synthetic
+  // interrupt messages — they're identical strings that would Jaccard 1.0 and
+  // form a phantom cluster (3+ ESC presses in a session = false-positive
+  // friction). userMsgCounter alignment with sentiment trace stays intact
+  // because we filter here, not at userMessages collection time.
+  const tokenSets: Array<{ idx: number; tokens: Set<string> }> = userMessages
+    .filter((um) => !isSyntheticUserMessage(um.text))
+    .map((um) => ({
+      idx: um.userMsgIdx,
+      tokens: tokenizeForCluster(um.text),
+    }));
+
+  // Union-Find (path-compression only — sufficient for this small n).
+  const parent = tokenSets.map((_, i) => i);
+  function find(x: number): number {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]]; // path halving
+      x = parent[x];
+    }
+    return x;
+  }
+  function union(x: number, y: number): void {
+    const rx = find(x);
+    const ry = find(y);
+    if (rx !== ry) parent[rx] = ry;
+  }
+
+  // Build adjacency: connect pairs (i, j) where j.userMsgCounter - i.userMsgCounter <= WINDOW
+  // and Jaccard(tokens_i, tokens_j) > THRESHOLD.
+  for (let i = 0; i < tokenSets.length; i++) {
+    const tsi = tokenSets[i];
+    if (tsi.tokens.size === 0) continue;
+    for (let j = i + 1; j < tokenSets.length; j++) {
+      const tsj = tokenSets[j];
+      if (tsj.idx - tsi.idx > USER_MSG_WINDOW) break;
+      if (tsj.tokens.size === 0) continue;
+      const sim = jaccard(tsi.tokens, tsj.tokens);
+      if (sim > JACCARD_THRESHOLD) union(i, j);
+    }
+  }
+
+  // Collect components: group indices by root.
+  const componentMap = new Map<number, number[]>();
+  for (let i = 0; i < tokenSets.length; i++) {
+    const root = find(i);
+    const arr = componentMap.get(root) ?? [];
+    arr.push(i);
+    componentMap.set(root, arr);
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. Filter clusters
+  // ---------------------------------------------------------------------------
+
+  // For each surviving cluster, collect needed pairwise Jaccard to compute avg.
+  // We approximate with the average of all pairs that are within the window.
+  interface CandidateCluster {
+    indices: number[];      // positions in tokenSets[] / userMessages[]
+    jaccardAvg: number;
+  }
+
+  const candidates: CandidateCluster[] = [];
+
+  for (const indices of componentMap.values()) {
+    if (indices.length < MIN_CLUSTER_SIZE) continue;
+
+    const msgs = indices.map((i) => userMessages[i]);
+    const minCounter = Math.min(...msgs.map((m) => m.userMsgIdx));
+    const maxCounter = Math.max(...msgs.map((m) => m.userMsgIdx));
+
+    // Skip setup phase: the cluster must start after the first SETUP_SKIP messages.
+    if (minCounter <= SETUP_SKIP) continue;
+
+    // Cluster span: stay within CLUSTER_SPAN_MAX user-message turns.
+    if (maxCounter - minCounter > CLUSTER_SPAN_MAX) continue;
+
+    // Compute average Jaccard over all pairs within the window.
+    let jaccardSum = 0;
+    let jaccardCount = 0;
+    const sortedIndices = [...indices].sort((a, b) => tokenSets[a].idx - tokenSets[b].idx);
+    for (let pi = 0; pi < sortedIndices.length; pi++) {
+      for (let pj = pi + 1; pj < sortedIndices.length; pj++) {
+        const idxA = sortedIndices[pi];
+        const idxB = sortedIndices[pj];
+        if (tokenSets[idxB].idx - tokenSets[idxA].idx > USER_MSG_WINDOW) continue;
+        jaccardSum += jaccard(tokenSets[idxA].tokens, tokenSets[idxB].tokens);
+        jaccardCount++;
+      }
+    }
+    const jaccardAvg = jaccardCount > 0 ? jaccardSum / jaccardCount : 0;
+
+    candidates.push({ indices: sortedIndices, jaccardAvg });
+  }
+
+  if (candidates.length === 0) return [];
+
+  // ---------------------------------------------------------------------------
+  // 3. Build helpers for enrichment signals and agentContext
+  // ---------------------------------------------------------------------------
+
+  // Map absolute entry positions by timestamp (for assistant turn range lookup).
+  const timestampToAbsIndex = new Map<string, number>();
+  for (let i = 0; i < entries.length; i++) {
+    const ts = entries[i]['timestamp'] as string | undefined;
+    if (ts && !timestampToAbsIndex.has(ts)) timestampToAbsIndex.set(ts, i);
+  }
+
+  // Map userMsgIdx → absolute entry index via timestamp.
+  const userMsgIdxToAbsIndex = new Map<number, number>();
+  for (const um of userMessages) {
+    const ai = timestampToAbsIndex.get(um.timestamp) ?? 0;
+    userMsgIdxToAbsIndex.set(um.userMsgIdx, ai);
+  }
+
+  // Map userMsgIdx → absolute turn number in the entries list (for start/endTurn).
+  // We define "absolute turn" here as the 1-indexed position in the entries list
+  // (not the assistant turn counter), so startTurn/endTurn are consistent with
+  // the existing zone API (which uses absolute entry-level positions).
+  // Actually: per the spec, startTurn/endTurn are "absolute turn" of the FIRST/LAST
+  // user message in the cluster. We'll use the absoluteIndex (entries position + 1).
+
+  // Backtrack map: assistant turn → file basename.
+  const backtrackedTurnToBasename = new Map<number, string>();
+  for (const fp of frictionPoints) {
+    const m = fp.matchedPattern.match(/^backtrack:(.+):T\d+->T(\d+)$/);
+    if (m) backtrackedTurnToBasename.set(parseInt(m[2], 10), m[1]);
+  }
+
+  // Build tool-error enrichment maps for S5/S6 detection.
+  // S5: ≥ 2 tool errors in the zone.
+  // S6: ≥ 2 "string not found" errors on same file in the zone.
+  const STRING_NOT_FOUND_RE = /string not found|not_found_in_file/i;
+
+  // tool_use_id → file path (for S6).
+  const toolUseIdToFilePath = new Map<string, string>();
+  for (const entry of entries) {
+    if (entry['type'] !== 'assistant') continue;
+    const msg = entry['message'] as { content?: unknown[] } | undefined;
+    if (!Array.isArray(msg?.content)) continue;
+    for (const block of msg!.content) {
+      const b = block as { type?: string; id?: string; name?: string; input?: Record<string, unknown> };
+      if (b.type === 'tool_use' && b.id && (b.name === 'Edit' || b.name === 'MultiEdit')) {
+        const fp = b.input?.['file_path'] as string | undefined;
+        if (fp) toolUseIdToFilePath.set(b.id, fp);
+      }
+    }
+  }
+
+  // tool_use_id → error text (for S6).
+  const toolUseIdToErrorText = new Map<string, string>();
+  for (const entry of entries) {
+    if (entry['type'] !== 'user') continue;
+    const msg = entry['message'] as { content?: unknown } | undefined;
+    if (!Array.isArray(msg?.content)) continue;
+    for (const block of msg!.content) {
+      const b = block as { type?: string; tool_use_id?: string; is_error?: boolean; content?: unknown };
+      if (b.type !== 'tool_result' || !b.tool_use_id) continue;
+      if (!erroredToolUseIds.has(b.tool_use_id)) continue;
+      let errorText = '';
+      if (typeof b.content === 'string') {
+        errorText = b.content;
+      } else if (Array.isArray(b.content)) {
+        for (const part of b.content as Array<{ type?: string; text?: string }>) {
+          if (part.type === 'text' && part.text) { errorText = part.text; break; }
+        }
+      }
+      if (errorText) toolUseIdToErrorText.set(b.tool_use_id, errorText);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. For each candidate cluster → build a ConversationFrictionZone
+  // ---------------------------------------------------------------------------
+
+  const zones: ConversationFrictionZone[] = [];
+
+  for (const { indices, jaccardAvg } of candidates) {
+    const clusterMsgs = indices.map((i) => userMessages[i]);
+    const clusterSize = clusterMsgs.length;
+
+    // startTurn / endTurn: absolute entry index (1-based) of first/last cluster message.
+    const firstMsg = clusterMsgs[0];
+    const lastMsg = clusterMsgs[clusterMsgs.length - 1];
+    const startTurn = (timestampToAbsIndex.get(firstMsg.timestamp) ?? 0) + 1;
+    const endTurn = (timestampToAbsIndex.get(lastMsg.timestamp) ?? 0) + 1;
+    const startTimestamp = firstMsg.timestamp;
+    const endTimestamp = lastMsg.timestamp;
+
+    // Determine assistant turn range spanning this zone (for agentContext).
+    // Include all assistant turns whose absolute index is in [startTurn-1, endTurn-1].
+    const absStart = startTurn - 1;
+    const absEnd = endTurn - 1;
+    let aStartTurn = Infinity;
+    let aEndTurn = 0;
+    for (const aRec of assistantTurnRecords) {
+      const ai = timestampToAbsIndex.get(aRec.timestamp) ?? 0;
+      if (ai >= absStart && ai <= absEnd) {
+        if (aRec.turn < aStartTurn) aStartTurn = aRec.turn;
+        if (aRec.turn > aEndTurn) aEndTurn = aRec.turn;
+      }
+    }
+    // Fallback when no assistant turns land precisely in the range.
+    if (!isFinite(aStartTurn)) {
+      aStartTurn = 1;
+      aEndTurn = assistantTurnRecords.length > 0 ? assistantTurnRecords[assistantTurnRecords.length - 1].turn : 1;
+    }
+
+    // Compute agentContext over [aStartTurn, aEndTurn].
+    const filesTouchedSet: string[] = [];
+    const filesTouchedSeen = new Set<string>();
+    let toolCallsCount = 0;
+    let toolErrorsCount = 0;
+    const editCountsByFile = new Map<string, number>();
+
+    for (let t = aStartTurn; t <= aEndTurn; t++) {
+      const aRec = assistantByTurn.get(t);
+      if (!aRec) continue;
+      toolCallsCount += aRec.toolUses.length;
+      for (const tu of aRec.toolUses) {
+        if (tu.filePath && !filesTouchedSeen.has(tu.filePath)) {
+          filesTouchedSeen.add(tu.filePath);
+          filesTouchedSet.push(tu.filePath);
+        }
+        if (
+          tu.filePath &&
+          (tu.toolName === 'Edit' || tu.toolName === 'Write' || tu.toolName === 'MultiEdit')
+        ) {
+          editCountsByFile.set(tu.filePath, (editCountsByFile.get(tu.filePath) ?? 0) + 1);
+        }
+      }
+    }
+
+    // Count errors within the zone.
+    for (const toolUseId of erroredToolUseIds) {
+      const turn = toolUseTurnById.get(toolUseId);
+      if (turn !== undefined && turn >= aStartTurn && turn <= aEndTurn) toolErrorsCount++;
+    }
+
+    // backtrackedFiles.
+    const backtrackedFiles: string[] = [];
+    for (const [laterTurn, bn] of backtrackedTurnToBasename) {
+      if (laterTurn >= aStartTurn && laterTurn <= aEndTurn) {
+        const fullPath = filesTouchedSet.find((p) => p.endsWith('/' + bn) || p === bn);
+        const target = fullPath ?? bn;
+        if (!backtrackedFiles.includes(target)) backtrackedFiles.push(target);
+      }
+    }
+
+    // keyActions.
+    const keyActions: string[] = [];
+    if (toolErrorsCount > 0) {
+      const errorToolCounts = new Map<string, number>();
+      for (const toolUseId of erroredToolUseIds) {
+        const turn = toolUseTurnById.get(toolUseId);
+        if (turn !== undefined && turn >= aStartTurn && turn <= aEndTurn) {
+          const aRec = assistantByTurn.get(turn);
+          if (aRec && aRec.toolUses.length > 0) {
+            const lastName = aRec.toolUses[aRec.toolUses.length - 1].toolName;
+            errorToolCounts.set(lastName, (errorToolCounts.get(lastName) ?? 0) + 1);
+          }
+        }
+      }
+      for (const [toolName, count] of errorToolCounts) {
+        if (keyActions.length >= 5) break;
+        keyActions.push(`${toolName} failed ×${count}`);
+      }
+    }
+    const sortedEdits = Array.from(editCountsByFile.entries())
+      .filter(([, c]) => c >= 2)
+      .sort((a, b) => b[1] - a[1]);
+    for (const [fp, count] of sortedEdits) {
+      if (keyActions.length >= 5) break;
+      keyActions.push(`Edit ${fp.split('/').pop() ?? fp} ×${count}`);
+    }
+    if (keyActions.length < 5) {
+      const notableTools = new Set(['Bash', 'Read', 'WebFetch', 'WebSearch']);
+      const seenNotable = new Set<string>();
+      for (let t = aStartTurn; t <= aEndTurn && keyActions.length < 5; t++) {
+        const aRec = assistantByTurn.get(t);
+        if (!aRec) continue;
+        for (const tu of aRec.toolUses) {
+          if (!notableTools.has(tu.toolName) || seenNotable.has(tu.toolName)) continue;
+          seenNotable.add(tu.toolName);
+          keyActions.push(
+            tu.toolName === 'Bash' && tu.bashCommand
+              ? `Bash: ${tu.bashCommand.slice(0, 40)}`
+              : tu.toolName,
+          );
+        }
+      }
+    }
+
+    // ---------------------------------------------------------------------------
+    // 5. Enrichment signals (S4/S5/S6) — bumps severity, used as badges.
+    // ---------------------------------------------------------------------------
+
+    const enrichSignals = new Set<'S4' | 'S5' | 'S6'>();
+
+    // S4: any backtrack within the assistant zone.
+    if (backtrackedFiles.length > 0) enrichSignals.add('S4');
+
+    // S5: ≥ 2 tool errors in the zone.
+    if (toolErrorsCount >= 2) enrichSignals.add('S5');
+
+    // S6: ≥ 2 "string not found" errors on same file in the zone.
+    const notFoundByFile = new Map<string, number>();
+    for (const toolUseId of erroredToolUseIds) {
+      const turn = toolUseTurnById.get(toolUseId);
+      if (turn === undefined || turn < aStartTurn || turn > aEndTurn) continue;
+      const errorText = toolUseIdToErrorText.get(toolUseId) ?? '';
+      if (!STRING_NOT_FOUND_RE.test(errorText)) continue;
+      const filePath = toolUseIdToFilePath.get(toolUseId);
+      if (!filePath) continue;
+      notFoundByFile.set(filePath, (notFoundByFile.get(filePath) ?? 0) + 1);
+    }
+    if ([...notFoundByFile.values()].some((c) => c >= 2)) enrichSignals.add('S6');
+
+    const signalKinds = [...enrichSignals].sort() as Array<'S4' | 'S5' | 'S6'>;
+
+    // Severity: base = cluster size (3 → medium, 5+ → high). Bump if any enrichment.
+    let severity: ConversationFrictionZone['severity'] =
+      clusterSize >= 5 ? 'high' : 'medium';
+    if (severity === 'medium' && signalKinds.length > 0) severity = 'high';
+
+    // reactionPoint: last cluster message, with stuck-cluster pattern.
+    const reactionPoint: ConversationFrictionPoint = {
+      offsetPct: lastMsg.offsetPct,
+      timestamp: lastMsg.timestamp,
+      snippet: lastMsg.text.slice(0, 200),
+      matchedPattern: `stuck-cluster:${clusterSize}:${jaccardAvg.toFixed(2)}`,
+      precedingTool: null,
+    };
+
+    // Zone id.
+    const zoneId = `${sessionId}:${startTurn}:${endTurn}:cluster${clusterSize}`;
+
+    zones.push({
+      id: zoneId,
+      startTurn,
+      endTurn,
+      startTimestamp,
+      endTimestamp,
+      reactionPoint,
+      agentContext: {
+        filesTouched: filesTouchedSet,
+        toolCallsCount,
+        toolErrorsCount,
+        backtrackedFiles,
+        keyActions,
+      },
+      clusterSize,
+      severity,
+      signalKinds: signalKinds.length > 0 ? signalKinds : undefined,
+    });
+  }
+
+  // Sort zones by startTurn for stable rendering order.
+  zones.sort((a, b) => a.startTurn - b.startTurn);
+
+  return zones;
+}
+
+// ---------------------------------------------------------------------------
+// Signal C — user message repetition detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Tokenizes a string for Jaccard similarity: lowercase, split on non-word
+ * characters, drop tokens shorter than 3 chars.
+ */
+function tokenize(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/\W+/)
+      .filter((t) => t.length >= 3),
+  );
+}
+
+/**
+ * Computes Jaccard similarity between two token sets: |A ∩ B| / |A ∪ B|.
+ * Returns 0 if the union is empty.
+ */
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const t of a) {
+    if (b.has(t)) intersection++;
+  }
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/**
+ * Detects repeated user messages: when a user message has Jaccard similarity
+ * > 0.5 with any of the previous 5 user messages (on 3+-char lowercased tokens).
+ *
+ * Emits one {@link ConversationFrictionPoint} per detected repetition.
+ * `matchedPattern` format: `'repetition:T<previous_userMsgIdx>:<jaccard.toFixed(2)>'`.
+ *
+ * Skips pairs where either message has fewer than 3 unique tokens.
+ */
+function detectRepetitions(userMessages: UserMessageRecord[]): ConversationFrictionPoint[] {
+  const JACCARD_THRESHOLD = 0.5;
+  const WINDOW = 5;
+  const results: ConversationFrictionPoint[] = [];
+
+  for (let i = 1; i < userMessages.length; i++) {
+    const curr = userMessages[i];
+    const currTokens = tokenize(curr.text);
+    if (currTokens.size < 3) continue;
+
+    const start = Math.max(0, i - WINDOW);
+    let bestJaccard = 0;
+    let bestPrevIdx = -1;
+
+    for (let j = start; j < i; j++) {
+      const prev = userMessages[j];
+      const prevTokens = tokenize(prev.text);
+      if (prevTokens.size < 3) continue;
+
+      const sim = jaccard(currTokens, prevTokens);
+      if (sim > JACCARD_THRESHOLD && sim > bestJaccard) {
+        bestJaccard = sim;
+        bestPrevIdx = prev.userMsgIdx;
+      }
+    }
+
+    if (bestPrevIdx >= 0) {
+      results.push({
+        offsetPct: curr.offsetPct,
+        timestamp: curr.timestamp,
+        snippet: curr.text.slice(0, 200),
+        matchedPattern: `repetition:T${bestPrevIdx}:${bestJaccard.toFixed(2)}`,
+        precedingTool: null,
+      });
+    }
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Signal E — long gap + topic change detection
+// ---------------------------------------------------------------------------
+
+const LONG_GAP_MS = 30 * 60 * 1000; // 30 minutes
+const TOPIC_CHANGE_JACCARD_MAX = 0.2;
+
+/**
+ * Detects long pauses (> 30 min) between consecutive user messages where the
+ * two messages also have very different content (Jaccard < 0.2), indicating
+ * the user returned to start a new topic.
+ *
+ * Emits one {@link ConversationTip} per qualifying pair with
+ * `id: 'long-gap-topic-change'`, `category: 'workflow'`. Severity is `'info'`
+ * for a single occurrence and `'warning'` when 2+ pairs are found.
+ *
+ * Aggregation choice: individual tips are emitted per pair (not aggregated)
+ * up to 2 pairs. If 3+ pairs are found, they are collapsed into a single tip
+ * with `data.count` to avoid flooding the UI with workflow tips.
+ */
+function detectLongGapTopicChanges(userMessages: UserMessageRecord[]): ConversationTip[] {
+  interface GapRecord {
+    gapMin: number;
+    turn: number;
+  }
+
+  const qualifyingPairs: GapRecord[] = [];
+
+  for (let i = 1; i < userMessages.length; i++) {
+    const prev = userMessages[i - 1];
+    const curr = userMessages[i];
+
+    if (!prev.timestamp || !curr.timestamp) continue;
+
+    const gapMs = new Date(curr.timestamp).getTime() - new Date(prev.timestamp).getTime();
+    if (gapMs <= LONG_GAP_MS) continue;
+
+    const prevTokens = tokenize(prev.text);
+    const currTokens = tokenize(curr.text);
+    const sim = jaccard(prevTokens, currTokens);
+
+    if (sim < TOPIC_CHANGE_JACCARD_MAX) {
+      qualifyingPairs.push({
+        gapMin: Math.round(gapMs / 60_000),
+        turn: curr.userMsgIdx,
+      });
+    }
+  }
+
+  if (qualifyingPairs.length === 0) return [];
+
+  // Collapse 3+ pairs into a single aggregated tip.
+  if (qualifyingPairs.length >= 3) {
+    return [
+      {
+        id: 'long-gap-topic-change',
+        category: 'workflow',
+        severity: 'warning',
+        data: {
+          gapMin: qualifyingPairs[0].gapMin,
+          turn: qualifyingPairs[0].turn,
+          count: qualifyingPairs.length,
+        },
+      },
+    ];
+  }
+
+  // 1 or 2 pairs: emit one tip per pair.
+  const severity: ConversationTip['severity'] = qualifyingPairs.length >= 2 ? 'warning' : 'info';
+  return qualifyingPairs.map((p) => ({
+    id: 'long-gap-topic-change',
+    category: 'workflow' as const,
+    severity,
+    data: { gapMin: p.gapMin, turn: p.turn },
+  }));
 }

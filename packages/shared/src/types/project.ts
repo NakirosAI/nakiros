@@ -111,6 +111,78 @@ export interface ConversationFrictionPoint {
 }
 
 /**
+ * Richer friction view: a span of time where the user was stuck on the same
+ * topic, sending 3+ messages on it within a 10-user-message window. Built by
+ * `analyzeConversation` using a Jaccard-based cluster algorithm (v10).
+ *
+ * Frontend renders zones as background rectangles in the sismograph and
+ * as expandable sections in the timeline.
+ */
+export interface ConversationFrictionZone {
+  /**
+   * Stable id (`<sessionId>:<startTurn>:<endTurn>:<signalCodes>`), useful for
+   * React keys and dedup across re-analyses.
+   */
+  id: string;
+  /**
+   * 1-indexed absolute turn of the FIRST user message in the stuck cluster.
+   */
+  startTurn: number;
+  /** 1-indexed absolute turn of the LAST user message in the stuck cluster. */
+  endTurn: number;
+  startTimestamp: string;
+  endTimestamp: string;
+  /**
+   * The last user message in the cluster, annotated with the cluster summary.
+   * `matchedPattern` format: `'stuck-cluster:<size>:<jaccardAvg>'`
+   * (e.g. `'stuck-cluster:4:0.48'`).
+   */
+  reactionPoint: ConversationFrictionPoint;
+  /** Summary of what the agent did in `[startTurn, endTurn]`. */
+  agentContext: {
+    /** Unique file paths touched by Edit/Write/MultiEdit/NotebookEdit, in order of first appearance. */
+    filesTouched: string[];
+    /** Total number of tool_uses by the assistant within the zone. */
+    toolCallsCount: number;
+    /** Count of tool_uses whose result was an error. */
+    toolErrorsCount: number;
+    /** Subset of `filesTouched` where the agent reverted its own modification. */
+    backtrackedFiles: string[];
+    /**
+     * Up to 5 short human-readable labels describing key actions.
+     * Examples: `["Edit auth.ts ×4", "Bash npm test failed", "Read package.json"]`.
+     * Ordered by relevance: errors first, then high-count edits, then notable singles.
+     */
+    keyActions: string[];
+  };
+  /**
+   * Number of user messages grouped into this stuck cluster.
+   * Frontend can display: "4 messages on the same topic".
+   */
+  clusterSize: number;
+  /**
+   * Drives the background rect colour and drawer badge. Never `'low'` — the
+   * cluster is already the minimum bar. Base: 3 msgs = medium, 5+ = high.
+   * Bumped one level when any enrichment signal (S1/S4/S5/S6) is present.
+   */
+  severity: 'medium' | 'high';
+  /**
+   * Enrichment signals present inside the zone. These no longer create the
+   * zone (the cluster does), but they bump severity and render as badges.
+   * Optional for backward-compat with cached analyses from v10 and earlier.
+   *
+   * - S4: Agent backtrack (Edit/Write reverts its own prior output on same file)
+   * - S5: Tool error spike (≥ 2 tool errors within zone)
+   * - S6: Repeated edit failure (≥ 2 "string not found"-like errors on same file)
+   *
+   * Note: S1 (sentiment) was removed in v11 — the bert model produced too many
+   * false positives on French dev/agent dialog. S2 (repetition) was removed
+   * earlier — the cluster algorithm already captures the stuck-on-topic signal.
+   */
+  signalKinds?: Array<'S4' | 'S5' | 'S6'>;
+}
+
+/**
  * One assistant turn's cost breakdown — drives the sismograph cost-stacked
  * track. All token fields are raw (input-token-equivalent multipliers are
  * applied to compute `billed` and `cumBilled`).
@@ -256,6 +328,8 @@ export interface ConversationAnalysis {
 
   // --- Friction ---
   frictionPoints: ConversationFrictionPoint[];
+  /** Richer friction view: one zone per user-reaction, with agent context spanning the preceding assistant turns. */
+  frictionZones: ConversationFrictionZone[];
 
   // --- Tool use ---
   toolStats: Record<string, ConversationToolStats>;

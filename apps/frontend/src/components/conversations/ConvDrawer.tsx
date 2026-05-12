@@ -4,17 +4,13 @@ import type { ConversationAnalysis } from '@nakiros/shared';
 import { X } from 'lucide-react';
 import { DiagnosticTab } from './DiagnosticTab';
 import { TimelineTab } from './TimelineTab';
-import { TranscriptTab } from './TranscriptTab';
-import { FrictionsTab } from './FrictionsTab';
 
 interface Props {
   analysis: ConversationAnalysis;
   onClose(): void;
-  /** Threaded down from `NewShell` so the Frictions tab can open run tabs. */
-  onOpenRunTab?: import('../../lib/run-launcher').OpenRunTabCallback;
 }
 
-type DrawerTab = 'diagnostic' | 'timeline' | 'transcript' | 'frictions';
+type DrawerTab = 'diagnostic' | 'timeline';
 
 interface TabDef {
   id: DrawerTab;
@@ -24,19 +20,17 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'diagnostic', labelKey: 'drawer.tabs.diagnostic' },
   { id: 'timeline', labelKey: 'drawer.tabs.timeline' },
-  { id: 'transcript', labelKey: 'drawer.tabs.transcript' },
-  { id: 'frictions', labelKey: 'drawer.tabs.frictions' },
 ];
 
 /**
  * Slide-in drawer over the {@link ConversationsScreen} list. Mirrors the
  * mockup `ConvDrawer` (`apps/Nakiros-new-design/screens-conversations.jsx`):
  * compact header with score chip + zone badge + session metadata + title,
- * tab nav, then the active tab body. Diagnostic + Timeline + Transcript
- * are wired; the Export tab from the mockup is deferred (no MD/PDF/Slack
- * export endpoint exists yet).
+ * tab nav, then the active tab body. Diagnostic and Timeline are the two
+ * live tabs; Transcript and Frictions were removed (redundant with Timeline
+ * and superseded by frictionZones in Diagnostic respectively).
  */
-export function ConvDrawer({ analysis, onClose, onOpenRunTab }: Props) {
+export function ConvDrawer({ analysis, onClose }: Props) {
   const { t } = useTranslation('conversations');
   const tone = toneFor(analysis.healthZone);
   const [tab, setTab] = useState<DrawerTab>('diagnostic');
@@ -134,14 +128,6 @@ export function ConvDrawer({ analysis, onClose, onOpenRunTab }: Props) {
         <div className="flex-1 overflow-y-auto">
           {tab === 'diagnostic' && <DiagnosticTab analysis={analysis} />}
           {tab === 'timeline' && <TimelineTab analysis={analysis} />}
-          {tab === 'transcript' && <TranscriptTab analysis={analysis} />}
-          {tab === 'frictions' && (
-            <FrictionsTab
-              projectId={analysis.projectId}
-              sessionId={analysis.sessionId}
-              onOpenRunTab={onOpenRunTab}
-            />
-          )}
         </div>
       </aside>
     </div>

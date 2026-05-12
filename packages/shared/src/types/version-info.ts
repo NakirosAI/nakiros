@@ -1,4 +1,17 @@
 /**
+ * Changelog content returned by `meta:getChangelog`. The markdown is the full
+ * content of the workspace `CHANGELOG.md` (Keep-a-Changelog format). Empty
+ * string means the file could not be resolved at runtime (graceful fallback).
+ */
+export interface GetChangelogResult {
+  /** Full raw markdown content of CHANGELOG.md, or empty string if unavailable. */
+  markdown: string;
+  /** Currently running daemon version — convenience field so the frontend can
+   *  scroll to the right section without a separate `meta:getVersionInfo` call. */
+  version: string;
+}
+
+/**
  * Version info surfaced to the UI: installed Nakiros version plus the latest
  * version published on npm. Powers the "update available" banner in the app.
  */

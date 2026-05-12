@@ -13,6 +13,7 @@ export const IPC_CHANNELS = {
 
   // Meta
   'meta:getVersionInfo': 'meta:getVersionInfo',
+  'meta:getChangelog': 'meta:getChangelog',
 
   // Preferences
   'preferences:get': 'preferences:get',

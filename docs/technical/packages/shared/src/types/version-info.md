@@ -2,9 +2,23 @@
 
 **Path:** `packages/shared/src/types/version-info.ts`
 
-Shape returned by the `meta:getVersionInfo` IPC call. Drives the "update available" banner in the Nakiros app.
+Shared types for the `meta:*` IPC channels. Drives the "update available" banner and the changelog modal in the Nakiros app.
 
 ## Exports
+
+### `interface GetChangelogResult`
+
+Result returned by the `meta:getChangelog` IPC channel.
+
+```ts
+export interface GetChangelogResult {
+  /** Full raw markdown content of CHANGELOG.md, or empty string if unavailable. */
+  markdown: string;
+  /** Currently running daemon version — convenience field so the frontend can
+   *  scroll to the right section without a separate `meta:getVersionInfo` call. */
+  version: string;
+}
+```
 
 ### `interface VersionInfo`
 

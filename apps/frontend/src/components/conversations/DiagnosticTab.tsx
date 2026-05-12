@@ -11,10 +11,9 @@ interface Props {
 /**
  * Diagnostic tab body of the conversation drawer. Mirrors the layout of the
  * mockup `ConvDrawer.diagnostic` (`apps/Nakiros-new-design/screens-conversations.jsx`):
- * narrative card, recommendations, sismograph (1-track in PR10a — uplift to
- * 5-tracks lands in PR10c), reading guide, KPI grid, cache efficiency, and a
- * 1fr/1fr split for top tools and hot files. Reads `ConversationAnalysis`
- * straight from IPC — no derived/mocked data.
+ * narrative card, recommendations, sismograph (cost-stacked + ctx), reading
+ * guide, KPI grid, cache efficiency, and a 1fr/1fr split for top tools and
+ * hot files. Reads `ConversationAnalysis` straight from IPC — no derived/mocked data.
  */
 export function DiagnosticTab({ analysis }: Props) {
   const { t } = useTranslation('conversations');

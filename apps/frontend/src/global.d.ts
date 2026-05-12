@@ -34,6 +34,7 @@ import type {
   SkillDiffEntry,
   SkillDiffFilePayload,
   VersionInfo,
+  GetChangelogResult,
   ResolvedLanguage,
   Project,
   ProjectAggregate,
@@ -136,6 +137,8 @@ declare global {
 
       // Meta
       getVersionInfo(options?: { force?: boolean }): Promise<VersionInfo>;
+      /** Returns the raw CHANGELOG.md content and the running version. */
+      getChangelog(): Promise<GetChangelogResult>;
 
       // Preferences
       getPreferences(): Promise<AppPreferences>;

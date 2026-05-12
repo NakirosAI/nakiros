@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import type { ConversationAnalysis, ConversationCostSample } from '@nakiros/shared';
+import type { ConversationAnalysis, ConversationCostSample, ConversationFrictionZone } from '@nakiros/shared';
 import { useTranslation } from 'react-i18next';
 
 interface Props {
@@ -7,7 +7,6 @@ interface Props {
 }
 
 const W = 920;
-const H = 360;
 const PAD_L = 70;
 const PAD_R = 18;
 const PAD_T = 6;
@@ -20,6 +19,7 @@ const PAD_B = 36;
 const Y_COST_BASE = PAD_T + EVENT_LANE_H + COST_H;
 const Y_CTX_TOP = Y_COST_BASE + GAP;
 const Y_CTX_BASE = Y_CTX_TOP + CTX_H;
+const H = Y_CTX_BASE + PAD_B;
 const INNER_W = W - PAD_L - PAD_R;
 
 const HEALTHY_PCT = 0.25;
@@ -63,6 +63,10 @@ export function Sismograph({ analysis }: Props) {
   const { t } = useTranslation('conversations');
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
+  const [hoverZone, setHoverZone] = useState<{
+    zone: ConversationFrictionZone;
+    x: number;
+  } | null>(null);
 
   // Downsample for paths (keeps SVG light on huge sessions).
   const samples = useMemo(
@@ -174,7 +178,14 @@ export function Sismograph({ analysis }: Props) {
     }
     for (const f of analysis.frictionPoints) {
       const tMs = new Date(f.timestamp).getTime() - new Date(analysis.startedAt).getTime();
-      all.push({ kind: 'friction', tMs, label: t('hover.friction'), detail: `"${f.snippet.slice(0, 60)}…"` });
+      const kind = frictionKindFromPattern(f.matchedPattern);
+      const label =
+        kind === 'sentiment' ? t('hover.frictionSentiment') :
+        kind === 'backtrack' ? t('hover.frictionBacktrack') :
+        kind === 'repetition' ? t('hover.frictionRepetition') :
+        t('hover.friction');
+      const detail = frictionDetail(kind, f.matchedPattern, f.snippet);
+      all.push({ kind: 'friction', tMs, label, detail });
     }
     let nearest: (M & { d: number }) | null = null;
     for (const m of all) {
@@ -238,6 +249,30 @@ export function Sismograph({ analysis }: Props) {
         >
           ctx
         </text>
+        {/* Friction zone background rectangles — rendered first (lowest z-order) */}
+        {(analysis.frictionZones ?? []).map((zone, i) => {
+          const zoneStartMs = new Date(zone.startTimestamp).getTime() - new Date(analysis.startedAt).getTime();
+          const zoneEndMs = new Date(zone.endTimestamp).getTime() - new Date(analysis.startedAt).getTime();
+          const x1 = xFor(zoneStartMs);
+          const x2 = xFor(zoneEndMs);
+          const rectWidth = Math.max(2, x2 - x1);
+          const rectHeight = Y_CTX_BASE - PAD_T;
+          const fillOpacity = zone.severity === 'high' ? 0.16 : zone.severity === 'medium' ? 0.10 : 0.06;
+          return (
+            <rect
+              key={`fz${i}`}
+              x={x1}
+              y={PAD_T}
+              width={rectWidth}
+              height={rectHeight}
+              fill="var(--n-critical, #e0405a)"
+              fillOpacity={fillOpacity}
+              style={{ cursor: 'default' }}
+              onMouseEnter={() => setHoverZone({ zone, x: (x1 + x2) / 2 })}
+              onMouseLeave={() => setHoverZone(null)}
+            />
+          );
+        })}
 
         {/* Vertical tick gridlines */}
         {ticks.map((m, i) => {
@@ -426,22 +461,23 @@ export function Sismograph({ analysis }: Props) {
           />
         )}
 
-        {/* X-axis ticks */}
+        {/* X-axis ticks — anchored below ctx */}
         {ticks.map((m, i) => {
           const x = xFor(m * 60_000);
           const isEdge = i === 0 || i === ticks.length - 1;
+          const axisY = Y_CTX_BASE;
           return (
             <g key={`tick${m}`}>
               <line
                 x1={x}
                 x2={x}
-                y1={Y_CTX_BASE}
-                y2={Y_CTX_BASE + 4}
+                y1={axisY}
+                y2={axisY + 4}
                 stroke="var(--n-border-default)"
               />
               <text
                 x={x}
-                y={Y_CTX_BASE + 14}
+                y={axisY + 14}
                 textAnchor="middle"
                 fontFamily="var(--n-font-mono)"
                 fontSize={9.5}
@@ -452,7 +488,7 @@ export function Sismograph({ analysis }: Props) {
               {startClock && (
                 <text
                   x={x}
-                  y={Y_CTX_BASE + 25}
+                  y={axisY + 25}
                   textAnchor="middle"
                   fontFamily="var(--n-font-mono)"
                   fontSize={8.5}
@@ -495,6 +531,46 @@ export function Sismograph({ analysis }: Props) {
           contextWindow={analysis.contextWindow}
           t={t}
         />
+      )}
+
+      {/* Friction zone hover tooltip */}
+      {hoverZone && (
+        <div
+          className="pointer-events-none absolute z-20 max-w-xs rounded-md border border-[var(--n-border-default)] bg-[var(--n-bg-surface)] px-3 py-2 text-xs shadow-md"
+          style={{
+            left: `calc(${(hoverZone.x / W) * 100}% + 8px)`,
+            top: 28,
+          }}
+        >
+          <div className="mb-1 flex items-center gap-1.5">
+            <span
+              className="inline-block rounded-sm px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white"
+              style={{
+                background: 'var(--n-critical, #e0405a)',
+                letterSpacing: '0.6px',
+              }}
+            >
+              {hoverZone.zone.severity}
+            </span>
+            <span className="text-[var(--n-fg-muted)]">
+              {(() => {
+                const kind = frictionKindFromPattern(hoverZone.zone.reactionPoint.matchedPattern);
+                return kind === 'sentiment' ? t('hover.frictionSentiment')
+                  : kind === 'backtrack' ? t('hover.frictionBacktrack')
+                  : kind === 'repetition' ? t('hover.frictionRepetition')
+                  : t('hover.friction');
+              })()}
+            </span>
+          </div>
+          <div className="text-[var(--n-fg-muted)]">
+            {t('hover.zoneAgentContext', {
+              calls: hoverZone.zone.agentContext.toolCallsCount,
+              errors: hoverZone.zone.agentContext.toolErrorsCount,
+              filesCount: hoverZone.zone.agentContext.filesTouched.length,
+              defaultValue: `Agent: {{calls}} tool calls, {{errors}} errors, {{filesCount}} files`,
+            })}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -618,6 +694,57 @@ function Row({ color, label, value }: { color: string; label: string; value: str
       <span className="tabular-nums text-[var(--n-fg)]">{value}</span>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Friction helpers
+// ---------------------------------------------------------------------------
+
+/** Classify a `matchedPattern` string into one of the known friction families. */
+export function frictionKindFromPattern(matchedPattern: string): 'sentiment' | 'backtrack' | 'repetition' | 'other' {
+  if (matchedPattern.startsWith('sentiment:')) return 'sentiment';
+  if (matchedPattern.startsWith('backtrack:')) return 'backtrack';
+  if (matchedPattern.startsWith('repetition:')) return 'repetition';
+  return 'other';
+}
+
+function parseBacktrack(matchedPattern: string): { file: string; from: string; to: string } | null {
+  const m = matchedPattern.match(/^backtrack:(.+):T(\d+)→T(\d+)$/);
+  return m ? { file: m[1], from: m[2], to: m[3] } : null;
+}
+
+function parseRepetition(matchedPattern: string): { turn: string; jaccard: number } | null {
+  const m = matchedPattern.match(/^repetition:T(\d+):([\d.]+)$/);
+  return m ? { turn: m[1], jaccard: parseFloat(m[2]) } : null;
+}
+
+/**
+ * Build a human-readable tooltip detail line for a friction point.
+ * - sentiment: show the snippet (user message text is informative)
+ * - backtrack: show the file basename and turn range
+ * - repetition: show the turn and similarity percentage
+ * - other: fall back to the snippet
+ */
+function frictionDetail(
+  kind: 'sentiment' | 'backtrack' | 'repetition' | 'other',
+  matchedPattern: string,
+  snippet: string,
+): string {
+  if (kind === 'backtrack') {
+    const parsed = parseBacktrack(matchedPattern);
+    if (parsed) {
+      const basename = parsed.file.split('/').pop() ?? parsed.file;
+      return `${basename} · T${parsed.from}→T${parsed.to}`;
+    }
+  }
+  if (kind === 'repetition') {
+    const parsed = parseRepetition(matchedPattern);
+    if (parsed) {
+      return `turn T${parsed.turn} · ${Math.round(parsed.jaccard * 100)}% similar`;
+    }
+  }
+  // sentiment + other: snippet is the most informative detail
+  return `"${snippet.slice(0, 60)}…"`;
 }
 
 // ---------------------------------------------------------------------------

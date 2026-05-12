@@ -5,6 +5,647 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] — 2026-05-12
+
+Friction detection release. Nakiros stops trying to read user emotion
+and starts detecting when the user is **stuck on a topic** — clusters
+of related user messages within a short window, enriched by agent-side
+indicators (revert, tool errors, edit failures). The drawer is
+simplified to two tabs, the changelog gets its own modal, and the
+sentiment brick is gone for good.
+
+### Added
+
+- **Friction zones — stuck-cluster algorithm.** A friction is now detected
+  when 3+ user messages share tokens (Jaccard > 0.3, FR/EN stop words
+  filtered) within a 10-turn window, after the first 10 user turns
+  (which are treated as legitimate setup / exploration). The cluster
+  span is capped at 10 user turns so a slow conversation doesn't get
+  flagged. Each zone exposes `clusterSize`, `signalKinds`, and an
+  `agentContext` describing what the assistant did in the same window
+  (files touched, tool call count, errors, backtracked files, key
+  actions). Severity scales with cluster size (3 → medium, 5+ → high)
+  and is bumped one level when agent enrichments fire (S4 backtrack,
+  S5 tool error spike, S6 repeated edit failure).
+- **Sismograph background zones.** Each friction zone renders as a
+  red-tinted rectangle behind the cost / context / sentiment tracks,
+  with opacity proportional to severity (0.06 / 0.10 / 0.16). Hover
+  surfaces a compact tooltip with the agent stats and the friction kind.
+- **Timeline FrictionZonePanel.** Inline panel under the SVG shows the
+  agent context of each zone alongside its user reaction excerpt. A
+  severity-coloured left border (critical for high, warning for medium)
+  matches the sismograph rect. Signal-kind chips (Backtrack / Tool
+  errors / Edit failures) make the trigger combination explicit.
+- **Friction filter expansion in the timeline tab.** Selecting the
+  `friction` chip now shows every message inside any frictionZone —
+  user reaction, assistant turns, tool calls — with a faint amber
+  border on context messages and a strong red border on the reaction
+  itself. The agent's work that led to the user being stuck is no
+  longer hidden.
+- **Long-gap topic-change tip.** A new `ConversationTip` fires when a
+  30-minute+ gap between user messages combines with a topic change
+  (Jaccard < 0.2 vs the prior message). The drawer surfaces an
+  actionable suggestion: "you came back to a different topic, consider
+  starting a fresh conversation to keep the context clean".
+- **ChangelogModal in the version chip.** Clicking the version chip
+  when up-to-date opens a modal with the release notes for the running
+  version, rendered via `MarkdownViewer`. CHANGELOG.md is bundled into
+  the published package via `apps/nakiros/scripts/copy-frontend.mjs`.
+- **Auto-show on install / update.** On every new install or version
+  bump, the modal opens once. The current version is persisted in
+  `localStorage` under `nakiros:lastSeenVersion`; subsequent launches
+  with the same version stay silent. When an update is available AND
+  the user hasn't seen the current version yet, the UpdateModal takes
+  priority over the ChangelogModal.
+- **CHANGELOG backfill 0.7.0 → 0.11.0.** Five months of releases that
+  had been undocumented are now reconstructed from git history into
+  Keep-a-Changelog sections, so users opening the ChangelogModal on
+  any installed version see real release notes.
+
+### Changed
+
+- **Drawer trimmed to two tabs.** The conversation drawer now exposes
+  only Diagnostic and Timeline. The Transcript tab was redundant with
+  Timeline (which already renders user + assistant + tool + system
+  messages with filter chips), and the Frictions tab — output of the
+  V1.1 Haiku classifier — is superseded by the new in-drawer friction
+  zones in Diagnostic and Timeline.
+- **Purge confirm uses ConfirmModal.** Settings → "Purger les données
+  ingérées" no longer triggers `window.confirm()`. The action goes
+  through the new-design `ConfirmModal` with destructive styling,
+  loading spinner during purge, and full keyboard support (Esc /
+  Enter / click-outside) — matches the pattern already used on
+  ClaudeMdScreen, SubagentDetailScreen, etc.
+- **Timeline filter i18n hoisted.** `timeline.filter.*` keys were
+  nested inside `drawer.timeline` with a duplicate sibling `drawer.timeline`
+  string, so JSON dedup was silently dropping the structured filter
+  block. Keys are now at the top of the `conversations` namespace and
+  the filter chips render their proper labels.
+
+### Removed
+
+- **Sentiment brick.** `@xenova/transformers` and its bundled
+  `distilbert-base-multilingual-cased-sentiments-student` (then
+  `bert-base-multilingual-uncased-sentiment` after migration) are
+  removed from the daemon. Both models confused descriptive negation
+  ("we don't display X" — factual) with emotional negation ("X
+  sucks" — frustration) and produced too many false-positive frictions
+  on dev/agent dialog in French. The stuck-cluster algorithm detects
+  the same problems without per-message sentiment scoring. Side
+  effects: daemon RSS drops from ~1.4 GB to ~750 MB on first ingest,
+  the model cache under `~/.nakiros/models/` (~430 MB) can be deleted,
+  and the bundled package no longer pulls `sharp` + `onnxruntime-node`
+  native binaries.
+- **Sentiment dot row in the sismograph + recap block in the diagnostic
+  tab.** Both displayed sentiment results and confused users with
+  contradictory signals (a clearly positive message scored as
+  "Negative 0.84"). Replaced by the friction zones, which are honest
+  about what they detect.
+- **Transcript tab and Frictions (V1.1) tab.** See Changed above.
+
+### Fixed
+
+- **Synthetic ESC interrupts no longer cluster.** Claude Code injects
+  `[Request interrupted by user for tool use]` as a `user`-type message
+  when the user hits ESC mid-tool. Three of these in a session share
+  identical tokens (Jaccard 1.0) and would form a phantom cluster.
+  They are now filtered from the cluster algorithm (the user-message
+  counter still advances so the index alignment with downstream
+  analytics stays correct).
+- **`cwd` lookup walks JSONL entries.** The conversation analyzer was
+  reading `cwd` from `entries[0]`, but the first JSONL entry is often
+  a `{type:"last-prompt"}` metadata record with no `cwd`. The analyzer
+  now walks entries until it finds one that carries `cwd` (or its
+  legacy nested `payload.cwd`).
+- **ChangelogModal background.** The new modal was using `bg-n-bg` /
+  `border-n-line` — tokens that don't exist in `tokens.css`. Switched
+  to `bg-n-surface` / `border-n-border-default` aligned with
+  ConfirmModal; the modal now renders with an actual background.
+
+## [0.11.0] — 2026-05-07
+
+Multi-provider release. Nakiros now scans, ingests and audits projects
+from **Cowork** (Anthropic's local-agent-mode tool) alongside Claude
+Code — same Home cards, same conversation analysis, same audit/fix
+flows on the subset of `.claude/` entities Cowork actually supports.
+
+### Added
+
+- **Cowork as a second project provider.** New scanner detects Cowork
+  spaces under `~/Library/Application Support/Claude/local-agent-mode-sessions/`
+  (one space = one project, id = `cowork:<spaceId>`, sessions
+  aggregated across every `local_<uuid>` matching the space folder).
+  HomeScreen splits projects across two top-level tabs ("Claude Code"
+  and "Cowork") and reuses the existing `ProjectsTab` for parity.
+- **Provider-aware conversation ingest.** `ingestSession` accepts an
+  optional `forcedProjectPath` so Cowork sessions key under the
+  user-visible folder rather than the `local_<uuid>/outputs` sandbox
+  the JSONL `cwd` points at. New `ensureCoworkProjectIndexed` walks
+  every matching session group and feeds the shared ingest store —
+  audit / fix / eval keep working transparently.
+- **Per-provider sidebar filtering.** Cowork projects hide rules /
+  output-styles / hooks / mcp tabs (not supported by Cowork per
+  Anthropic docs), keep claudemd / skills / subagents / permissions.
+
+### Changed
+
+- **Conversation-analysis cache routing.** `project:listConversations-
+  WithAnalysis`, `analyzeConversation` and `deepAnalyzeConversation`
+  now resolve `dirname(transcriptPath)` per-session via the ingest
+  store instead of assuming `~/.claude/projects/<encoded>/` — without
+  this the analyzer would read from `userDir` and find no JSONLs on
+  Cowork projects. `project-aggregate-cache` follows the same pattern
+  and `ensureIndexed`s at the top of `computeAggregate` so Home card
+  metrics populate before the user opens the project.
+- ConversationsScreen empty / loading states inlined with `n-*` tokens
+  to match HomeScreen (drops legacy `components/ui` imports that broke
+  on the new design palette).
+
+## [0.10.0] — 2026-05-07
+
+Direct-edit release. A new **edit** run kind lets the user open a
+conversational session against any `.claude/` entity (no audit
+required), drive it from an **IDE-style 3-pane shell** with syntax
+highlighting, and Apply & Deploy when satisfied. Edit is mechanically
+close to fix (same sandbox, same Apply flow) but user-driven rather
+than findings-driven.
+
+### Added
+
+- **Edit run kind for all 8 entity types** (skill + claudemd / rules /
+  subagents / hooks / permissions / mcp / output-styles). Same sandbox
+  seeding, Apply & Deploy and (for skills) eval support as fix. Wired
+  end-to-end: 14 new `edit:*` IPC channels, `handlers/edit.ts`, eight
+  rewritten first-turn prompts following an identical imperative
+  "First-turn protocol" (read seeded file → one-sentence ack in the
+  user's language → wait for input). "Ouvrir une session Edit" CTAs
+  on every entity detail screen plus a contextual entry from
+  `AuditCompletedReport`.
+- **IDE-style run shell.** New 3-pane layout `[Chat 1/4] [Code viewer
+  2/4] [File list 1/4]` for edit / fix / create runs. Right pane
+  renders the workdir as a collapsible folder tree with `+N -M`
+  change indicators; centre pane reads files via the existing
+  `readXxxDiffFile` IPC, computes a client-side line-level LCS diff
+  and highlights additions / deletions inline. Selecting lines in the
+  code viewer surfaces a floating "Quote in chat" button that pushes
+  a `file:line-range` chip to the composer. Auto-refresh on
+  Write/Edit/MultiEdit/NotebookEdit tool events with a 4 s safety-net
+  poll while running. Audit stays on the read-only screen.
+- **Syntax highlighting in the code viewer** via `prism-react-renderer`
+  (vsDark theme). Whole-file tokenisation via `Prism.tokenize` keeps
+  multi-line strings / JSX / fenced markdown coherent. Per-line diff
+  backgrounds remain visible underneath token colours. Fallback to
+  plain text when files exceed 3 000 lines or the grammar throws.
+
+### Changed
+
+- **IDE shell is now the default** for edit / fix / create — the
+  `?runs=ide` flag and `feature-flags.ts` shim are gone. Eval keeps
+  its own `EvalRunScreen`; audit stays on `AuditLikeRunScreen`
+  (read-only, no benefit from the code viewer).
+- `listFixDiff` / `listEditDiff` / `listCreateDiff` gain an optional
+  `includeUnchanged` flag so the IDE file list can show every workdir
+  file from run start; existing screens keep `false`.
+- `NewRunHeader` Stop and Finish buttons now also render on
+  `status === 'awaiting_input'` so users can Apply & Deploy
+  mid-conversation without first stopping the run.
+
+### Fixed
+
+- **Fix runs on non-skill entities now seed the latest archived audit
+  into the workdir.** New `copyLatestNonSkillAudit` detects the
+  target type, walks the matching `list*Audits()` newest-first and
+  copies the report to `<workdir>/outputs/audit-report.md`. The agent
+  no longer reports "no recent audit" when a real one exists on disk.
+  Silent on missing audits — fix without audit still works.
+- **Non-skill diff listings no longer surface the bundled expert's
+  internals as "deleted"** in the workspace panel. A
+  `<workdir>/.snapshot/` taken at run start scopes the diff to the
+  relevant entity file (`CLAUDE.md`, `.claude/rules/<name>`,
+  `.claude/settings.json (hooks)`, …). Fixes a latent bug in fix mode
+  exposed by edit testing.
+- Boot sweep now keeps edit-run session JSONLs from being wiped
+  (`collectLiveProjectEntryNames` includes edit), and rehydrate
+  restores edit runs to `waiting_for_input` like create.
+
+## [0.9.2] — 2026-05-06
+
+### Added
+
+- **Chain claudemd-expert sync after `.claude/` entity edits.** New
+  `sync` mode on `nakiros-claudemd-expert` regenerates the
+  routing/rules tables inside CLAUDE.md between opt-in HTML markers
+  (`<!-- nakiros:routing:* -->`, `<!-- nakiros:rules:* -->`), no-op
+  when the target CLAUDE.md does not opt in. Each of the six sister
+  `.claude/` experts (subagents / rules / hooks / permissions / mcp /
+  output-styles) now invokes `Skill('nakiros-claudemd-expert', 'sync')`
+  at the end of their `create` and `fix` runs so the project CLAUDE.md
+  stays aligned with the actual `.claude/` content. Today only
+  subagents and rules tables are filled; the other four calls are
+  no-ops kept for uniformity. Dogfooded in this repo's own CLAUDE.md.
+- **Landing page v2 — control-room narrative.** Replaces the
+  minimalist v1 landing with a 10-section product story (Problem,
+  Room with `.claude` / Audit / Eval tabs, Standard, Audit, Fix,
+  Factory, Local, Install, Etymology, FAQ) keeping v1's TS + Vite +
+  Tailwind 4 build, I18nProvider and Etymology storytelling.
+  ClaudeTree component reflects the real `.claude/` shape (no
+  invented `hooks/` or `commands/` folders). Local-first diagram
+  redrawn hub-and-spoke around `nakirosd` with the accurate IO flow
+  (reads `.claude/`, writes `~/.nakiros/` JSON+JSONL, spawns
+  `claude` CLI, serves browser UI). Navbar version badge now
+  dynamic via `useNpmVersion`.
+
+## [0.9.1] — 2026-05-05
+
+### Added
+
+- **`nakiros service install|start|stop|uninstall|status`** so the
+  daemon can run in the background, restart on crash and start at
+  login — prerequisite for the upcoming live drift detection &
+  notifications. macOS uses a LaunchAgent at
+  `~/Library/LaunchAgents/com.nakiros.daemon.plist` with `RunAtLoad`
+  + `KeepAlive` (`stop` = `disable` + `bootout` so it survives
+  `KeepAlive` resurrection; `start` symmetric with `enable` +
+  `bootstrap`). Linux uses a `systemd --user` unit with
+  `Restart=always`. Windows exits cleanly with "not yet supported".
+  Refuses to install when invoked from the npx cache and points the
+  user at `npm i -g`. Logs in `~/.nakiros/logs/`.
+
+## [0.9.0] — 2026-05-05
+
+`.claude/` audit-and-fix release. Nakiros gains six new bundled
+experts (rules / subagents / hooks / permissions / mcp /
+output-styles) on top of CLAUDE.md, each with its own audit history,
+deterministic + judgment-based check manifest, and frontend detail
+screen. A new **conversation-classifier** runner turns every Claude
+Code session into structured frictions for cross-conversation
+aggregation. The conversation-ingest pipeline becomes the
+single-source-of-truth backing every project's conversation list.
+
+### Added
+
+- **Per-project conversation ingest pipeline (V1).** Opt-in capture
+  via a user-global `Stop` hook + chokidar watcher persists parsed
+  turns under `~/.nakiros/ingest/projects/<basename>-<sha1[:8]>/
+  sessions/`. Sessions are tagged `user | synthetic` so `.claude/`
+  audits later see only real-usage data — not nakiros sandbox /
+  fix-temp / eval-iteration noise. The hook script is self-contained
+  CommonJS with no daemon dependency.
+- **Single-source-of-truth indexing.** `project:listConversations`,
+  `getConversationMessages` and `listConversationsWithAnalysis` read
+  from the ingest store, with `ensureProjectIndexed` refreshing
+  against `~/.claude/projects/<encoded>/` before each read.
+  `ConversationIngestSession` carries `transcriptMtime`, `gitBranch`,
+  `claudeVersion`, `summary` and `toolsUsed` extracted in a single
+  pass. Synthetic runs are filtered by default with a "Show synthetic"
+  toggle in `ConversationsScreen`.
+- **CLAUDE.md as a first-class audit target.** New
+  `nakiros-claudemd-expert` bundled skill with an 18-check manifest
+  aligned on the shared `AuditManifest` contract + a static-checks
+  script emitting JSONL findings. `claudemd-audit-history` archives
+  reports under `~/.nakiros/projects/<id>/claudemd-audits/`. New
+  `ClaudeMdScreen` refonted around the canonical SkillDetailScreen
+  pattern (Edit / Audit / Fix tabs), with a **Milkdown Crepe
+  WYSIWYG editor** (Raw toggle, metrics sidebar) replacing the raw
+  textarea.
+- **Six new `.claude/` experts**, each bundled skill + audit-history
+  service + IPC handlers + runner wiring + detail screen with the
+  canonical 3-tab layout (Edit / Audit / Fix):
+  - **rules-expert** — 15 checks (9 deterministic, 6 judgment incl.
+    2 cross-entity).
+  - **subagents-expert** — 15 checks (11 deterministic, 4 judgment
+    incl. 2 cross-entity).
+  - **hooks-expert** — 14 checks (singleton, targets the `hooks`
+    sub-tree of `.claude/settings.json`). New `HooksScreen` with
+    Form / JSON toggle (auto-fallback to JSON on invalid input).
+  - **permissions-expert** — 14 checks with a **project / local
+    scope toggle** (since approved-via-prompt rules typically land
+    in `.claude/settings.local.json`). Sidebar warnings on
+    `bypassPermissions`, missing dangerous-bash deny rules, etc.
+  - **mcp-expert** — singleton screen + Form/JSON toggle for
+    `.mcp.json` at the project root.
+  - **output-styles-expert** — 12 checks, collection layout, the
+    last of the seven experts.
+- **`dotClaudeSnapshot` v1.** Every `.claude/` expert receives a
+  read-only snapshot of the project's whole `.claude/` ecosystem
+  (claudemd / rules / subagents / hooks / permissions / mcpServers /
+  outputStyles + identity-only skills) written into the agent's
+  workdir before spawn, so it can detect cross-entity inconsistencies
+  (CLAUDE.md routing referencing a missing subagent, hook command
+  pointing at a missing rule glob, etc.).
+- **Workdir-draft + sync-back pattern.** Since Claude Code hard-blocks
+  every write under `.claude/**`, the daemon now seeds
+  `<workdir>/draft.<ext>` from the existing target, the agent edits
+  only that draft, and Nakiros syncs back on `Apply & Deploy`.
+  Applied to rules / subagents / hooks / permissions / output-styles;
+  claudemd and mcp keep direct edit since their targets sit outside
+  `.claude/`.
+- **V1.1 friction classifier.** New bundled
+  `nakiros-conversation-classifier` skill (designed for Haiku 4.5)
+  compresses a Claude Code session JSONL into a token-bounded digest
+  and emits structured JSON — phases, semantic frictions (where
+  human and agent did not understand each other), candidate
+  `.claude/` rules — for downstream cross-conversation aggregation.
+  New `classify-convo` `AgentRunKind`, IPC surface
+  (`classifyConvo:start / stopRun / getRun / sendUserMessage /
+  finish / event / listActive / listAll`) plus `project:
+  getConversationDigest` and `listConversationDigests`. Powers a new
+  **Frictions tab** in the conversation drawer and a digest viewer.
+- **Shared `CreateEntityModal` + `ConfirmModal`.** AI generation is
+  the only path to create new rules / subagents / output-styles
+  through the UI; manual scaffolding is left to the IDE. Every
+  `window.confirm` in the new detail screens is replaced with a
+  styled dialog. MCP and Permissions drop AI create CTAs (the form
+  is faster) — missing-banner CTA becomes "Open the editor".
+- **Project `.claude/` config tracked in git.** Allowlist `.gitignore`
+  keeps `settings.local.json`, `output-styles/`, `commands/` and
+  `worktrees/` out of git; tracks `rules/`, `agents/`,
+  `agent-memory/`, `scripts/`, `settings.json` and the bundled
+  `code-documentation` skill. Audit reports under any
+  `.claude/skills/*/audits/` stay ignored.
+
+### Changed
+
+- `ConversationIngestSession.kind` propagated to `ProjectConversation`
+  + `ConversationAnalysis` so the UI can hide synthetic runs.
+- Ingest panel toggle re-worded from "Enable / Disable" to "Enable
+  real-time / Disable real-time" — indexing itself is no longer
+  opt-in.
+- `MarkdownEditor` extracted as a reusable component, used by every
+  `.claude/` entity detail screen.
+
+## [0.8.0] — 2026-05-02
+
+`.claude/` configuration explorer release. Nakiros gains a full UI to
+read **and edit** every artifact under a project's `.claude/`
+directory — rules, subagents, output styles, permissions, MCP
+servers, lifecycle hooks and CLAUDE.md — each in a dedicated sidebar
+tab with safe atomic writes, optimistic locking and round-trip
+preservation of fields managed by other tabs.
+
+### Added
+
+- **Read-only `.claude/` explorer (V1).** Backend scan walks
+  `.claude/` and emits a `ClaudeConfigSnapshot` covering CLAUDE.md,
+  settings (project + local merge), rules, skills count, commands,
+  output styles, subagents, MCP servers and lifecycle hooks. New
+  `claudeConfig:scan` and `claudeConfig:readFile` IPC channels with
+  an anti-traversal guard scoping reads to `.claude/` and
+  `.mcp.json`. Frontend hub presents a 9-card grid with completeness
+  ring and a slide-in drawer per category. *(Superseded by the
+  per-tab editors below within the same release.)*
+- **Module 1 — Rules editor.** List + editor view for
+  `.claude/rules/*.md` with name + scope chips (`paths:`
+  frontmatter), token budget, summary and last-edit time. Editor
+  combines a path picker with common-glob suggestions and a raw
+  markdown body (optional MarkdownViewer preview). Atomic
+  tmp + rename writes, mtime-guarded saves with a "reload from disk"
+  conflict UI, name validation
+  (`/^[a-z0-9][a-z0-9-]*$/`), confirm-delete.
+- **Module 2 — Subagents editor.** Full CRUD on `.claude/agents/*.md`
+  with **Structured / Raw frontmatter toggle**. Structured surface
+  exposes `description`, `model` (sonnet / opus / haiku / inherit /
+  custom-id), `tools` (multi-select allowlist) and `color`. All
+  unrelated frontmatter fields (memory, hooks, mcpServers,
+  permissionMode, …) survive structured edits unchanged via
+  `yaml`'s Document API. Raw mode rejects invalid YAML at save time
+  with `code: 'invalid-yaml'`.
+- **Module 3 — Output styles editor.** CRUD on
+  `.claude/output-styles/*.md`. List tracks the currently active
+  style by reading `outputStyle` from `settings.json` (project)
+  and `settings.local.json` (local override); built-in styles
+  (`Default`, `Explanatory`, `Learning`) surface in a banner since
+  they don't live on disk. Editor exposes `description`,
+  `keep-coding-instructions` and the markdown body with preview.
+- **Module 4 — Permissions editor.** Structured editor for
+  `.claude/settings.json` and `.claude/settings.local.json`
+  scoped to permission-relevant fields. Three colored
+  `ChipPicker`s for `permissions.allow` / `deny` / `ask` with
+  project-relevant glob suggestions
+  (`Bash(pnpm *)`, `Bash(rm -rf *)`, `Bash(git push *)`, …),
+  a `defaultMode` dropdown covering every Claude Code mode and a
+  "raw JSON" textarea for everything else. Cross-tab pointers
+  explain that `outputStyle` lives in the Output styles tab and
+  `hooks` in the Hooks tab.
+- **Module 5 — MCP servers editor.** Per-server CRUD on
+  `.mcp.json` at the project root with **transport pills**
+  (stdio / http / sse) that toggle the relevant field set. stdio
+  surfaces `command` + chip-style `args`; http/sse surface
+  `url` + optional `headers` JSON; `env` key/value list always
+  visible with `${VAR}` placeholders to keep tokens out of
+  `.mcp.json`. Name regex validated server-side.
+- **Module 6 — Hooks editor.** Lifecycle-timeline editor for the
+  `hooks` block of `.claude/settings.json` (and
+  `.local.json`). Eight stacked event cards in lifecycle order
+  (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse,
+  Notification, Stop, SubagentStop, SessionEnd). Storage round-trips
+  Claude Code's nested `MatcherGroup` shape and the legacy flat
+  shape on read; emits one MatcherGroup per non-empty editor row on
+  write.
+- **Module 7 — CLAUDE.md editor.** Covers the three project-scoped
+  locations (`./CLAUDE.md`, `./.claude/CLAUDE.md`,
+  `./CLAUDE.local.md`) with a pill tabs strip + per-scope status
+  badges. Raw markdown textarea with a preview toggle, plus a right
+  metadata sidebar (lines with 200-line warning, chars, tokens,
+  sections, top-level `#` headings, `@-imports` extracted live
+  while skipping fenced code blocks and `@scope/pkg` mentions,
+  AGENTS.md awareness with a "+ Add @AGENTS.md import" helper, and
+  an HTML-comment hint).
+
+### Changed
+
+- Sidebar restructured into three logical sections (Project domain /
+  `.claude/` configuration / Nakiros) separated by thin dividers;
+  disabled tabs surface a tooltip pointing at the upcoming module.
+- The V1 overview screen (completeness ring + drawers + context
+  budget bar) is removed at Module 1: a project doesn't have to
+  configure every category to be healthy, so a "completeness score"
+  wasn't meaningful.
+- **Round-trip preservation across editors.** Hooks / Permissions /
+  MCP / Output-styles all stash fields managed by sibling tabs in
+  an opaque `preservedJson` blob and write them back unchanged on
+  save, so two tabs can co-own the same file (`settings.json`)
+  without stepping on each other.
+
+## [0.7.0] — 2026-04-30
+
+New-design release. The entire frontend ships behind a new shell
+(NewShell + TopBar + RunDock), the legacy design is dropped, the
+RunScreen is unified across audit / fix / create / eval kinds, and
+the evals UI gains a **baseline-per-model cache**, an actionable
+**post-completion recap**, a **structured live audit progress
+manifest**, an **end-to-end Fix loop** with Apply & Deploy, and a
+**conversation sismograph** (cost-stacked + cache TTL
+auto-detection).
+
+### Added
+
+- **NewShell + TopBar + RunDock** (Phases 1-2). New OKLch token set,
+  Geist fonts, density + accent-hue preferences, RunDock pinned in
+  the topbar with active-runs drawer, ProjectOverviewScreen and
+  sidebar.
+- **Skills hub** (Phase 3): Audit / Files / Evals / Fix / Iterations
+  tabs, expandable assertions, EvalDiffOverlay full-screen view,
+  RunPicker, Sparkline + HBar viz primitives.
+- **Unified RunScreen for audit / fix / create** with side panels
+  (Audit: workdir + parsed score + report link; Fix: live diff list;
+  Create: sandbox path). Replaces the legacy AuditView / FixView
+  overlays. Live event subscription replaces polling; legacy 2 Hz
+  flicker between loading and chat is gone.
+- **Unified EvalRunScreen** with bucketed events per runId, queue
+  selection, with-skill / baseline toggle, conversation rehydrate
+  from persisted turns after a daemon restart. Audit / Fix / Run-evals
+  buttons get `isLaunching` feedback to prevent double-clicks.
+- **ConversationsScreen ported to the new shell** (Phase 5):
+  6 filter chips with live counts, health-first row list with real
+  `contextSamples` sparkline, slide-in ConvDrawer with Diagnostic
+  / Timeline / Transcript tabs. Timeline streams JSONL turns as
+  user / assistant / system / tool cards with a friction filter
+  (timestamp-joined with `ConversationAnalysis`). Transcript renders
+  each parsed message as a collapsible syntax-highlighted JSON
+  record.
+- **HomeScreen** (Phase 6): 3 tabs (Projects / Plugins / Globals)
+  with rich `ProjectCard`s — mono name + skills count badge, score
+  colored by ratio, micro health bar, healthy / watch / critical
+  conversation dots, cumulative tokens, last activity in relative
+  time. Search at the top filters all three tabs client-side.
+  Plugins tab groups skills by `{marketplaceName}::{pluginName}`.
+- **Cached aggregates + inline rescan + dismissed-restore.** Two-tier
+  cache (per-conversation `ConversationAnalysis` keyed by JSONL
+  mtime/size; per-project aggregate with stale-while-revalidate).
+  Rescan stays on Home with a progress banner. "Show dismissed"
+  toggle restores previously dismissed projects.
+- **Baseline-per-model cache.** SHA-256 fingerprint over the eval
+  definition (prompt + assertions + output_files + mode + fixtures)
+  keys a model-aware cache under
+  `~/.nakiros/baselines/<skill>/<eval>/<modelFullId>/<fingerprint>/`.
+  Skill iterations look up the cache and skip the `without_skill`
+  rerun on hit; baselines run as real iterations
+  (kind = `'baseline'`) so the sparkline shows a violet dot at every
+  baseline position and the diff overlay can pick a baseline as a
+  comparison target.
+- **Baseline-only run mode.** "Recalculer la baseline" kebab action
+  runs only `without_skill` (instead of doubling the cost the
+  feature was meant to save). New baseline-only tab with a distinct
+  label, eval-screen sibling-config switcher removed.
+- **Selectable model chips driving Run / Recalculer la baseline.**
+  Sonnet / Opus / Haiku chips are now real toggles backed by
+  `selectedModel` (default Opus = `DEFAULT_EVAL_MODEL`); the choice
+  feeds every launch.
+- **Post-completion eval recap screen.** Two variants
+  (skill-iteration vs baseline-only) with hero "+X% pass rate vs
+  baseline", KPIs (pass rate / vs baseline / regressions / tokens),
+  per-eval breakdown with expandable assertion list, and
+  next-step cards (Fix regression, View diff vs previous run,
+  Re-run on each model not yet tested). Sort: regressions first.
+- **Audit live progress + completion screen.** Audit runs stream a
+  typed manifest (23-check taxonomy) + per-check outcomes via
+  `outputs/audit-manifest.json` + `outputs/audit-progress.jsonl`,
+  driving a live sidebar (score ring, sections, findings) and a
+  completion screen (hero card, KPIs, findings, next steps). The
+  skill-factory ships a deterministic JS script that emits
+  ~10/23 checks before the LLM completes the rest. runner-core
+  gains an `afterStart` spec hook + buffered + replayed events on
+  remount to survive WebSocket reconnects.
+- **End-to-end Fix loop.** Fix iterations now live under
+  `<skillDir>/evals/.fix-temp/<fixRunId>/` segregated from prod
+  history (no more iter-number jumps in the matrix), `fix:finish`
+  promotes the latest fix-temp iter into `evals/workspace/`
+  atomically, `stopFix` (Reject) drops the whole `.fix-temp/`
+  directory. New "Apply & deploy" button (green), all Fix triggers
+  grey out when an active fix already exists for the skill (header
+  breadcrumb / AuditTab / FixTab body / EvalRunRecap), Resume
+  button dropped (the chat input is enough on `waiting_for_input`).
+- **End-to-end Create-skill flow.** Create runs share the
+  new-design RunScreen with fix: session-jsonl timeline,
+  billed-equivalent tokens + agent-active timer, sandbox sidebar
+  with diff cards, Apply & Deploy / Discard. Drafts + their Claude
+  conversation history survive daemon restarts. Drafts surface as
+  cards in the Skills listing. Eval-from-draft routes both
+  execution context and iteration workspace to the tmp sandbox so
+  `.claude/skills/<name>/` isn't created prematurely. Assistant
+  output rendered as Markdown (react-markdown + GFM tables) across
+  every run kind. Language directive (FR/EN, from preferences →
+  OS locale) injected in the first prompt.
+- **Sismograph variant A** — cost-stacked + ctx 2-track chart with
+  hover crosshair / tooltip / time-pill, friction + tool errors
+  moved off the chart to the impact panel (they're quality
+  signals, not cost events), tips sorted by economy potential
+  descending. `ConversationAnalysis` extended with
+  `costSamples` (per-turn billed breakdown) and
+  `pausePoints` (with attributed cache-rewrite waste).
+- **Token-accounting & timeline pattern extended from fix to
+  audit + eval.** Session JSONL becomes the source-of-truth for
+  the chat timeline and the billed-equivalent token total
+  (×1 / ×5 / ×0.1 / ×1.25 / ×2 multipliers) + agent-active timer
+  (sum of `assistant_ts − prev_user_ts` intervals). New helpers
+  `runner-core/session-jsonl.ts` + `session-usage.ts`; new IPC
+  `audit:getTimeline / getUsage`, `eval:getTimeline /
+  getIterationUsage / getBatchUsage`. Bypasses the
+  `claude-stream.ts` bug that drops `cache_read` / `cache_creation`.
+- **Sismograph cache TTL auto-detection.** Claude Code uses the
+  1h beta cache (`ephemeral_1h_input_tokens`) systematically since
+  2026-04. TTL is now detected per session via the
+  `cache_creation` breakdown; the old hardcoded 5min TTL produced
+  14× false-positive pauses on heavy sessions. `totalTokens` no
+  longer includes `cache_read` (was inflating by ~50× on
+  heavy-cache sessions and didn't match Claude Code's
+  "consumed" counter).
+- **"Lancer un Fix run" CTA** on `AuditCompletedReport` — wired
+  via `launchFix` + `useActiveFixForSkill`.
+
+### Changed
+
+- `Sparkline` gains a `markers?: ('skill' | 'baseline')[]` prop;
+  baseline positions overlay a 2.6px violet circle.
+- `EvalResultCard` thresholds: ≥ 75% green, > 0% orange, 0% red;
+  same rule applied in `EvalRunRecap.pickHeroTone` and the per-eval
+  dot tone for cross-screen consistency.
+- Eval-batch fingerprint helper `computeEvalBatchKey` extracted to
+  `apps/frontend/src/lib/eval-batch-key.ts` so ad-hoc `.join('|')`
+  call-sites stop diverging.
+- Tip engine: replace `use-extended-cache` (non-actionable API
+  toggle the user can't control) with `split-before-long-pause`
+  (user-actionable). Tips now sorted by economy potential desc.
+- ProjectOverviewScreen now opens the new `ConvDrawer` (slide-in
+  with Diagnostic / Timeline / Transcript tabs) when a critical
+  conversation is clicked, instead of the legacy
+  `ConversationDiagnosticPanel` modal.
+
+### Fixed
+
+- SIGTERM'd turn no longer flips to `failed` after `stop()` already
+  set it to `stopped` (race condition in runner-core +
+  eval-runner).
+- Eval prompts that already include the `/skillName` slash command
+  are tolerated (no double-prefix).
+- Baseline-only run tab now routes through the agent-run store
+  (was orphaned).
+- React #310 in `EvalRunScreen` + 3-tone hero in the recap.
+- `loadIterationRun` accepts an optional `fixRunId` so fix-temp
+  iters resolve correctly; diff overlay merges prod + fix-temp
+  matrices client-side with a `fixTempOffset` to avoid iter-number
+  collisions, orange "fix" badge on the run picker pills and
+  orange dot in the sparkline.
+- Boot sweep + project-scanner purge regex now also catch
+  `evals/comparisons/<ts>/<model>/eval-*/(with|without)_skill`
+  artefacts.
+- ConversationAnalysis cache bumped to v3; `ProjectAggregate`
+  versioned for the first time (v1). Stale entries invalidated on
+  read.
+
+### Removed
+
+- **Legacy design dropped.** The `?shell=new` flag and all 34
+  legacy view / component files (≈ 8 234 lines) are gone. NewShell
+  is the only shell post-boot. `App.tsx` reduces to loading →
+  scan (first-run) → NewShell.
+- Iterations tab dropped from the new design (redundant — the
+  matrix already shows iteration history); version pill restored.
+- Disabled "Export diff" and "Promote" buttons removed from the
+  eval UI. Disabled "Voir le dernier diff" removed from the FixTab
+  body. "Mark as baseline" mockup action explicitly dropped.
+
 ## [0.6.0] — 2026-04-22
 
 Multi-model release. Evals can now run on a chosen Claude model
@@ -231,6 +872,14 @@ First public beta. Initial scope:
 - `require('fs')` calls replaced with static imports for ESM
   compatibility.
 
+[0.11.0]: https://github.com/NakirosAI/nakiros/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/NakirosAI/nakiros/compare/v0.9.2...v0.10.0
+[0.9.2]: https://github.com/NakirosAI/nakiros/compare/v0.9.1...v0.9.2
+[0.9.1]: https://github.com/NakirosAI/nakiros/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/NakirosAI/nakiros/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/NakirosAI/nakiros/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/NakirosAI/nakiros/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/NakirosAI/nakiros/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/NakirosAI/nakiros/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/NakirosAI/nakiros/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/NakirosAI/nakiros/compare/v0.4.0...v0.4.1

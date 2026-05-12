@@ -363,6 +363,7 @@ const client = {
 
   // Meta
   getVersionInfo: (options?: { force?: boolean }) => invoke(C['meta:getVersionInfo'], options ?? {}),
+  getChangelog: () => invoke(C['meta:getChangelog']),
 
   // Skill agent temp files
   listSkillAgentTempFiles: (runId: string) => invoke(C['skillAgent:listTempFiles'], runId),
@@ -650,6 +651,7 @@ const client = {
   getClassifyConvoBufferedEvents: (runId: string) =>
     invoke(C['classifyConvo:getBufferedEvents'], runId),
   onClassifyConvoEvent: (cb: (event: unknown) => void) => subscribe(C['classifyConvo:event'], cb),
+
 };
 
 // Install on window. We cast via `unknown` because the full type surface in

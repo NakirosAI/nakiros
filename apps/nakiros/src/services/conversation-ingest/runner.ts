@@ -277,6 +277,7 @@ export function ingestSession(
     toolsUsed,
   };
   upsertSession(meta);
+
   return { sessionId, ok: true };
 }
 

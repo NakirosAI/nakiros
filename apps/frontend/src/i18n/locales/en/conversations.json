@@ -44,7 +44,10 @@
     "wasted": "WASTED",
     "compaction": "Compaction",
     "pause": "Pause",
-    "friction": "Friction"
+    "friction": "Friction",
+    "frictionBacktrack": "Agent backtrack",
+    "frictionRepetition": "Repetition",
+    "zoneAgentContext": "Agent: {{calls}} tool calls, {{errors}} errors, {{filesCount}} files"
   },
   "diagnostic": {
     "healthy": "Healthy conversation — no notable signal"
@@ -54,30 +57,28 @@
     "close": "Close",
     "tabs": {
       "diagnostic": "Diagnostic",
-      "timeline": "Timeline",
-      "transcript": "Transcript",
-      "frictions": "Frictions"
+      "timeline": "Timeline"
     },
     "markers": "Markers",
+    "frictionZone": {
+      "title": "Friction · {{kind}} · severity {{severity}}",
+      "preamble": "Before this reaction (T{{start}}→T{{end}}):",
+      "stats": "{{calls}} tool calls including {{errors}} errors",
+      "files": "Files: {{files}} ({{count}})",
+      "backtracks": "Reverts: {{files}}",
+      "noFiles": "No files touched",
+      "noBacktracks": "",
+      "severityHigh": "high",
+      "severityMedium": "medium",
+      "severityLow": "low",
+      "signalKinds": {
+        "S4": "Backtrack",
+        "S5": "Tool errors",
+        "S6": "Edit failures"
+      }
+    },
     "readingGuide": "How to read",
     "readingGuideBody": "The coloured band tracks per-turn context against the {{window}} window — green is healthy, amber watch, red degraded. Vertical purple bars mark compactions. Red triangles below the axis mark detected user friction.",
-    "timeline": {
-      "filter": {
-        "all": "All",
-        "user": "User",
-        "assistant": "Assistant",
-        "tools": "Tool calls",
-        "system": "System",
-        "friction": "Friction"
-      },
-      "empty": "No messages match this filter."
-    },
-    "transcript": {
-      "searchPlaceholder": "Search the transcript…",
-      "clearSearch": "Clear search",
-      "records": "records",
-      "empty": "No records match this filter."
-    },
     "timeline": "Context timeline",
     "timelineLegend": "tokens per turn · compactions · frictions · tool errors",
     "overview": "Overview",
@@ -102,6 +103,17 @@
   },
   "loadingMessages": "Loading raw messages…",
   "rawMessages": "Raw messages",
+  "timeline": {
+    "filter": {
+      "all": "All",
+      "user": "User",
+      "assistant": "Assistant",
+      "tools": "Tool calls",
+      "system": "System",
+      "friction": "Friction"
+    },
+    "empty": "No messages match this filter."
+  },
   "messageCount_one": "{{count}} message",
   "messageCount_other": "{{count}} messages",
   "deepAnalysis": {
@@ -163,6 +175,10 @@
     "consider-custom-skill": {
       "title": "Create a dedicated skill for this workflow",
       "body": "{{durationMin}} min session with frictions and no skill invoked. If this kind of task recurs, a skill (via nakiros-skill-factory) standardises good practice and reduces corrections."
+    },
+    "long-gap-topic-change": {
+      "title": "Topic changed after a long gap",
+      "body": "You came back after {{gapMin}}min with a different topic. Consider starting a fresh conversation to keep the context focused."
     }
   }
 }

@@ -38,7 +38,8 @@
   "scripts": {
     "build": "tsup && node scripts/copy-frontend.mjs",
     "dev": "tsx bin/nakiros.ts",
-    "prepack": "pnpm build"
+    "prepack": "pnpm build",
+    "sentiment-poc": "node scripts/sentiment-poc.mjs"
   },
   "dependencies": {
     "@fastify/static": "^9.1.1",

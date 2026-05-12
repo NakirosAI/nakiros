@@ -158,8 +158,9 @@ export interface ConversationFrictionZone {
   severity: 'low' | 'medium' | 'high';
   /**
    * Which signals fired in this zone, sorted alphabetically. Used by the UI
-   * to render the badge cluster. At least 2 distinct signal kinds are always
-   * present (single-signal events no longer produce a zone as of v9).
+   * to render the badge cluster. At least 2 distinct signal kinds are present
+   * in zones produced by v9+ (single-signal events no longer produce a zone).
+   * Optional for backward-compat with cached analyses from v8.
    *
    * - S1: User sentiment Negative with score > 0.60
    * - S2: User message repetition (Jaccard > 0.5 within 5-turn window)
@@ -167,7 +168,6 @@ export interface ConversationFrictionZone {
    * - S5: Tool error spike (≥ 2 tool errors within 5-turn window)
    * - S6: Repeated edit failure (≥ 2 "string not found"-like errors on same file)
    */
-  /** Optional for backward-compat with cached analyses from v8 (single-signal). */
   signalKinds?: Array<'S1' | 'S2' | 'S4' | 'S5' | 'S6'>;
 }
 

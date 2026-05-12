@@ -64,8 +64,17 @@ interface CacheEntry {
  * Backtrack-only frictionPoints without a downstream user reaction within 5
  * user turns produce `severity: 'low'` zones. `frictionPoints[]` is unchanged
  * for backward compatibility.
+ *
+ * v9 (2026-05-12) — multi-signal convergence for `frictionZones`. A zone is
+ * now emitted only when at least 2 distinct signals (S1 sentiment, S2
+ * repetition, S4 backtrack, S5 tool-error-spike, S6 repeated-edit-failure)
+ * fire within a 5-turn window. Single-signal events no longer create zones.
+ * New signals: S5 (≥ 2 tool errors in 5 turns) and S6 (≥ 2 "string not
+ * found" errors on same file). Severity: 2 signals → medium, 3+ → high;
+ * `low` is no longer emitted. New field `signalKinds` on each zone exposes
+ * which signals fired. `frictionPoints[]` is unchanged.
  */
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

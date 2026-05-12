@@ -2,9 +2,13 @@
   "currentVersion": "v{{version}}",
   "updateAvailable": "Update available",
   "updateAvailableTooltip": "v{{latest}} available on npm. You're on v{{current}}. Click for instructions.",
-  "upToDateTooltip": "Up to date (v{{current}})",
+  "upToDateTooltip": "Up to date (v{{current}}) — click to see what's new",
   "devTooltip": "Local build — not compared against npm",
   "openNpm": "View on npm",
   "updateInstructions": "Update with: npm install -g @nakirosai/nakiros@latest, then restart the daemon.",
-  "dismiss": "Got it"
+  "dismiss": "Got it",
+  "changelogTitle": "What's new in v{{version}}",
+  "changelogLoading": "Loading release notes…",
+  "changelogEmpty": "No release notes available.",
+  "changelogGotIt": "Got it"
 }

@@ -46,8 +46,18 @@ interface CacheEntry {
  * (nlptown 5-class star rating). Labels now from summed probabilities
  * (Neg=P(1*)+P(2*), Neu=P(3*), Pos=P(4*)+P(5*)). Friction threshold lowered
  * to 0.60 to match the new score scale.
+ *
+ * v7 (2026-05-12) — added three new signals to `frictionPoints` and `tips`:
+ * Signal B (backtrack): Edit/Write/MultiEdit that reverts earlier agent output,
+ * detected by exact normalized-string match between current new_string and a
+ * prior old_string on the same file. matchedPattern: 'backtrack:<file>:T<N>->T<M>'.
+ * Signal C (repetition): user message with Jaccard > 0.5 vs any of the 5
+ * previous user messages (3+-char tokens). matchedPattern: 'repetition:T<N>:<j>'.
+ * Signal E (long-gap topic change): ConversationTip emitted when 30min+ gap
+ * between user messages combines with Jaccard < 0.2 — suggests new topic,
+ * benefit from a fresh conversation. id='long-gap-topic-change'.
  */
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 7;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

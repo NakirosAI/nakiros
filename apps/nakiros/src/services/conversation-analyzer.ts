@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 
 import type {
   ConversationAnalysis,
@@ -71,6 +71,28 @@ const SCORE_WEIGHTS = {
   hotFileCap: 15,
   cacheMissCap: 10, // cache waste contribution, scales with waste ratio
 };
+
+// ---------------------------------------------------------------------------
+// Internal intermediate types (used across analyzeConversation + helpers)
+// ---------------------------------------------------------------------------
+
+/** Tool-use record collected per file during the first pass (Signal B). */
+interface ToolUseRecord {
+  /** 1-indexed assistant turn number. */
+  turn: number;
+  toolName: string;
+  filePath: string;
+  input: Record<string, unknown>;
+}
+
+/** User text message collected during the first pass (Signals C + E). */
+interface UserMessageRecord {
+  /** 1-indexed, aligned with sentiment trace messageIndex. */
+  userMsgIdx: number;
+  text: string;
+  timestamp: string;
+  offsetPct: number;
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -221,6 +243,15 @@ export function analyzeConversation(
   }
   const totalConvEntries = Math.max(convIndex, 1);
 
+  // Signal B — per-file tool-use history (Edit / Write / MultiEdit).
+  const toolUsesByFile = new Map<string, ToolUseRecord[]>();
+
+  // Signal C + E — user messages with text + turn index + timestamp.
+  const userMessages: UserMessageRecord[] = [];
+
+  // Turn counter for assistant entries (used in ToolUseRecord).
+  let assistantTurnCounter = 0;
+
   for (const entry of entries) {
     const type = entry['type'] as string | undefined;
     const timestamp = entry['timestamp'] as string | undefined;
@@ -323,6 +354,14 @@ export function analyzeConversation(
             precedingTool: lastAssistantToolName,
           });
         }
+
+        // Collect for Signal C (repetition) and Signal E (long-gap + topic change).
+        userMessages.push({
+          userMsgIdx: userMsgCounter,
+          text,
+          timestamp: timestamp ?? '',
+          offsetPct: entryOffset,
+        });
       }
 
       // Cache miss detection — real user reply arriving > TTL after last
@@ -351,6 +390,8 @@ export function analyzeConversation(
     // --- Assistant messages -------------------------------------------------
     if (type === 'assistant') {
       messageCount++;
+      assistantTurnCounter++;
+      const currentTurn = assistantTurnCounter;
       const msg = entry['message'] as
         | {
             content?: unknown[];
@@ -390,7 +431,16 @@ export function analyzeConversation(
             const path = (b.input?.['file_path'] ?? b.input?.['notebook_path']) as
               | string
               | undefined;
-            if (path) editCounts.set(path, (editCounts.get(path) ?? 0) + 1);
+            if (path) {
+              editCounts.set(path, (editCounts.get(path) ?? 0) + 1);
+
+              // Signal B: record this tool use for backtrack detection.
+              if (b.name === 'Edit' || b.name === 'Write' || b.name === 'MultiEdit') {
+                const records = toolUsesByFile.get(path) ?? [];
+                records.push({ turn: currentTurn, toolName: b.name, filePath: path, input: b.input ?? {} });
+                toolUsesByFile.set(path, records);
+              }
+            }
           }
         }
       }
@@ -562,6 +612,20 @@ export function analyzeConversation(
 
   const score = Math.max(0, Math.min(100, Math.round(100 - penalty)));
 
+  // --- Signal B: backtrack detection ----------------------------------------
+  const backtracks = detectBacktracks(toolUsesByFile);
+  for (const fp of backtracks) frictionPoints.push(fp);
+
+  // --- Signal C: user-message repetition detection --------------------------
+  const repetitions = detectRepetitions(userMessages);
+  for (const fp of repetitions) frictionPoints.push(fp);
+
+  // Sort friction points by position in conversation for consistent ordering.
+  frictionPoints.sort((a, b) => a.offsetPct - b.offsetPct);
+
+  // --- Signal E: long-gap + topic change detection ---------------------------
+  const gapTips = detectLongGapTopicChanges(userMessages);
+
   const diagnostic = buildDiagnostic({
     compactions,
     healthZone,
@@ -589,6 +653,7 @@ export function analyzeConversation(
     durationMs,
     slashCommands: Array.from(slashCommandSet),
     sidechainCount,
+    extraTips: gapTips,
   });
 
   return {
@@ -719,6 +784,7 @@ function buildTips(args: {
   durationMs: number;
   slashCommands: string[];
   sidechainCount: number;
+  extraTips: ConversationTip[];
 }): ConversationTip[] {
   const tips: ConversationTip[] = [];
   const ctxPct = Math.round((args.maxContextTokens / args.contextWindow) * 100);
@@ -859,6 +925,9 @@ function buildTips(args: {
     });
   }
 
+  // Append signal-E tips (long-gap + topic change) before sorting.
+  for (const t of args.extraTips) tips.push(t);
+
   // Sort by economy potential first (descending tokens economisable), then by
   // severity. Tips without an `economyTokens` data field fall to the bottom of
   // their severity bucket.
@@ -877,4 +946,264 @@ function buildTips(args: {
 function shortenFile(path: string): string {
   const parts = path.split('/').filter(Boolean);
   return parts.length <= 2 ? path : parts.slice(-2).join('/');
+}
+
+// ---------------------------------------------------------------------------
+// Signal B — backtrack detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalizes a string for backtrack comparison: trims leading/trailing
+ * whitespace and collapses internal runs of whitespace to a single space.
+ */
+function normalizeForBacktrack(s: string): string {
+  return s.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Detects agent backtracks: cases where an Edit/Write/MultiEdit on file F
+ * at turn N reverts content that the agent itself produced at an earlier turn
+ * (i.e. `current.new_string` matches a prior `old_string` after normalization).
+ *
+ * Emits one {@link ConversationFrictionPoint} per confirmed backtrack, at the
+ * position of the LATER edit. `matchedPattern` format:
+ * `'backtrack:<file_basename>:T<earlier_turn>->T<later_turn>'`.
+ *
+ * Min-length guard: strings shorter than 20 chars after normalization are
+ * skipped (too generic — high false-positive risk). Fuzzy matching is out of
+ * scope (V1).
+ */
+function detectBacktracks(
+  toolUsesByFile: Map<string, ToolUseRecord[]>,
+): ConversationFrictionPoint[] {
+  const MIN_LEN = 20;
+  const results: ConversationFrictionPoint[] = [];
+
+  for (const [filePath, records] of toolUsesByFile) {
+    // Accumulate prior strings as we scan forward.
+    // We track {turn, normalized string} for each old_string / content seen.
+    const priorStrings: Array<{ turn: number; value: string }> = [];
+
+    for (let i = 0; i < records.length; i++) {
+      const rec = records[i];
+
+      // Collect the "new_string" candidates for the current op.
+      const newStrings: Array<{ value: string }> = [];
+
+      if (rec.toolName === 'Edit') {
+        const ns = rec.input['new_string'] as string | undefined;
+        if (ns) newStrings.push({ value: ns });
+      } else if (rec.toolName === 'Write') {
+        const content = rec.input['content'] as string | undefined;
+        if (content) newStrings.push({ value: content });
+      } else if (rec.toolName === 'MultiEdit') {
+        const edits = rec.input['edits'] as Array<{ old_string?: string; new_string?: string }> | undefined;
+        if (Array.isArray(edits)) {
+          for (const e of edits) {
+            if (e.new_string) newStrings.push({ value: e.new_string });
+          }
+        }
+      }
+
+      // Check each new_string against all prior old_strings.
+      for (const { value: rawNew } of newStrings) {
+        const normNew = normalizeForBacktrack(rawNew);
+        if (normNew.length < MIN_LEN) continue;
+
+        for (const prior of priorStrings) {
+          if (prior.value.length < MIN_LEN) continue;
+          if (normNew === prior.value) {
+            results.push({
+              offsetPct: 0, // Will be patched below if we track offsetPct per record.
+              timestamp: '',
+              snippet: rawNew.slice(0, 200),
+              matchedPattern: `backtrack:${basename(filePath)}:T${prior.turn}->T${rec.turn}`,
+              precedingTool: rec.toolName,
+            });
+            // Only flag once per new_string (first match is sufficient).
+            break;
+          }
+        }
+      }
+
+      // Add the old_string(s) of the current op to priorStrings for future comparisons.
+      if (rec.toolName === 'Edit') {
+        const os = rec.input['old_string'] as string | undefined;
+        if (os) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(os) });
+        // Also add new_string — a future edit could revert back to it.
+        const ns = rec.input['new_string'] as string | undefined;
+        if (ns) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(ns) });
+      } else if (rec.toolName === 'Write') {
+        const content = rec.input['content'] as string | undefined;
+        if (content) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(content) });
+      } else if (rec.toolName === 'MultiEdit') {
+        const edits = rec.input['edits'] as Array<{ old_string?: string; new_string?: string }> | undefined;
+        if (Array.isArray(edits)) {
+          for (const e of edits) {
+            if (e.old_string) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(e.old_string) });
+            if (e.new_string) priorStrings.push({ turn: rec.turn, value: normalizeForBacktrack(e.new_string) });
+          }
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Signal C — user message repetition detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Tokenizes a string for Jaccard similarity: lowercase, split on non-word
+ * characters, drop tokens shorter than 3 chars.
+ */
+function tokenize(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/\W+/)
+      .filter((t) => t.length >= 3),
+  );
+}
+
+/**
+ * Computes Jaccard similarity between two token sets: |A ∩ B| / |A ∪ B|.
+ * Returns 0 if the union is empty.
+ */
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const t of a) {
+    if (b.has(t)) intersection++;
+  }
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/**
+ * Detects repeated user messages: when a user message has Jaccard similarity
+ * > 0.5 with any of the previous 5 user messages (on 3+-char lowercased tokens).
+ *
+ * Emits one {@link ConversationFrictionPoint} per detected repetition.
+ * `matchedPattern` format: `'repetition:T<previous_userMsgIdx>:<jaccard.toFixed(2)>'`.
+ *
+ * Skips pairs where either message has fewer than 3 unique tokens.
+ */
+function detectRepetitions(userMessages: UserMessageRecord[]): ConversationFrictionPoint[] {
+  const JACCARD_THRESHOLD = 0.5;
+  const WINDOW = 5;
+  const results: ConversationFrictionPoint[] = [];
+
+  for (let i = 1; i < userMessages.length; i++) {
+    const curr = userMessages[i];
+    const currTokens = tokenize(curr.text);
+    if (currTokens.size < 3) continue;
+
+    const start = Math.max(0, i - WINDOW);
+    let bestJaccard = 0;
+    let bestPrevIdx = -1;
+
+    for (let j = start; j < i; j++) {
+      const prev = userMessages[j];
+      const prevTokens = tokenize(prev.text);
+      if (prevTokens.size < 3) continue;
+
+      const sim = jaccard(currTokens, prevTokens);
+      if (sim > JACCARD_THRESHOLD && sim > bestJaccard) {
+        bestJaccard = sim;
+        bestPrevIdx = prev.userMsgIdx;
+      }
+    }
+
+    if (bestPrevIdx >= 0) {
+      results.push({
+        offsetPct: curr.offsetPct,
+        timestamp: curr.timestamp,
+        snippet: curr.text.slice(0, 200),
+        matchedPattern: `repetition:T${bestPrevIdx}:${bestJaccard.toFixed(2)}`,
+        precedingTool: null,
+      });
+    }
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Signal E — long gap + topic change detection
+// ---------------------------------------------------------------------------
+
+const LONG_GAP_MS = 30 * 60 * 1000; // 30 minutes
+const TOPIC_CHANGE_JACCARD_MAX = 0.2;
+
+/**
+ * Detects long pauses (> 30 min) between consecutive user messages where the
+ * two messages also have very different content (Jaccard < 0.2), indicating
+ * the user returned to start a new topic.
+ *
+ * Emits one {@link ConversationTip} per qualifying pair with
+ * `id: 'long-gap-topic-change'`, `category: 'workflow'`. Severity is `'info'`
+ * for a single occurrence and `'warning'` when 2+ pairs are found.
+ *
+ * Aggregation choice: individual tips are emitted per pair (not aggregated)
+ * up to 2 pairs. If 3+ pairs are found, they are collapsed into a single tip
+ * with `data.count` to avoid flooding the UI with workflow tips.
+ */
+function detectLongGapTopicChanges(userMessages: UserMessageRecord[]): ConversationTip[] {
+  interface GapRecord {
+    gapMin: number;
+    turn: number;
+  }
+
+  const qualifyingPairs: GapRecord[] = [];
+
+  for (let i = 1; i < userMessages.length; i++) {
+    const prev = userMessages[i - 1];
+    const curr = userMessages[i];
+
+    if (!prev.timestamp || !curr.timestamp) continue;
+
+    const gapMs = new Date(curr.timestamp).getTime() - new Date(prev.timestamp).getTime();
+    if (gapMs <= LONG_GAP_MS) continue;
+
+    const prevTokens = tokenize(prev.text);
+    const currTokens = tokenize(curr.text);
+    const sim = jaccard(prevTokens, currTokens);
+
+    if (sim < TOPIC_CHANGE_JACCARD_MAX) {
+      qualifyingPairs.push({
+        gapMin: Math.round(gapMs / 60_000),
+        turn: curr.userMsgIdx,
+      });
+    }
+  }
+
+  if (qualifyingPairs.length === 0) return [];
+
+  // Collapse 3+ pairs into a single aggregated tip.
+  if (qualifyingPairs.length >= 3) {
+    return [
+      {
+        id: 'long-gap-topic-change',
+        category: 'workflow',
+        severity: 'warning',
+        data: {
+          gapMin: qualifyingPairs[0].gapMin,
+          turn: qualifyingPairs[0].turn,
+          count: qualifyingPairs.length,
+        },
+      },
+    ];
+  }
+
+  // 1 or 2 pairs: emit one tip per pair.
+  const severity: ConversationTip['severity'] = qualifyingPairs.length >= 2 ? 'warning' : 'info';
+  return qualifyingPairs.map((p) => ({
+    id: 'long-gap-topic-change',
+    category: 'workflow' as const,
+    severity,
+    data: { gapMin: p.gapMin, turn: p.turn },
+  }));
 }

@@ -198,10 +198,14 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
   // Y is the label-signed confidence score mapped into the SENTIMENT_H band.
   const sentimentDots = useMemo(() => {
     const entries = sentimentTrace?.entries ?? [];
-    const msgCount = analysis.messageCount > 0 ? analysis.messageCount : 1;
+    // Denominator MUST be the user-message count (matches messageIndex's 1..N
+    // user numbering), not the total message count — using total clusters dots
+    // at the start because user messages are typically fewer than assistant ones.
+    const userMsgCount =
+      sentimentTrace && sentimentTrace.observed > 0 ? sentimentTrace.observed : 1;
     return entries.map((e) => {
       // Estimate tMs by distributing user messages uniformly across the session duration.
-      const tMs = (e.messageIndex / msgCount) * durationMs;
+      const tMs = (e.messageIndex / userMsgCount) * durationMs;
       const x = xFor(tMs);
       // Positive → above mid, Negative → below mid, Neutral → at mid.
       const amplitude = scoreToAmplitude(e.label, e.score);
@@ -210,7 +214,7 @@ export function Sismograph({ analysis, sentimentTrace }: Props) {
     });
     // xFor depends on durationMs
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sentimentTrace, analysis.messageCount, durationMs]);
+  }, [sentimentTrace, durationMs]);
 
   if ((analysis.costSamples ?? []).length === 0) {
     return (

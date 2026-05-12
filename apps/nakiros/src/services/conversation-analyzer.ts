@@ -292,13 +292,10 @@ export function analyzeConversation(
       if (slashMatch) slashCommandSet.add(slashMatch[1].trim());
 
       // User-message friction — derived from high-confidence Negative sentiment.
-      // NOTE: the ingest runner (runner.ts) builds userInputs from
-      // getConversationMessages() which filters BOTH <command-name> AND
-      // <local-command-> messages. This counter only excludes <command-name>,
-      // so <local-command-> messages increment userMsgCounter without being
-      // scored. The index may drift by the number of <local-command-> messages
-      // in the session — accepted, see DONE_WITH_CONCERNS below.
-      if (!text.includes('<command-name>')) {
+      // Mirror the runner's `getConversationMessages()` filter exactly: skip
+      // BOTH `<command-name>` and `<local-command-…>` messages so the counter
+      // stays in sync with the trace's `messageIndex`.
+      if (!text.includes('<command-name>') && !text.includes('<local-command-')) {
         userMsgCounter += 1;
         const score = negativeUserIndices.get(userMsgCounter);
         if (score !== undefined) {

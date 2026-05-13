@@ -22,6 +22,7 @@ import ConversationsScreen from '../conversations/ConversationsScreen';
 import type { MarketplaceTabView, SkillTabIdentity } from '../../hooks/useTabs';
 import NewShellTopBar from './NewShellTopBar';
 import NewShellSidebar from './NewShellSidebar';
+import { RecsScreen } from '../recommendations/RecsScreen';
 
 interface NewShellProps {
   projects: Project[];
@@ -225,6 +226,15 @@ export default function NewShell({
                       onOpenRunTab={handleOpenRunByIds}
                     />
                   )}
+                  {view === 'recs' && (
+                    <RecsScreen
+                      key={project.id}
+                      projectId={project.id}
+                      onRunOpen={(runId) =>
+                        openTab({ kind: 'run', runId, runKind: 'edit', label: `run ${runId.slice(0, 6)}` })
+                      }
+                    />
+                  )}
                   {view === 'settings' && <SettingsScreen />}
                   {view !== 'overview' &&
                     view !== 'skills' &&
@@ -236,6 +246,7 @@ export default function NewShell({
                     view !== 'mcp' &&
                     view !== 'hooks' &&
                     view !== 'claudeMd' &&
+                    view !== 'recs' &&
                     view !== 'settings' && (
                       <ComingSoon view={view} onBack={() => setView('overview')} />
                     )}

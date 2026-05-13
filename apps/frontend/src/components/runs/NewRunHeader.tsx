@@ -5,6 +5,8 @@ import {
   CheckCircle,
   FlaskConical,
   GitCompare,
+  Loader2,
+  Play,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -43,6 +45,20 @@ interface NewRunHeaderProps {
   /** Optional explicit "done" step count — overrides the percentage-based
    *  computation. Used by eval batches where steps are runs done. */
   stepDone?: number;
+  /**
+   * Callback to launch an eval batch on the current run's sandbox.
+   * When defined and `evalsButtonVisible` is true, a "Run evals" button
+   * appears between Stop and Finish.
+   */
+  onLaunchEval?: () => void;
+  /** When true the eval button shows a spinner and is disabled. */
+  isLaunchingEval?: boolean;
+  /**
+   * Controls whether the eval button is rendered at all. The parent is
+   * responsible for the visibility logic (e.g. evals/evals.json exists
+   * in the sandbox AND the run is in a terminal/waiting state).
+   */
+  evalsButtonVisible?: boolean;
 }
 
 /**
@@ -69,6 +85,9 @@ export default function NewRunHeader({
   progressPct,
   stepTotal,
   stepDone: stepDoneProp,
+  onLaunchEval,
+  isLaunchingEval = false,
+  evalsButtonVisible = false,
 }: NewRunHeaderProps) {
   const { t } = useTranslation('runs');
   const kindMeta = kindVisual(kind);
@@ -144,7 +163,7 @@ export default function NewRunHeader({
           </div>
         )}
 
-        {(onStop || onFinish) && (
+        {(onStop || onFinish || (evalsButtonVisible && onLaunchEval)) && (
           <>
             <span className="h-3.5 w-px bg-n-border-subtle" />
             <div className="flex flex-shrink-0 gap-1.5">
@@ -165,6 +184,25 @@ export default function NewRunHeader({
                   tone="danger"
                   onClick={onStop}
                   disabled={isStopping}
+                />
+              )}
+              {evalsButtonVisible && onLaunchEval && (
+                <ActionButton
+                  icon={
+                    isLaunchingEval ? (
+                      <Loader2 size={12} strokeWidth={2.25} className="animate-spin" />
+                    ) : (
+                      <Play size={12} strokeWidth={2.25} />
+                    )
+                  }
+                  label={
+                    isLaunchingEval
+                      ? t('panels.fix.evalLaunching', { defaultValue: 'Launching evals…' })
+                      : t('panels.fix.evalRun', { defaultValue: 'Run evals on sandbox' })
+                  }
+                  tone="accent"
+                  onClick={onLaunchEval}
+                  disabled={isLaunchingEval}
                 />
               )}
               {onFinish && (status === 'awaiting_input' || status === 'done') && (
@@ -239,14 +277,16 @@ function ActionButton({
 }: {
   icon: React.ReactNode;
   label: string;
-  tone: 'primary' | 'danger';
+  tone: 'primary' | 'danger' | 'accent';
   onClick(): void;
   disabled?: boolean;
 }) {
   const cls =
     tone === 'primary'
       ? 'border-n-accent-line bg-n-accent-soft text-n-accent hover:bg-n-accent-soft'
-      : 'border-n-critical/40 bg-n-critical-soft text-n-critical hover:bg-n-critical-soft';
+      : tone === 'accent'
+        ? 'border-n-violet/40 bg-n-violet-soft text-n-violet hover:bg-n-violet-soft/80'
+        : 'border-n-critical/40 bg-n-critical-soft text-n-critical hover:bg-n-critical-soft';
   return (
     <button
       type="button"

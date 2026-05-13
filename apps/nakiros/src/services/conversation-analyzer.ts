@@ -1,6 +1,14 @@
 import { readFileSync } from 'fs';
 import { basename, join } from 'path';
 
+import {
+  isSyntheticUserMessage,
+  jaccard,
+  STOP_WORDS,
+  SYNTHETIC_USER_TEXTS,
+  tokenizeForCluster,
+} from './runner-core/cluster-tokens.js';
+
 import type {
   ConversationAnalysis,
   ConversationCompaction,
@@ -1095,60 +1103,6 @@ function detectBacktracks(
 // ---------------------------------------------------------------------------
 
 /**
- * Stop words for Jaccard tokenization (FR + EN, case-insensitive).
- * These common function words carry no topical meaning and would inflate
- * similarity between unrelated messages.
- */
-const STOP_WORDS = new Set([
-  // FR
-  'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'donc',
-  'car', 'que', 'qui', 'quoi', 'comment', 'pourquoi', 'tu', 'je', 'il',
-  'elle', 'on', 'nous', 'vous', 'ils', 'elles', 'ce', 'cette', 'ces',
-  'mon', 'ton', 'son', 'ma', 'ta', 'sa', 'mes', 'tes', 'ses', 'avec',
-  'sans', 'pour', 'par', 'dans', 'sur', 'sous', 'entre', 'aussi',
-  'pas', 'plus', 'moins', 'tout', 'tous', 'toute', 'toutes', 'fait',
-  'faire', 'voir', 'avoir', 'être', 'etre', 'pouvoir', 'falloir',
-  'vouloir', 'savoir', 'oui', 'non', 'peut', 'doit', 'va',
-  // EN
-  'the', 'a', 'an', 'and', 'or', 'but', 'so', 'because', 'that',
-  'this', 'these', 'those', 'is', 'are', 'was', 'were', 'be',
-  'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
-  'will', 'would', 'should', 'can', 'could', 'may', 'might',
-  'i', 'you', 'he', 'she', 'we', 'they', 'it', 'us',
-  'for', 'in', 'on', 'at', 'to', 'of', 'with', 'as', 'by',
-  'yes', 'no', 'not', 'just', 'only',
-]);
-
-/**
- * Synthetic "user" messages injected by Claude Code when the user hits ESC
- * to interrupt a tool. They are NOT real user turns and must never seed a
- * stuck-cluster.
- */
-const SYNTHETIC_USER_TEXTS = new Set([
-  '[Request interrupted by user for tool use]',
-  '[Request interrupted by user]',
-]);
-
-function isSyntheticUserMessage(text: string): boolean {
-  return SYNTHETIC_USER_TEXTS.has(text.trim());
-}
-
-/**
- * Tokenizes a string for the cluster Jaccard algorithm:
- * - Lowercase
- * - Split on /\W+/
- * - Drop tokens shorter than 3 chars
- * - Drop stop words
- */
-function tokenizeForCluster(text: string): Set<string> {
-  const tokens = new Set<string>();
-  for (const t of text.toLowerCase().split(/\W+/)) {
-    if (t.length >= 3 && !STOP_WORDS.has(t)) tokens.add(t);
-  }
-  return tokens;
-}
-
-/**
  * Builds {@link ConversationFrictionZone} records using the stuck-cluster
  * algorithm (v11 — sentiment removed).
  *
@@ -1575,20 +1529,6 @@ function tokenize(text: string): Set<string> {
       .split(/\W+/)
       .filter((t) => t.length >= 3),
   );
-}
-
-/**
- * Computes Jaccard similarity between two token sets: |A ∩ B| / |A ∪ B|.
- * Returns 0 if the union is empty.
- */
-function jaccard(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 || b.size === 0) return 0;
-  let intersection = 0;
-  for (const t of a) {
-    if (b.has(t)) intersection++;
-  }
-  const union = a.size + b.size - intersection;
-  return union === 0 ? 0 : intersection / union;
 }
 
 /**

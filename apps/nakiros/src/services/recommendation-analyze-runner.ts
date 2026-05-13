@@ -152,7 +152,7 @@ Constraints:
 - Don't invent artefacts. For 'fix', the target MUST exist in inventory.json.
   If unsure, prefer 'create'.
 - Output language matches the user's language (auto-detect from zone excerpts).
-- patternId in the frontmatter MUST equal "${extras.pattern.id}".
+- patternId in the frontmatter MUST be the EXACT string "${extras.pattern.id}", quoted as YAML string (the value may look numeric — quote it).
 
 CARD TEMPLATE
 =============
@@ -161,7 +161,7 @@ Use this exact structure. The frontmatter is YAML between two \`---\` lines.
 \`\`\`markdown
 ---
 recId: <kebab-title>
-patternId: ${extras.pattern.id}
+patternId: "${extras.pattern.id}"
 action: fix | create
 artifactType: rules | skill | claudemd | subagent | hook | permission | mcp | output-style
 target: <existing-id> | new

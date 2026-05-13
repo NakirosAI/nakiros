@@ -77,7 +77,11 @@ export function parseRecoCardFromMarkdown(
 
   const recId = strOrNull(fm.recId);
   if (!recId) return { ok: false, reason: 'missing recId' };
-  if (strOrNull(fm.patternId) !== patternId) return { ok: false, reason: 'patternId mismatch' };
+  // YAML may have parsed `patternId` as a number (e.g. `546337e749143029` is read
+  // as scientific notation). Coerce to string for the comparison so a hex sha1
+  // prefix doesn't get rejected based on YAML quirks.
+  const fmPatternId = fm.patternId == null ? null : String(fm.patternId);
+  if (fmPatternId !== patternId) return { ok: false, reason: 'patternId mismatch' };
 
   const action = fm.action === 'fix' || fm.action === 'create' ? fm.action : null;
   if (!action) return { ok: false, reason: 'invalid action' };

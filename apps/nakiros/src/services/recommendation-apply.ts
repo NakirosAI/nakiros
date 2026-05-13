@@ -286,9 +286,24 @@ export async function applyReco(
   // Start the downstream runner. Returns synchronously with a run handle.
   const run = mapping.starter(req, opts as Parameters<typeof mapping.starter>[1]);
 
+  // Wrap the brief in a structured <apply-recommendation> block so the expert
+  // skill can detect the non-interactive flow and execute directly without
+  // asking follow-up questions.
+  const wrappedBrief = `<apply-recommendation>
+artifactType: ${card.artifactType}
+action: ${card.action}
+target: ${card.target}
+recId: ${card.recId}
+patternId: ${card.patternId}
+
+${briefToSend}
+</apply-recommendation>
+
+Apply this recommendation now. Every field above is final and authoritative — do not ask follow-up questions about target name, paths, scope, or any other detail. Read the SKILL.md section "Applying a Nakiros recommendation" for the non-interactive flow.`;
+
   // Immediately send the brief as the first user message so the agent
   // receives the recommendation without any manual user interaction.
-  await mapping.sender(run.runId, briefToSend, opts as Parameters<typeof sendFixUserMessage>[2]);
+  await mapping.sender(run.runId, wrappedBrief, opts as Parameters<typeof sendFixUserMessage>[2]);
 
   // Persist the applied state so subsequent calls return idempotently.
   updateRecoStatus(projectId, patternId, recId, {

@@ -6,6 +6,10 @@ user-invocable: true
 
 # Skill Factory — Nakiros
 
+> Two modes:
+> - **Interactive** (user invokes `/nakiros-skill-factory` with a question) — discover with the user.
+> - **Non-interactive** (user invokes with `<apply-recommendation>` block) — execute directly, see the section at the bottom.
+
 You create, audit, and improve agent skills for any project. Every skill must follow the agentskills.io best practices and be calibrated for real execution, not theory.
 
 ## Output language
@@ -359,3 +363,28 @@ Triggered by `/nakiros-skill-factory edit <name>`. The user wants to **modify an
 6. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
 
 No audit findings, no audit manifest. The user's chat is the spec. When the user is satisfied, they will click "Apply & Deploy" from the UI; you do not need to call `finish` yourself.
+
+## Applying a Nakiros recommendation (non-interactive)
+
+When the user prompt **starts with** `<apply-recommendation>` and ends with `</apply-recommendation>`, the agent has already produced a complete spec — your job is to write the artefact directly without discovery.
+
+### How to read the block
+
+The block contains:
+- `artifactType: skill` — confirms this skill is being invoked correctly.
+- `action: fix | create`.
+- `target: <id>` — for `create`, the desired skill name (e.g. `api-error-handling`) which becomes the directory name under `.claude/skills/`; for `fix`, the name of the existing skill to modify. The string `new` means derive the name from the brief.
+- `recId`, `patternId` — opaque, just acknowledge them in your summary at the end.
+
+After the metadata lines, a blank line, then the **brief**: the full spec written by the recommendation agent. Treat it as authoritative.
+
+### What you MUST do
+
+1. **Do not ask questions.** Every detail is in the block. If something seems ambiguous, infer from the brief or pick a sensible default — do NOT prompt the user.
+2. **For `action: create`**: derive the skill name from `target` (or from the brief if `target` is `new`). Create the directory structure at `.claude/skills/<name>/` with `SKILL.md` and any `references/` files described in the brief. Use the brief's spec as the source of truth for inputs, outputs, commands, and gotchas.
+3. **For `action: fix`**: locate the existing skill at `.claude/skills/<target>/`. Apply the changes described in the brief to `SKILL.md` and any other files referenced. Use Edit/Write — do not rewrite the entire skill unless the brief explicitly asks for a full rewrite.
+4. **End your turn with a one-line summary** of what you wrote, including the absolute path. Example: `Wrote .claude/skills/api-error-handling/SKILL.md (create mode, 87 lines).`
+
+### When NOT to apply non-interactively
+
+If the block is malformed (missing `action`, missing `target`, unknown `artifactType`, etc.), refuse: emit a single short message starting with `[apply-recommendation] malformed:` followed by the reason. Do not write anything. Do not ask follow-ups.

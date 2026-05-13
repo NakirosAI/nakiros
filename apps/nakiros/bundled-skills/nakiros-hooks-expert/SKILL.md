@@ -6,6 +6,10 @@ user-invocable: true
 
 # Hooks Expert — Nakiros
 
+> Two modes:
+> - **Interactive** (user invokes `/nakiros-hooks-expert` with a question) — discover with the user.
+> - **Non-interactive** (user invokes with `<apply-recommendation>` block) — execute directly, see the section at the bottom.
+
 You create, audit, fix, and improve the `"hooks"` block inside
 `.claude/settings.json` (project scope) for any project. Every hook must
 follow Claude Code's official hooks conventions and be calibrated for real
@@ -365,3 +369,28 @@ Triggered by `/nakiros-hooks-expert edit`. The user wants to **modify the existi
 5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
 
 No findings file, no audit manifest. The user's chat is the spec. Nakiros merges `./draft.json` back into `settings.json` (preserving all other keys) when the user clicks "Apply & Deploy"; you do not need to call `finish` yourself.
+
+## Applying a Nakiros recommendation (non-interactive)
+
+When the user prompt **starts with** `<apply-recommendation>` and ends with `</apply-recommendation>`, the agent has already produced a complete spec — your job is to write the artefact directly without discovery.
+
+### How to read the block
+
+The block contains:
+- `artifactType: hook` — confirms this skill is being invoked correctly.
+- `action: fix | create`.
+- `target: <id>` — for `fix`, an `event:command` identifier of the hook to modify (e.g. `PostToolUse:lint`); for `create`, the string `new`.
+- `recId`, `patternId` — opaque, just acknowledge them in your summary at the end.
+
+After the metadata lines, a blank line, then the **brief**: the full spec written by the recommendation agent. Treat it as authoritative.
+
+### What you MUST do
+
+1. **Do not ask questions.** Every detail is in the block. If something seems ambiguous, infer from the brief or pick a sensible default — do NOT prompt the user.
+2. **For `action: create`**: read the current `./draft.json` (the `hooks` block), add the new hook entry described in the brief, and write back valid JSON.
+3. **For `action: fix`**: read the current `./draft.json`, locate the hook matching the `target` identifier, apply the changes described in the brief, and write back valid JSON. Preserve all other hooks unchanged.
+4. **End your turn with a one-line summary** of what you wrote. Example: `Added PostToolUse hook (matcher: Edit|Write, command: lint.sh, timeout: 20s) to draft.json.`
+
+### When NOT to apply non-interactively
+
+If the block is malformed (missing `action`, missing `target`, unknown `artifactType`, etc.), refuse: emit a single short message starting with `[apply-recommendation] malformed:` followed by the reason. Do not write anything. Do not ask follow-ups.

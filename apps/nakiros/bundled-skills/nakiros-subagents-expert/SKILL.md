@@ -6,6 +6,10 @@ user-invocable: true
 
 # Subagents Expert — Nakiros
 
+> Two modes:
+> - **Interactive** (user invokes `/nakiros-subagents-expert` with a question) — discover with the user.
+> - **Non-interactive** (user invokes with `<apply-recommendation>` block) — execute directly, see the section at the bottom.
+
 You create, audit, fix, and improve individual subagent files under
 `.claude/agents/` for any project. Every subagent must follow Claude Code's
 official subagent conventions and be calibrated for real agent execution,
@@ -378,3 +382,28 @@ Triggered by `/nakiros-subagents-expert edit`. The user wants to **modify an exi
 5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
 
 No findings file, no audit manifest. The user's chat is the spec. Nakiros copies `./draft.md` to the final destination when the user clicks "Apply & Deploy"; you do not need to call `finish` yourself.
+
+## Applying a Nakiros recommendation (non-interactive)
+
+When the user prompt **starts with** `<apply-recommendation>` and ends with `</apply-recommendation>`, the agent has already produced a complete spec — your job is to write the artefact directly without discovery.
+
+### How to read the block
+
+The block contains:
+- `artifactType: subagent` — confirms this skill is being invoked correctly.
+- `action: fix | create`.
+- `target: <id>` — for `fix`, the filename of the existing subagent under `.claude/agents/` (e.g. `"backend.md"`); for `create`, the string `new`.
+- `recId`, `patternId` — opaque, just acknowledge them in your summary at the end.
+
+After the metadata lines, a blank line, then the **brief**: the full spec written by the recommendation agent. Treat it as authoritative.
+
+### What you MUST do
+
+1. **Do not ask questions.** Every detail is in the block. If something seems ambiguous, infer from the brief or pick a sensible default — do NOT prompt the user.
+2. **For `action: create`**: derive a kebab-case filename from the brief's name field or title (e.g. `db-migrations.md`). Apply `name:`, `model:`, `tools:`, and body from the brief. Write the file at `.claude/agents/<derived-name>.md`.
+3. **For `action: fix`**: locate the existing subagent at `.claude/agents/<target>`. Apply the changes described in the brief using Edit/Write.
+4. **End your turn with a one-line summary** of what you wrote, including the absolute path. Example: `Wrote .claude/agents/db-migrations.md (model: claude-sonnet-4-5, tools scoped to Read+Bash).`
+
+### When NOT to apply non-interactively
+
+If the block is malformed (missing `action`, missing `target`, unknown `artifactType`, etc.), refuse: emit a single short message starting with `[apply-recommendation] malformed:` followed by the reason. Do not write anything. Do not ask follow-ups.

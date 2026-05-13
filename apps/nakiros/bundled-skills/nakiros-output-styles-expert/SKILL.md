@@ -6,6 +6,10 @@ user-invocable: true
 
 # Output Styles Expert — Nakiros
 
+> Two modes:
+> - **Interactive** (user invokes `/nakiros-output-styles-expert` with a question) — discover with the user.
+> - **Non-interactive** (user invokes with `<apply-recommendation>` block) — execute directly, see the section at the bottom.
+
 You create, audit, fix, and improve individual output-style files under
 `.claude/output-styles/` for any project. Every style must follow Claude
 Code's official output styles conventions and produce consistent, predictable
@@ -358,3 +362,28 @@ Triggered by `/nakiros-output-styles-expert edit`. The user wants to **modify an
 5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
 
 No findings file, no audit manifest. The user's chat is the spec. Nakiros copies `./draft.md` to the final destination when the user clicks "Apply & Deploy"; you do not need to call `finish` yourself.
+
+## Applying a Nakiros recommendation (non-interactive)
+
+When the user prompt **starts with** `<apply-recommendation>` and ends with `</apply-recommendation>`, the agent has already produced a complete spec — your job is to write the artefact directly without discovery.
+
+### How to read the block
+
+The block contains:
+- `artifactType: output-style` — confirms this skill is being invoked correctly.
+- `action: fix | create`.
+- `target: <id>` — for `fix`, the filename of the existing style under `.claude/output-styles/` (e.g. `"code-reviewer.md"`); for `create`, the string `new`.
+- `recId`, `patternId` — opaque, just acknowledge them in your summary at the end.
+
+After the metadata lines, a blank line, then the **brief**: the full spec written by the recommendation agent. Treat it as authoritative.
+
+### What you MUST do
+
+1. **Do not ask questions.** Every detail is in the block. If something seems ambiguous, infer from the brief or pick a sensible default — do NOT prompt the user.
+2. **For `action: create`**: derive a kebab-case filename from the brief's `name:` field or title (e.g. `technical-writer.md`). Apply `name:`, `description:`, `keep-coding-instructions:`, and body from the brief. Write the file at `.claude/output-styles/<derived-name>.md`.
+3. **For `action: fix`**: locate the existing style at `.claude/output-styles/<target>`. Apply the changes described in the brief using Edit/Write.
+4. **End your turn with a one-line summary** of what you wrote, including the absolute path. Example: `Wrote .claude/output-styles/technical-writer.md (keep-coding-instructions: false, 48 lines).`
+
+### When NOT to apply non-interactively
+
+If the block is malformed (missing `action`, missing `target`, unknown `artifactType`, etc.), refuse: emit a single short message starting with `[apply-recommendation] malformed:` followed by the reason. Do not write anything. Do not ask follow-ups.

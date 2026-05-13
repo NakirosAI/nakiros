@@ -95,6 +95,7 @@ const ACTION_BY_KIND: Record<AgentRunKind, RunDisplayContext['actionVerb']> = {
   eval: 'Eval',
   'analyze-convo': 'Analyze',
   'classify-convo': 'Classify',
+  'recommendation-analyze': 'Analyze',
 };
 
 /** Build the display context for a run. Pure — safe to call inline. */

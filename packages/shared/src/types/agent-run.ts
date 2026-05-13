@@ -15,7 +15,7 @@ export type { OutputStylesRunMode } from './project.js';
  * on the frontend. New kinds (e.g. `analyze-convo`) extend this union without
  * changing the surrounding contract.
  */
-export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'edit' | 'analyze-convo' | 'classify-convo';
+export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'edit' | 'analyze-convo' | 'classify-convo' | 'recommendation-analyze';
 
 /**
  * Lifecycle status surfaced to the UI. Mapped from each runner's native

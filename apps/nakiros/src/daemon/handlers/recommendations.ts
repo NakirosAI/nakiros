@@ -28,6 +28,7 @@ import { groupPatterns, wrapZone } from '../../services/recommendation-cluster.j
 import {
   listRecoCards,
   readPatterns,
+  updatePatternAnalysis,
   updateRecoStatus,
   writeRecoBody,
   writePatterns,
@@ -35,6 +36,8 @@ import {
 import {
   startRecommendationAnalyze,
   stopRecommendationAnalyze,
+  getRecommendationAnalyzeRun,
+  listActiveRecommendationAnalyzeRuns,
   getRecommendationAnalyzeBufferedEvents,
 } from '../../services/recommendation-analyze-runner.js';
 import { applyReco } from '../../services/recommendation-apply.js';
@@ -138,17 +141,36 @@ export const recommendationsHandlers: HandlerRegistry = {
 
   /**
    * Start (or rebind to an active) LLM analyser run for the given pattern.
-   * Returns the `runId` immediately; progress arrives via `recommendations:event`.
+   * Flips `analysis.status` to `'running'` synchronously before the runner
+   * spawns the subprocess so the frontend sees the status change immediately
+   * after the IPC call returns — no need to wait for the first stream event.
+   * Returns the `runId`; progress arrives via `recommendations:event`.
    */
   'recommendations:analyzePattern': createTypedHandler(
     (request: StartRecommendationAnalyzeRequest): { runId: string } => {
       const { projectPath, providerProjectDir } = resolveProject(request.projectId);
-      const run = startRecommendationAnalyze(request, {
-        projectPath,
-        providerProjectDir,
-        onEvent: broadcastAnalyzeEvent,
+      // Flip status synchronously so a pattern refresh right after the IPC
+      // call already shows `running` in the UI.
+      updatePatternAnalysis(request.projectId, request.patternId, {
+        status: 'running',
+        runId: undefined,
       });
-      return { runId: run.runId };
+      try {
+        const run = startRecommendationAnalyze(request, {
+          projectPath,
+          providerProjectDir,
+          onEvent: broadcastAnalyzeEvent,
+        });
+        // Persist the real runId once the runner entry is created.
+        updatePatternAnalysis(request.projectId, request.patternId, {
+          status: 'running',
+          runId: run.runId,
+        });
+        return { runId: run.runId };
+      } catch (err) {
+        updatePatternAnalysis(request.projectId, request.patternId, { status: 'failed' });
+        throw err;
+      }
     },
   ),
 
@@ -165,6 +187,22 @@ export const recommendationsHandlers: HandlerRegistry = {
       (runId) => runId,
     ),
   ),
+
+  /**
+   * Look up a recommendation analyser run by id. Returns `null` when unknown.
+   */
+  'recommendations:getAnalyzeRun': createTypedHandler(getRecommendationAnalyzeRun),
+
+  /**
+   * List all active (non-terminal) recommendation analyser runs across all projects.
+   */
+  'recommendations:listActiveAnalyzeRuns': createTypedHandler(listActiveRecommendationAnalyzeRuns),
+
+  /**
+   * Return the buffered replay events for the given run. Used by frontend
+   * components that mount after the run has already started.
+   */
+  'recommendations:getAnalyzeBufferedEvents': createTypedHandler(getRecommendationAnalyzeBufferedEvents),
 
   /**
    * Spawn a downstream fix / edit / create run for the given reco card and

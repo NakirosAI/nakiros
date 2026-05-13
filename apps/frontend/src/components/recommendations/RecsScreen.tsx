@@ -6,14 +6,17 @@ import { PatternDetail } from './PatternDetail';
 
 interface Props {
   projectId: string;
+  /** Called when the user applies a reco card — opens the downstream run tab. */
   onRunOpen(runId: string): void;
+  /** Called when the user clicks Analyser — opens the recommendation-analyze run tab. */
+  onAnalyzeRunOpen(runId: string): void;
 }
 
 /**
  * 2-column screen: pattern list (left) + selected pattern detail (right).
  * Loads patterns on mount; Refresh re-runs the daemon-side clustering.
  */
-export function RecsScreen({ projectId, onRunOpen }: Props) {
+export function RecsScreen({ projectId, onRunOpen, onAnalyzeRunOpen }: Props) {
   const { t } = useTranslation('recommendations');
   const [patterns, setPatterns] = useState<RecommendationPattern[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -67,6 +70,7 @@ export function RecsScreen({ projectId, onRunOpen }: Props) {
               projectId={projectId}
               pattern={selected}
               onRunOpen={onRunOpen}
+              onAnalyzeRunOpen={onAnalyzeRunOpen}
               onPatternsRefresh={() => void load()}
             />
           ) : (

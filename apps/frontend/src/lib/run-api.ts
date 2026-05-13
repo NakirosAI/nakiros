@@ -4,6 +4,8 @@ import type {
   AuditRunEvent,
   ClassifyConvoRun,
   ClassifyConvoRunEvent,
+  RecommendationAnalyzeRun,
+  RecommendationAnalyzeRunEvent,
 } from '@nakiros/shared';
 import type { RunStateApi } from '../hooks/useRunState';
 
@@ -26,8 +28,8 @@ import type { RunStateApi } from '../hooks/useRunState';
  * `manifest` / `checkResults` / `targets`, classify-convo's
  * `digestPath`) are narrowed at the call site by `runKind`.
  */
-export type AuditLikeRun = AuditRun | ClassifyConvoRun;
-export type AuditLikeEvent = AuditRunEvent['event'] | ClassifyConvoRunEvent['event'];
+export type AuditLikeRun = AuditRun | ClassifyConvoRun | RecommendationAnalyzeRun;
+export type AuditLikeEvent = AuditRunEvent['event'] | ClassifyConvoRunEvent['event'] | RecommendationAnalyzeRunEvent['event'];
 
 export interface RunUserActions {
   /** Send a free-form message while the run is `waiting_for_input`. */
@@ -135,6 +137,22 @@ export function getRunAPI(kind: AgentRunKind): KindRunAPI | null {
         // classify-convo's terminal artefact is a structured `ConversationDigest`
         // rendered via `DigestView`, not a markdown report. The RunScreen swaps
         // its terminal panel based on `runKind === 'classify-convo'`.
+        readReport: null,
+      };
+    case 'recommendation-analyze':
+      return {
+        state: {
+          getRun: (id) => window.nakiros.getRecommendationAnalyzeRun(id),
+          getBufferedEvents: (id) => window.nakiros.getRecommendationAnalyzeBufferedEvents(id),
+          onEvent: window.nakiros.onRecommendationsEvent,
+        },
+        actions: {
+          // recommendation-analyze is single-turn — no user messages, stop only.
+          sendUserMessage: () => Promise.resolve(),
+          stop: (id) => window.nakiros.stopRecommendationAnalyze(id),
+          // No finish step — runner self-completes after the single turn.
+          finish: () => Promise.resolve(),
+        },
         readReport: null,
       };
   }

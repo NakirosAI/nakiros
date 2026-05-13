@@ -13,6 +13,8 @@ import {
   type IpcChannel,
   type ApplyRecoResponse,
   type RecoCard,
+  type RecommendationAnalyzeRun,
+  type RecommendationAnalyzeRunEvent,
   type RecommendationPattern,
   type StartRecommendationAnalyzeRequest,
 } from '@nakiros/shared';
@@ -665,6 +667,15 @@ const client = {
 
   stopRecommendationAnalyze: (runId: string) =>
     invoke<void>(C['recommendations:stopAnalyze'], runId),
+
+  getRecommendationAnalyzeRun: (runId: string) =>
+    invoke<RecommendationAnalyzeRun | null>(C['recommendations:getAnalyzeRun'], runId),
+
+  listActiveRecommendationAnalyzeRuns: () =>
+    invoke<RecommendationAnalyzeRun[]>(C['recommendations:listActiveAnalyzeRuns']),
+
+  getRecommendationAnalyzeBufferedEvents: (runId: string) =>
+    invoke<RecommendationAnalyzeRunEvent['event'][]>(C['recommendations:getAnalyzeBufferedEvents'], runId),
 
   applyReco: (
     projectId: string,

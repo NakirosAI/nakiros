@@ -587,6 +587,11 @@ declare global {
         req: StartRecommendationAnalyzeRequest,
       ): Promise<{ runId: string }>;
       stopRecommendationAnalyze(runId: string): Promise<void>;
+      getRecommendationAnalyzeRun(runId: string): Promise<RecommendationAnalyzeRun | null>;
+      listActiveRecommendationAnalyzeRuns(): Promise<RecommendationAnalyzeRun[]>;
+      getRecommendationAnalyzeBufferedEvents(
+        runId: string,
+      ): Promise<RecommendationAnalyzeRunEvent['event'][]>;
       applyReco(
         projectId: string,
         patternId: string,

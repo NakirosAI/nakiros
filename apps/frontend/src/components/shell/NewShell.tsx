@@ -233,6 +233,14 @@ export default function NewShell({
                       onRunOpen={(runId) =>
                         openTab({ kind: 'run', runId, runKind: 'edit', label: `run ${runId.slice(0, 6)}` })
                       }
+                      onAnalyzeRunOpen={(runId) =>
+                        openTab({
+                          kind: 'run',
+                          runId,
+                          runKind: 'recommendation-analyze',
+                          label: `analyse ${runId.slice(0, 6)}`,
+                        })
+                      }
                     />
                   )}
                   {view === 'settings' && <SettingsScreen />}

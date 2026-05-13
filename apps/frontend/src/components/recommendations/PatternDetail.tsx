@@ -6,7 +6,10 @@ import { RecoCard } from './RecoCard';
 interface Props {
   projectId: string;
   pattern: RecommendationPattern;
+  /** Called when the user applies a reco card — opens the downstream fix/edit/create run tab. */
   onRunOpen(runId: string): void;
+  /** Called when the user clicks Analyser — opens the recommendation-analyze run tab. */
+  onAnalyzeRunOpen(runId: string): void;
   onPatternsRefresh(): void;
 }
 
@@ -18,7 +21,7 @@ interface Props {
  * Subscribes to `recommendations:event` so the run status and reco list
  * live-update while the analyser is running.
  */
-export function PatternDetail({ projectId, pattern, onRunOpen, onPatternsRefresh }: Props) {
+export function PatternDetail({ projectId, pattern, onRunOpen, onAnalyzeRunOpen, onPatternsRefresh }: Props) {
   const { t } = useTranslation('recommendations');
   const [recos, setRecos] = useState<RecoCardType[]>([]);
   const [showDismissed, setShowDismissed] = useState(false);
@@ -57,7 +60,8 @@ export function PatternDetail({ projectId, pattern, onRunOpen, onPatternsRefresh
   const dismissedCount = recos.filter((r) => r.status === 'dismissed').length;
 
   const handleAnalyze = async () => {
-    await window.nakiros.analyzeRecommendationPattern({ projectId, patternId: pattern.id });
+    const { runId } = await window.nakiros.analyzeRecommendationPattern({ projectId, patternId: pattern.id });
+    onAnalyzeRunOpen(runId);
     onPatternsRefresh();
   };
 

@@ -17,10 +17,7 @@ import { randomBytes } from 'crypto';
 
 import type { RecommendationPattern, RecoCard } from '@nakiros/shared';
 
-// TEMP — wired in Task 8.
-function parseRecoCardFromDisk(_md: string, _sidecar: RecoSidecar): RecoCard | null {
-  throw new Error('parseRecoCardFromDisk is wired in Task 8 — do not call before then');
-}
+import { parseRecoCardFromDisk } from './recommendation-card-parser.js';
 
 /** Cache version stored in `patterns.json`. Increment on schema changes. */
 export const PATTERNS_CACHE_VERSION = 1;

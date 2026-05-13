@@ -331,6 +331,22 @@ export const IPC_CHANNELS = {
   'classifyConvo:listActive': 'classifyConvo:listActive',
   'classifyConvo:listAll': 'classifyConvo:listAll',
   'classifyConvo:getBufferedEvents': 'classifyConvo:getBufferedEvents',
+
+  // Recommendations — friction-pattern clustering + per-pattern LLM analyser
+  // + apply-reco translation to existing fix/create/edit runners.
+  // See `docs/superpowers/specs/2026-05-13-friction-pattern-recommendations-design.md`.
+  'recommendations:listPatterns': 'recommendations:listPatterns',
+  'recommendations:getPattern': 'recommendations:getPattern',
+  'recommendations:refresh': 'recommendations:refresh',
+  'recommendations:analyzePattern': 'recommendations:analyzePattern',
+  'recommendations:stopAnalyze': 'recommendations:stopAnalyze',
+  'recommendations:applyReco': 'recommendations:applyReco',
+  'recommendations:dismissReco': 'recommendations:dismissReco',
+  'recommendations:editRecoBrief': 'recommendations:editRecoBrief',
+  'recommendations:event': 'recommendations:event',
+  'recommendations:patternsUpdated': 'recommendations:patternsUpdated',
+  'recommendations:patternAnalyzed': 'recommendations:patternAnalyzed',
+  'recommendations:recoApplied': 'recommendations:recoApplied',
 } as const;
 
 /** Union of every IPC channel key declared in {@link IPC_CHANNELS}. */

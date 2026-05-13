@@ -111,84 +111,25 @@ function hydrateZones(
 // ─── First prompt ─────────────────────────────────────────────────────────────
 
 /**
- * Build the full first-turn prompt from the resolved extras. Self-contained —
- * does not read any files; the agent receives file paths and uses its own tools.
+ * Build the thin first-turn prompt that delegates to the bundled skill. The
+ * agent reads both input files itself; the card format and artefact-type guide
+ * live in the skill's `references/` directory so they can be iterated without
+ * touching this runner.
  *
  * @param extras Kind-specific extras resolved during `prepareWorkdir`.
  * @returns The first user prompt string passed to the Claude Code CLI.
  */
 function buildInitialPrompt(extras: AnalyzeExtras): string {
-  return `ROLE
-====
-You are the Nakiros recommendation agent. A friction pattern has been
-detected across ${extras.pattern.zoneCount} conversations of this project.
-Produce one or more recommendation cards proposing concrete \`.claude/\`
-actions that would have prevented this friction.
+  return `<pattern>
+A friction pattern with id "${extras.pattern.id}" has been detected across ${extras.pattern.zoneCount} conversations of this project. The full pattern (including hydrated zones) is in ./pattern.json. The project's existing .claude/ inventory is in ./inventory.json.
+</pattern>
 
-PATTERN
-=======
-The pattern is in ./pattern.json. Read it with the Read tool. It contains:
-- topTokens, filesTouched, signalKinds, severity, zoneCount.
-- For each zone: reactionPoint.snippet (full text of the user message), agentContext
-  (keyActions, filesTouched, toolErrorsCount, backtrackedFiles), originating convoId.
+<instructions>
+Produce recommendation cards for the pattern above per the \`nakiros-recommendation-analyzer\` skill. Read both ./pattern.json and ./inventory.json with the Read tool, decide on 1..N atomic actions, and write each as a markdown card under ./recos/. Card format details are in the skill's \`references/card-format.md\`. Choose the artefact type using \`references/decision-guide.md\`.
 
-EXISTING .claude/ INVENTORY
-===========================
-The inventory is in ./inventory.json. Read it with the Read tool. It lists
-existing rules/skills/claudemd/subagents/hooks/permissions/mcps/output-styles
-with identifiers and short descriptions. Use it to decide whether to
-\`fix\` an existing artefact or \`create\` a new one.
-
-YOUR JOB
-========
-Write 1..N markdown cards to \`./recos/<kebab-title>.md\`. Each card = ONE
-atomic action. If multiple levers are needed (fix rule X + create skill Y
-+ add a CLAUDE.md note), write one card per lever.
-
-Constraints:
-- The 'Brief' body is passed verbatim to the downstream fix/create runner —
-  make it self-contained: cite zone excerpts, exact file paths, exact errors.
-  Never summarise.
-- Don't invent artefacts. For 'fix', the target MUST exist in inventory.json.
-  If unsure, prefer 'create'.
-- Output language matches the user's language (auto-detect from zone excerpts).
-- patternId in the frontmatter MUST be the EXACT string "${extras.pattern.id}", quoted as YAML string (the value may look numeric — quote it).
-
-CARD TEMPLATE
-=============
-Use this exact structure. The frontmatter is YAML between two \`---\` lines.
-
-\`\`\`markdown
----
-recId: <kebab-title>
-patternId: "${extras.pattern.id}"
-action: fix | create
-artifactType: rules | skill | claudemd | subagent | hook | permission | mcp | output-style
-target: <existing-id> | new
-title: <short human title>
-evidence:
-  zoneRefs:
-    - {convoId: <id>, zoneId: <id>}
-  files:
-    - <path>
----
-
-# <title>
-
-## Why
-<2-3 sentences anchored in pattern evidence>
-
-## Brief
-<self-contained prompt for the downstream runner — detailed, includes zone
-excerpts and exact targets. At least 20 characters.>
-
-## Acceptance criteria
-- bullet 1
-- bullet 2
-\`\`\`
-
-When you are done writing all the cards, end your turn. Do not return the
-cards inline — only write them to files.`;
+The patternId you must write in every card's frontmatter is "${extras.pattern.id}" — quote it as a YAML string.
+</instructions>
+`;
 }
 
 // ─── Runner spec ──────────────────────────────────────────────────────────────

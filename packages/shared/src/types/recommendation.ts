@@ -172,6 +172,22 @@ export interface RecommendationAnalyzeRun {
   model: 'sonnet' | 'opus';
   /** Count of {@link RecoCard}s successfully parsed and persisted. */
   recoCount: number;
+  /**
+   * Conversation turns logged by runner-core. Single-turn runner — will always
+   * contain exactly one `user` turn (the first prompt) and one `assistant` turn
+   * once the run completes.
+   */
+  turns: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
+    tools?: { name: string; display: string }[];
+    blocks?: Array<{ type: 'text'; text: string } | { type: 'tool'; name: string; display: string }>;
+  }>;
+  /** Cumulative output tokens reported by runner-core across all streaming events. */
+  tokensUsed: number;
+  /** Total wall-clock milliseconds the Claude Code subprocess was active. */
+  durationMs: number;
   /** ISO-8601 start timestamp. */
   startedAt: string;
   /** ISO-8601 finish timestamp — `null` while the run is active. */

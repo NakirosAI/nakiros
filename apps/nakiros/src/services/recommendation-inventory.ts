@@ -68,10 +68,10 @@ export interface ProjectInventory {
  * @param projectId   Stable project identifier (used in the returned inventory).
  * @param projectPath Absolute path to the project root.
  */
-export async function buildProjectInventory(
+export function buildProjectInventorySync(
   projectId: string,
   projectPath: string,
-): Promise<ProjectInventory> {
+): ProjectInventory {
   const items: InventoryItem[] = [];
 
   let snapshot: ReturnType<typeof buildDotClaudeSnapshot>;
@@ -188,4 +188,19 @@ export async function buildProjectInventory(
     generatedAt: new Date().toISOString(),
     items,
   };
+}
+
+/**
+ * Async alias of {@link buildProjectInventorySync} — preserved for callers
+ * that already `await` this function. Delegates synchronously; the returned
+ * promise resolves on the same tick.
+ *
+ * @param projectId   Stable project identifier.
+ * @param projectPath Absolute path to the project root.
+ */
+export async function buildProjectInventory(
+  projectId: string,
+  projectPath: string,
+): Promise<ProjectInventory> {
+  return buildProjectInventorySync(projectId, projectPath);
 }

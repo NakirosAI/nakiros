@@ -126,6 +126,12 @@ import type {
   ConversationIngestProject,
   ConversationIngestSession,
   ConversationIngestProgressEvent,
+  ApplyRecoResponse,
+  RecoCard,
+  RecommendationAnalyzeRun,
+  RecommendationAnalyzeRunEvent,
+  RecommendationPattern,
+  StartRecommendationAnalyzeRequest,
 } from '@nakiros/shared';
 
 declare global {
@@ -568,6 +574,49 @@ declare global {
       listConversationIngestSessions(projectPath?: string): Promise<ConversationIngestSession[]>;
       onConversationIngestProgress(
         cb: (event: ConversationIngestProgressEvent) => void,
+      ): () => void;
+
+      // Recommendations — friction-pattern clustering + analyser + apply.
+      listRecommendationPatterns(projectId: string): Promise<RecommendationPattern[]>;
+      getRecommendationPattern(
+        projectId: string,
+        patternId: string,
+      ): Promise<{ pattern: RecommendationPattern | null; recos: RecoCard[] }>;
+      refreshRecommendations(projectId: string): Promise<{ patternCount: number }>;
+      analyzeRecommendationPattern(
+        req: StartRecommendationAnalyzeRequest,
+      ): Promise<{ runId: string }>;
+      stopRecommendationAnalyze(runId: string): Promise<void>;
+      applyReco(
+        projectId: string,
+        patternId: string,
+        recId: string,
+        editedBrief?: string,
+      ): Promise<ApplyRecoResponse>;
+      dismissReco(
+        projectId: string,
+        patternId: string,
+        recId: string,
+      ): Promise<{ ok: boolean }>;
+      editRecoBrief(
+        projectId: string,
+        patternId: string,
+        recId: string,
+        brief: string,
+      ): Promise<{ ok: boolean }>;
+      /** Subscribe to live events from a running analyser run. Returns an unsubscribe function. */
+      onRecommendationsEvent(cb: (event: RecommendationAnalyzeRunEvent) => void): () => void;
+      /** Fired when the pattern list for a project is refreshed (cluster recomputed). */
+      onRecommendationsPatternsUpdated(
+        cb: (event: { projectId: string; patterns: RecommendationPattern[] }) => void,
+      ): () => void;
+      /** Fired when an analyser run finishes — carries the updated run object. */
+      onRecommendationsPatternAnalyzed(
+        cb: (event: { projectId: string; patternId: string; run: RecommendationAnalyzeRun }) => void,
+      ): () => void;
+      /** Fired when a reco card is applied — carries the updated card. */
+      onRecommendationsRecoApplied(
+        cb: (event: { projectId: string; patternId: string; reco: RecoCard }) => void,
       ): () => void;
     };
   }

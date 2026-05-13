@@ -8,7 +8,14 @@
  * channel strings. Enforced by `CLAUDE.md`.
  */
 
-import { IPC_CHANNELS, type IpcChannel } from '@nakiros/shared';
+import {
+  IPC_CHANNELS,
+  type IpcChannel,
+  type ApplyRecoResponse,
+  type RecoCard,
+  type RecommendationPattern,
+  type StartRecommendationAnalyzeRequest,
+} from '@nakiros/shared';
 
 const HTTP_BASE = typeof window !== 'undefined' ? window.location.origin : '';
 const WS_URL = HTTP_BASE.replace(/^http/, 'ws') + '/ws';
@@ -638,6 +645,63 @@ const client = {
   getEditUsage: (runId: string) => invoke(C['edit:getUsage'], runId),
   runEditEvals: (request: { runId: string; evalNames?: string[]; includeBaseline?: boolean }) =>
     invoke(C['edit:runEvals'], request),
+
+  // Recommendations — friction-pattern clustering + analyser + apply.
+  listRecommendationPatterns: (projectId: string) =>
+    invoke<RecommendationPattern[]>(C['recommendations:listPatterns'], projectId),
+
+  getRecommendationPattern: (projectId: string, patternId: string) =>
+    invoke<{ pattern: RecommendationPattern | null; recos: RecoCard[] }>(
+      C['recommendations:getPattern'],
+      projectId,
+      patternId,
+    ),
+
+  refreshRecommendations: (projectId: string) =>
+    invoke<{ patternCount: number }>(C['recommendations:refresh'], projectId),
+
+  analyzeRecommendationPattern: (req: StartRecommendationAnalyzeRequest) =>
+    invoke<{ runId: string }>(C['recommendations:analyzePattern'], req),
+
+  stopRecommendationAnalyze: (runId: string) =>
+    invoke<void>(C['recommendations:stopAnalyze'], runId),
+
+  applyReco: (
+    projectId: string,
+    patternId: string,
+    recId: string,
+    editedBrief?: string,
+  ) =>
+    invoke<ApplyRecoResponse>(
+      C['recommendations:applyReco'],
+      ...(editedBrief !== undefined
+        ? [projectId, patternId, recId, editedBrief]
+        : [projectId, patternId, recId]),
+    ),
+
+  dismissReco: (projectId: string, patternId: string, recId: string) =>
+    invoke<{ ok: boolean }>(C['recommendations:dismissReco'], projectId, patternId, recId),
+
+  editRecoBrief: (projectId: string, patternId: string, recId: string, brief: string) =>
+    invoke<{ ok: boolean }>(
+      C['recommendations:editRecoBrief'],
+      projectId,
+      patternId,
+      recId,
+      brief,
+    ),
+
+  onRecommendationsEvent: (cb: (event: unknown) => void) =>
+    subscribe(C['recommendations:event'], cb),
+
+  onRecommendationsPatternsUpdated: (cb: (event: unknown) => void) =>
+    subscribe(C['recommendations:patternsUpdated'], cb),
+
+  onRecommendationsPatternAnalyzed: (cb: (event: unknown) => void) =>
+    subscribe(C['recommendations:patternAnalyzed'], cb),
+
+  onRecommendationsRecoApplied: (cb: (event: unknown) => void) =>
+    subscribe(C['recommendations:recoApplied'], cb),
 
   // Conversation friction-classifier runner (classify-convo)
   startClassifyConvo: (request: unknown) => invoke(C['classifyConvo:start'], request),

@@ -1,0 +1,12 @@
+{
+  "projectId": "eval-project",
+  "projectPath": "/tmp/eval-project",
+  "generatedAt": "2026-05-13T00:00:00.000Z",
+  "items": [
+    { "id": "i18n", "type": "rules", "label": "i18n", "description": "i18n keys go through bundles", "hint": "apps/frontend/**/*.tsx" },
+    { "id": "ipc-contract", "type": "rules", "label": "ipc-contract", "hint": "packages/shared/src/ipc-channels.ts" },
+    { "id": "ui-kit", "type": "rules", "label": "ui-kit" },
+    { "id": "frontend", "type": "subagent", "label": "frontend", "description": "Frontend specialist" },
+    { "id": "backend", "type": "subagent", "label": "backend", "description": "Backend specialist" }
+  ]
+}

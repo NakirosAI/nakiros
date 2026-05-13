@@ -1,0 +1,73 @@
+{
+  "pattern": {
+    "id": "abc123def4567890",
+    "projectId": "eval-project",
+    "zoneRefs": [{ "convoId": "c6", "zoneId": "z6" }, { "convoId": "c7", "zoneId": "z7" }],
+    "signature": {
+      "topTokens": ["sqlite", "lock", "writer", "concurrent"],
+      "filesTouched": ["apps/nakiros/src/services/conversation-ingest/runner.ts"],
+      "signalKinds": ["S5"],
+      "firstSeen": "2026-05-08T08:00:00.000Z",
+      "lastSeen": "2026-05-09T20:00:00.000Z"
+    },
+    "zoneCount": 2,
+    "severity": "high",
+    "analysis": { "status": "idle" }
+  },
+  "zones": [
+    {
+      "convoId": "c6",
+      "zone": {
+        "id": "z6",
+        "startTurn": 30,
+        "endTurn": 38,
+        "startTimestamp": "2026-05-08T08:00:00.000Z",
+        "endTimestamp": "2026-05-08T08:20:00.000Z",
+        "reactionPoint": {
+          "offsetPct": 0.9,
+          "timestamp": "2026-05-08T08:20:00.000Z",
+          "snippet": "database is locked, ça arrive en boucle quand deux writers tournent en même temps",
+          "matchedPattern": "stuck-cluster:4:0.45",
+          "precedingTool": "Edit"
+        },
+        "agentContext": {
+          "filesTouched": ["apps/nakiros/src/services/conversation-ingest/runner.ts"],
+          "toolCallsCount": 7,
+          "toolErrorsCount": 3,
+          "backtrackedFiles": [],
+          "keyActions": ["Edit runner.ts ×3", "Bash sqlite3 (3 errors)"]
+        },
+        "clusterSize": 4,
+        "severity": "high",
+        "signalKinds": ["S5"]
+      }
+    },
+    {
+      "convoId": "c7",
+      "zone": {
+        "id": "z7",
+        "startTurn": 18,
+        "endTurn": 22,
+        "startTimestamp": "2026-05-09T20:00:00.000Z",
+        "endTimestamp": "2026-05-09T20:10:00.000Z",
+        "reactionPoint": {
+          "offsetPct": 0.8,
+          "timestamp": "2026-05-09T20:10:00.000Z",
+          "snippet": "encore database is locked, on n'a pas géré la concurrence",
+          "matchedPattern": "stuck-cluster:3:0.50",
+          "precedingTool": "Bash"
+        },
+        "agentContext": {
+          "filesTouched": ["apps/nakiros/src/services/conversation-ingest/runner.ts"],
+          "toolCallsCount": 5,
+          "toolErrorsCount": 2,
+          "backtrackedFiles": [],
+          "keyActions": ["Bash sqlite3 lock errors"]
+        },
+        "clusterSize": 3,
+        "severity": "high",
+        "signalKinds": ["S5"]
+      }
+    }
+  ]
+}

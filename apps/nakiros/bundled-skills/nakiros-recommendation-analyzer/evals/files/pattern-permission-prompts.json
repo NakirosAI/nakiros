@@ -1,0 +1,73 @@
+{
+  "pattern": {
+    "id": "permission-prompts1",
+    "projectId": "eval-project",
+    "zoneRefs": [{ "convoId": "c4", "zoneId": "z4" }, { "convoId": "c5", "zoneId": "z5" }],
+    "signature": {
+      "topTokens": ["permission", "deny", "pnpm", "command"],
+      "filesTouched": [],
+      "signalKinds": [],
+      "firstSeen": "2026-05-12T09:00:00.000Z",
+      "lastSeen": "2026-05-13T11:00:00.000Z"
+    },
+    "zoneCount": 2,
+    "severity": "medium",
+    "analysis": { "status": "idle" }
+  },
+  "zones": [
+    {
+      "convoId": "c4",
+      "zone": {
+        "id": "z4",
+        "startTurn": 5,
+        "endTurn": 11,
+        "startTimestamp": "2026-05-12T09:00:00.000Z",
+        "endTimestamp": "2026-05-12T09:08:00.000Z",
+        "reactionPoint": {
+          "offsetPct": 0.5,
+          "timestamp": "2026-05-12T09:08:00.000Z",
+          "snippet": "arrête de me demander à chaque pnpm build, autorise-le une bonne fois",
+          "matchedPattern": "stuck-cluster:3:0.60",
+          "precedingTool": "Bash"
+        },
+        "agentContext": {
+          "filesTouched": [],
+          "toolCallsCount": 3,
+          "toolErrorsCount": 0,
+          "backtrackedFiles": [],
+          "keyActions": ["Bash pnpm build (asked permission)"]
+        },
+        "clusterSize": 3,
+        "severity": "medium",
+        "signalKinds": []
+      }
+    },
+    {
+      "convoId": "c5",
+      "zone": {
+        "id": "z5",
+        "startTurn": 9,
+        "endTurn": 15,
+        "startTimestamp": "2026-05-13T11:00:00.000Z",
+        "endTimestamp": "2026-05-13T11:06:00.000Z",
+        "reactionPoint": {
+          "offsetPct": 0.6,
+          "timestamp": "2026-05-13T11:06:00.000Z",
+          "snippet": "pareil pour pnpm test et turbo build, je veux pas valider à chaque fois",
+          "matchedPattern": "stuck-cluster:3:0.55",
+          "precedingTool": "Bash"
+        },
+        "agentContext": {
+          "filesTouched": [],
+          "toolCallsCount": 4,
+          "toolErrorsCount": 0,
+          "backtrackedFiles": [],
+          "keyActions": ["Bash pnpm test (asked permission)", "Bash turbo build (asked permission)"]
+        },
+        "clusterSize": 3,
+        "severity": "medium",
+        "signalKinds": []
+      }
+    }
+  ]
+}

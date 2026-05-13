@@ -1,6 +1,31 @@
 {
-  "title": "Insights",
-  "bodyPrefix": "LLM-powered analysis of ",
-  "bodySuffix": " conversations to propose skill improvements beyond the deterministic patterns is coming soon.",
-  "comingSoon": "Coming soon"
+  "title": "Recommendations",
+  "emptyState": "No patterns detected. Patterns surface when 2+ friction zones share a topic.",
+  "refresh": "Refresh",
+  "analyze": "Analyze",
+  "reanalyze": "Re-analyze",
+  "running": "Running…",
+  "failed": "Failed — try again",
+  "noRecosProduced": "The agent did not identify a clear preventive action for this pattern.",
+  "card": {
+    "applyFix": "Apply Fix",
+    "create": "Create",
+    "dismiss": "Dismiss",
+    "openRun": "Open run",
+    "showDismissed": "Show dismissed ({{count}})",
+    "evidenceZones": "Evidence — {{count}} zones",
+    "editBrief": "Edit brief",
+    "cancelEdit": "Cancel"
+  },
+  "confirmApply": {
+    "title": "Apply recommendation",
+    "description": "The brief below will be sent verbatim to the {{kind}} runner. You can edit it before confirming.",
+    "confirm": "Confirm and launch",
+    "cancel": "Cancel"
+  },
+  "errors": {
+    "targetMissing": "Target artefact no longer exists. Switch to Create?",
+    "unknownArtifactType": "Unknown artefact type — cannot apply this recommendation.",
+    "recoNotFound": "Recommendation no longer exists."
+  }
 }

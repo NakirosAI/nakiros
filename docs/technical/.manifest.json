@@ -245,9 +245,10 @@
     "apps/nakiros/src/daemon/handlers/sentiment.ts": "9124f42b6e96572bca54e30dd918f4d5a1457799052db150a05eeced1e356ca7",
     "packages/shared/src/types/recommendation.ts": "951775e2fd6a3d88dcba741f57e15b52e7c45fb68e89c1b2cd0f2b70b72d9f67",
     "apps/nakiros/src/services/recommendation-apply.ts": "b98ac5f1fb811351e898c3a652c7ceaf439fdc9d5f4d18dfce320b92ba3fd57d",
-    "apps/nakiros/src/daemon/handlers/recommendations.ts": "529f70d0e6cd44628ad3b045fe2d48edbf813ba923b8ca77ad9caf8e074e53dd"
+    "apps/nakiros/src/daemon/handlers/recommendations.ts": "529f70d0e6cd44628ad3b045fe2d48edbf813ba923b8ca77ad9caf8e074e53dd",
+    "apps/nakiros/src/services/skill-symlink-override.ts": "4364fea11e04a696f992deeddf78963c0d9715d35e2ccf7dd00ee5c1412f75d0"
   },
-  "updated_at": "2026-05-13T09:16:40.102Z",
+  "updated_at": "2026-05-13T13:53:14.918Z",
   "apps/nakiros/src/services/runner-core/cluster-tokens.ts": "4ab5a37506e3daa5e72b2c258de09fd2b0f1e1eb698f6a188721489f5b999846",
   "apps/nakiros/src/services/conversation-analyzer.ts": "e2b63966c77f98fefee47cc13876c971509fa227d04f80492dc1122a0702c8c0",
   "apps/nakiros/src/services/runner-core/index.ts": "0268ba33f3ff8d2a2f6045c8c8e1650a421696917dffbacce6cae23da9e78a6b",

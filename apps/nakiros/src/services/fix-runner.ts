@@ -2576,11 +2576,17 @@ interface FixEvalBatchState {
  * to this fix run. Subscribes to `eval:event` broadcasts and finalises the
  * batch once every tracked run reaches a terminal status. Idempotent — the
  * subscription auto-cleans on completion.
+ *
+ * @param args.onComplete Optional callback invoked once all runs in the batch
+ *   have reached a terminal state and {@link finaliseFixEvalBatch} has run.
+ *   Used by callers (e.g. `fix:runEvalsInTemp`) to release any resource held
+ *   for the duration of the batch (e.g. a symlink override).
  */
 export function registerFixEvalBatch(args: {
   fixRunId: string;
   iteration: number;
   evalRunIds: string[];
+  onComplete?: () => void;
 }): void {
   const { fixRunId, iteration, evalRunIds } = args;
   if (evalRunIds.length === 0) return;
@@ -2617,7 +2623,11 @@ export function registerFixEvalBatch(args: {
     if (state.statusByRunId.size < state.evalRunIds.size) return;
     // All runs terminal → finalise once and detach the listener.
     state.unsubscribe();
-    finaliseFixEvalBatch(state);
+    try {
+      finaliseFixEvalBatch(state);
+    } finally {
+      args.onComplete?.();
+    }
   });
 }
 

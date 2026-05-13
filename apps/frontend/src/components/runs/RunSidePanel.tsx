@@ -368,6 +368,10 @@ function FixPanel({
 }) {
   const { t } = useTranslation('runs');
   const [diff, setDiff] = useState<SkillDiffEntry[] | null>(null);
+  // Tracks whether the sandbox contains `evals/evals.json` regardless of
+  // whether the agent modified it. The display diff only includes changed
+  // files, so we can't rely on it to decide if the eval button should show.
+  const [hasEvalsFile, setHasEvalsFile] = useState(false);
 
   // Event-driven refresh: refetch on mount, and again every time a
   // Write/Edit tool_use lands on the run stream. Fix events come from
@@ -390,7 +394,21 @@ function FixPanel({
           if (!cancelled) setDiff([]);
         });
 
+    // Separate one-shot probe for the eval button: list with includeUnchanged
+    // so `evals/evals.json` shows up even when the agent didn't touch it.
+    const probeEvalsFile = () =>
+      listDiff(run.runId, { includeUnchanged: true })
+        .then((entries) => {
+          if (!cancelled) {
+            setHasEvalsFile(entries.some((e) => e.relativePath === 'evals/evals.json'));
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setHasEvalsFile(false);
+        });
+
     void fetchDiff();
+    void probeEvalsFile();
 
     const subscribe =
       kind === 'create'
@@ -551,7 +569,7 @@ function FixPanel({
 
       {onLaunchEval &&
         (run.status === 'completed' || run.status === 'waiting_for_input') &&
-        (diff ?? []).some((e) => e.relativePath === 'evals/evals.json') && (
+        hasEvalsFile && (
           <PanelSection
             label={t('panels.fix.evalLabel', { defaultValue: 'Test the sandbox' })}
           >

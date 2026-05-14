@@ -10,8 +10,12 @@
  * improvement). For skills, `startFix` is the natural entry point.
  */
 
+import { join } from 'path';
+import { homedir } from 'os';
+
 import type {
   ApplyRecoResponse,
+  ApplyRecommendationContext,
   AuditRunEvent,
   ClaudeMdRunMode,
   HooksRunMode,
@@ -26,9 +30,6 @@ import type {
 } from '@nakiros/shared';
 
 import {
-  sendEditUserMessage,
-  sendFixUserMessage,
-  sendCreateUserMessage,
   startCreate,
   startEdit,
   startFix,
@@ -44,40 +45,136 @@ interface RunOpts {
   onEvent(event: AuditRunEvent): void;
 }
 
+// ─── Skill-dir resolution ─────────────────────────────────────────────────────
+
+/**
+ * Resolves the on-disk skill directory for a built request. Mirrors the logic
+ * of `resolveSkillDir` in `handlers/skill-dir.ts` for the two scopes used by
+ * recommendation runners (`nakiros-bundled` for `.claude/` expert skills and
+ * `project` for project-local skills).
+ *
+ * This avoids importing from the `daemon/handlers/` layer into a service —
+ * the logic is trivial enough to inline here.
+ *
+ * @param req          The start request with `scope`, `skillName`, `projectId`.
+ * @param projectPath  Resolved absolute project path (needed for project scope).
+ */
+function resolveSkillDirFromReq(req: StartAuditRequest, projectPath: string): string {
+  if (req.scope === 'nakiros-bundled') {
+    return join(homedir(), '.nakiros', 'skills', req.skillName);
+  }
+  // project scope — skill lives in <project>/.claude/skills/<name>/
+  return join(projectPath, '.claude', 'skills', req.skillName);
+}
+
+// ─── Name derivation ──────────────────────────────────────────────────────────
+
+/**
+ * Converts an arbitrary title string into a kebab-case slug suitable as a
+ * filename stem or skill directory name.
+ *
+ * Examples: `"GitHub Infra"` → `"github-infra"`,
+ *           `"Règle d'accès"` → `"regle-d-acces"`.
+ *
+ * Strips Latin diacritics via NFKD decomposition so accented characters
+ * produce readable ASCII slugs rather than bare hyphens.
+ */
+function titleToKebab(title: string): string {
+  return title
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-') || 'untitled';
+}
+
+/**
+ * Derives the effective target name for a card, resolving the `'new'` sentinel
+ * into a real kebab-case filename when the card action is `'create'`.
+ *
+ * - For collection artefacts (`rules`, `subagent`, `output-style`): appends
+ *   `.md` extension (e.g. `"GitHub Infra"` → `"github-infra.md"`).
+ * - For `skill`: no extension (e.g. `"GitHub Infra"` → `"github-infra"`).
+ * - For singleton artefacts (`claudemd`, `hook`, `permission`, `mcp`): the
+ *   target field is ignored at the call site — this function returns `card.target`
+ *   unchanged and the builder ignores it.
+ * - For `action !== 'create'` (i.e. `'fix'`): `card.target` is already a real
+ *   name, returned as-is.
+ */
+function deriveEffectiveTarget(card: RecoCard): string {
+  if (card.action !== 'create' || card.target !== 'new') {
+    return card.target;
+  }
+  const slug = titleToKebab(card.title);
+  if (card.artifactType === 'skill') {
+    return slug;
+  }
+  // rules, subagent, output-style — all store as .md files
+  return `${slug}.md`;
+}
+
 // ─── Request builders ─────────────────────────────────────────────────────────
 
+/**
+ * Builds a {@link StartAuditRequest} for a given artefact type.
+ * The `brief` parameter is forwarded into `applyRecommendation.brief` so
+ * `buildFirstPrompt` in fix-runner can embed it directly in the first prompt.
+ */
 type ReqBuilder = (
   card: RecoCard,
   projectId: string,
   projectPath: string,
+  brief: string,
 ) => StartAuditRequest;
 
 /**
+ * Shared helper — builds the {@link ApplyRecommendationContext} from a card +
+ * brief. The `target` field is set to the derived effective name so all
+ * consumers (expert skill prompt + sync-back) see the real filename, never the
+ * `'new'` sentinel.
+ */
+function buildApplyCtx(card: RecoCard, brief: string): ApplyRecommendationContext {
+  return {
+    artifactType: card.artifactType,
+    action: card.action,
+    target: deriveEffectiveTarget(card),
+    title: card.title,
+    recId: card.recId,
+    patternId: card.patternId,
+    brief,
+  };
+}
+
+/**
  * Builders per artifact type. Each builds a {@link StartAuditRequest} with the
- * correct `*Target` field populated. Shapes come from `packages/shared/src/types/project.ts`.
+ * correct `*Target` field populated and `applyRecommendation` set so the
+ * runner emits a non-interactive first prompt directly embedding the brief.
+ * Shapes come from `packages/shared/src/types/project.ts`.
  */
 const EDIT_REQ_BUILDERS: Record<string, ReqBuilder> = {
   /**
    * `.claude/rules/<ruleName>` — `RulesTargetContext.ruleName` is the relative
    * filename from `.claude/rules/` (e.g. `"i18n.md"`).
    */
-  rules: (card, projectId, projectPath) => ({
+  rules: (card, projectId, projectPath, brief) => ({
     scope: 'nakiros-bundled',
     skillName: 'nakiros-rules-expert',
     projectId,
     rulesTarget: {
       projectId,
       projectPath,
-      ruleName: card.target,
+      ruleName: deriveEffectiveTarget(card),
       mode: 'edit' as RulesRunMode,
     },
+    applyRecommendation: buildApplyCtx(card, brief),
   }),
 
   /**
    * Root `CLAUDE.md` — `ClaudeMdTargetContext` has no name field (singleton).
    * `card.target` is ignored; there is only one CLAUDE.md per project.
    */
-  claudemd: (_card, projectId, projectPath) => ({
+  claudemd: (card, projectId, projectPath, brief) => ({
     scope: 'nakiros-bundled',
     skillName: 'nakiros-claudemd-expert',
     projectId,
@@ -86,29 +183,31 @@ const EDIT_REQ_BUILDERS: Record<string, ReqBuilder> = {
       projectPath,
       mode: 'edit' as ClaudeMdRunMode,
     },
+    applyRecommendation: buildApplyCtx(card, brief),
   }),
 
   /**
    * `.claude/agents/<subagentName>` — `SubagentsTargetContext.subagentName` is
    * the relative filename from `.claude/agents/` (e.g. `"backend.md"`).
    */
-  subagent: (card, projectId, projectPath) => ({
+  subagent: (card, projectId, projectPath, brief) => ({
     scope: 'nakiros-bundled',
     skillName: 'nakiros-subagents-expert',
     projectId,
     subagentsTarget: {
       projectId,
       projectPath,
-      subagentName: card.target,
+      subagentName: deriveEffectiveTarget(card),
       mode: 'edit' as SubagentsRunMode,
     },
+    applyRecommendation: buildApplyCtx(card, brief),
   }),
 
   /**
    * `.claude/settings.json` hooks block — `HooksTargetContext` is singleton
    * (no name field). `card.target` is ignored.
    */
-  hook: (_card, projectId, projectPath) => ({
+  hook: (card, projectId, projectPath, brief) => ({
     scope: 'nakiros-bundled',
     skillName: 'nakiros-hooks-expert',
     projectId,
@@ -117,13 +216,14 @@ const EDIT_REQ_BUILDERS: Record<string, ReqBuilder> = {
       projectPath,
       mode: 'edit' as HooksRunMode,
     },
+    applyRecommendation: buildApplyCtx(card, brief),
   }),
 
   /**
    * `.claude/settings.json` permissions block — `PermissionsTargetContext` has
    * `scope` (project vs local). Recommendations always target the project scope.
    */
-  permission: (_card, projectId, projectPath) => ({
+  permission: (card, projectId, projectPath, brief) => ({
     scope: 'nakiros-bundled',
     skillName: 'nakiros-permissions-expert',
     projectId,
@@ -133,13 +233,14 @@ const EDIT_REQ_BUILDERS: Record<string, ReqBuilder> = {
       scope: 'project' as PermissionsExpertScope,
       mode: 'edit' as PermissionsRunMode,
     },
+    applyRecommendation: buildApplyCtx(card, brief),
   }),
 
   /**
    * Project-root `.mcp.json` — `McpTargetContext` is singleton (no name field).
    * `card.target` is ignored.
    */
-  mcp: (_card, projectId, projectPath) => ({
+  mcp: (card, projectId, projectPath, brief) => ({
     scope: 'nakiros-bundled',
     skillName: 'nakiros-mcp-expert',
     projectId,
@@ -148,22 +249,24 @@ const EDIT_REQ_BUILDERS: Record<string, ReqBuilder> = {
       projectPath,
       mode: 'edit' as McpRunMode,
     },
+    applyRecommendation: buildApplyCtx(card, brief),
   }),
 
   /**
    * `.claude/output-styles/<styleName>` — `OutputStylesTargetContext.styleName`
    * is the relative filename from `.claude/output-styles/`.
    */
-  'output-style': (card, projectId, projectPath) => ({
+  'output-style': (card, projectId, projectPath, brief) => ({
     scope: 'nakiros-bundled',
     skillName: 'nakiros-output-styles-expert',
     projectId,
     outputStylesTarget: {
       projectId,
       projectPath,
-      styleName: card.target,
+      styleName: deriveEffectiveTarget(card),
       mode: 'edit' as OutputStylesRunMode,
     },
+    applyRecommendation: buildApplyCtx(card, brief),
   }),
 };
 
@@ -171,7 +274,6 @@ const EDIT_REQ_BUILDERS: Record<string, ReqBuilder> = {
 
 interface RunMapping {
   starter: typeof startFix | typeof startCreate | typeof startEdit;
-  sender: typeof sendFixUserMessage | typeof sendCreateUserMessage | typeof sendEditUserMessage;
   runKind: 'fix' | 'create' | 'edit';
   buildRequest: ReqBuilder;
 }
@@ -187,12 +289,12 @@ function mappingFor(card: RecoCard): RunMapping | null {
     const isCreate = card.action === 'create';
     return {
       starter: isCreate ? startCreate : startFix,
-      sender: isCreate ? sendCreateUserMessage : sendFixUserMessage,
       runKind: isCreate ? 'create' : 'fix',
-      buildRequest: (c, projectId) => ({
+      buildRequest: (c, projectId, _projectPath, brief) => ({
         scope: 'project',
-        skillName: c.target === 'new' ? '__new__' : c.target,
+        skillName: deriveEffectiveTarget(c),
         projectId,
+        applyRecommendation: buildApplyCtx(c, brief),
       }),
     };
   }
@@ -205,7 +307,6 @@ function mappingFor(card: RecoCard): RunMapping | null {
   // recommended from friction analysis.
   return {
     starter: startEdit,
-    sender: sendEditUserMessage,
     runKind: 'edit',
     buildRequest: build,
   };
@@ -276,34 +377,27 @@ export async function applyReco(
     writeRecoBody(projectId, patternId, recId, newBody);
   }
 
-  const req = mapping.buildRequest(card, projectId, ctx.projectPath);
+  // Pass briefToSend into the request builder so buildFirstPrompt in
+  // fix-runner can embed it directly in the non-interactive first prompt.
+  const req = mapping.buildRequest(card, projectId, ctx.projectPath, briefToSend);
+
+  // Resolve the on-disk skill directory from the built request. For .claude/
+  // expert runs the scope is always `nakiros-bundled` so skillDir resolves to
+  // `~/.nakiros/skills/<skillName>` — the symlink target that prepareWorkdir
+  // places under `<workdir>/.claude/skills/<name>` so the slash-command works.
+  // ctx.skillDir is honoured when provided (e.g. from a direct API caller that
+  // already resolved the path) but falls back to automatic resolution so callers
+  // that only set projectPath (like the daemon handler) get a valid path.
+  const skillDir = ctx.skillDir || resolveSkillDirFromReq(req, ctx.projectPath);
 
   const opts: RunOpts = {
-    skillDir: ctx.skillDir ?? '',
+    skillDir,
     onEvent: ctx.onEvent,
   };
 
-  // Start the downstream runner. Returns synchronously with a run handle.
+  // Start the downstream runner. The first prompt already embeds the
+  // <apply-recommendation> block — no second sendUserMessage call needed.
   const run = mapping.starter(req, opts as Parameters<typeof mapping.starter>[1]);
-
-  // Wrap the brief in a structured <apply-recommendation> block so the expert
-  // skill can detect the non-interactive flow and execute directly without
-  // asking follow-up questions.
-  const wrappedBrief = `<apply-recommendation>
-artifactType: ${card.artifactType}
-action: ${card.action}
-target: ${card.target}
-recId: ${card.recId}
-patternId: ${card.patternId}
-
-${briefToSend}
-</apply-recommendation>
-
-Apply this recommendation now. Every field above is final and authoritative — do not ask follow-up questions about target name, paths, scope, or any other detail. Read the SKILL.md section "Applying a Nakiros recommendation" for the non-interactive flow.`;
-
-  // Immediately send the brief as the first user message so the agent
-  // receives the recommendation without any manual user interaction.
-  await mapping.sender(run.runId, wrappedBrief, opts as Parameters<typeof sendFixUserMessage>[2]);
 
   // Persist the applied state so subsequent calls return idempotently.
   updateRecoStatus(projectId, patternId, recId, {

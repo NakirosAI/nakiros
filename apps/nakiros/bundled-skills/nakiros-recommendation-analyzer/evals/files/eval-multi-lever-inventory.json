@@ -1,0 +1,10 @@
+{
+  "items": [
+    {
+      "id": "git-conventions",
+      "type": "rules",
+      "label": "Git conventions",
+      "description": "Commit message style and branching."
+    }
+  ]
+}

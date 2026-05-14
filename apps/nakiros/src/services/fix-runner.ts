@@ -625,6 +625,173 @@ function findLatestClaudeSessionId(workdir: string): string | null {
   return bestName ? bestName.replace(/\.jsonl$/, '') : null;
 }
 
+// ─── Non-interactive apply-recommendation helper ───────────────────────────
+
+/**
+ * Resolves the context needed to build a non-interactive first prompt for a
+ * given `*Target` field on the request. Returns `null` when no `*Target` is
+ * set (skill-factory path — handled separately).
+ */
+function resolveApplyTarget(
+  req: SkillAgentStartReq,
+  workdir: string,
+): {
+  skillName: string;
+  slashCmd: string;
+  /** Where the agent must write (draft path or final target path). */
+  writePath: string;
+  /**
+   * `'draft-md'`   — Claude Code blocks `.claude/**`; agent writes ./draft.md
+   * `'draft-json'` — Claude Code blocks `.claude/**`; agent writes ./draft.json
+   * `'direct'`     — agent may write the target file directly (no .claude/** constraint)
+   */
+  writeMode: 'draft-md' | 'draft-json' | 'direct';
+  /** Short label describing what is being edited (for the prompt). */
+  label: string;
+} | null {
+  if (req.claudemdTarget) {
+    const targetPath = join(req.claudemdTarget.projectPath, 'CLAUDE.md');
+    return {
+      skillName: CLAUDEMD_EXPERT_SKILL_NAME,
+      slashCmd: `/${CLAUDEMD_EXPERT_SKILL_NAME} edit`,
+      writePath: targetPath,
+      writeMode: 'direct',
+      label: 'CLAUDE.md',
+    };
+  }
+  if (req.rulesTarget) {
+    return {
+      skillName: RULES_EXPERT_SKILL_NAME,
+      slashCmd: `/${RULES_EXPERT_SKILL_NAME} edit`,
+      writePath: join(workdir, 'draft.md'),
+      writeMode: 'draft-md',
+      label: `rule \`${req.rulesTarget.ruleName}\``,
+    };
+  }
+  if (req.subagentsTarget) {
+    return {
+      skillName: SUBAGENTS_EXPERT_SKILL_NAME,
+      slashCmd: `/${SUBAGENTS_EXPERT_SKILL_NAME} edit`,
+      writePath: join(workdir, 'draft.md'),
+      writeMode: 'draft-md',
+      label: `subagent \`${req.subagentsTarget.subagentName}\``,
+    };
+  }
+  if (req.hooksTarget) {
+    return {
+      skillName: HOOKS_EXPERT_SKILL_NAME,
+      slashCmd: `/${HOOKS_EXPERT_SKILL_NAME} edit`,
+      writePath: join(workdir, 'draft.json'),
+      writeMode: 'draft-json',
+      label: 'hooks configuration',
+    };
+  }
+  if (req.permissionsTarget) {
+    const scope = req.permissionsTarget.scope ?? 'project';
+    return {
+      skillName: PERMISSIONS_EXPERT_SKILL_NAME,
+      slashCmd: `/${PERMISSIONS_EXPERT_SKILL_NAME} edit`,
+      writePath: join(workdir, 'draft.json'),
+      writeMode: 'draft-json',
+      label: `permissions configuration (scope: ${scope})`,
+    };
+  }
+  if (req.mcpTarget) {
+    const mcpPath = join(req.mcpTarget.projectPath, '.mcp.json');
+    return {
+      skillName: MCP_EXPERT_SKILL_NAME,
+      slashCmd: `/${MCP_EXPERT_SKILL_NAME} edit`,
+      writePath: mcpPath,
+      writeMode: 'direct',
+      label: '.mcp.json',
+    };
+  }
+  if (req.outputStylesTarget) {
+    return {
+      skillName: OUTPUT_STYLES_EXPERT_SKILL_NAME,
+      slashCmd: `/${OUTPUT_STYLES_EXPERT_SKILL_NAME} edit`,
+      writePath: join(workdir, 'draft.md'),
+      writeMode: 'draft-md',
+      label: `output style \`${req.outputStylesTarget.styleName}\``,
+    };
+  }
+  return null;
+}
+
+
+/**
+ * Builds the non-interactive first prompt used when a run is spawned to
+ * apply a Nakiros recommendation card. Embeds the `<apply-recommendation>`
+ * block directly so the expert skill executes without waiting for user input.
+ *
+ * `ar.target` is always a real artefact name at this point — the `'new'`
+ * sentinel was resolved to a kebab-case filename by `deriveEffectiveTarget`
+ * in `recommendation-apply.ts` before the request was built.
+ *
+ * Only called when `req.applyRecommendation` is set.
+ */
+function buildNonInteractiveApplyPrompt(
+  req: SkillAgentStartReq,
+  workdir: string,
+  languageLine: string,
+): string {
+  const ar = req.applyRecommendation!;
+  const target = resolveApplyTarget(req, workdir);
+
+  // Skill-factory path (skill artefacts — no *Target field set).
+  if (target === null) {
+    const isCreate = ar.action === 'create';
+    const slashCmd = isCreate
+      ? `/${FACTORY_SKILL_NAME} create ${req.skillName}`
+      : `/${FACTORY_SKILL_NAME} fix ${req.skillName}`;
+
+    return [
+      slashCmd,
+      '',
+      languageLine,
+      '- You are applying a Nakiros recommendation non-interactively.',
+      '- Read your SKILL.md section "Applying a Nakiros recommendation (non-interactive)" and follow it strictly.',
+      '- The user\'s spec is the `<apply-recommendation>` block below. Apply it directly. Do not ask follow-up questions.',
+      '',
+      `<apply-recommendation>`,
+      `artifactType: ${ar.artifactType}`,
+      `action: ${ar.action}`,
+      `target: ${ar.target}`,
+      `title: ${ar.title}`,
+      `recId: ${ar.recId}`,
+      `patternId: ${ar.patternId}`,
+      '',
+      ar.brief,
+      `</apply-recommendation>`,
+    ].join('\n');
+  }
+
+  const writeConstraintLine = target.writeMode === 'direct'
+    ? `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`
+    : `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit ONLY at \`${target.writePath}\`. Nakiros will sync it to the final destination when the user clicks "Apply & Deploy".`;
+
+  return [
+    target.slashCmd,
+    '',
+    languageLine,
+    `- You are applying a Nakiros recommendation non-interactively to ${target.label}.`,
+    '- Read your SKILL.md section "Applying a Nakiros recommendation (non-interactive)" and follow it strictly.',
+    '- The user\'s spec is the `<apply-recommendation>` block below. Apply it directly. Do not ask follow-up questions.',
+    writeConstraintLine,
+    '',
+    `<apply-recommendation>`,
+    `artifactType: ${ar.artifactType}`,
+    `action: ${ar.action}`,
+    `target: ${ar.target}`,
+    `title: ${ar.title}`,
+    `recId: ${ar.recId}`,
+    `patternId: ${ar.patternId}`,
+    '',
+    ar.brief,
+    `</apply-recommendation>`,
+  ].join('\n');
+}
+
 // ─── Spec ──────────────────────────────────────────────────────────────────
 
 const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras> = {
@@ -943,6 +1110,13 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       language === 'fr'
         ? '- IMPORTANT: communique avec l\'utilisateur en français. Toutes tes questions, résumés, demandes de clarification et messages de progression doivent être en français.'
         : '- IMPORTANT: communicate with the user in English. All your questions, summaries, clarifications and progress updates must be in English.';
+
+    // Non-interactive apply-recommendation: skip the interactive first-turn
+    // protocol entirely and embed the <apply-recommendation> block directly
+    // so the expert skill executes without waiting for user input.
+    if (req.applyRecommendation) {
+      return buildNonInteractiveApplyPrompt(req, workdir, languageLine);
+    }
 
     if (req.claudemdTarget) {
       const ct = req.claudemdTarget;

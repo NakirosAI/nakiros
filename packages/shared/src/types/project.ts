@@ -4,6 +4,7 @@
 
 import type { AuditCheckOutcome, AuditManifest } from './audit-checks.js';
 import type { FixEvalResult, FixFinding, FixTarget } from './fix-progress.js';
+import type { RecommendationArtifactType } from './recommendation.js';
 
 /** Supported AI coding agents that Nakiros can scan for projects and skills. */
 export type ProviderType = 'claude' | 'cowork' | 'gemini' | 'cursor' | 'codex';
@@ -1161,6 +1162,39 @@ export interface AuditRunEvent {
     | { type: 'error'; error: string };
 }
 
+/**
+ * When present on a {@link StartAuditRequest}, signals that the run was
+ * spawned to apply a Nakiros recommendation non-interactively. The runner
+ * will skip the interactive first-turn protocol and embed the
+ * `<apply-recommendation>` block directly in the first prompt so the expert
+ * skill executes immediately without asking follow-up questions.
+ */
+export interface ApplyRecommendationContext {
+  /** Type of `.claude/` artefact targeted by the recommendation. */
+  artifactType: RecommendationArtifactType;
+  /** Whether the recommendation proposes creating a new artefact or fixing an existing one. */
+  action: 'fix' | 'create';
+  /** Identifier of the target artefact (filename, slug, or `'new'`). */
+  target: string;
+  /**
+   * Human-readable title of the recommendation card. Used by expert skills to
+   * derive a kebab-case filename when `target` is the sentinel `'new'` or
+   * `'__new__'` (create actions where no concrete name has been assigned yet).
+   * Example: "GitHub Infra" → `github-infra.md`.
+   */
+  title: string;
+  /** Stable recommendation id — passed through to the SKILL.md block. */
+  recId: string;
+  /** Friction pattern the recommendation was derived from. */
+  patternId: string;
+  /**
+   * Pre-rendered brief text, ready to be dropped verbatim into the
+   * `<apply-recommendation>` XML block in the first prompt. Do not re-wrap
+   * or truncate — the expert skill validates that the block is well-formed.
+   */
+  brief: string;
+}
+
 /** Request payload for the `audit:start` IPC channel. */
 export interface StartAuditRequest {
   scope: SkillScope;
@@ -1215,6 +1249,15 @@ export interface StartAuditRequest {
    * per style file. Mutually exclusive with the other `*Target` fields.
    */
   outputStylesTarget?: OutputStylesTargetContext;
+  /**
+   * When present, the run was spawned to apply a Nakiros recommendation card
+   * non-interactively. `buildFirstPrompt` will skip the interactive first-turn
+   * protocol and embed the `<apply-recommendation>` block in the first prompt
+   * so the expert skill executes without asking follow-up questions.
+   *
+   * Optional — absence means a normal interactive session.
+   */
+  applyRecommendation?: ApplyRecommendationContext;
 }
 
 // ---------------------------------------------------------------------------

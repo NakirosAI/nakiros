@@ -5,6 +5,46 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] — 2026-05-14
+
+Apply-recommendation pipeline release. Cards produced by the
+recommendation-analyzer now drive a non-interactive expert run that
+writes the resolved `.claude/` artefact directly — no follow-up
+questions, no "what would you like to change?", no manual intake.
+
+### Added
+
+- **Non-interactive apply flow across the 8 expert skills.** Clicking
+  "Apply" on a recommendation card spawns the matching expert
+  (rules-expert, skill-factory, claudemd-expert, subagents-expert,
+  hooks-expert, permissions-expert, mcp-expert, output-styles-expert)
+  with a first prompt that embeds the `<apply-recommendation>` block.
+  The expert reads the brief verbatim and writes the artefact
+  directly. The `<apply-recommendation>` block is now part of the
+  first user turn — not a follow-up message — so the expert never
+  falls back to its interactive flow.
+- **Daemon-side target name derivation.** When a card has
+  `target: "new"` (or `"__new__"` for skills), the daemon derives a
+  kebab-case name from the card title (e.g. "GitHub Infra" →
+  `github-infra.md`) before spawning the expert. The sentinel never
+  reaches the model or the sync-back, so the file lands at the right
+  path under `.claude/` and "Apply & Deploy" syncs it correctly.
+- **`ApplyRecommendationContext` on `StartAuditRequest`.** The shared
+  IPC contract now carries `artifactType` / `action` / `target` /
+  `title` / `recId` / `patternId` from the card straight into the
+  runner's first-prompt builder.
+
+### Fixed
+
+- **Apply runs silently doing nothing when the expert symlink was
+  missing.** `recommendation-apply` was passing an empty `skillDir`,
+  which made `prepareWorkdir` fail on `realpathSync('')` and skip the
+  `.claude/skills/<expert>` symlink in the workdir. The slash command
+  `/<expert> edit` could not resolve, the expert never wrote
+  `draft.md`, and "Apply & Deploy" had nothing to sync — so the
+  recommendation appeared to do nothing. The expert bundled-skill
+  directory is now resolved from the request itself.
+
 ## [0.12.0] — 2026-05-12
 
 Friction detection release. Nakiros stops trying to read user emotion

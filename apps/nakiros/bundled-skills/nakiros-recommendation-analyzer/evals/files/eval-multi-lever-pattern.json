@@ -1,0 +1,90 @@
+{
+  "pattern": {
+    "id": "f1e2d3c4b5a69788",
+    "severity": "high",
+    "zoneCount": 4,
+    "signature": {
+      "topTokens": ["query", "safe-query", "db", "prisma", "migration", "generate"],
+      "filesTouched": [
+        "apps/api/src/db/safe-query.ts",
+        "apps/api/src/services/users.ts",
+        "apps/api/src/services/orders.ts",
+        "apps/api/src/services/products.ts"
+      ],
+      "signalKinds": ["userCorrection", "agentBacktrack", "multipleAttempts"],
+      "firstSeen": "2026-04-20T11:00:00Z",
+      "lastSeen": "2026-05-12T15:00:00Z"
+    }
+  },
+  "zones": [
+    {
+      "convoId": "c7",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "toutes les queries DB passent par safe-query.ts, jamais directement prisma.client. C'est la convention."
+        },
+        "agentContext": {
+          "keyActions": ["called prisma.user.findMany directly in users.ts"],
+          "filesTouched": ["apps/api/src/services/users.ts"],
+          "toolErrorsCount": 0,
+          "backtrackedFiles": ["apps/api/src/services/users.ts"]
+        },
+        "signalKinds": ["userCorrection"],
+        "severity": "high"
+      }
+    },
+    {
+      "convoId": "c8",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "encore prisma direct dans orders.ts. Passe par safeQuery() comme dans users.ts maintenant."
+        },
+        "agentContext": {
+          "keyActions": ["called prisma.order.findMany directly"],
+          "filesTouched": ["apps/api/src/services/orders.ts"],
+          "toolErrorsCount": 0,
+          "backtrackedFiles": ["apps/api/src/services/orders.ts"]
+        },
+        "signalKinds": ["userCorrection"],
+        "severity": "high"
+      }
+    },
+    {
+      "convoId": "c9",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "ce n'est pas la bonne façon d'ajouter une nouvelle query. Il faut créer la migration, ajouter le schéma Prisma, regenerer le client, puis ajouter la fonction dans safe-query.ts. Tu as oublié 3 étapes."
+        },
+        "agentContext": {
+          "keyActions": [
+            "added query function in services/products.ts",
+            "skipped prisma migration",
+            "skipped prisma generate",
+            "skipped safe-query.ts update"
+          ],
+          "filesTouched": ["apps/api/src/services/products.ts"],
+          "toolErrorsCount": 2,
+          "backtrackedFiles": ["apps/api/src/services/products.ts", "apps/api/src/db/safe-query.ts"]
+        },
+        "signalKinds": ["agentBacktrack", "multipleAttempts"],
+        "severity": "high"
+      }
+    },
+    {
+      "convoId": "c10",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "tu as encore zappé l'étape de migration. Le workflow complet : 1) prisma/schema.prisma 2) npx prisma migrate dev 3) npx prisma generate 4) safe-query.ts 5) service."
+        },
+        "agentContext": {
+          "keyActions": ["modified safe-query.ts before migration", "got prisma type error"],
+          "filesTouched": ["apps/api/src/db/safe-query.ts"],
+          "toolErrorsCount": 3,
+          "backtrackedFiles": ["apps/api/src/db/safe-query.ts"]
+        },
+        "signalKinds": ["agentBacktrack", "multipleAttempts"],
+        "severity": "high"
+      }
+    }
+  ]
+}

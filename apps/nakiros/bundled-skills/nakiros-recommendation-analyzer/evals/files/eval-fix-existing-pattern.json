@@ -1,0 +1,68 @@
+{
+  "pattern": {
+    "id": "a3b9c2d1e8f47650",
+    "severity": "medium",
+    "zoneCount": 3,
+    "signature": {
+      "topTokens": ["i18n", "translation", "locale", "key", "string"],
+      "filesTouched": [
+        "apps/frontend/src/i18n/fr.ts",
+        "apps/frontend/src/components/OrderCard.tsx",
+        "apps/frontend/src/components/ProductList.tsx"
+      ],
+      "signalKinds": ["userCorrection"],
+      "firstSeen": "2026-04-15T09:00:00Z",
+      "lastSeen": "2026-05-08T16:00:00Z"
+    }
+  },
+  "zones": [
+    {
+      "convoId": "c4",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "les clés i18n doivent être en camelCase et groupées par feature, c'est dans la convention."
+        },
+        "agentContext": {
+          "keyActions": ["added flat snake_case keys", "scattered across fr.ts"],
+          "filesTouched": ["apps/frontend/src/i18n/fr.ts"],
+          "toolErrorsCount": 0,
+          "backtrackedFiles": ["apps/frontend/src/i18n/fr.ts"]
+        },
+        "signalKinds": ["userCorrection"],
+        "severity": "medium"
+      }
+    },
+    {
+      "convoId": "c5",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "non, pas de string brute en JSX — passe par t('...') et ajoute la clé dans i18n."
+        },
+        "agentContext": {
+          "keyActions": ["hardcoded French strings in OrderCard.tsx"],
+          "filesTouched": ["apps/frontend/src/components/OrderCard.tsx"],
+          "toolErrorsCount": 0,
+          "backtrackedFiles": ["apps/frontend/src/components/OrderCard.tsx"]
+        },
+        "signalKinds": ["userCorrection"],
+        "severity": "medium"
+      }
+    },
+    {
+      "convoId": "c6",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "tu as encore mis du texte brut. Toutes les chaînes user-facing passent par i18n."
+        },
+        "agentContext": {
+          "keyActions": ["wrote literal strings in ProductList.tsx"],
+          "filesTouched": ["apps/frontend/src/components/ProductList.tsx"],
+          "toolErrorsCount": 0,
+          "backtrackedFiles": []
+        },
+        "signalKinds": ["userCorrection"],
+        "severity": "medium"
+      }
+    }
+  ]
+}

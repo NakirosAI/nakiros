@@ -22,6 +22,12 @@
     "body": "This run kind is wired up in a follow-up PR."
   },
   "panels": {
+    "fix": {
+      "evalLabel": "Test the sandbox",
+      "evalRun": "Run evals on sandbox",
+      "evalLaunching": "Launching evals…",
+      "next": "Next step"
+    },
     "edit": {
       "title": "Edit session",
       "titleClaudemd": "Edit CLAUDE.md"

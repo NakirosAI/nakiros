@@ -44,6 +44,10 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 
 - [dot-claude-snapshot-builder.ts](./dot-claude-snapshot-builder.md) — Synchronous builder for `DotClaudeSnapshot`; serialised to `dot-claude-snapshot.json` in the expert's workdir before each CLAUDE.md audit/fix run.
 
+## Eval sandbox helpers
+
+- [skill-symlink-override.ts](./skill-symlink-override.md) — Atomic `~/.claude/skills/<name>` symlink override for fix-eval and edit-eval batches; restores the original target on completion or daemon shutdown.
+
 ## `.claude/` expert I/O services
 
 - [hooks-writer.ts](./hooks-writer.md) — Read/merge-write the `hooks` block of `.claude/settings.json` with optimistic-lock conflict detection; never touches other settings keys.

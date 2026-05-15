@@ -1,0 +1,104 @@
+{
+  "pattern": {
+    "id": "i18nfixrule0000a",
+    "projectId": "eval-project",
+    "zoneRefs": [
+      { "convoId": "c1", "zoneId": "z1" },
+      { "convoId": "c2", "zoneId": "z2" },
+      { "convoId": "c3", "zoneId": "z3" }
+    ],
+    "signature": {
+      "topTokens": ["i18n", "translation", "missing", "key"],
+      "filesTouched": ["apps/frontend/src/i18n/locales/en/recommendations.json", "apps/frontend/src/components/recommendations/PatternList.tsx"],
+      "signalKinds": ["S4"],
+      "firstSeen": "2026-05-10T08:00:00.000Z",
+      "lastSeen": "2026-05-12T18:30:00.000Z"
+    },
+    "zoneCount": 3,
+    "severity": "medium",
+    "analysis": { "status": "idle" }
+  },
+  "zones": [
+    {
+      "convoId": "c1",
+      "zone": {
+        "id": "z1",
+        "startTurn": 12,
+        "endTurn": 18,
+        "startTimestamp": "2026-05-10T08:05:00.000Z",
+        "endTimestamp": "2026-05-10T08:20:00.000Z",
+        "reactionPoint": {
+          "offsetPct": 0.7,
+          "timestamp": "2026-05-10T08:20:00.000Z",
+          "snippet": "non, je t'ai dit, n'écris pas la string directement, passe par i18n, c'est la 3e fois",
+          "matchedPattern": "stuck-cluster:4:0.55",
+          "precedingTool": "Edit"
+        },
+        "agentContext": {
+          "filesTouched": ["apps/frontend/src/components/recommendations/PatternList.tsx"],
+          "toolCallsCount": 6,
+          "toolErrorsCount": 0,
+          "backtrackedFiles": ["apps/frontend/src/components/recommendations/PatternList.tsx"],
+          "keyActions": ["Edit PatternList.tsx ×3", "Read i18n.md"]
+        },
+        "clusterSize": 4,
+        "severity": "medium",
+        "signalKinds": ["S4"]
+      }
+    },
+    {
+      "convoId": "c2",
+      "zone": {
+        "id": "z2",
+        "startTurn": 8,
+        "endTurn": 14,
+        "startTimestamp": "2026-05-11T10:00:00.000Z",
+        "endTimestamp": "2026-05-11T10:15:00.000Z",
+        "reactionPoint": {
+          "offsetPct": 0.6,
+          "timestamp": "2026-05-11T10:15:00.000Z",
+          "snippet": "encore une fois tu hardcode des strings, il faut passer par les bundles i18n locales/",
+          "matchedPattern": "stuck-cluster:3:0.48",
+          "precedingTool": "Write"
+        },
+        "agentContext": {
+          "filesTouched": ["apps/frontend/src/components/recommendations/RecoCard.tsx"],
+          "toolCallsCount": 5,
+          "toolErrorsCount": 0,
+          "backtrackedFiles": [],
+          "keyActions": ["Write RecoCard.tsx", "Edit RecoCard.tsx"]
+        },
+        "clusterSize": 3,
+        "severity": "medium",
+        "signalKinds": ["S4"]
+      }
+    },
+    {
+      "convoId": "c3",
+      "zone": {
+        "id": "z3",
+        "startTurn": 20,
+        "endTurn": 26,
+        "startTimestamp": "2026-05-12T18:00:00.000Z",
+        "endTimestamp": "2026-05-12T18:30:00.000Z",
+        "reactionPoint": {
+          "offsetPct": 0.8,
+          "timestamp": "2026-05-12T18:30:00.000Z",
+          "snippet": "stop, la règle i18n existe déjà, lis-la avant de hardcoder",
+          "matchedPattern": "stuck-cluster:3:0.50",
+          "precedingTool": "Edit"
+        },
+        "agentContext": {
+          "filesTouched": ["apps/frontend/src/components/recommendations/RecsScreen.tsx"],
+          "toolCallsCount": 4,
+          "toolErrorsCount": 0,
+          "backtrackedFiles": [],
+          "keyActions": ["Edit RecsScreen.tsx ×2"]
+        },
+        "clusterSize": 3,
+        "severity": "medium",
+        "signalKinds": ["S4"]
+      }
+    }
+  ]
+}

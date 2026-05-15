@@ -66,3 +66,10 @@ export {
   EMPTY_SESSION_USAGE,
   TOKEN_MULTIPLIER,
 } from './session-usage.js';
+export {
+  STOP_WORDS,
+  SYNTHETIC_USER_TEXTS,
+  isSyntheticUserMessage,
+  tokenizeForCluster,
+  jaccard,
+} from './cluster-tokens.js';

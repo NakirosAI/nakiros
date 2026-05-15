@@ -1,0 +1,8 @@
+{
+  "projectId": "eval-project",
+  "projectPath": "/tmp/eval-project",
+  "generatedAt": "2026-05-13T00:00:00.000Z",
+  "items": [
+    { "id": "frontend", "type": "subagent", "label": "frontend" }
+  ]
+}

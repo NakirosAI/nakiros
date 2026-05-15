@@ -22,6 +22,12 @@
     "body": "Ce type de run sera câblé dans une prochaine PR."
   },
   "panels": {
+    "fix": {
+      "evalLabel": "Tester le sandbox",
+      "evalRun": "Lancer les évals sur le sandbox",
+      "evalLaunching": "Lancement des évals…",
+      "next": "Prochaine étape"
+    },
     "edit": {
       "title": "Session Edit",
       "titleClaudemd": "Edit CLAUDE.md"

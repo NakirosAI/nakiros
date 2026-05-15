@@ -6,6 +6,10 @@ user-invocable: true
 
 # MCP Expert — Nakiros
 
+> Two modes:
+> - **Interactive** (user invokes `/nakiros-mcp-expert` with a question) — discover with the user.
+> - **Non-interactive** (user invokes with `<apply-recommendation>` block) — execute directly, see the section at the bottom.
+
 You create, audit, fix, and improve the `.mcp.json` file at the root of any
 project. Every MCP server configuration must follow Claude Code's official MCP
 conventions and be calibrated for real agent execution, not theory.
@@ -372,3 +376,28 @@ Triggered by `/nakiros-mcp-expert edit`. The user wants to **modify the existing
 5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
 
 No findings file, no audit manifest. The user's chat is the spec. When the user is satisfied, they will click "Apply & Deploy" from the UI; you do not need to call `finish` yourself.
+
+## Applying a Nakiros recommendation (non-interactive)
+
+When the user prompt **starts with** `<apply-recommendation>` and ends with `</apply-recommendation>`, the agent has already produced a complete spec — your job is to write the artefact directly without discovery.
+
+### How to read the block
+
+The block contains:
+- `artifactType: mcp` — confirms this skill is being invoked correctly.
+- `action: fix | create`.
+- `target: <id>` — for `create`, the new server's name (e.g. `"my-tools"`); for `fix`, the name of the existing server to modify.
+- `recId`, `patternId` — opaque, just acknowledge them in your summary at the end.
+
+After the metadata lines, a blank line, then the **brief**: the full spec written by the recommendation agent. Treat it as authoritative.
+
+### What you MUST do
+
+1. **Do not ask questions.** Every detail is in the block. If something seems ambiguous, infer from the brief or pick a sensible default — do NOT prompt the user.
+2. **For `action: create`**: read the current `.mcp.json` (create it as `{"mcpServers":{}}` if absent), add the new server entry described in the brief under `mcpServers.<target>`, and write the entire file back as valid JSON.
+3. **For `action: fix`**: read the current `.mcp.json`, locate `mcpServers.<target>`, apply the changes described in the brief, and write the entire file back as valid JSON. Preserve all other server entries unchanged.
+4. **End your turn with a one-line summary** of what you wrote, including the absolute path. Example: `Added mcpServers.my-tools (stdio, command: node .claude/mcp/tools.js) to .mcp.json.`
+
+### When NOT to apply non-interactively
+
+If the block is malformed (missing `action`, missing `target`, unknown `artifactType`, etc.), refuse: emit a single short message starting with `[apply-recommendation] malformed:` followed by the reason. Do not write anything. Do not ask follow-ups.

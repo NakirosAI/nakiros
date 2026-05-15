@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "id": "i18n-conventions",
+      "type": "rules",
+      "label": "Frontend i18n conventions",
+      "description": "All user-facing strings must go through i18n. Keys camelCase, grouped by feature."
+    },
+    {
+      "id": "git-conventions",
+      "type": "rules",
+      "label": "Git conventions",
+      "description": "Commit message style and branching."
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import { runDisplayContext } from '../lib/run-display';
 import { useRunState } from '../hooks/useRunState';
 import { useElapsedTimer } from '../hooks/useElapsedTimer';
 import { invalidateSkillDiffCache } from '../components/diff/SkillDiffView';
+import { launchCreateEval, launchFixEval } from '../lib/run-launcher';
 import NewRunHeader from '../components/runs/NewRunHeader';
 import IdeChatPanel from '../components/runs/ide/IdeChatPanel';
 import IdeCodeViewer from '../components/runs/ide/IdeCodeViewer';
@@ -148,6 +149,7 @@ function IdeRunScreenBody({
   bootedRun,
   api,
   onClose,
+  onOpenRunTab,
 }: {
   runKind: AgentRunKind;
   bootedRun: AuditLikeRun;
@@ -309,6 +311,56 @@ function IdeRunScreenBody({
     }
   }
 
+  // ── Eval button — probe + launch ─────────────────────────────────────────
+
+  const [hasEvalsFile, setHasEvalsFile] = useState(false);
+  const [isLaunchingEval, setIsLaunchingEval] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const listDiff =
+      runKind === 'create'
+        ? window.nakiros.listCreateDiff
+        : runKind === 'edit'
+          ? window.nakiros.listEditDiff
+          : window.nakiros.listFixDiff;
+    listDiff(run.runId, { includeUnchanged: true })
+      .then((entries) => {
+        if (!cancelled) {
+          setHasEvalsFile(entries.some((e) => e.relativePath === 'evals/evals.json'));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setHasEvalsFile(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runKind, run.runId]);
+
+  async function handleLaunchEval() {
+    if (isLaunchingEval || !onOpenRunTab) return;
+    setIsLaunchingEval(true);
+    try {
+      const auditRun = run as AuditRun;
+      if (runKind === 'create') {
+        await launchCreateEval(auditRun, onOpenRunTab);
+      } else {
+        await launchFixEval(auditRun, onOpenRunTab);
+      }
+    } catch (err) {
+      console.error('[ide-run] launch eval failed', err);
+      window.alert(
+        t('errors.evalsStartFailed', {
+          defaultValue: 'Could not launch evals: {{message}}',
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    } finally {
+      setIsLaunchingEval(false);
+    }
+  }
+
   // ── Send handler ──────────────────────────────────────────────────────────
 
   async function handleSend(message: string) {
@@ -355,6 +407,18 @@ function IdeRunScreenBody({
         onStop={isRunning || isWaiting ? handleStop : undefined}
         onFinish={isWaiting || isTerminal ? handleFinish : undefined}
         isStopping={isStopping}
+        // Eval button: only for skill fix/create/edit (not CLAUDE.md or rules
+        // which have no eval suite). Visible once the sandbox is settled
+        // (completed or waiting for input) and evals/evals.json is present.
+        onLaunchEval={
+          !display.isClaudemd && !display.isRules && onOpenRunTab
+            ? handleLaunchEval
+            : undefined
+        }
+        isLaunchingEval={isLaunchingEval}
+        evalsButtonVisible={
+          hasEvalsFile && (run.status === 'completed' || run.status === 'waiting_for_input')
+        }
       />
 
       {/* 3-pane body: Chat (1fr) | Code viewer (2fr) | File list (1fr) */}

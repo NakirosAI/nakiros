@@ -1,0 +1,122 @@
+{
+  "skill_name": "nakiros-recommendation-analyzer",
+  "evals": [
+    {
+      "id": 1,
+      "name": "recurring-i18n-friction",
+      "prompt": "Place evals/files/pattern-i18n-recurring.json at ./pattern.json and evals/files/inventory-with-i18n-rule.json at ./inventory.json. Then run the recommendation analyzer: read both files, decide on actions, and write each recommendation as a markdown card under ./recos/.",
+      "expected_output": "At least one card in ./recos/ targeting the existing 'i18n' rule (action: fix) — the project already has the rule, the friction shows it isn't being followed.",
+      "files": [
+        "evals/files/pattern-i18n-recurring.json",
+        "evals/files/inventory-with-i18n-rule.json"
+      ],
+      "output_files": ["recos/"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Produces at least one .md card",
+          "script": "ls outputs/recos/*.md 2>/dev/null | head -n 1 | grep -q ."
+        },
+        {
+          "type": "script",
+          "text": "Every card quotes patternId as a YAML string",
+          "script": "! grep -L 'patternId: \"i18nfixrule0000a\"' outputs/recos/*.md | head -n 1 | grep -q ."
+        },
+        {
+          "type": "script",
+          "text": "Every card has the required frontmatter keys",
+          "script": "for f in outputs/recos/*.md; do grep -q '^action: ' \"$f\" && grep -q '^artifactType: ' \"$f\" && grep -q '^target: ' \"$f\" || exit 1; done"
+        },
+        {
+          "type": "script",
+          "text": "Has a '## Brief' section with non-trivial content",
+          "script": "for f in outputs/recos/*.md; do awk '/^## Brief/{flag=1; next} /^## /{flag=0} flag' \"$f\" | tr -d '[:space:]' | awk 'length($0) < 20 {exit 1}'; done"
+        },
+        {
+          "type": "llm",
+          "text": "Card with action: fix targets the existing 'i18n' rule (recognizes it's already in inventory)"
+        },
+        {
+          "type": "llm",
+          "text": "Brief cites at least one of the actual zone snippets verbatim (no summarising)"
+        },
+        {
+          "type": "llm",
+          "text": "Brief references the actual file paths from filesTouched, not invented ones"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "missing-permission-block",
+      "prompt": "Place evals/files/pattern-permission-prompts.json at ./pattern.json and evals/files/inventory-no-permission-block.json at ./inventory.json. Then run the recommendation analyzer: read both files, decide on actions, and write each recommendation as a markdown card under ./recos/.",
+      "expected_output": "At least one card with action: create, artifactType: permission — the inventory has no permission block, the user is complaining about repeated prompts on safe commands.",
+      "files": [
+        "evals/files/pattern-permission-prompts.json",
+        "evals/files/inventory-no-permission-block.json"
+      ],
+      "output_files": ["recos/"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Produces at least one .md card",
+          "script": "ls outputs/recos/*.md 2>/dev/null | head -n 1 | grep -q ."
+        },
+        {
+          "type": "script",
+          "text": "At least one card has artifactType: permission and action: create",
+          "script": "grep -l '^artifactType: permission' outputs/recos/*.md | xargs grep -l '^action: create' | head -n 1 | grep -q ."
+        },
+        {
+          "type": "script",
+          "text": "patternId is quoted on every card",
+          "script": "! grep -L 'patternId: \"permission-prompts1\"' outputs/recos/*.md | head -n 1 | grep -q ."
+        },
+        {
+          "type": "llm",
+          "text": "Brief references the specific commands the user named (pnpm build, pnpm test, turbo build)"
+        },
+        {
+          "type": "llm",
+          "text": "Does NOT invent an existing 'permission' artefact target (inventory has none)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "high-severity-runtime-bug",
+      "prompt": "Place evals/files/pattern-unknown-files.json at ./pattern.json and evals/files/inventory-minimal.json at ./inventory.json. Then run the recommendation analyzer: read both files, decide on actions, and write each recommendation as a markdown card under ./recos/.",
+      "expected_output": "At least one card. The pattern is about a sqlite concurrency bug (severity high) — the right artefact is likely a rule auto-attached to the runner.ts file, or a CLAUDE.md note about concurrency. The agent should NOT propose action: fix targeting a non-existent rule.",
+      "files": [
+        "evals/files/pattern-unknown-files.json",
+        "evals/files/inventory-minimal.json"
+      ],
+      "output_files": ["recos/"],
+      "assertions": [
+        {
+          "type": "script",
+          "text": "Produces at least one .md card",
+          "script": "ls outputs/recos/*.md 2>/dev/null | head -n 1 | grep -q ."
+        },
+        {
+          "type": "script",
+          "text": "No card claims action: fix on a non-existent rule",
+          "script": "if grep -l '^action: fix' outputs/recos/*.md > /dev/null 2>&1; then for f in $(grep -l '^action: fix' outputs/recos/*.md); do grep -E '^artifactType: rules' \"$f\" > /dev/null && exit 1; done; fi; exit 0"
+        },
+        {
+          "type": "script",
+          "text": "patternId quoted as YAML string",
+          "script": "! grep -L 'patternId: \"abc123def4567890\"' outputs/recos/*.md | head -n 1 | grep -q ."
+        },
+        {
+          "type": "llm",
+          "text": "Brief mentions the sqlite lock or concurrent-writers issue specifically"
+        },
+        {
+          "type": "llm",
+          "text": "Card targets the actual file path apps/nakiros/src/services/conversation-ingest/runner.ts"
+        }
+      ]
+    }
+  ]
+}

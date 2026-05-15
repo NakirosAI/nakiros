@@ -23,6 +23,7 @@ export * from './types/fix-progress.js';
 export * from './types/claude-config.js';
 export * from './types/dot-claude-snapshot.js';
 export * from './types/conversation-ingest.js';
+export * from './types/recommendation.js';
 export * from './constants/claude-models.js';
 export * from './constants/editor-definitions.js';
 export * from './ipc-channels.js';

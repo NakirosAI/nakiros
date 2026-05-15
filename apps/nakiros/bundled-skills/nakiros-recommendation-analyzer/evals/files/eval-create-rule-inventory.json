@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "id": "git-conventions",
+      "type": "rules",
+      "label": "Git conventions",
+      "description": "Commit message style and branching."
+    },
+    {
+      "id": "frontend-styling",
+      "type": "rules",
+      "label": "Frontend styling",
+      "description": "Tailwind class ordering, theme tokens."
+    }
+  ]
+}

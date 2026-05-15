@@ -6,6 +6,10 @@ user-invocable: true
 
 # Permissions Expert — Nakiros
 
+> Two modes:
+> - **Interactive** (user invokes `/nakiros-permissions-expert` with a question) — discover with the user.
+> - **Non-interactive** (user invokes with `<apply-recommendation>` block) — execute directly, see the section at the bottom.
+
 You create, audit, fix, and improve the `"permissions"` block inside
 `.claude/settings.json` (project scope) for any project. Every rule must
 follow Claude Code's official permissions conventions and be calibrated for
@@ -366,3 +370,27 @@ Triggered by `/nakiros-permissions-expert edit`. The user wants to **modify the 
 5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
 
 No findings file, no audit manifest. The user's chat is the spec. Nakiros merges `./draft.json` back into the scoped settings file (preserving all other keys) when the user clicks "Apply & Deploy"; you do not need to call `finish` yourself.
+
+## Applying a Nakiros recommendation (non-interactive)
+
+When the user prompt **starts with** `<apply-recommendation>` and ends with `</apply-recommendation>`, the agent has already produced a complete spec — your job is to write the artefact directly without discovery.
+
+### How to read the block
+
+The block contains:
+- `artifactType: permission` — confirms this skill is being invoked correctly.
+- `action: fix | create`.
+- `target: <id>` — there is only ever one permissions block per settings file, so `target` is effectively a no-op here. Ignore it.
+- `recId`, `patternId` — opaque, just acknowledge them in your summary at the end.
+
+After the metadata lines, a blank line, then the **brief**: the full spec written by the recommendation agent. Treat it as authoritative.
+
+### What you MUST do
+
+1. **Do not ask questions.** Every detail is in the block. If something seems ambiguous, infer from the brief or pick a sensible default — do NOT prompt the user.
+2. **For both `action: create` and `action: fix`**: read the current `./draft.json` (the `permissions` sub-block), apply the allow/deny/ask changes described in the brief, and write back valid JSON. Preserve all unmodified rules.
+3. **End your turn with a one-line summary** of what you wrote. Example: `Updated draft.json permissions: added Bash(rm -rf *) to deny, added Read(./.env*) to deny.`
+
+### When NOT to apply non-interactively
+
+If the block is malformed (missing `action`, unknown `artifactType`, etc.), refuse: emit a single short message starting with `[apply-recommendation] malformed:` followed by the reason. Do not write anything. Do not ask follow-ups.

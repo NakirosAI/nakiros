@@ -1,0 +1,68 @@
+{
+  "pattern": {
+    "id": "546337e749143029",
+    "severity": "high",
+    "zoneCount": 3,
+    "signature": {
+      "topTokens": ["mock", "integration", "test", "vi.mock", "db"],
+      "filesTouched": [
+        "tests/integration/auth.test.ts",
+        "tests/integration/orders.test.ts",
+        "tests/integration/products.test.ts"
+      ],
+      "signalKinds": ["userCorrection", "agentBacktrack"],
+      "firstSeen": "2026-04-01T10:00:00Z",
+      "lastSeen": "2026-05-10T14:30:00Z"
+    }
+  },
+  "zones": [
+    {
+      "convoId": "c1",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "non, j'ai dit pas de mock pour les tests d'intégration. La DB de test doit être réelle."
+        },
+        "agentContext": {
+          "keyActions": ["wrote vi.mock for db client in auth.test.ts", "stubbed prisma client"],
+          "filesTouched": ["tests/integration/auth.test.ts"],
+          "toolErrorsCount": 0,
+          "backtrackedFiles": ["tests/integration/auth.test.ts"]
+        },
+        "signalKinds": ["userCorrection"],
+        "severity": "high"
+      }
+    },
+    {
+      "convoId": "c2",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "encore le mock ? je veux des tests d'intégration qui hit la vraie DB."
+        },
+        "agentContext": {
+          "keyActions": ["created vi.mock('@/db/client')", "added fake response data"],
+          "filesTouched": ["tests/integration/orders.test.ts"],
+          "toolErrorsCount": 0,
+          "backtrackedFiles": ["tests/integration/orders.test.ts"]
+        },
+        "signalKinds": ["userCorrection", "agentBacktrack"],
+        "severity": "high"
+      }
+    },
+    {
+      "convoId": "c3",
+      "zone": {
+        "reactionPoint": {
+          "snippet": "pourquoi tu remocks la DB dans les tests d'intégration ? c'est la 3ème fois."
+        },
+        "agentContext": {
+          "keyActions": ["mocked database in tests/integration/products.test.ts"],
+          "filesTouched": ["tests/integration/products.test.ts"],
+          "toolErrorsCount": 0,
+          "backtrackedFiles": []
+        },
+        "signalKinds": ["userCorrection"],
+        "severity": "high"
+      }
+    }
+  ]
+}

@@ -82,7 +82,7 @@ export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarP
     },
     {
       items: [
-        { id: 'recs', label: 'Recommendations', icon: <Lightbulb size={18} strokeWidth={2} />, disabled: true, comingIn: 'Phase 5' },
+        { id: 'recs', label: 'Recommendations', icon: <Lightbulb size={18} strokeWidth={2} />, disabled: false },
       ],
     },
   ];

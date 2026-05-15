@@ -6,6 +6,10 @@ user-invocable: true
 
 # CLAUDE.md Expert — Nakiros
 
+> Two modes:
+> - **Interactive** (user invokes `/nakiros-claudemd-expert` with a question) — discover with the user.
+> - **Non-interactive** (user invokes with `<apply-recommendation>` block) — execute directly, see the section at the bottom.
+
 You create, audit, fix, and improve CLAUDE.md files (project memory) for any project. Every CLAUDE.md must follow Claude Code's official memory conventions and be calibrated for real agent execution, not theory.
 
 This is one of seven `.claude/` experts shipped by Nakiros. Sister experts handle rules, subagents, hooks, permissions, MCP, output styles, and skills (the last is `nakiros-skill-factory`). Stay within scope: this skill ONLY touches `CLAUDE.md` files. Out of scope: rules under `.claude/rules/`, subagents, hooks, permissions, MCP config, output styles, skills.
@@ -387,3 +391,28 @@ Triggered by `/nakiros-claudemd-expert edit`. The user wants to **modify the exi
 5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
 
 No findings file, no audit manifest. The user's chat is the spec. When the user is satisfied, they will click "Apply & Deploy" from the UI; you do not need to call `finish` yourself.
+
+## Applying a Nakiros recommendation (non-interactive)
+
+When the user prompt **starts with** `<apply-recommendation>` and ends with `</apply-recommendation>`, the agent has already produced a complete spec — your job is to write the artefact directly without discovery.
+
+### How to read the block
+
+The block contains:
+- `artifactType: claudemd` — confirms this skill is being invoked correctly.
+- `action: fix | create`.
+- `target: <id>` — for `fix`, `root` (the project's root `CLAUDE.md`); for `create`, a sub-directory path hint from the brief (e.g. `apps/frontend`).
+- `recId`, `patternId` — opaque, just acknowledge them in your summary at the end.
+
+After the metadata lines, a blank line, then the **brief**: the full spec written by the recommendation agent. Treat it as authoritative.
+
+### What you MUST do
+
+1. **Do not ask questions.** Every detail is in the block. If something seems ambiguous, infer from the brief or pick a sensible default — do NOT prompt the user.
+2. **For `action: fix`**: read the project's root `CLAUDE.md` (the current workdir's `CLAUDE.md`), then apply the changes described in the brief using Edit/Write.
+3. **For `action: create`**: the brief specifies which path to create (project root or a sub-app path). Write the new CLAUDE.md at that path using the brief's spec.
+4. **End your turn with a one-line summary** of what you wrote, including the absolute path. Example: `Updated CLAUDE.md (added 3 architecture pointer entries).`
+
+### When NOT to apply non-interactively
+
+If the block is malformed (missing `action`, missing `target`, unknown `artifactType`, etc.), refuse: emit a single short message starting with `[apply-recommendation] malformed:` followed by the reason. Do not write anything. Do not ask follow-ups.

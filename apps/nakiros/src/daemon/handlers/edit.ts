@@ -30,6 +30,10 @@ import {
   resolveSkillDirForRun,
   withBroadcastOnError,
 } from './run-helpers.js';
+import {
+  acquireSkillOverride,
+  releaseSkillOverride,
+} from '../../services/skill-symlink-override.js';
 import type { HandlerRegistry } from './index.js';
 
 const broadcastEditEvent = createEventBroadcaster<AuditRunEvent>('edit:event');
@@ -117,34 +121,48 @@ export const editHandlers: HandlerRegistry = {
         const run = getRunOrThrow(getEditRun, request.runId, 'Edit');
         const tempDir = getEditTempWorkdir(request.runId);
         if (!tempDir) throw new Error(`No temp workdir for edit run ${request.runId}`);
-        const response = await startEvalRuns(
-          {
-            scope: run.scope,
-            projectId: run.projectId,
-            skillName: run.skillName,
-            evalNames: request.evalNames,
-            includeBaseline: request.includeBaseline,
-            skillDirOverride: tempDir,
-            // Tag the resulting iteration as `fix-temp` so the matrix
-            // surfaces it in the unified history and the edit lifecycle
-            // (finish/reject) can later promote/cleanup the batch.
-            fixRunId: request.runId,
-          },
-          {
-            resolveSkillDir,
-            onEvent: broadcastEvalEvent,
-          },
-        );
+        // Override ~/.claude/skills/<skillName> to point at the edit workdir
+        // so Claude Code's user-global skill discovery resolves to the
+        // in-progress copy rather than the prod symlink target.
+        const restore = acquireSkillOverride(run.skillName, tempDir);
+        let response: Awaited<ReturnType<typeof startEvalRuns>>;
+        try {
+          response = await startEvalRuns(
+            {
+              scope: run.scope,
+              projectId: run.projectId,
+              skillName: run.skillName,
+              evalNames: request.evalNames,
+              includeBaseline: request.includeBaseline,
+              skillDirOverride: tempDir,
+              // Tag the resulting iteration as `fix-temp` so the matrix
+              // surfaces it in the unified history and the edit lifecycle
+              // (finish/reject) can later promote/cleanup the batch.
+              fixRunId: request.runId,
+            },
+            {
+              resolveSkillDir,
+              onEvent: broadcastEvalEvent,
+            },
+          );
+        } catch (err) {
+          // startEvalRuns failed before any run was created — restore
+          // immediately and re-throw so withBroadcastOnError can broadcast.
+          releaseSkillOverride(restore);
+          throw err;
+        }
         console.log(
           `[edit:runEvals] startEvalRuns ok editRunId=${request.runId} iteration=${response.iteration} runIdCount=${response.runIds.length}`,
         );
         // Watch the batch so when every SkillEvalRun finishes we read the
         // benchmark and broadcast `fix_eval_result` on `edit:event` — the
         // frontend's edit timeline turns each one into an inline card.
+        // The onComplete callback restores the symlink once every run is done.
         registerEditEvalBatch({
           fixRunId: request.runId,
           iteration: response.iteration,
           evalRunIds: response.runIds,
+          onComplete: () => releaseSkillOverride(restore),
         });
         return response;
       },

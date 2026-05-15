@@ -33,6 +33,7 @@ import { permissionsHandlers } from './permissions.js';
 import { mcpHandlers } from './mcp.js';
 import { outputStylesHandlers } from './output-styles.js';
 import { conversationIngestHandlers } from './conversation-ingest.js';
+import { recommendationsHandlers } from './recommendations.js';
 
 /** Signature every IPC handler must implement — takes an arg array, returns a value or promise. */
 export type IpcHandler = (args: unknown[]) => Promise<unknown> | unknown;
@@ -85,5 +86,6 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...mcpHandlers,
     ...outputStylesHandlers,
     ...conversationIngestHandlers,
+    ...recommendationsHandlers,
   };
 }

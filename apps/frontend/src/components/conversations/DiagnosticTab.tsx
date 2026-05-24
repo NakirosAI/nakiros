@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import type { ConversationAnalysis, ConversationTip } from '@nakiros/shared';
-import { AlertTriangle, Zap, Info } from 'lucide-react';
+import type { ConversationAnalysis, ConversationDrift, ConversationTip } from '@nakiros/shared';
+import { AlertTriangle, Compass, Zap, Info } from 'lucide-react';
 import { Sismograph } from './Sismograph';
 import { formatLongDuration } from '../../utils/format';
 
@@ -106,6 +106,9 @@ export function DiagnosticTab({ analysis }: Props) {
           <p className="mt-2 font-n-mono text-[11.5px] text-n-faint">{t('drawer.tipsEmpty')}</p>
         )}
       </section>
+
+      {/* === Drift — session-level drift signal (undefined = old analysis, null = no drift) === */}
+      {analysis.drift != null && <DriftSection drift={analysis.drift} />}
 
       {/* === Sismograph — context curve with compactions + frictions === */}
       <section>
@@ -221,6 +224,66 @@ export function DiagnosticTab({ analysis }: Props) {
         </Card>
       </section>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function DriftSection({ drift }: { drift: ConversationDrift }) {
+  const { t } = useTranslation('conversations');
+
+  const toneStyles: Record<typeof drift.severity, { bar: string; bg: string; icon: string; badge: string }> = {
+    low: {
+      bar: 'bg-n-info',
+      bg: 'bg-n-info-soft',
+      icon: 'text-n-info',
+      badge: 'bg-n-info-soft text-n-info',
+    },
+    medium: {
+      bar: 'bg-n-watch',
+      bg: 'bg-n-watch-soft',
+      icon: 'text-n-watch',
+      badge: 'bg-n-watch-soft text-n-watch',
+    },
+    high: {
+      bar: 'bg-n-critical',
+      bg: 'bg-n-critical-soft',
+      icon: 'text-n-critical',
+      badge: 'bg-n-critical-soft text-n-critical',
+    },
+  };
+  const tone = toneStyles[drift.severity];
+
+  return (
+    <section>
+      <SectionLabel>{t('drawer.drift.sectionLabel')}</SectionLabel>
+      <div className="mt-2 flex items-start gap-3 rounded-n-md border border-n-border-subtle bg-n-surface px-3.5 py-3">
+        {/* Severity bar */}
+        <div className={'mt-0.5 h-full w-0.5 self-stretch rounded-full ' + tone.bar} aria-hidden="true" />
+        <span
+          className={'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-n-xs ' + tone.bg}
+          aria-hidden="true"
+        >
+          <Compass size={13} className={tone.icon} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={'inline-flex items-center rounded-n-xs px-1.5 py-0.5 font-n-mono text-[11px] font-medium ' + tone.badge}>
+              {t(`drawer.drift.${drift.type}`)}
+            </span>
+            <span className="font-n-mono text-[10.5px] text-n-muted">
+              {t(`drawer.drift.severity${drift.severity.charAt(0).toUpperCase() + drift.severity.slice(1)}`)}
+            </span>
+          </div>
+          <p className="mt-1.5 break-words text-[12.5px] leading-relaxed text-n-fg whitespace-pre-wrap">
+            {drift.message}
+          </p>
+          <p className="mt-1 break-words text-[12px] leading-relaxed text-n-muted whitespace-pre-wrap">
+            {drift.suggestion}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 

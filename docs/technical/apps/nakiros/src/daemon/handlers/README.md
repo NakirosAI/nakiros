@@ -41,3 +41,4 @@ Every handler runs through `createTypedHandler` from [run-helpers.ts](./run-help
 - [analyze-convo.ts](./analyze-convo.md) — `analyzeConvo:*` streaming deep conversation analysis run kind.
 - [hooks.ts](./hooks.md) — `hooks:*` hooks-expert read/save/listAudits/readAudit (distinct from `claudeHooks:*` Module 6 V2 editor).
 - [mcp.ts](./mcp.md) — `mcp:*` mcp-expert read/save/listAudits/readAudit for the entire `.mcp.json` file (distinct from `claudeMcp:*` Module 5 V2 editor).
+- [drift-hook.ts](./drift-hook.md) — `driftHook:*` installer for the Stop + UserPromptSubmit drift detection hooks; status/diff/install/uninstall.

@@ -9,10 +9,14 @@ import {
   tokenizeForCluster,
 } from './runner-core/cluster-tokens.js';
 
+import { analyzeDriftFromPreparsed } from './drift-analyzer.js';
+import type { AssistantTurn, ContextMetrics, UserMessage as DriftUserMessage } from './drift/session-loader.js';
+
 import type {
   ConversationAnalysis,
   ConversationCompaction,
   ConversationCostSample,
+  ConversationDrift,
   ConversationFrictionPoint,
   ConversationFrictionZone,
   ConversationHealthZone,
@@ -247,6 +251,16 @@ export function analyzeConversation(
   // Turn counter for assistant entries (used in ToolUseRecord).
   let assistantTurnCounter = 0;
 
+  // Drift detection — parallel structures built during the main parse loop to
+  // avoid re-reading the JSONL in analyzeDriftFromPreparsed.
+  // Maps tool_use_id → isError (filled from user tool_result entries).
+  const driftToolErrors = new Map<string, boolean>();
+  // AssistantTurn[] compatible with drift/session-loader — built during assistant scan.
+  const driftAssistantTurns: AssistantTurn[] = [];
+  // DriftUserMessage[] compatible with drift/session-loader — built during user scan.
+  const driftUserMessages: DriftUserMessage[] = [];
+  let driftUserMsgCounter = 0;
+
   for (const entry of entries) {
     const type = entry['type'] as string | undefined;
     const timestamp = entry['timestamp'] as string | undefined;
@@ -302,10 +316,15 @@ export function analyzeConversation(
               type?: string;
               text?: string;
               is_error?: boolean;
+              tool_use_id?: string;
             };
             if (b.type === 'text' && b.text) textParts.push(b.text);
             else if (b.type === 'tool_result') {
               toolResults.push({ isError: Boolean(b.is_error) });
+              // Drift: index tool_result errors by tool_use_id for loop detection.
+              if (b.tool_use_id) {
+                driftToolErrors.set(b.tool_use_id, Boolean(b.is_error));
+              }
             }
           }
         }
@@ -343,6 +362,13 @@ export function analyzeConversation(
           text,
           timestamp: timestamp ?? '',
           offsetPct: entryOffset,
+        });
+
+        // Drift: collect user messages in the format expected by drift detectors.
+        driftUserMessages.push({
+          index: driftUserMsgCounter++,
+          timestamp: timestamp ?? '',
+          text,
         });
 
         // Friction zones: record which assistant turn immediately precedes this user message.
@@ -393,10 +419,14 @@ export function analyzeConversation(
       let turnLastTool: string | null = lastAssistantToolName;
       const turnToolNames: string[] = [];
       const turnToolUseInfos: AssistantToolUseInfo[] = [];
+      // Drift: tool_use events for this turn, resolved with hasError from driftToolErrors.
+      const driftToolUses: AssistantTurn['toolUses'] = [];
+
       if (Array.isArray(msg?.content)) {
         for (const block of msg!.content) {
           const b = block as {
             type?: string;
+            id?: string;
             name?: string;
             input?: Record<string, unknown>;
           };
@@ -438,6 +468,15 @@ export function analyzeConversation(
           }
 
           turnToolUseInfos.push({ toolName: b.name, filePath: toolFilePath, bashCommand: toolBashCmd });
+
+          // Drift: build ToolUseEvent for loop detector; use driftToolErrors for hasError.
+          const hasError = b.id ? (driftToolErrors.get(b.id) ?? false) : false;
+          driftToolUses.push({
+            tool: b.name,
+            input: b.input ?? {},
+            hasError,
+            resultContent: '',
+          });
         }
       }
       lastAssistantToolName = turnLastTool;
@@ -447,6 +486,13 @@ export function analyzeConversation(
         turn: currentTurn,
         timestamp: timestamp ?? '',
         toolUses: turnToolUseInfos,
+      });
+
+      // Drift: accumulate an AssistantTurn compatible with drift detectors.
+      driftAssistantTurns.push({
+        index: currentTurn,
+        timestamp: timestamp ?? '',
+        toolUses: driftToolUses,
       });
 
       // Token accounting from message.usage.
@@ -702,6 +748,17 @@ export function analyzeConversation(
     extraTips: gapTips,
   });
 
+  // --- Drift detection — using data already parsed above ---------------------
+  // `analyzeDriftFromPreparsed` runs the three detectors (loop → topic →
+  // context) on the structures built during the main parse loop, without
+  // re-reading the JSONL. Null = explicitly computed, no drift found.
+  const driftContextMetrics: ContextMetrics = { maxContextTokens, contextWindow };
+  const drift: ConversationDrift | null = analyzeDriftFromPreparsed({
+    assistantTurns: driftAssistantTurns,
+    userMessages: driftUserMessages,
+    contextMetrics: driftContextMetrics,
+  });
+
   return {
     sessionId,
     projectId,
@@ -731,6 +788,7 @@ export function analyzeConversation(
 
     frictionPoints,
     frictionZones,
+    drift,
 
     toolStats,
     toolErrorCount,

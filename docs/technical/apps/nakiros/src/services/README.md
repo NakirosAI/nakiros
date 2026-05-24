@@ -10,6 +10,7 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 - [providers/](./providers/README.md) — Per-agent project scanners (Claude, eventually Cursor / Codex / Gemini).
 - [service-manager/](./service-manager/README.md) — Install / start / stop / uninstall the Nakiros daemon as a background service (launchd on macOS, systemd on Linux).
 - [skill-fs/](./skill-fs/README.md) — Shared filesystem primitives for every skill scope: directory scan, audit count, path-traversal-safe IO, `Skill` record assembly.
+- [drift/](./drift/README.md) — Internal modules for the drift detection pipeline: session loading (JSONL → structured turns) and per-detector logic.
 
 ## Runners
 
@@ -39,6 +40,7 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 - [conversation-parser.ts](./conversation-parser.md) — Parse Claude Code JSONL into metadata + messages.
 - [conversation-analyzer.ts](./conversation-analyzer.md) — Deterministic health analysis (score, tips, friction, cache waste).
 - [conversation-deep-analyzer.ts](./conversation-deep-analyzer.md) — LLM-powered narrative report with Haiku/Sonnet routing.
+- [drift-analyzer.ts](./drift-analyzer.md) — Drift detection service wiring all per-type detectors (loop wired in stage 2; topic + context in stages 3–4); supports `?force=<type>` stubs for plumbing validation.
 
 ## Snapshot builders
 

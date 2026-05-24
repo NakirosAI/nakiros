@@ -99,7 +99,14 @@ interface MarketplaceTab {
   view: MarketplaceTabView;
 }
 
-export type Tab = HomeTab | ProjectTab | RunTab | SkillTab | MarketplaceTab;
+/** Global settings tab — singleton, not tied to any project. */
+interface SettingsTab {
+  id: string;
+  kind: 'settings';
+  label: string;
+}
+
+export type Tab = HomeTab | ProjectTab | RunTab | SkillTab | MarketplaceTab | SettingsTab;
 
 /** Args accepted by {@link UseTabsApi.openTab}. The id is generated. */
 export type OpenTabInput =
@@ -107,7 +114,8 @@ export type OpenTabInput =
   | Omit<ProjectTab, 'id'>
   | Omit<RunTab, 'id'>
   | Omit<SkillTab, 'id'>
-  | Omit<MarketplaceTab, 'id'>;
+  | Omit<MarketplaceTab, 'id'>
+  | Omit<SettingsTab, 'id'>;
 
 interface UseTabsApi {
   tabs: Tab[];
@@ -204,6 +212,13 @@ export function useTabs(initial?: Tab[]): UseTabsApi {
           (t): t is MarketplaceTab =>
             t.kind === 'marketplace' && t.marketplaceName === input.marketplaceName,
         );
+        if (existing) {
+          focusedId = existing.id;
+          return prev;
+        }
+      } else if (input.kind === 'settings') {
+        // Settings is a singleton — reuse any existing settings tab.
+        const existing = prev.find((t): t is SettingsTab => t.kind === 'settings');
         if (existing) {
           focusedId = existing.id;
           return prev;

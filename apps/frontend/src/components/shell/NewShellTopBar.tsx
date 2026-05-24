@@ -1,4 +1,4 @@
-import { Home as HomeIcon, Folder, Activity, X, Plus } from 'lucide-react';
+import { Home as HomeIcon, Folder, Activity, Settings as SettingsIcon, X, Plus } from 'lucide-react';
 import type { AgentRun, Project } from '@nakiros/shared';
 import type { Tab } from '../../hooks/useTabs';
 import RunDock from './RunDock';
@@ -65,6 +65,7 @@ export default function NewShellTopBar({
 function tabIcon(tab: Tab) {
   if (tab.kind === 'home') return HomeIcon;
   if (tab.kind === 'run') return Activity;
+  if (tab.kind === 'settings') return SettingsIcon;
   return Folder;
 }
 

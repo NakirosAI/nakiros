@@ -181,11 +181,13 @@
   },
   "install": {
     "label": "08 — INSTALL",
-    "title": "Install in ten seconds.",
-    "sub": "Requires Node 20+. The daemon binds 127.0.0.1:4242 and the UI opens automatically in your browser.",
+    "title": "Install in three commands.",
+    "sub": "Requires Node 20+. Install the CLI, register the background service (so the daemon survives reboots and powers real-time features like drift detection), then open the UI.",
     "terminalLabel": "~/code — zsh",
     "lines": [
       { "p": "$", "c": "npm i -g @nakirosai/nakiros" },
+      { "p": "$", "c": "nakiros service install" },
+      { "p": "#", "c": "registered launchd unit · daemon running on 127.0.0.1:4242", "muted": true },
       { "p": "$", "c": "nakiros" },
       { "p": "#", "c": "scanning ~/.claude ...", "muted": true },
       { "p": "#", "c": "indexed 4 skills · 3 agents · 2 rules · 1 output-style in 1.4s", "muted": true },
@@ -193,8 +195,8 @@
       { "p": "#", "c": "3 findings · 1 auto-fixable · 2 need your review", "muted": true },
       { "p": "#", "c": "ui ready → http://localhost:4242", "accent": true }
     ],
-    "tipLabel": "PERSISTENT DAEMON",
-    "tip": "Want it to autostart at boot? Run `nakiros service install` — registers a launchd / systemd unit, no extra config.",
+    "tipLabel": "WHY THE SERVICE STEP",
+    "tip": "`nakiros service install` registers a launchd / systemd unit so the daemon auto-starts at login. Real-time features (drift detection, conversation ingestion) need the daemon up — without it, the hooks fail silent.",
     "systemReq": "macOS · Linux · Windows (WSL)"
   },
   "faq": {

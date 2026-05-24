@@ -44,6 +44,13 @@ import {
   isHookInstalled as isConversationIngestHookInstalled,
   startWatcher as startConversationIngestWatcher,
 } from '../services/conversation-ingest/index.js';
+import { analyzeDrift, type DriftType } from '../services/drift-analyzer.js';
+import {
+  buildDriftHookDiff,
+  getDriftHookStatus,
+  installDriftHook,
+  uninstallDriftHook,
+} from '../services/drift/hook-installer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -266,6 +273,74 @@ export async function createDaemonServer(opts: DaemonServerOptions = {}): Promis
   await app.register(fastifyWebsocket);
 
   app.get('/health', async () => ({ status: 'ok', ts: new Date().toISOString() }));
+
+  // ── Drift detection ─────────────────────────────────────────────────────────
+  // GET /api/drift?session=<sessionId>[&force=loop|topic|context]
+  // Returns { drift: DriftReport | null }. No auth required (daemon is localhost-only).
+  app.get<{ Querystring: { session?: string; force?: string } }>(
+    '/api/drift',
+    async (request, reply) => {
+      const { session, force } = request.query;
+      if (!session) {
+        reply.status(400);
+        return { error: 'Missing required query param: session' };
+      }
+      try {
+        const validForce: DriftType[] = ['loop', 'topic', 'context'];
+        const opts =
+          force && validForce.includes(force as DriftType)
+            ? { force: force as DriftType }
+            : undefined;
+        const drift = await analyzeDrift(session, opts);
+        return { drift };
+      } catch (err) {
+        app.log.warn({ err }, '[drift] analyzeDrift threw unexpectedly');
+        reply.status(500);
+        return { error: 'Internal error during drift analysis' };
+      }
+    },
+  );
+
+  // ── Drift hook management ───────────────────────────────────────────────────
+  // REST convenience endpoints so `curl` test commands work without a running
+  // frontend. The same operations are also available as IPC channels
+  // `driftHook:status`, `driftHook:diff`, `driftHook:install`,
+  // `driftHook:uninstall`.
+  app.get('/api/drift-hook/status', async (_request, reply) => {
+    try {
+      return getDriftHookStatus();
+    } catch (err) {
+      reply.status(500);
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  app.get('/api/drift-hook/diff', async (_request, reply) => {
+    try {
+      return buildDriftHookDiff();
+    } catch (err) {
+      reply.status(500);
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  app.post('/api/drift-hook/install', async (_request, reply) => {
+    try {
+      return installDriftHook();
+    } catch (err) {
+      reply.status(500);
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  app.post('/api/drift-hook/uninstall', async (_request, reply) => {
+    try {
+      return uninstallDriftHook();
+    } catch (err) {
+      reply.status(500);
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 
   // ── IPC dispatcher ──────────────────────────────────────────────────────────
   const handlers = buildHandlerRegistry();

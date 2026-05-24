@@ -37,7 +37,12 @@
     "cacheMisses_one": "{{count}} cache miss",
     "cacheMisses_other": "{{count}} cache misses",
     "hotFiles_one": "{{count}} fichier chaud",
-    "hotFiles_other": "{{count}} fichiers chauds"
+    "hotFiles_other": "{{count}} fichiers chauds",
+    "drift": {
+      "loop": "Drift : boucle",
+      "topic": "Drift : sujet",
+      "context": "Drift : contexte"
+    }
   },
   "diagnostic": {
     "healthy": "Conversation saine — pas de signal notable"
@@ -89,6 +94,15 @@
     "tips": "À faire la prochaine fois",
     "tipsEmpty": "Rien à suggérer — cette conversation est saine",
     "deepTitle": "Analyse approfondie (LLM)",
+    "drift": {
+      "sectionLabel": "Signal de dérive",
+      "loop": "Dérive : boucle",
+      "topic": "Dérive : sujet",
+      "context": "Dérive : contexte",
+      "severityLow": "faible",
+      "severityMedium": "moyenne",
+      "severityHigh": "haute"
+    },
     "rawLink": "Voir les messages bruts",
     "fields": {
       "score": "Score",

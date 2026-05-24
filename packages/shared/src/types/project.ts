@@ -111,6 +111,34 @@ export interface ConversationFrictionPoint {
   precedingTool: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Drift detection — session-level signals produced by the drift analyzers
+// and embedded inside ConversationAnalysis for display in the Nakiros UI.
+// ---------------------------------------------------------------------------
+
+/** The three drift archetypes Nakiros can detect in a Claude Code session. */
+export type DriftType = 'loop' | 'topic' | 'context';
+
+/**
+ * A detected drift event embedded in a {@link ConversationAnalysis}. Produced
+ * by `drift-analyzer.ts` when the session has strayed from a healthy trajectory.
+ *
+ * Three archetypes:
+ *   - `loop`    — agent keeps retrying the same action without progress
+ *   - `topic`   — conversation has shifted far from the original objective
+ *   - `context` — context window is polluted by unrelated accumulated content
+ */
+export interface ConversationDrift {
+  type: DriftType;
+  severity: 'low' | 'medium' | 'high';
+  /** Short human-readable message to surface in the UI (1–2 sentences, FR). */
+  message: string;
+  /** Concrete actionable suggestion for the user (e.g. "/clear", "new session"). */
+  suggestion: string;
+  /** Raw evidence — counters, similarity scores — for debug / future UI use. */
+  evidence: Record<string, unknown>;
+}
+
 /**
  * Richer friction view: a span of time where the user was stuck on the same
  * topic, sending 3+ messages on it within a 10-user-message window. Built by
@@ -331,6 +359,13 @@ export interface ConversationAnalysis {
   frictionPoints: ConversationFrictionPoint[];
   /** Richer friction view: one zone per user-reaction, with agent context spanning the preceding assistant turns. */
   frictionZones: ConversationFrictionZone[];
+  /**
+   * Session-level drift signal. Present when the drift analyzer detected a
+   * loop, topic shift, or context pollution. `null` when explicitly computed
+   * but no drift was found. `undefined` for analyses predating drift detection
+   * (cache v11 and earlier).
+   */
+  drift?: ConversationDrift | null;
 
   // --- Tool use ---
   toolStats: Record<string, ConversationToolStats>;

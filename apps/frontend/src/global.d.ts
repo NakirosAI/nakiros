@@ -126,6 +126,8 @@ import type {
   ConversationIngestProject,
   ConversationIngestSession,
   ConversationIngestProgressEvent,
+  DriftHookStatus,
+  DriftHookDiff,
   ApplyRecoResponse,
   RecoCard,
   RecommendationAnalyzeRun,
@@ -575,6 +577,12 @@ declare global {
       onConversationIngestProgress(
         cb: (event: ConversationIngestProgressEvent) => void,
       ): () => void;
+
+      // Drift hook installer (Settings panel toggle)
+      getDriftHookStatus(): Promise<DriftHookStatus>;
+      getDriftHookDiff(): Promise<DriftHookDiff>;
+      installDriftHook(): Promise<DriftHookStatus>;
+      uninstallDriftHook(): Promise<DriftHookStatus>;
 
       // Recommendations — friction-pattern clustering + analyser + apply.
       listRecommendationPatterns(projectId: string): Promise<RecommendationPattern[]>;

@@ -9,6 +9,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Settings,
   Sparkles,
   Users,
 } from 'lucide-react';
@@ -39,6 +40,8 @@ interface HomeScreenProps {
   onOpenSkillTab(identity: SkillTabIdentity, label: string): void;
   /** Opens a marketplace in a dedicated `kind: 'marketplace'` tab. */
   onOpenMarketplaceTab(marketplaceName: string, label: string): void;
+  /** Opens the global settings tab (singleton — deduped by useTabs). */
+  onOpenSettings(): void;
 }
 
 type HomeTabKey = 'projects' | 'cowork' | 'plugins' | 'globals' | 'nakiros';
@@ -69,6 +72,7 @@ export default function HomeScreen({
   onOpenSkillTab,
   onOpenMarketplaceTab,
   onProjectsChanged,
+  onOpenSettings,
 }: HomeScreenProps) {
   const { t } = useTranslation('home');
   const [tab, setTab] = useState<HomeTabKey>('projects');
@@ -277,6 +281,15 @@ export default function HomeScreen({
             {rescanning
               ? t('hero.rescanning', { defaultValue: 'Scanning…' })
               : t('hero.rescan', { defaultValue: 'Rescan' })}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            title={t('hero.openSettings', { defaultValue: 'Settings' })}
+            className="inline-flex h-8 items-center gap-1.5 rounded-n-sm bg-transparent px-3 font-n-mono text-[12px] text-n-muted hover:bg-n-raised hover:text-n-fg"
+          >
+            <Settings size={13} strokeWidth={2} />
+            {t('hero.openSettings', { defaultValue: 'Settings' })}
           </button>
         </div>
       </div>

@@ -27,7 +27,8 @@
     "tagline": "Analyse, audite et améliore les skills qui pilotent tes agents Claude Code — entièrement sur ta machine.",
     "nakirosSkills": "Nakiros Skills",
     "rescan": "Rescanner",
-    "rescanning": "Scan en cours…"
+    "rescanning": "Scan en cours…",
+    "openSettings": "Paramètres"
   },
   "rescanBanner": {
     "scanning": "Scan en cours · {{current}}/{{total}}",

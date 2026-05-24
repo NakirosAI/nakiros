@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ConversationAnalysis } from '@nakiros/shared';
-import { ChevronRight } from 'lucide-react';
+import type { ConversationAnalysis, DriftType } from '@nakiros/shared';
+import { ChevronRight, Compass } from 'lucide-react';
 import { ConvSparkline } from './ConvSparkline';
 import { formatLongDuration } from '../../utils/format';
 
@@ -78,6 +79,14 @@ export function ConvRow({ analysis, onOpen }: Props) {
             <Chip tone="violet">
               {t('badge.cacheMisses', { count: cacheMisses })}
             </Chip>
+          )}
+          {analysis.drift != null && (
+            <DriftChip
+              type={analysis.drift.type}
+              severity={analysis.drift.severity}
+              message={analysis.drift.message}
+              suggestion={analysis.drift.suggestion}
+            />
           )}
         </div>
 
@@ -157,6 +166,69 @@ function Chip({
       }
     >
       {children}
+    </span>
+  );
+}
+
+function DriftChip({
+  type,
+  severity,
+  message,
+  suggestion,
+}: {
+  type: DriftType;
+  severity: 'low' | 'medium' | 'high';
+  message: string;
+  suggestion: string;
+}) {
+  const { t } = useTranslation('conversations');
+  const [open, setOpen] = useState(false);
+
+  const tone: Record<typeof severity, string> = {
+    low: 'bg-n-info-soft text-n-info',
+    medium: 'bg-n-watch-soft text-n-watch',
+    high: 'bg-n-critical-soft text-n-critical',
+  };
+  const tooltipBorder: Record<typeof severity, string> = {
+    low: 'border-n-info/30',
+    medium: 'border-n-watch/30',
+    high: 'border-n-critical/30',
+  };
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        aria-label={t(`badge.drift.${type}`)}
+        className={
+          'inline-flex cursor-default items-center gap-1 rounded-n-xs px-1.5 py-0.5 font-n-mono text-[10.5px] ' +
+          tone[severity]
+        }
+      >
+        <Compass size={9} aria-hidden="true" />
+        {t(`badge.drift.${type}`)}
+      </button>
+      {open && (
+        <div
+          className={
+            'pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 w-64 rounded-n-md border bg-n-canvas px-3 py-2.5 shadow-n-pop ' +
+            tooltipBorder[severity]
+          }
+          role="tooltip"
+        >
+          <p className="break-words text-[12px] leading-relaxed text-n-fg">
+            {message}
+          </p>
+          <p className="mt-1.5 break-words text-[11.5px] leading-relaxed text-n-muted">
+            {suggestion}
+          </p>
+        </div>
+      )}
     </span>
   );
 }

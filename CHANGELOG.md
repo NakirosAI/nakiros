@@ -5,6 +5,56 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] — 2026-05-24
+
+Drift detection release. Nakiros now watches your active Claude Code
+conversation in real time and surfaces a banner inside the transcript
+when it detects you're going in circles, drifting off-topic, or letting
+context pollute the agent's responses.
+
+### Added
+
+- **Three drift detectors running on the session JSONL.**
+  - **Loop drift** — counts repeated tool signatures on a 12-turn window
+    (≥4 edits on the same file, ≥3 Bash commands with the same error,
+    ≥5 grep/find on the same pattern, ≥5 reads of the same file).
+  - **Topic drift** — Jaccard similarity on tokenized user messages.
+    Triggers on ≥2 transitions with low similarity to the first
+    message, honoring `/clear` as a topic reset.
+  - **Context drift** — combines context-window usage (≥50%), topic
+    transitions, and divergence from the original objective. Topic
+    detector has priority so we don't double-fire.
+- **Real-time banner via two Claude Code hooks.**
+  - `Stop` hook → emits `systemMessage` so the user sees a banner
+    immediately ("🧭 Nakiros — Loop drift detected, try /clear...").
+  - `UserPromptSubmit` hook → emits `additionalContext` so the agent
+    itself knows about the drift on the next turn and can nudge the
+    user if relevant.
+- **Opt-in toggle in Settings.** A new "Drift detection" panel under
+  Settings installs/removes both hooks in `~/.claude/settings.json`
+  idempotently, shows the JSON diff before mutating, and materializes
+  the hook scripts under `~/.nakiros/drift/`. Other entries in your
+  global settings (other hooks, MCP servers, permissions) are
+  preserved verbatim.
+- **Drift badge inside Nakiros UI.** Conversations analyzed by Nakiros
+  now show a `Drift: loop|topic|context` chip in the conversation row,
+  a colored section inside the diagnostic tab, and a pill in the
+  drawer header — same visual language as `frictionZones`.
+- **Settings tab accessible from the Home screen.** New Settings
+  button in the Home header opens a dedicated tab — no need to enter
+  a project to reach global settings.
+
+### Notes
+
+- **Real-time detection requires the daemon to be running.** The hooks
+  are thin clients that call `http://localhost:4242/api/drift` and
+  fail silently if the daemon is unreachable, so drift detection is
+  best paired with `nakiros service install` (registers the daemon as
+  a login-persistent launchd / systemd unit). Without the service,
+  you need `nakiros start` for drift to be active.
+- **No network, no telemetry.** Everything runs in the local daemon.
+  Hooks talk to `127.0.0.1:4242` only.
+
 ## [0.13.0] — 2026-05-14
 
 Apply-recommendation pipeline release. Cards produced by the

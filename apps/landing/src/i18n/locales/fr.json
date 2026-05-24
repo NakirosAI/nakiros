@@ -181,11 +181,13 @@
   },
   "install": {
     "label": "08 — INSTALL",
-    "title": "Installe en dix secondes.",
-    "sub": "Node 20+ requis. Le daemon écoute sur 127.0.0.1:4242 et l'UI s'ouvre automatiquement dans ton navigateur.",
+    "title": "Installe en trois commandes.",
+    "sub": "Node 20+ requis. Installe le CLI, enregistre le service en arrière-plan (pour que le daemon survive aux redémarrages et alimente les features temps réel comme la détection de drift), puis ouvre l'UI.",
     "terminalLabel": "~/code — zsh",
     "lines": [
       { "p": "$", "c": "npm i -g @nakirosai/nakiros" },
+      { "p": "$", "c": "nakiros service install" },
+      { "p": "#", "c": "unit launchd enregistrée · daemon en route sur 127.0.0.1:4242", "muted": true },
       { "p": "$", "c": "nakiros" },
       { "p": "#", "c": "scan ~/.claude ...", "muted": true },
       { "p": "#", "c": "4 skills · 3 agents · 2 rules · 1 output-style indexés en 1.4s", "muted": true },
@@ -193,8 +195,8 @@
       { "p": "#", "c": "3 findings · 1 auto-fixable · 2 à valider par toi", "muted": true },
       { "p": "#", "c": "ui prête → http://localhost:4242", "accent": true }
     ],
-    "tipLabel": "DAEMON PERSISTANT",
-    "tip": "Tu veux qu'il démarre au boot ? Lance `nakiros service install` — enregistre une unit launchd / systemd, sans config supplémentaire.",
+    "tipLabel": "POURQUOI L'ÉTAPE SERVICE",
+    "tip": "`nakiros service install` enregistre une unit launchd / systemd pour que le daemon démarre à la session. Les features temps réel (détection de drift, ingestion conversations) ont besoin du daemon up — sans lui, les hooks échouent en silence.",
     "systemReq": "macOS · Linux · Windows (WSL)"
   },
   "faq": {

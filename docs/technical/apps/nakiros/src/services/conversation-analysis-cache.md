@@ -4,6 +4,10 @@
 
 Disk-backed cache for per-conversation analysis results. Each entry is stored as a JSON file under `~/.nakiros/cache/analyses/<sessionId>.json` and is invalidated by comparing the source JSONL's `mtime` and byte size. A `CACHE_VERSION` constant guards against schema drift — entries written by an older version are silently discarded and recomputed.
 
+Current version: **v12** (2026-05-24) — added `drift?: ConversationDrift | null`
+(loop/topic/context detectors). Bumping the version invalidates all v11 entries
+so they are recomputed with the new drift field.
+
 ## Exports
 
 ### `peekCachedAnalysis`

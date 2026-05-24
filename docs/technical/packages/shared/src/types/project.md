@@ -52,6 +52,33 @@ export type ConversationHealthZone = 'healthy' | 'watch' | 'degraded';
 
 A single compaction event (auto or manual) detected in the JSONL stream.
 
+### `type DriftType`
+
+The three session-level drift archetypes Nakiros can detect.
+
+```ts
+export type DriftType = 'loop' | 'topic' | 'context';
+```
+
+| Value | Description |
+|-------|-------------|
+| `loop` | Agent repeating the same tool actions without progress. |
+| `topic` | Conversation has shifted far from the original objective. |
+| `context` | Context window polluted by accumulated unrelated content. |
+
+### `interface ConversationDrift`
+
+A detected drift event embedded inside `ConversationAnalysis.drift`. Produced
+by `drift-analyzer.ts` when the session has strayed from a healthy trajectory.
+
+| Field | Description |
+|-------|-------------|
+| `type` | Which drift archetype was detected (`DriftType`). |
+| `severity` | `'low' | 'medium' | 'high'` |
+| `message` | Short FR message to surface in the UI (1–2 sentences). |
+| `suggestion` | Concrete actionable suggestion for the user (e.g. `/clear`). |
+| `evidence` | Raw counters / similarity scores for debug / future UI use. |
+
 ### `interface ConversationFrictionPoint`
 
 User-message moment flagged as friction (correction / frustration / abort).
@@ -87,7 +114,14 @@ One actionable tip surfaced by the rule-based conversation analyzer. The `id` ma
 
 ### `interface ConversationAnalysis`
 
-Full deterministic analysis of a single conversation: metadata, context health, cache efficiency, friction, tool usage, composite score and tips. Consumed by `ConversationsView` and the diagnostic panel.
+Full deterministic analysis of a single conversation: metadata, context health,
+cache efficiency, friction, drift, tool usage, composite score and tips.
+Consumed by `ConversationsView` and the diagnostic panel.
+
+Key field added in v12:
+- `drift?: ConversationDrift | null` — session-level drift signal. `null` means
+  explicitly computed and no drift was found. `undefined` on analyses predating
+  drift detection (cache v11 and earlier).
 
 ## Deep (LLM) conversation analysis
 

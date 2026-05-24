@@ -7,6 +7,7 @@ import {
 } from '@nakiros/shared';
 import { usePreferences } from '../hooks/usePreferences';
 import ConversationIngestPanel from './ConversationIngestPanel';
+import DriftDetectionPanel from './DriftDetectionPanel';
 
 /**
  * New-design Settings — port of the `SettingsScreen` in
@@ -72,6 +73,7 @@ export default function SettingsScreen() {
       />
       <SettingCard label="Auto-rescan on launch" value="Enabled" />
 
+      <DriftDetectionPanel />
       <ConversationIngestPanel />
     </div>
     </div>

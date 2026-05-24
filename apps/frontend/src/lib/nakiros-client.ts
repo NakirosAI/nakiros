@@ -537,6 +537,12 @@ const client = {
   onConversationIngestProgress: (cb: (event: unknown) => void) =>
     subscribe(C['conversationIngest:progress'], cb),
 
+  // Drift hook installer (Settings panel toggle)
+  getDriftHookStatus: () => invoke(C['driftHook:status']),
+  getDriftHookDiff: () => invoke(C['driftHook:diff']),
+  installDriftHook: () => invoke(C['driftHook:install']),
+  uninstallDriftHook: () => invoke(C['driftHook:uninstall']),
+
   // Conversation deep-analysis runner (analyze-convo)
   startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),

@@ -89,8 +89,13 @@ interface CacheEntry {
  * `signalKinds` union. The bert-nlptown model produced too many false positives
  * on French dev/agent dialog. `signalKinds` now only covers `'S4' | 'S5' | 'S6'`.
  * `frictionPoints[]` no longer includes sentiment-derived entries.
+ *
+ * v12 (2026-05-24) — added `drift?: ConversationDrift | null`. Session-level
+ * drift signal produced by `analyzeDriftFromPreparsed` (loop/topic/context
+ * detectors). `null` means explicitly computed, no drift found. `undefined`
+ * on older cached entries (treated as "not yet computed" by the UI).
  */
-const CACHE_VERSION = 11;
+const CACHE_VERSION = 12;
 
 function cacheDir(): string {
   const dir = join(getNakirosDir(), 'cache', 'analyses');

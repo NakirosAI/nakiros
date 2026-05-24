@@ -37,7 +37,12 @@
     "cacheMisses_one": "{{count}} cache miss",
     "cacheMisses_other": "{{count}} cache misses",
     "hotFiles_one": "{{count}} hot file",
-    "hotFiles_other": "{{count}} hot files"
+    "hotFiles_other": "{{count}} hot files",
+    "drift": {
+      "loop": "Drift: loop",
+      "topic": "Drift: topic",
+      "context": "Drift: context"
+    }
   },
   "hover": {
     "cumBilled": "cumul billed",
@@ -88,6 +93,15 @@
     "hotFiles": "Hot files (≥ 3 edits)",
     "tips": "What to do next time",
     "tipsEmpty": "Nothing to suggest — this conversation is healthy",
+    "drift": {
+      "sectionLabel": "Drift signal",
+      "loop": "Loop drift",
+      "topic": "Topic drift",
+      "context": "Context drift",
+      "severityLow": "low",
+      "severityMedium": "medium",
+      "severityHigh": "high"
+    },
     "rawLink": "View raw messages",
     "fields": {
       "score": "Score",

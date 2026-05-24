@@ -332,6 +332,13 @@ export const IPC_CHANNELS = {
   'classifyConvo:listAll': 'classifyConvo:listAll',
   'classifyConvo:getBufferedEvents': 'classifyConvo:getBufferedEvents',
 
+  // Drift hook installer — opt-in Stop + UserPromptSubmit hooks that surface
+  // conversation drift signals in the Claude Code UI. Managed as a pair.
+  'driftHook:status': 'driftHook:status',
+  'driftHook:diff': 'driftHook:diff',
+  'driftHook:install': 'driftHook:install',
+  'driftHook:uninstall': 'driftHook:uninstall',
+
   // Recommendations — friction-pattern clustering + per-pattern LLM analyser
   // + apply-reco translation to existing fix/create/edit runners.
   // See `docs/superpowers/specs/2026-05-13-friction-pattern-recommendations-design.md`.

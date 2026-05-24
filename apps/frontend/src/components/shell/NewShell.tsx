@@ -101,6 +101,10 @@ export default function NewShell({
     openTab({ kind: 'marketplace', marketplaceName, label, view: 'overview' });
   };
 
+  const handleOpenSettings = () => {
+    openTab({ kind: 'settings', label: t('settings') });
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-n-canvas font-n-sans text-n-fg">
       <NewShellTopBar
@@ -123,7 +127,19 @@ export default function NewShell({
             onProjectsChanged={onProjectsChanged}
             onOpenSkillTab={handleOpenSkillTab}
             onOpenMarketplaceTab={handleOpenMarketplaceTab}
+            onOpenSettings={handleOpenSettings}
           />
+        )}
+
+        {activeTab.kind === 'settings' && (
+          <PreferencesProvider
+            preferences={preferences}
+            updatePreferences={updatePreferences}
+          >
+            <section className="flex flex-1 flex-col overflow-hidden">
+              <SettingsScreen />
+            </section>
+          </PreferencesProvider>
         )}
 
         {activeTab.kind === 'project' && (() => {

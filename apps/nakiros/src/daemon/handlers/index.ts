@@ -33,6 +33,7 @@ import { permissionsHandlers } from './permissions.js';
 import { mcpHandlers } from './mcp.js';
 import { outputStylesHandlers } from './output-styles.js';
 import { conversationIngestHandlers } from './conversation-ingest.js';
+import { driftHookHandlers } from './drift-hook.js';
 import { recommendationsHandlers } from './recommendations.js';
 
 /** Signature every IPC handler must implement — takes an arg array, returns a value or promise. */
@@ -86,6 +87,7 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...mcpHandlers,
     ...outputStylesHandlers,
     ...conversationIngestHandlers,
+    ...driftHookHandlers,
     ...recommendationsHandlers,
   };
 }

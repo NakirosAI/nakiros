@@ -1,6 +1,17 @@
 {
   "mcpServers": {},
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/scripts/drift-context.mjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit",
@@ -14,6 +25,15 @@
       }
     ],
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/scripts/drift-check.mjs",
+            "timeout": 5
+          }
+        ]
+      },
       {
         "hooks": [
           {

@@ -44,7 +44,10 @@ import {
   cleanupRunWorkdir,
   computeSessionUsage,
   createRunner,
+  createRunWorktree,
+  destroyEvalSandbox,
   encodeProjectPath,
+  findGitRoot,
   isActiveRunStatus,
   persistRunJson,
   type RehydrateResult,
@@ -112,6 +115,14 @@ interface SkillAgentExtras {
    * only appends new lines after the daemon resumes.
    */
   targetsLineCount?: number;
+  /**
+   * Absolute path of the git worktree used as the Claude subprocess `cwd`.
+   * Set by `prepareWorkdir` when the project is inside a git repo. When set,
+   * `cleanupOnTerminal` calls `destroyEvalSandbox(worktreePath)` in addition
+   * to cleaning the Nakiros workdir. NOT persisted — the path is re-derived
+   * from `run.cwd` at rehydration (cleanup is best-effort on restart).
+   */
+  worktreePath?: string | null;
 }
 
 /** Internal start request — `StartAuditRequest` + the resolved skill dir + mode. */
@@ -551,16 +562,24 @@ function stopProgressPolling(extras: SkillAgentExtras): void {
  * (Bash, Read, Glob, …) so `afterToolUse` becomes a no-op.
  *
  * For `MultiEdit`, we yield ONE FixEdit per inner edit (caller iterates).
+ *
+ * `cwd` is the optional git worktree path used as the Claude subprocess cwd.
+ * When provided, files under `cwd` are relativised against `cwd` (project-
+ * relative display path); files outside `cwd` fall back to `workdir`.
  */
 function toFixEdits(
   toolName: string,
   input: Record<string, unknown>,
   workdir: string,
+  cwd?: string,
 ): FixEdit[] {
   const ts = new Date().toISOString();
   const filePath = typeof input.file_path === 'string' ? input.file_path : '';
   if (!filePath) return [];
-  const displayPath = relative(workdir, filePath) || filePath;
+  // Choose the best base for the display path: use the worktree root when the
+  // file is inside it (project files), fall back to the workdir (Nakiros artefacts).
+  const displayBase = (cwd && filePath.startsWith(cwd + '/')) ? cwd : workdir;
+  const displayPath = relative(displayBase, filePath) || filePath;
   // Skip Nakiros-internal artefacts (outputs/fix-targets.jsonl,
   // outputs/fix-findings.jsonl, audits/audit-*.md, .claude/**, run.json,
   // events.jsonl, evals/workspace/**). The user only wants to see edits
@@ -831,20 +850,65 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     let latestAuditFile: string | null = null;
     let latestIteration: number | null = null;
 
+    // ── Worktree setup ──────────────────────────────────────────────────────
+    // Resolve the project root for this run. For *Target runs the project path
+    // is explicit; for skill runs we walk up from skillDir and hope it lives
+    // inside a git repo.
+    let resolvedProjectPath: string | null = null;
+    if (req.claudemdTarget) resolvedProjectPath = req.claudemdTarget.projectPath;
+    else if (req.rulesTarget) resolvedProjectPath = req.rulesTarget.projectPath;
+    else if (req.subagentsTarget) resolvedProjectPath = req.subagentsTarget.projectPath;
+    else if (req.hooksTarget) resolvedProjectPath = req.hooksTarget.projectPath;
+    else if (req.permissionsTarget) resolvedProjectPath = req.permissionsTarget.projectPath;
+    else if (req.mcpTarget) resolvedProjectPath = req.mcpTarget.projectPath;
+    else if (req.outputStylesTarget) resolvedProjectPath = req.outputStylesTarget.projectPath;
+    else {
+      // Skill run — try to find the git root from the skill directory.
+      resolvedProjectPath = req.skillDir;
+    }
+
+    let worktreePath: string | null = null;
+    const gitRoot = resolvedProjectPath ? findGitRoot(resolvedProjectPath) : null;
+    if (gitRoot) {
+      try {
+        const kind = req.mode === 'create' ? 'create' : req.mode === 'edit' ? 'edit' : 'fix';
+        const result = createRunWorktree(gitRoot, runId, kind);
+        worktreePath = result.path;
+        // Write the daemon's execution settings into the worktree .claude/ dir
+        // so the Claude subprocess picks them up from its cwd.
+        writeExecutionSettings(worktreePath);
+        console.log(`[skill-agent-runner] Created worktree at ${worktreePath} (gitRoot=${gitRoot})`);
+      } catch (err) {
+        // Worktree creation failed (e.g. git unavailable, repo too large, disk full).
+        // Fall back gracefully: the agent runs from the plain Nakiros workdir.
+        console.warn(`[skill-agent-runner] Could not create worktree — falling back to workdir-only: ${(err as Error).message}`);
+        worktreePath = null;
+      }
+    }
+
     if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget || req.permissionsTarget || req.mcpTarget || req.outputStylesTarget) {
       // For CLAUDE.md, rules, subagents, hooks, permissions, and mcp runs we
       // don't copy the bundled expert into the workdir — it's immutable. We only
       // symlink it under `.claude/skills/<name>` so the slash-command resolves
       // from cwd. The agent edits the target file directly via Write/Edit at
       // the absolute path injected in the first prompt.
-      const claudeSkillsDir = join(workdir, '.claude', 'skills');
-      mkdirSync(claudeSkillsDir, { recursive: true });
-      const linkPath = join(claudeSkillsDir, req.skillName);
-      if (!existsSync(linkPath)) {
-        try {
-          symlinkSync(realpathSync(req.skillDir), linkPath, 'dir');
-        } catch (err) {
-          console.warn(`[skill-agent-runner] Failed to symlink expert: ${(err as Error).message}`);
+      //
+      // When a worktree is available, symlink inside the worktree's .claude/ so
+      // Claude can resolve the slash-command from its actual cwd. We also keep a
+      // symlink in the Nakiros workdir as a fallback / for consistency.
+      const symlinkTargets: string[] = worktreePath
+        ? [worktreePath, workdir]
+        : [workdir];
+      for (const base of symlinkTargets) {
+        const claudeSkillsDir = join(base, '.claude', 'skills');
+        mkdirSync(claudeSkillsDir, { recursive: true });
+        const linkPath = join(claudeSkillsDir, req.skillName);
+        if (!existsSync(linkPath)) {
+          try {
+            symlinkSync(realpathSync(req.skillDir), linkPath, 'dir');
+          } catch (err) {
+            console.warn(`[skill-agent-runner] Failed to symlink expert in ${base}: ${(err as Error).message}`);
+          }
         }
       }
     } else if (req.mode === 'fix' || req.mode === 'edit') {
@@ -854,6 +918,36 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       copySkillSourceForFix(req.skillDir, workdir);
       latestAuditFile = copyLatestAudit(req.skillDir, workdir);
       latestIteration = copyLatestIteration(req.skillDir, workdir);
+
+      // When running inside a worktree, make the skill accessible from the
+      // worktree cwd via a symlink so the slash-command resolves correctly.
+      if (worktreePath) {
+        const claudeSkillsDir = join(worktreePath, '.claude', 'skills');
+        mkdirSync(claudeSkillsDir, { recursive: true });
+        const linkPath = join(claudeSkillsDir, req.skillName);
+        if (!existsSync(linkPath)) {
+          try {
+            // Point to the workdir (Nakiros copy) — the agent's edits land there
+            // and are later synced back to the real skill on finish.
+            symlinkSync(workdir, linkPath, 'dir');
+          } catch (err) {
+            console.warn(`[skill-agent-runner] Failed to symlink skill into worktree: ${(err as Error).message}`);
+          }
+        }
+      }
+    } else if (req.mode === 'create' && worktreePath) {
+      // Create mode: empty workdir. Expose it as a skill in the worktree so
+      // the agent can invoke /nakiros-skill-factory create from the project cwd.
+      const claudeSkillsDir = join(worktreePath, '.claude', 'skills');
+      mkdirSync(claudeSkillsDir, { recursive: true });
+      const linkPath = join(claudeSkillsDir, req.skillName);
+      if (!existsSync(linkPath)) {
+        try {
+          symlinkSync(workdir, linkPath, 'dir');
+        } catch (err) {
+          console.warn(`[skill-agent-runner] Failed to symlink new skill workdir into worktree: ${(err as Error).message}`);
+        }
+      }
     }
 
     writeExecutionSettings(workdir);
@@ -1099,6 +1193,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         latestIteration,
         syncTimer: null,
         targetsLineCount: 0,
+        worktreePath,
       },
     };
   },
@@ -1478,7 +1573,7 @@ ${languageLine}
 - Do not modify \`.claude/settings.local.json\` in this workdir — it's Nakiros's runtime config.`;
   },
 
-  createInitialRun(req, runId, workdir): AuditRun {
+  createInitialRun(req, runId, workdir, extras): AuditRun {
     return {
       runId,
       scope: req.scope,
@@ -1489,6 +1584,9 @@ ${languageLine}
       status: 'starting',
       sessionId: null,
       workdir,
+      // When a worktree was created, use it as the Claude subprocess cwd so
+      // the agent lands in the actual project tree and can read source files.
+      cwd: extras.worktreePath ?? undefined,
       reportPath: null,
       turns: [],
       tokensUsed: 0,
@@ -1547,11 +1645,25 @@ ${languageLine}
   onTurnFailed(entry) {
     stopProgressPolling(entry.extras);
     cleanupRunWorkdir(entry.run.workdir);
+    if (entry.extras.worktreePath) {
+      try {
+        destroyEvalSandbox(entry.extras.worktreePath);
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Failed to destroy worktree on turn failure: ${(err as Error).message}`);
+      }
+    }
   },
 
   cleanupOnTerminal(entry) {
     stopProgressPolling(entry.extras);
     cleanupRunWorkdir(entry.run.workdir);
+    if (entry.extras.worktreePath) {
+      try {
+        destroyEvalSandbox(entry.extras.worktreePath);
+      } catch (err) {
+        console.warn(`[skill-agent-runner] Failed to destroy worktree on terminal cleanup: ${(err as Error).message}`);
+      }
+    }
   },
 
   /**
@@ -1914,14 +2026,16 @@ ${languageLine}
     // run.json may not have flushed sessionId before the crash. Recover it
     // from the most recent `*.jsonl` Claude wrote under the cwd-encoded
     // project entry — that's where `getFixTimeline` will read history from.
+    // When a worktree cwd was used, Claude Code indexes under that path.
+    const blobCwd = (blob as AuditRun).cwd ?? workdir;
     const recoveredSessionId =
-      blob.sessionId ?? findLatestClaudeSessionId(workdir);
+      blob.sessionId ?? findLatestClaudeSessionId(blobCwd);
     const sessionFile = recoveredSessionId
       ? join(
           homedir(),
           '.claude',
           'projects',
-          encodeProjectPath(workdir),
+          encodeProjectPath(blobCwd),
           `${recoveredSessionId}.jsonl`,
         )
       : null;
@@ -1940,6 +2054,10 @@ ${languageLine}
       status: restoredStatus,
       sessionId: recoveredSessionId,
       workdir,
+      // Restore the worktree cwd when it was set — required so getFixTimeline /
+      // getFixUsage continue to resolve the session JSONL under the right path
+      // after a daemon restart.
+      cwd: (blob as AuditRun).cwd,
       reportPath: blob.reportPath ?? null,
       turns: Array.isArray(blob.turns) ? blob.turns : [],
       tokensUsed: typeof blob.tokensUsed === 'number' ? blob.tokensUsed : 0,
@@ -1985,6 +2103,10 @@ ${languageLine}
           typeof blob._extras?.targetsLineCount === 'number'
             ? blob._extras.targetsLineCount
             : (Array.isArray(blob.targets) ? blob.targets.length : 0),
+        // Worktrees are ephemeral: the boot sweep (`sweepOrphanSandboxes`) will
+        // have already cleaned them up before rehydration runs. Set to null so
+        // cleanupOnTerminal does not attempt a second destroy.
+        worktreePath: null,
       },
     };
   },
@@ -2254,13 +2376,17 @@ export function getFixTimeline(runId: string): FixTimelineEntry[] {
   const entry = runner.registry().get(runId);
   if (!entry) return [];
   const { sessionId, workdir } = entry.run;
+  // When a worktree cwd was used, Claude Code records the session JSONL under
+  // the encoded worktree path — use that for lookup; fall back to workdir for
+  // runs that predate the worktree feature.
+  const sessionCwd = entry.run.cwd ?? workdir;
   if (!sessionId) return [];
 
   const sessionFile = join(
     homedir(),
     '.claude',
     'projects',
-    encodeProjectPath(workdir),
+    encodeProjectPath(sessionCwd),
     `${sessionId}.jsonl`,
   );
   if (!existsSync(sessionFile)) return [];
@@ -2343,7 +2469,7 @@ export function getFixTimeline(runId: string): FixTimelineEntry[] {
           }
           // toFixEdits returns [] for runtime-only paths so they're
           // naturally filtered. MultiEdit yields one entry per inner edit.
-          const edits = toFixEdits(b.name, input, workdir);
+          const edits = toFixEdits(b.name, input, workdir, entry.run.cwd);
           for (const edit of edits) {
             // Override the daemon-stamped `ts` with the session jsonl one
             // so timeline position is the real time the agent issued the
@@ -2388,7 +2514,9 @@ export function getFixUsage(runId: string): FixUsage {
   const entry = runner.registry().get(runId);
   if (!entry) return computeSessionUsage('', null);
   const { sessionId, workdir, startedAt } = entry.run;
-  return computeSessionUsage(workdir, sessionId, startedAt);
+  // Use run.cwd when available — that's where Claude Code wrote the session JSONL.
+  const sessionCwd = entry.run.cwd ?? workdir;
+  return computeSessionUsage(sessionCwd, sessionId, startedAt);
 }
 
 /**
@@ -2494,13 +2622,14 @@ export function listFixEditsHistory(runId: string): FixEdit[] {
   const entry = runner.registry().get(runId);
   if (!entry) return [];
   const { sessionId, workdir } = entry.run;
+  const sessionCwd = entry.run.cwd ?? workdir;
   if (!sessionId) return [];
 
   const sessionFile = join(
     homedir(),
     '.claude',
     'projects',
-    encodeProjectPath(workdir),
+    encodeProjectPath(sessionCwd),
     `${sessionId}.jsonl`,
   );
   if (!existsSync(sessionFile)) return [];
@@ -2537,7 +2666,7 @@ export function listFixEditsHistory(runId: string): FixEdit[] {
       // Reuse the same extractor as the live afterToolUse hook so the
       // mapping stays in one place — only difference is we override `ts`
       // with the session jsonl timestamp instead of Date.now().
-      const edits = toFixEdits(b.name, b.input, workdir);
+      const edits = toFixEdits(b.name, b.input, workdir, entry.run.cwd);
       for (const edit of edits) {
         out.push({ ...edit, ts });
       }

@@ -5,6 +5,40 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.1] — 2026-05-25
+
+Runner isolation fix. Create / fix / audit runs targeting a skill or any
+`.claude/` entity (claudemd, rules, subagents, hooks, permissions, mcp,
+output-styles) now spawn the Claude sub-agent inside a dedicated **git
+worktree** of the project, so it can read project sources to understand
+the architecture without ever touching the user's live working tree.
+
+### Fixed
+
+- **Sub-agents had no read access to the target project.** They were
+  launched in an empty Nakiros sandbox (`~/.nakiros/tmp-skills/<runId>/`)
+  with no awareness of the surrounding codebase. Now they land in a
+  detached worktree (`~/.nakiros/sandboxes/<kind>-<runId>/`) checked out
+  at the project's current HEAD. Falls back gracefully to the previous
+  sandbox-only behavior when the target isn't a git repository.
+
+### Added
+
+- `createRunWorktree(gitRoot, runId, kind)` in `runner-core/git-worktree.ts`
+  (wraps `createEvalSandbox` with a `<kind>-<runId>` label).
+- `BaseRun.cwd?` and `AuditRun.cwd?` propagate the worktree path through
+  the runners and survive `rehydrate` so resumed runs can still locate
+  their session JSONL.
+
+### Notes
+
+- Worktree files are physically distinct from the source repo: writes by
+  the agent never reach the user's working tree. `detachRemotes`
+  neutralizes any accidental `git push` from the sandbox.
+- `eval-runner` was already conformant (already used `createEvalSandbox`).
+- Worktrees are torn down on terminal state by `destroyEvalSandbox` and
+  swept on daemon boot by `sweepOrphanSandboxes`.
+
 ## [0.14.0] — 2026-05-24
 
 Drift detection release. Nakiros now watches your active Claude Code

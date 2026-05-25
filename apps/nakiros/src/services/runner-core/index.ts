@@ -21,12 +21,14 @@ export {
 export {
   findGitRoot,
   createEvalSandbox,
+  createRunWorktree,
   captureSandboxDiff,
   listSandboxUntracked,
   destroyEvalSandbox,
   sweepOrphanSandboxes,
   sandboxRoot,
   type CreateSandboxResult,
+  type RunWorktreeKind,
 } from './git-worktree.js';
 export {
   createTmpSandbox,

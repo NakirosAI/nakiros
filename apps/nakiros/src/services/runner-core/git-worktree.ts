@@ -258,3 +258,34 @@ export function sweepOrphanSandboxes(keep?: ReadonlySet<string>): { deleted: num
 export function sandboxRoot(): string {
   return SANDBOX_ROOT;
 }
+
+/**
+ * Run-kind labels accepted by {@link createRunWorktree}.
+ * Matches the prefixes used in run ids so the sandbox label is
+ * `<kind>-<runId>` and `sweepOrphanSandboxes` reclaims them automatically
+ * (it sweeps the entire `~/.nakiros/sandboxes/` directory at boot).
+ */
+export type RunWorktreeKind = 'fix' | 'audit' | 'eval' | 'create' | 'edit';
+
+/**
+ * Create a detached worktree for a fix / audit / create / edit run.
+ *
+ * This is the canonical way for non-eval runners to obtain a worktree-backed
+ * `cwd` that gives the agent full read access to the project source without
+ * touching the user's working tree. The worktree is created under
+ * `~/.nakiros/sandboxes/<kind>-<runId>/` and remotes are neutralised.
+ *
+ * The label format `<kind>-<runId>` is intentionally distinct from eval
+ * sandboxes (`eval-<runId>`) so boot-time logs are easier to read.
+ * `sweepOrphanSandboxes` does NOT distinguish labels — it sweeps everything
+ * under `SANDBOX_ROOT`, so orphan run-worktrees are cleaned up on the next
+ * daemon start just like eval sandboxes.
+ */
+export function createRunWorktree(
+  gitRoot: string,
+  runId: string,
+  kind: RunWorktreeKind,
+): CreateSandboxResult {
+  const label = `${kind}-${runId}`;
+  return createEvalSandbox(gitRoot, label);
+}

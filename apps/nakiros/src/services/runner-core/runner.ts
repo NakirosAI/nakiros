@@ -41,6 +41,17 @@ export interface BaseRun {
   status: RunStatus;
   sessionId: string | null;
   workdir: string;
+  /**
+   * Optional override of the `cwd` passed to the Claude CLI subprocess.
+   * When set, Claude is spawned with this directory as its working directory
+   * (typically a git worktree of the user's project), while `workdir` continues
+   * to serve as the Nakiros artefact root (outputs/, run.json, events.jsonl).
+   *
+   * When absent, the CLI is spawned with `cwd = workdir` (legacy behaviour).
+   *
+   * This field is daemon-internal and NOT sent to the frontend.
+   */
+  cwd?: string;
   turns: BaseTurn[];
   tokensUsed: number;
   durationMs: number;
@@ -318,8 +329,11 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
     persist(entry);
     entry.eventLog.emit({ type: 'status', status: 'running' } as unknown as TEvent);
 
+    // `run.cwd` is set by runners that need the Claude subprocess to land in a
+    // git worktree of the user's project (fix / audit / create / edit). When
+    // absent we fall back to `run.workdir` — the Nakiros artefact sandbox.
     const result = await spawnClaudeTurn({
-      workdir: run.workdir,
+      workdir: run.cwd ?? run.workdir,
       cliArgs,
       onChildSpawned: (c) => {
         entry.child = c;

@@ -17,7 +17,10 @@ import {
   cleanupRunWorkdir,
   computeSessionUsage,
   createRunner,
+  createRunWorktree,
+  destroyEvalSandbox,
   encodeProjectPath,
+  findGitRoot,
   formatTool,
   isActiveRunStatus,
   parseSessionBlocks,
@@ -56,6 +59,13 @@ interface AuditEntryExtras {
    * `cleanupOnTerminal`. NOT persisted to `run.json` (rebuilt at boot).
    */
   syncTimer: NodeJS.Timeout | null;
+  /**
+   * Absolute path to the git worktree used as Claude subprocess cwd.
+   * `null` when the project is not in a git repo (fallback: workdir-only).
+   * NOT persisted to `run.json` — rebuilt as `null` at boot (the boot-time
+   * sweepOrphanSandboxes call handles any leftover worktrees).
+   */
+  worktreePath: string | null;
 }
 
 const PROGRESS_POLL_MS = 1000;
@@ -200,7 +210,7 @@ function prepareWorkdir(skillDir: string, skillName: string, runId: string): str
  * with "No conversation found with session ID …" — better to surface the run
  * as `stopped` than offer a broken Reprendre button.
  */
-function auditRunHasResumableSessionFile(blob: { sessionId?: string | null; workdir?: string }, workdir: string): boolean {
+function auditRunHasResumableSessionFile(blob: { sessionId?: string | null; workdir?: string; cwd?: string | null }, workdir: string): boolean {
   if (!blob.sessionId) {
     console.log(`[audit-runner] Resume check: sessionId is null/missing — not resumable`);
     return false;
@@ -209,7 +219,10 @@ function auditRunHasResumableSessionFile(blob: { sessionId?: string | null; work
     console.log(`[audit-runner] Resume check: workdir ${workdir} doesn't exist — not resumable`);
     return false;
   }
-  const sessionFile = join(homedir(), '.claude', 'projects', encodeProjectPath(workdir), `${blob.sessionId}.jsonl`);
+  // Claude Code indexes its session files by the subprocess cwd. When a
+  // worktree was used, that cwd was run.cwd (the worktree path), not workdir.
+  const sessionBase = blob.cwd ?? workdir;
+  const sessionFile = join(homedir(), '.claude', 'projects', encodeProjectPath(sessionBase), `${blob.sessionId}.jsonl`);
   const exists = existsSync(sessionFile);
   console.log(`[audit-runner] Resume check: sessionFile=${sessionFile} → ${exists ? 'OK' : 'MISSING'}`);
   return exists;
@@ -350,6 +363,42 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
   prepareWorkdir(req, runId) {
     const workdir = prepareWorkdir(req.skillDir, req.skillName, runId);
 
+    // Resolve the user's project root so we can anchor the git worktree there.
+    // For *Target runs the projectPath is explicit; for skill runs we use the
+    // skill directory itself (which lives inside the project's .claude/skills/).
+    let resolvedProjectPath: string | null = null;
+    if (req.claudemdTarget) resolvedProjectPath = req.claudemdTarget.projectPath;
+    else if (req.rulesTarget) resolvedProjectPath = req.rulesTarget.projectPath;
+    else if (req.subagentsTarget) resolvedProjectPath = req.subagentsTarget.projectPath;
+    else if (req.hooksTarget) resolvedProjectPath = req.hooksTarget.projectPath;
+    else if (req.permissionsTarget) resolvedProjectPath = req.permissionsTarget.projectPath;
+    else if (req.mcpTarget) resolvedProjectPath = req.mcpTarget.projectPath;
+    else if (req.outputStylesTarget) resolvedProjectPath = req.outputStylesTarget.projectPath;
+    else resolvedProjectPath = req.skillDir;
+
+    let worktreePath: string | null = null;
+    const gitRoot = resolvedProjectPath ? findGitRoot(resolvedProjectPath) : null;
+    if (gitRoot) {
+      try {
+        const result = createRunWorktree(gitRoot, runId, 'audit');
+        worktreePath = result.path;
+        writeExecutionSettings(worktreePath);
+
+        // Symlink the expert skill into the worktree so the agent subprocess
+        // can invoke it via /<skillName> when running from the worktree cwd.
+        const wtClaudeDir = join(worktreePath, '.claude');
+        const wtSkillsDir = join(wtClaudeDir, 'skills');
+        mkdirSync(wtSkillsDir, { recursive: true });
+        const wtLinkPath = join(wtSkillsDir, req.skillName);
+        if (!existsSync(wtLinkPath)) {
+          symlinkSync(realpathSync(req.skillDir), wtLinkPath, 'dir');
+        }
+      } catch (err) {
+        console.warn(`[audit-runner] Could not create worktree for run ${runId}: ${(err as Error).message}. Falling back to workdir-only.`);
+        worktreePath = null;
+      }
+    }
+
     // For CLAUDE.md audits, write a cross-entity snapshot so the expert agent
     // can detect coherence issues across the full .claude/ configuration.
     if (req.claudemdTarget) {
@@ -482,7 +531,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       }
     }
 
-    return { workdir, extras: { skillDir: req.skillDir, syncTimer: null } };
+    return { workdir, extras: { skillDir: req.skillDir, syncTimer: null, worktreePath } };
   },
 
   buildFirstPrompt(req) {
@@ -590,7 +639,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     return `/${FACTORY_SKILL_NAME} audit ${req.skillName}`;
   },
 
-  createInitialRun(req, runId, workdir): AuditRun {
+  createInitialRun(req, runId, workdir, extras): AuditRun {
     return {
       runId,
       scope: req.scope,
@@ -601,6 +650,10 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       status: 'starting',
       sessionId: null,
       workdir,
+      // When a git worktree was created, set cwd so executeTurn uses the
+      // worktree as Claude subprocess cwd (gives the agent access to real
+      // project sources while keeping Nakiros artefacts in workdir).
+      cwd: extras?.worktreePath ?? undefined,
       reportPath: null,
       turns: [],
       tokensUsed: 0,
@@ -652,10 +705,18 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
 
   onTurnFailed(entry) {
     stopProgressPolling(entry.extras);
+    if (entry.extras.worktreePath) {
+      destroyEvalSandbox(entry.extras.worktreePath);
+      entry.extras.worktreePath = null;
+    }
   },
 
   cleanupOnTerminal(entry) {
     stopProgressPolling(entry.extras);
+    if (entry.extras.worktreePath) {
+      destroyEvalSandbox(entry.extras.worktreePath);
+      entry.extras.worktreePath = null;
+    }
     cleanupRunWorkdir(entry.run.workdir);
   },
 
@@ -746,6 +807,11 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       status: restoredStatus,
       sessionId: blob.sessionId ?? null,
       workdir,
+      // Restore the worktree cwd so session JSONL lookups (getAuditTimeline,
+      // getAuditUsage) keep pointing at the right ~/.claude/projects/<encoded>/
+      // path. The worktree itself is gone (swept on boot) but we only need the
+      // encoded path to find the existing session file.
+      cwd: (blob as AuditRun).cwd ?? undefined,
       reportPath: blob.reportPath ?? null,
       turns: Array.isArray(blob.turns) ? blob.turns : [],
       tokensUsed: typeof blob.tokensUsed === 'number' ? blob.tokensUsed : 0,
@@ -792,7 +858,10 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     };
 
     console.log(`[audit-runner] Restored audit ${restoredRun.runId} for "${restoredRun.skillName}" (status=${restoredStatus}, ${restoredRun.checkResults?.length ?? 0}/${restoredRun.manifest?.totalChecks ?? '?'} checks)`);
-    return { kind: 'rehydrate', run: restoredRun, extras: { skillDir, syncTimer: null } };
+    // worktreePath is always null on boot — sweepOrphanSandboxes already
+    // cleaned up any leftover worktrees. The path is not needed for session
+    // JSONL lookups (run.cwd is used for that, restored above).
+    return { kind: 'rehydrate', run: restoredRun, extras: { skillDir, syncTimer: null, worktreePath: null } };
   },
 };
 
@@ -912,7 +981,11 @@ export function getAuditTimeline(runId: string): AuditTimelineEntry[] {
 
   const out: AuditTimelineEntry[] = [];
 
-  for (const block of parseSessionBlocks(workdir, sessionId)) {
+  // Claude Code indexes sessions by subprocess cwd. When a worktree was used,
+  // that cwd was run.cwd (the worktree path), not workdir.
+  const sessionBase = entry.run.cwd ?? workdir;
+
+  for (const block of parseSessionBlocks(sessionBase, sessionId)) {
     if (block.kind === 'user_text') {
       out.push({ kind: 'user', ts: block.ts, text: block.text });
       continue;
@@ -955,8 +1028,9 @@ export function getAuditTimeline(runId: string): AuditTimelineEntry[] {
 export function getAuditUsage(runId: string): FixUsage {
   const entry = runner.registry().get(runId);
   if (!entry) return computeSessionUsage('', null);
-  const { sessionId, workdir, startedAt } = entry.run;
-  return computeSessionUsage(workdir, sessionId, startedAt);
+  const { sessionId, workdir, cwd, startedAt } = entry.run;
+  // Use run.cwd when available — Claude Code indexes sessions by subprocess cwd.
+  return computeSessionUsage(cwd ?? workdir, sessionId, startedAt);
 }
 
 /**

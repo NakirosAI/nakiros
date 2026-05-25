@@ -985,6 +985,14 @@ export interface AuditRun {
    * `*Target` fields. Stable across rehydrate.
    */
   outputStylesTarget?: OutputStylesTargetContext;
+  /**
+   * Optional override of the `cwd` passed to the Claude CLI subprocess.
+   * Daemon-internal — not sent to the frontend. When set, Claude is spawned with
+   * this path as its working directory (a git worktree of the project) while
+   * `workdir` remains the Nakiros artefact root. Persisted in `run.json` so
+   * session JSONL lookup stays correct after a daemon restart.
+   */
+  cwd?: string;
 }
 
 /**

@@ -5,6 +5,29 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.2] — 2026-05-26
+
+Audit completion fix for the worktree isolation introduced in 0.14.1.
+
+### Fixed
+
+- **Claude audits hung in `waiting_for_input` even after finishing.** Since
+  0.14.1 the Claude sub-agent runs inside a git worktree (`run.cwd`) and
+  writes `outputs/audit-report.md` there, but `archiveReport` still looked
+  for it under the Nakiros artefact dir (`run.workdir`). The report was
+  never found, so `onTurnComplete` fell through to `helpers.wait()` and the
+  run stayed blocked forever. Audit artefact reads now resolve to
+  `run.cwd ?? run.workdir`.
+
+### Notes
+
+- Affected `syncAuditProgress` (live findings), `archiveReport`, and
+  `isAuditProgressPath` (timeline) — all now read from the worktree when one
+  exists.
+- `cleanupOnTerminal` rescues `audit-report.md` from the worktree into the
+  Nakiros workdir before tearing down the sandbox, and archives it if the
+  run was stopped after the report was produced but before completion fired.
+
 ## [0.14.1] — 2026-05-25
 
 Runner isolation fix. Create / fix / audit runs targeting a skill or any

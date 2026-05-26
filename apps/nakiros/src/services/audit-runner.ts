@@ -87,7 +87,9 @@ function syncAuditProgress(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtra
   // fix-runner, which doesn't audit anything. Audit runs always initialise
   // them in `createInitialRun` / `rehydrate` — but narrow here to be safe.
   if (!run.checkResults) run.checkResults = [];
-  const outputsDir = join(run.workdir, 'outputs');
+  // Progress artefacts are written relative to the agent's cwd. When a git
+  // worktree is in use, that cwd is run.cwd (the worktree path), not workdir.
+  const outputsDir = join(run.cwd ?? run.workdir, 'outputs');
 
   let mutated = false;
 
@@ -233,7 +235,9 @@ function auditRunHasResumableSessionFile(blob: { sessionId?: string | null; work
  * into `{skillDir}/audits/audit-{ISO}.md` and complete the run.
  */
 function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>): { ok: true; reportPath: string } | { ok: false; error: string } {
-  const reportSrc = join(entry.run.workdir, 'outputs', 'audit-report.md');
+  // The agent writes outputs/ relative to its cwd. When a worktree is in use
+  // (run.cwd is set), the report lives there — not under workdir.
+  const reportSrc = join(entry.run.cwd ?? entry.run.workdir, 'outputs', 'audit-report.md');
   if (!existsSync(reportSrc)) {
     return { ok: false, error: 'No audit-report.md was produced' };
   }
@@ -714,8 +718,36 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
   cleanupOnTerminal(entry) {
     stopProgressPolling(entry.extras);
     if (entry.extras.worktreePath) {
+      // Before destroying the worktree, rescue the audit report into workdir
+      // so that the archive step below can still find it. A stop before
+      // the report was written is legitimate — the copy is best-effort.
+      const reportInWorktree = join(entry.extras.worktreePath, 'outputs', 'audit-report.md');
+      if (existsSync(reportInWorktree)) {
+        try {
+          const destDir = join(entry.run.workdir, 'outputs');
+          mkdirSync(destDir, { recursive: true });
+          copyFileSync(reportInWorktree, join(destDir, 'audit-report.md'));
+        } catch (err) {
+          console.warn(`[audit-runner] Could not rescue audit-report.md from worktree: ${(err as Error).message}`);
+        }
+      }
       destroyEvalSandbox(entry.extras.worktreePath);
       entry.extras.worktreePath = null;
+      // Clear cwd so archiveReport (below) falls back to workdir — the rescue
+      // copy above already moved the report there and the worktree is gone.
+      entry.run.cwd = undefined;
+    }
+    // Archive the report if it was produced but the run was stopped before
+    // onTurnComplete got to do it (user hit Stop after the agent wrote the
+    // report but before Nakiros could call helpers.complete). Guard against
+    // double-archiving when onTurnComplete already ran (reportPath non-null).
+    if (!entry.run.reportPath) {
+      const result = archiveReport(entry);
+      if (result.ok) {
+        entry.run.reportPath = result.reportPath;
+        persistRunJson(entry.run.workdir, { ...entry.run, _extras: entry.extras });
+        console.log(`[audit-runner] Archived report on stop: ${result.reportPath}`);
+      }
     }
     cleanupRunWorkdir(entry.run.workdir);
   },
@@ -999,7 +1031,7 @@ export function getAuditTimeline(runId: string): AuditTimelineEntry[] {
     // produces `audits/audit-*.md`, etc. — render as the generic tool box.
     if (
       (block.name === 'Write' || block.name === 'Edit' || block.name === 'MultiEdit') &&
-      isAuditProgressPath(block.input, workdir)
+      isAuditProgressPath(block.input, entry.run.cwd ?? workdir)
     ) {
       continue;
     }
@@ -1040,10 +1072,12 @@ export function getAuditUsage(runId: string): FixUsage {
  * via the typed `manifest` / `check_result` events, so re-rendering them
  * as generic tool calls in the chat would be redundant noise.
  */
-function isAuditProgressPath(input: Record<string, unknown>, workdir: string): boolean {
+function isAuditProgressPath(input: Record<string, unknown>, agentCwd: string): boolean {
   const filePath = typeof input.file_path === 'string' ? input.file_path : '';
   if (!filePath) return false;
-  const rel = relative(workdir, filePath);
+  // Must be relative to the agent's effective cwd (worktree when one was
+  // created, otherwise workdir) so paths written by Claude match correctly.
+  const rel = relative(agentCwd, filePath);
   return rel === 'outputs/audit-progress.jsonl' || rel === 'outputs/audit-manifest.json';
 }
 

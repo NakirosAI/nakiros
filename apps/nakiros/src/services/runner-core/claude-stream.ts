@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process';
 
+import { buildClaudeEnv, resolveClaudeBinary } from './claude-binary.js';
 import { formatTool } from './tool-format.js';
 
 /**
@@ -132,9 +133,10 @@ export interface SpawnTurnResult {
  */
 export function spawnClaudeTurn(opts: SpawnTurnOptions): Promise<SpawnTurnResult> {
   return new Promise((resolve) => {
-    const child = spawn('claude', opts.cliArgs, {
+    const command = resolveClaudeBinary();
+    const child = spawn(command, opts.cliArgs, {
       cwd: opts.workdir,
-      env: opts.env ?? process.env,
+      env: opts.env ?? buildClaudeEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     opts.onChildSpawned(child);

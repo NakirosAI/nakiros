@@ -5,6 +5,38 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.3] — 2026-05-27
+
+Service-mode fix: Claude runs no longer fail instantly when the daemon is
+started via `nakiros service install`.
+
+### Fixed
+
+- **Create / subagent / audit / fix / eval runs fell straight to `failed`
+  when the daemon ran as a launchd / systemd service.** The service inherits
+  a minimal `PATH` (e.g. `/usr/bin:/bin:/usr/sbin:/sbin`) that excludes the
+  directories where `claude` is typically installed (`~/.local/bin`,
+  `~/.nvm/.../bin`, `/opt/homebrew/bin`), so `spawn('claude', …)` failed with
+  `ENOENT`. Runs started from a foreground `nakiros` worked because they
+  inherited the shell `PATH`. This was unrelated to the 0.14.1 worktree change.
+
+### How
+
+- New `runner-core/claude-binary.ts`:
+  - `resolveClaudeBinary()` resolves the absolute path to `claude` at spawn
+    time, primarily from the user's **login-shell PATH** (`$SHELL -lic`,
+    cached for the process lifetime, 5 s timeout) — the same approach VS Code
+    uses to recover the user environment. Falls back to `process.env.PATH`,
+    then well-known install dirs, then bare `'claude'`.
+  - `buildClaudeEnv()` passes an enriched `PATH` to the subprocess so Claude's
+    own child processes (MCP servers via `npx`, etc.) resolve correctly.
+- `runner-core/claude-stream.ts` now spawns the resolved binary with that env.
+
+### Notes
+
+- No `nakiros service uninstall && install` required — the fix lives in the
+  spawn path and takes effect on the next daemon start.
+
 ## [0.14.2] — 2026-05-26
 
 Audit completion fix for the worktree isolation introduced in 0.14.1.

@@ -188,22 +188,46 @@ export function listSandboxUntracked(sandboxPath: string): string[] {
 }
 
 /**
- * Remove a worktree cleanly via `git worktree remove --force`. The subcommand
- * contacts the main repo to drop the worktree entry and deletes the directory.
- * Falls back to a plain `rm -rf` if the git call fails (stale worktree list
- * entries will be reclaimed by `git worktree prune` on next use in the main
- * repo).
+ * Remove a worktree cleanly via `git -C <gitRoot> worktree remove --force`.
+ * When `gitRoot` is provided, git resolves the worktree entry from the main
+ * repo and drops the `.git/worktrees/<name>` record — preventing stale
+ * "prunable" entries from accumulating in the user's repo.
+ *
+ * Falls back to a plain `rm -rf` if the git call fails (stale entries will
+ * be reclaimed by a subsequent `pruneWorktrees` call or by git itself on next
+ * use in the main repo). Never throws — cleanup must not block a run.
+ *
+ * @param sandboxPath Absolute path of the sandbox directory to remove.
+ * @param gitRoot Optional git root of the source repo. When provided, the
+ *   `git worktree remove` command is issued relative to this root so the
+ *   `.git/worktrees/` entry is properly cleaned up.
  */
-export function destroyEvalSandbox(sandboxPath: string): void {
+export function destroyEvalSandbox(sandboxPath: string, gitRoot?: string): void {
   try {
-    execFileSync('git', ['worktree', 'remove', '--force', sandboxPath], {
-      stdio: 'pipe',
-    });
+    const gitArgs = gitRoot
+      ? ['-C', gitRoot, 'worktree', 'remove', '--force', sandboxPath]
+      : ['worktree', 'remove', '--force', sandboxPath];
+    execFileSync('git', gitArgs, { stdio: 'pipe' });
     return;
   } catch {
     // fallthrough to rm-based cleanup
   }
   forceRemoveSandbox(sandboxPath);
+}
+
+/**
+ * Run `git worktree prune` on a git root to remove stale `.git/worktrees/`
+ * entries whose directories no longer exist. Safe to call after the sandbox
+ * directories have already been deleted (e.g. at boot sweep). Never throws.
+ *
+ * @param gitRoot Absolute path of the git repository root.
+ */
+export function pruneWorktrees(gitRoot: string): void {
+  try {
+    execFileSync('git', ['-C', gitRoot, 'worktree', 'prune'], { stdio: 'pipe' });
+  } catch {
+    // Best-effort — if the repo is gone or git is unavailable, silently skip.
+  }
 }
 
 function forceRemoveSandbox(path: string): void {
@@ -222,8 +246,22 @@ function forceRemoveSandbox(path: string): void {
  * We intentionally don't try to preserve anything — a completed eval has
  * already saved its `diff.patch` to the artefact directory; an interrupted
  * one has nothing worth keeping.
+ *
+ * After deleting sandbox directories, runs `git worktree prune` on every
+ * `gitRoot` in the provided set so that stale `.git/worktrees/` entries are
+ * removed from the user's repositories. This prevents "prunable" ghost entries
+ * from accumulating when sandboxes were deleted without a proper
+ * `git worktree remove` (e.g. after a daemon crash).
+ *
+ * @param keep Sandbox paths that must NOT be deleted (rehydrated eval runs
+ *   that still need their worktree for `--resume`).
+ * @param gitRoots Git repository roots to prune after the sandbox sweep.
+ *   Deduplicated internally — pass the same root multiple times safely.
  */
-export function sweepOrphanSandboxes(keep?: ReadonlySet<string>): { deleted: number } {
+export function sweepOrphanSandboxes(
+  keep?: ReadonlySet<string>,
+  gitRoots?: ReadonlySet<string>,
+): { deleted: number } {
   if (!existsSync(SANDBOX_ROOT)) return { deleted: 0 };
   let entries: string[];
   try {
@@ -246,6 +284,14 @@ export function sweepOrphanSandboxes(keep?: ReadonlySet<string>): { deleted: num
     if (keep && keep.has(p)) continue;
     destroyEvalSandbox(p);
     deleted++;
+  }
+  // Prune stale worktree entries from the source repos. The sandbox directories
+  // were already deleted above (or were gone before the sweep), so
+  // `git worktree remove` can't reach them — `prune` is the correct tool here.
+  if (gitRoots) {
+    for (const root of gitRoots) {
+      pruneWorktrees(root);
+    }
   }
   return { deleted };
 }

@@ -36,6 +36,7 @@ import { cleanupEvalArtifacts } from '../services/eval-artifact-cleanup.js';
 import { syncBundledSkills } from '../services/bundled-skills-sync.js';
 import {
   encodeProjectPath,
+  findGitRoot,
   isActiveRunStatus,
   sweepOrphanNakirosProjectEntries,
   sweepOrphanSandboxes,
@@ -114,6 +115,30 @@ function collectLiveProjectEntryNames(): Set<string> {
     add(run.executionDir);
   }
   return names;
+}
+
+/**
+ * Collect unique git roots from all persisted fix/audit/create/edit runs that
+ * have a `cwd` (worktree path). Used to drive `git worktree prune` during the
+ * boot sweep so stale `.git/worktrees/` entries are cleaned up even when the
+ * sandbox directories were removed without a proper `git worktree remove`.
+ */
+function collectGitRootsFromRuns(): Set<string> {
+  const roots = new Set<string>();
+  const addCwd = (cwd: string | null | undefined): void => {
+    if (!cwd) return;
+    try {
+      const root = findGitRoot(cwd);
+      if (root) roots.add(root);
+    } catch {
+      // Silently skip — the directory may not exist on boot
+    }
+  };
+  for (const run of listAllAuditRuns()) addCwd(run.cwd);
+  for (const run of listAllFixRuns()) addCwd(run.cwd);
+  for (const run of listAllCreateRuns()) addCwd(run.cwd);
+  for (const run of listAllEditRuns()) addCwd(run.cwd);
+  return roots;
 }
 
 /**
@@ -236,9 +261,16 @@ export function bootstrapDaemonRuntime(): void {
   // eval runs — without this the user's "Reprendre" would `--resume` against
   // a directory the sweep just deleted ("No conversation found with session
   // ID …").
-  const sandboxes = sweepOrphanSandboxes(getResumableSandboxPaths());
+  // Git roots are derived from persisted run.cwd values so `git worktree prune`
+  // can clean up ghost `.git/worktrees/` entries even when the sandbox
+  // directories were already deleted before the daemon restarted.
+  const orphanGitRoots = collectGitRootsFromRuns();
+  const sandboxes = sweepOrphanSandboxes(getResumableSandboxPaths(), orphanGitRoots);
   if (sandboxes.deleted > 0) {
     console.log(`[nakiros] Swept ${sandboxes.deleted} orphan eval sandbox${sandboxes.deleted === 1 ? '' : 'es'}.`);
+  }
+  if (orphanGitRoots.size > 0) {
+    console.log(`[nakiros] Pruned git worktree entries in ${orphanGitRoots.size} repo(s).`);
   }
 
   // Conversation ingest — only auto-start the watcher when the user has

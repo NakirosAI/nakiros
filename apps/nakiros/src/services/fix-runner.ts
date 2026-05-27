@@ -118,11 +118,18 @@ interface SkillAgentExtras {
   /**
    * Absolute path of the git worktree used as the Claude subprocess `cwd`.
    * Set by `prepareWorkdir` when the project is inside a git repo. When set,
-   * `cleanupOnTerminal` calls `destroyEvalSandbox(worktreePath)` in addition
-   * to cleaning the Nakiros workdir. NOT persisted — the path is re-derived
-   * from `run.cwd` at rehydration (cleanup is best-effort on restart).
+   * `cleanupOnTerminal` calls `destroyEvalSandbox(worktreePath, gitRoot)` in
+   * addition to cleaning the Nakiros workdir. NOT persisted — the path is
+   * re-derived from `run.cwd` at rehydration (cleanup is best-effort on restart).
    */
   worktreePath?: string | null;
+  /**
+   * Git root of the project that owns the worktree. Stored alongside
+   * `worktreePath` so `destroyEvalSandbox` can issue `git -C <gitRoot>
+   * worktree remove` and keep the `.git/worktrees/` index clean. NOT
+   * persisted — only needed during the lifetime of an active worktree.
+   */
+  worktreeGitRoot?: string | null;
 }
 
 /** Internal start request — `StartAuditRequest` + the resolved skill dir + mode. */
@@ -1194,6 +1201,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         syncTimer: null,
         targetsLineCount: 0,
         worktreePath,
+        worktreeGitRoot: worktreePath ? gitRoot : null,
       },
     };
   },
@@ -1521,8 +1529,9 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         '',
         languageLine,
         `- You are in **edit mode** for skill \`${req.skillName}\`.`,
-        `- Working directory (full skill copy): ${workdir}`,
-        `- All paths are relative to cwd: \`SKILL.md\`, \`references/\`, \`assets/\`, \`evals/\`, etc.`,
+        `- Skill workdir (write ALL skill files here using ABSOLUTE paths): \`${workdir}\``,
+        `- Write to absolute paths: \`${workdir}/SKILL.md\`, \`${workdir}/references/\`, \`${workdir}/assets/\`, \`${workdir}/evals/\`, etc. — do NOT use relative paths like \`./SKILL.md\`.`,
+        `- Your shell cwd is the user's project (for reading project files only) — do NOT write skill files relative to cwd.`,
         '',
         `**First-turn protocol — do these in order before asking the user anything:**`,
         `1. Read \`${workdir}/SKILL.md\` so you have the current skill definition in context. If \`evals/evals.json\` exists, read it too for context on the eval suite.`,
@@ -1551,10 +1560,11 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       const nextIterHint = seedIter > 0 ? seedIter + 1 : 1;
       return `/${FACTORY_SKILL_NAME} fix ${req.skillName}
 
-You are working on a TEMPORARY copy of the skill, located at your current working directory (\`${workdir}\`).
+You are working on a TEMPORARY copy of the skill. The skill workdir is \`${workdir}\` — write ALL skill files there using ABSOLUTE paths.
 ${languageLine}
 - Edit files here freely — all changes are synced back to the real skill (\`${extras.realSkillDir}\`) when the user clicks "Sync to skill". If the user clicks "Discard", your changes are thrown away.
-- All paths are relative to cwd: \`SKILL.md\`, \`references/\`, \`assets/\`, \`evals/\`, etc.
+- Write to absolute paths: \`${workdir}/SKILL.md\`, \`${workdir}/references/\`, \`${workdir}/assets/\`, \`${workdir}/evals/\`, etc. — do NOT use relative paths like \`./SKILL.md\`.
+- Your shell cwd is the user's project (for reading project files only) — do NOT write skill files relative to cwd.
 - IMPORTANT: before declaring any file missing, run \`ls -la <dir>/\` (or Glob) RECURSIVELY. Empty-looking subdirs usually just weren't inspected. Do not overwrite existing files without reading them first — the copy of the skill is complete.
 ${auditLine}
 ${iterLine}
@@ -1564,12 +1574,13 @@ ${iterLine}
 
     return `/${FACTORY_SKILL_NAME} create ${req.skillName}
 
-You are creating a NEW skill from scratch. Your current working directory is a TEMPORARY workdir (\`${workdir}\`).
+You are creating a NEW skill from scratch. The skill workdir is \`${workdir}\` — write ALL skill files there using ABSOLUTE paths.
 ${languageLine}
-- Write every file of the skill here: \`SKILL.md\`, \`references/\`, \`assets/\`, \`scripts/\`, \`templates/\`, \`evals/evals.json\`, etc.
-- All paths are relative to cwd. Do NOT try to write to \`${extras.realSkillDir}\` directly — Nakiros will copy the whole workdir there when the user clicks "Create skill".
+- Write every file of the skill at these ABSOLUTE paths: \`${workdir}/SKILL.md\`, \`${workdir}/references/\`, \`${workdir}/assets/\`, \`${workdir}/scripts/\`, \`${workdir}/templates/\`, \`${workdir}/evals/evals.json\`, etc.
+- Your shell cwd is the user's project (for reading project context only) — do NOT write skill files relative to cwd.
+- IMPORTANT: your own SKILL.md may mention \`{project}/.claude/skills/{name}/\` as the write target — IGNORE that path here. Write exclusively to the absolute workdir paths above. Nakiros will copy the whole workdir to the real skill location when the user clicks "Create skill".
 - If the user clicks "Discard", everything is thrown away.
-- Follow your own \`create\` procedure: ASK the user the design questions first, then write using \`assets/templates/skill-template.md\` as the skeleton.
+- Follow your own \`create\` procedure: ASK the user the design questions first, then write using your bundled \`assets/templates/skill-template.md\` skeleton (read it from your own skill directory, not the new skill workdir).
 - Do not modify \`.claude/settings.local.json\` in this workdir — it's Nakiros's runtime config.`;
   },
 
@@ -1647,7 +1658,7 @@ ${languageLine}
     cleanupRunWorkdir(entry.run.workdir);
     if (entry.extras.worktreePath) {
       try {
-        destroyEvalSandbox(entry.extras.worktreePath);
+        destroyEvalSandbox(entry.extras.worktreePath, entry.extras.worktreeGitRoot ?? undefined);
       } catch (err) {
         console.warn(`[skill-agent-runner] Failed to destroy worktree on turn failure: ${(err as Error).message}`);
       }
@@ -1659,7 +1670,7 @@ ${languageLine}
     cleanupRunWorkdir(entry.run.workdir);
     if (entry.extras.worktreePath) {
       try {
-        destroyEvalSandbox(entry.extras.worktreePath);
+        destroyEvalSandbox(entry.extras.worktreePath, entry.extras.worktreeGitRoot ?? undefined);
       } catch (err) {
         console.warn(`[skill-agent-runner] Failed to destroy worktree on terminal cleanup: ${(err as Error).message}`);
       }

@@ -66,6 +66,12 @@ interface AuditEntryExtras {
    * sweepOrphanSandboxes call handles any leftover worktrees).
    */
   worktreePath: string | null;
+  /**
+   * Git root of the project that owns the worktree. Passed to
+   * `destroyEvalSandbox` so `git -C <gitRoot> worktree remove` keeps the
+   * `.git/worktrees/` index clean. NOT persisted.
+   */
+  worktreeGitRoot: string | null;
 }
 
 const PROGRESS_POLL_MS = 1000;
@@ -535,7 +541,15 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       }
     }
 
-    return { workdir, extras: { skillDir: req.skillDir, syncTimer: null, worktreePath } };
+    return {
+      workdir,
+      extras: {
+        skillDir: req.skillDir,
+        syncTimer: null,
+        worktreePath,
+        worktreeGitRoot: worktreePath ? gitRoot : null,
+      },
+    };
   },
 
   buildFirstPrompt(req) {
@@ -710,7 +724,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
   onTurnFailed(entry) {
     stopProgressPolling(entry.extras);
     if (entry.extras.worktreePath) {
-      destroyEvalSandbox(entry.extras.worktreePath);
+      destroyEvalSandbox(entry.extras.worktreePath, entry.extras.worktreeGitRoot ?? undefined);
       entry.extras.worktreePath = null;
     }
   },
@@ -731,7 +745,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           console.warn(`[audit-runner] Could not rescue audit-report.md from worktree: ${(err as Error).message}`);
         }
       }
-      destroyEvalSandbox(entry.extras.worktreePath);
+      destroyEvalSandbox(entry.extras.worktreePath, entry.extras.worktreeGitRoot ?? undefined);
       entry.extras.worktreePath = null;
       // Clear cwd so archiveReport (below) falls back to workdir — the rescue
       // copy above already moved the report there and the worktree is gone.
@@ -893,7 +907,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     // worktreePath is always null on boot — sweepOrphanSandboxes already
     // cleaned up any leftover worktrees. The path is not needed for session
     // JSONL lookups (run.cwd is used for that, restored above).
-    return { kind: 'rehydrate', run: restoredRun, extras: { skillDir, syncTimer: null, worktreePath: null } };
+    return { kind: 'rehydrate', run: restoredRun, extras: { skillDir, syncTimer: null, worktreePath: null, worktreeGitRoot: null } };
   },
 };
 

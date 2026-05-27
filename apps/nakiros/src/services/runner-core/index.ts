@@ -25,6 +25,7 @@ export {
   captureSandboxDiff,
   listSandboxUntracked,
   destroyEvalSandbox,
+  pruneWorktrees,
   sweepOrphanSandboxes,
   sandboxRoot,
   type CreateSandboxResult,

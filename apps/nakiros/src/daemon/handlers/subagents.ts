@@ -1,14 +1,12 @@
 import {
   existsSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   statSync,
   unlinkSync,
-  writeFileSync,
 } from 'fs';
 import type { Dirent } from 'fs';
-import { join, normalize, resolve, dirname } from 'path';
+import { join, normalize, resolve } from 'path';
 
 import type {
   SubagentsAuditHistoryEntry,
@@ -23,31 +21,9 @@ import {
   listSubagentsAudits,
   readSubagentsAudit,
 } from '../../services/subagents-audit-history.js';
+import { resolveSubagentPath, writeSubagentFile } from '../../services/subagents-writer.js';
 import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
-
-// ---------------------------------------------------------------------------
-// Security helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Validate that `subagentName` is safe (no `..`, no leading `/`) and that
- * the resolved absolute path stays within `agentsDir`. Returns the resolved
- * absolute path on success, throws on traversal attempt.
- */
-function resolveSubagentPath(projectPath: string, subagentName: string): string {
-  // Reject any path component that could escape the agents directory.
-  if (subagentName.includes('..') || subagentName.startsWith('/')) {
-    throw new Error(`Invalid subagentName — path traversal detected: ${subagentName}`);
-  }
-  const agentsDir = join(projectPath, '.claude', 'agents');
-  const resolved = normalize(resolve(agentsDir, subagentName));
-  // Ensure the resolved path stays inside the agents directory.
-  if (!resolved.startsWith(normalize(agentsDir) + '/') && resolved !== normalize(agentsDir)) {
-    throw new Error(`Invalid subagentName — path escapes .claude/agents/: ${subagentName}`);
-  }
-  return resolved;
-}
 
 // ---------------------------------------------------------------------------
 // Frontmatter / metadata helpers
@@ -340,35 +316,7 @@ export const subagentsHandlers: HandlerRegistry = {
       if (!project) {
         return { ok: false, code: 'project-not-found', message: `Project ${projectId} not found.` };
       }
-
-      let absolutePath: string;
-      try {
-        absolutePath = resolveSubagentPath(project.projectPath, subagentName);
-      } catch (err) {
-        return { ok: false, code: 'invalid-path', message: (err as Error).message };
-      }
-
-      // Optimistic-lock: if the file exists and was modified since read, reject.
-      if (existsSync(absolutePath) && mtimeAtRead) {
-        try {
-          const stat = statSync(absolutePath);
-          const currentMtime = stat.mtime.toISOString();
-          if (currentMtime !== mtimeAtRead) {
-            return { ok: false, code: 'conflict', message: `Subagent "${subagentName}" was modified externally. Reload to continue.` };
-          }
-        } catch {
-          // Can't stat — proceed with write (best-effort).
-        }
-      }
-
-      try {
-        // Ensure the parent directory exists (handles nested subagents like team/reviewer.md).
-        mkdirSync(dirname(absolutePath), { recursive: true });
-        writeFileSync(absolutePath, content, 'utf8');
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, code: 'write-failed', message: `Failed to write subagent: ${(err as Error).message}` };
-      }
+      return writeSubagentFile(project.projectPath, subagentName, content, mtimeAtRead);
     },
   ),
 

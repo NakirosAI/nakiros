@@ -1,14 +1,12 @@
 import {
   existsSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   statSync,
   unlinkSync,
-  writeFileSync,
 } from 'fs';
 import type { Dirent } from 'fs';
-import { join, normalize, resolve, dirname } from 'path';
+import { join, normalize, resolve } from 'path';
 
 import type {
   OutputStyleSummary,
@@ -23,29 +21,9 @@ import {
   listOutputStylesAudits,
   readOutputStylesAudit,
 } from '../../services/output-styles-audit-history.js';
+import { resolveStylePath, writeOutputStyleFile } from '../../services/output-styles-writer.js';
 import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
-
-// ---------------------------------------------------------------------------
-// Security helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Validate that `styleName` is safe (no `..`, no leading `/`) and that
- * the resolved absolute path stays within `stylesDir`. Returns the resolved
- * absolute path on success, throws on traversal attempt.
- */
-function resolveStylePath(projectPath: string, styleName: string): string {
-  if (styleName.includes('..') || styleName.startsWith('/')) {
-    throw new Error(`Invalid styleName — path traversal detected: ${styleName}`);
-  }
-  const stylesDir = join(projectPath, '.claude', 'output-styles');
-  const resolved = normalize(resolve(stylesDir, styleName));
-  if (!resolved.startsWith(normalize(stylesDir) + '/') && resolved !== normalize(stylesDir)) {
-    throw new Error(`Invalid styleName — path escapes .claude/output-styles/: ${styleName}`);
-  }
-  return resolved;
-}
 
 // ---------------------------------------------------------------------------
 // Frontmatter / metadata helpers
@@ -303,38 +281,7 @@ export const outputStylesHandlers: HandlerRegistry = {
       if (!project) {
         return { ok: false, code: 'project-not-found', message: `Project ${projectId} not found.` };
       }
-
-      let absolutePath: string;
-      try {
-        absolutePath = resolveStylePath(project.projectPath, styleName);
-      } catch (err) {
-        return { ok: false, code: 'invalid-name', message: (err as Error).message };
-      }
-
-      // Optimistic-lock: if the file exists and was modified since read, reject.
-      if (existsSync(absolutePath) && mtimeAtRead) {
-        try {
-          const stat = statSync(absolutePath);
-          const currentMtime = stat.mtime.toISOString();
-          if (currentMtime !== mtimeAtRead) {
-            return {
-              ok: false,
-              code: 'conflict',
-              message: `Style "${styleName}" was modified externally. Reload to continue.`,
-            };
-          }
-        } catch {
-          // Can't stat — proceed with write (best-effort).
-        }
-      }
-
-      try {
-        mkdirSync(dirname(absolutePath), { recursive: true });
-        writeFileSync(absolutePath, content, 'utf8');
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, code: 'fs-error', message: `Failed to write style: ${(err as Error).message}` };
-      }
+      return writeOutputStyleFile(project.projectPath, styleName, content, mtimeAtRead);
     },
   ),
 

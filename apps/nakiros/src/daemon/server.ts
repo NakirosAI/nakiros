@@ -23,6 +23,11 @@ import {
   restoreOrCleanupClassifyConvoWorkdirs,
 } from '../services/classify-convo-runner.js';
 import {
+  getResumableBootstrapWorktreePaths,
+  listAllBootstrapRuns,
+  restoreOrCleanupBootstrapWorkdirs,
+} from '../services/bootstrap-runner.js';
+import {
   getResumableSandboxPaths,
   listRuns as listAllEvalRuns,
   restoreEvalRunsForSkillDirs,
@@ -109,6 +114,14 @@ function collectLiveProjectEntryNames(): Set<string> {
   for (const run of listAllClassifyConvoRuns()) {
     if (isActiveRunStatus(run.status)) add(run.workdir);
   }
+  for (const run of listAllBootstrapRuns()) {
+    if (!isActiveRunStatus(run.status)) continue;
+    // Bootstrap can have a worktree `cwd` distinct from `workdir` (same as
+    // audit) — protect both encoded entries so a resumable session file
+    // survives the sweep regardless of which one it's actually keyed by.
+    add(run.cwd);
+    add(run.workdir);
+  }
   for (const run of listAllEvalRuns()) {
     if (!isActiveRunStatus(run.status)) continue;
     add(run.workdir);
@@ -138,6 +151,7 @@ function collectGitRootsFromRuns(): Set<string> {
   for (const run of listAllFixRuns()) addCwd(run.cwd);
   for (const run of listAllCreateRuns()) addCwd(run.cwd);
   for (const run of listAllEditRuns()) addCwd(run.cwd);
+  for (const run of listAllBootstrapRuns()) addCwd(run.cwd);
   return roots;
 }
 
@@ -211,6 +225,7 @@ export function bootstrapDaemonRuntime(): void {
   restoreOrCleanupAuditWorkdirs();
   restoreOrCleanupAnalyzeConvoWorkdirs();
   restoreOrCleanupClassifyConvoWorkdirs();
+  restoreOrCleanupBootstrapWorkdirs();
   // Eval runs persist per-skill (`{skillDir}/evals/workspace/iteration-N/…`),
   // not under a flat `~/.nakiros/runs/eval/`. To surface them in the
   // runs-center on first paint we walk every known skill source and replay
@@ -260,12 +275,17 @@ export function bootstrapDaemonRuntime(): void {
   // Preserve sandboxes still referenced by rehydrated `waiting_for_input`
   // eval runs — without this the user's "Reprendre" would `--resume` against
   // a directory the sweep just deleted ("No conversation found with session
-  // ID …").
+  // ID …"). Also preserve worktrees of resumable bootstrap runs
+  // (`awaiting_approval` / `waiting_for_input`) — without this union, a
+  // bootstrap run's worktree would be swept at every reboot regardless of
+  // whether anything still references it (rehydrate would then restore
+  // `cwd` pointing at a directory that no longer exists).
   // Git roots are derived from persisted run.cwd values so `git worktree prune`
   // can clean up ghost `.git/worktrees/` entries even when the sandbox
   // directories were already deleted before the daemon restarted.
   const orphanGitRoots = collectGitRootsFromRuns();
-  const sandboxes = sweepOrphanSandboxes(getResumableSandboxPaths(), orphanGitRoots);
+  const keepSandboxPaths = new Set([...getResumableSandboxPaths(), ...getResumableBootstrapWorktreePaths()]);
+  const sandboxes = sweepOrphanSandboxes(keepSandboxPaths, orphanGitRoots);
   if (sandboxes.deleted > 0) {
     console.log(`[nakiros] Swept ${sandboxes.deleted} orphan eval sandbox${sandboxes.deleted === 1 ? '' : 'es'}.`);
   }

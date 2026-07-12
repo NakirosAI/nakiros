@@ -76,3 +76,7 @@ export {
   tokenizeForCluster,
   jaccard,
 } from './cluster-tokens.js';
+export {
+  buildChatTimeline,
+  type ExcludedToolPathPredicate,
+} from './chat-timeline-builder.js';

@@ -1,0 +1,71 @@
+{
+  "title": "Project Bootstrap",
+  "sidebar": {
+    "label": "Bootstrap"
+  },
+  "back": "Back",
+  "stop": "Stop",
+  "stopping": "Stopping…",
+  "finish": "Close",
+  "finishing": "Closing…",
+  "error": {
+    "title": "Error"
+  },
+  "stats": {
+    "tokens": "Tokens",
+    "elapsed": "Elapsed"
+  },
+  "status": {
+    "starting": "starting",
+    "running": "running",
+    "waiting_for_input": "waiting",
+    "awaiting_approval": "awaiting approval",
+    "executing": "executing",
+    "completed": "completed",
+    "failed": "failed",
+    "stopped": "stopped"
+  },
+  "intro": {
+    "title": "Bootstrap this project’s .claude/",
+    "body": "Analyses the codebase, the existing .claude/ configuration, and (optionally) conversation frictions, then proposes one coherent plan covering CLAUDE.md, rules, subagents, hooks, permissions, MCP and output styles. You review and approve every entity before anything is written.",
+    "start": "Start bootstrap",
+    "starting": "Starting…"
+  },
+  "history": {
+    "title": "Previous runs",
+    "loading": "Loading…",
+    "proposalsCount_one": "{{count}} proposal",
+    "proposalsCount_other": "{{count}} proposals"
+  },
+  "boot": {
+    "notFound": "Run not found or already discarded.",
+    "loading": "Loading…"
+  },
+  "composer": {
+    "waitingBanner": "Agent is waiting for your input",
+    "placeholderWaiting": "Reply or ask to change the plan… (Enter to send, Shift+Enter for new line)",
+    "placeholderRunning": "Agent is working…",
+    "placeholderIdle": "Start a bootstrap run to discuss it here.",
+    "send": "Send",
+    "sendFailed": "Could not send: {{message}}"
+  },
+  "plan": {
+    "title": "Configuration plan",
+    "acceptedCount": "{{accepted}}/{{total}} included",
+    "usedFrictionDigests": "informed by conversation frictions",
+    "empty": "Nothing to propose — the project is already well configured.",
+    "approve": "Approve & write",
+    "approving": "Approving…",
+    "complete": "Complete",
+    "completing": "Completing…",
+    "executingBanner": "Writing approved entities to the project…"
+  },
+  "proposal": {
+    "acceptTooltip": "Include in the plan",
+    "rejectTooltip": "Exclude from the plan",
+    "edited": "edited",
+    "edit": "Edit",
+    "donePreview": "Preview",
+    "writtenTo": "Written to"
+  }
+}

@@ -1867,8 +1867,17 @@ function UnsupportedKindPlaceholder({
  * Translate the kind-specific runner status (`AuditRunStatus`,
  * `EvalRunStatus`, …) into the unified `AgentRunStatus` enum
  * understood by every new-design surface (header / dock / store).
+ *
+ * Accepts `BootstrapRunStatus` too purely for exhaustiveness — `run.status`
+ * on the wider `AuditLikeRun` union now includes it (see `lib/run-api.ts`),
+ * even though a bootstrap run never actually reaches this screen in
+ * practice (`NewShell.handleOpenRun` routes it to `BootstrapScreen`
+ * instead). `awaiting_approval`/`executing` map the same way the dock's
+ * own `BOOTSTRAP_STATUS_MAP` in `useAgentRunsSync.ts` does.
  */
-function mapAuditStatus(status: AuditRun['status']): import('@nakiros/shared').AgentRunStatus {
+function mapAuditStatus(
+  status: AuditRun['status'] | import('@nakiros/shared').BootstrapRunStatus,
+): import('@nakiros/shared').AgentRunStatus {
   switch (status) {
     case 'starting':
       return 'pending';
@@ -1876,6 +1885,10 @@ function mapAuditStatus(status: AuditRun['status']): import('@nakiros/shared').A
       return 'running';
     case 'waiting_for_input':
       return 'awaiting_input';
+    case 'awaiting_approval':
+      return 'awaiting_input';
+    case 'executing':
+      return 'running';
     case 'completed':
       return 'done';
     case 'failed':
@@ -1892,6 +1905,10 @@ function composeTitle(kind: AgentRunKind, run: AuditLikeRun, t: ReturnType<typeo
     create: t('titles.create', { defaultValue: 'Create skill' }),
     edit: t('titles.edit', { defaultValue: 'Edit' }),
     'classify-convo': t('titles.classifyConvo', { defaultValue: 'Classify' }),
+    // Defense in depth only — see `NewRunHeader.kindVisual`'s bootstrap
+    // case for why this composeTitle call should never actually run on a
+    // bootstrap run in practice.
+    bootstrap: t('titles.bootstrap', { defaultValue: 'Project Bootstrap' }),
   };
   const prefix = labelByKind[kind] ?? kind;
   if (kind === 'classify-convo') {

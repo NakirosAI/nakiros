@@ -8,6 +8,7 @@ import {
   Layers,
   MessageSquare,
   Plug,
+  Rocket,
   Sliders,
   ShieldCheck,
   Sparkles,
@@ -334,6 +335,12 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
               {t('sections.config')}
             </div>
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+              <ConfigCard
+                icon={<Rocket size={14} strokeWidth={2} />}
+                label={t('config.bootstrap')}
+                count={null}
+                onClick={() => onNavigate('bootstrap')}
+              />
               <ConfigCard
                 icon={<Layers size={14} strokeWidth={2} />}
                 label={t('config.rules')}

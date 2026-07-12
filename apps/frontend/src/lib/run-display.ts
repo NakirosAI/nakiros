@@ -38,7 +38,7 @@ export interface RunDisplayContext {
   /** Short label for the kind chip (ex "Audit", "Audit CLAUDE.md", "Fix CLAUDE.md"). */
   kindLabel: string;
   /** Bare action verb localised for the current run kind. */
-  actionVerb: 'Audit' | 'Fix' | 'Create' | 'Edit' | 'Eval' | 'Analyze' | 'Classify';
+  actionVerb: 'Audit' | 'Fix' | 'Create' | 'Edit' | 'Eval' | 'Analyze' | 'Classify' | 'Bootstrap';
   /** What the run operates on, in user-facing prose. */
   targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp' | 'output style';
   /**
@@ -96,6 +96,11 @@ const ACTION_BY_KIND: Record<AgentRunKind, RunDisplayContext['actionVerb']> = {
   'analyze-convo': 'Analyze',
   'classify-convo': 'Classify',
   'recommendation-analyze': 'Analyze',
+  // Present for exhaustiveness only — `runDisplayContext` is never actually
+  // called with a bootstrap run in practice (`BootstrapScreen.tsx` owns its
+  // own header/labels standalone; `NewShell.handleOpenRun` routes bootstrap
+  // `AgentRun`s to the project's Bootstrap view instead of a `RunScreen` tab).
+  bootstrap: 'Bootstrap',
 };
 
 /** Build the display context for a run. Pure — safe to call inline. */

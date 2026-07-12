@@ -45,6 +45,7 @@ import frOutputStylesRunner from './locales/fr/output-styles-runner.json';
 import frClaudeMd from './locales/fr/claude-md.json';
 import frConversationIngest from './locales/fr/conversation-ingest.json';
 import frDriftDetection from './locales/fr/drift-detection.json';
+import frBootstrap from './locales/fr/bootstrap.json';
 
 import enCommon from './locales/en/common.json';
 import enHome from './locales/en/home.json';
@@ -90,6 +91,7 @@ import enOutputStylesRunner from './locales/en/output-styles-runner.json';
 import enClaudeMd from './locales/en/claude-md.json';
 import enConversationIngest from './locales/en/conversation-ingest.json';
 import enDriftDetection from './locales/en/drift-detection.json';
+import enBootstrap from './locales/en/bootstrap.json';
 import { resolveLanguage } from '../utils/language';
 import type { ResolvedLanguage } from '@nakiros/shared';
 
@@ -139,6 +141,7 @@ const resources = {
     'claude-md': frClaudeMd,
     'conversation-ingest': frConversationIngest,
     'drift-detection': frDriftDetection,
+    bootstrap: frBootstrap,
   },
   en: {
     common: enCommon,
@@ -185,6 +188,7 @@ const resources = {
     'claude-md': enClaudeMd,
     'conversation-ingest': enConversationIngest,
     'drift-detection': enDriftDetection,
+    bootstrap: enBootstrap,
   },
 };
 

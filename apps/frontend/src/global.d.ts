@@ -134,6 +134,11 @@ import type {
   RecommendationAnalyzeRunEvent,
   RecommendationPattern,
   StartRecommendationAnalyzeRequest,
+  StartBootstrapRequest,
+  BootstrapRun,
+  BootstrapRunEvent,
+  ApproveBootstrapPlanRequest,
+  BootstrapTimelineEntry,
 } from '@nakiros/shared';
 
 declare global {
@@ -341,6 +346,23 @@ declare global {
       getFixTempMatrix(runId: string): Promise<EvalMatrix>;
       getFixUsage(runId: string): Promise<FixUsage>;
       readFixDiffFile(runId: string, relativePath: string): Promise<SkillDiffFilePayload>;
+
+      // Project .claude Bootstrap — interactive whole-project analyse →
+      // discuss → approve → execute lifecycle. Mirrors the `audit:*` surface;
+      // `approveBootstrapPlan` is the one bootstrap-specific addition (see
+      // `docs/redesign/features/project-bootstrap.md`).
+      startBootstrap(request: StartBootstrapRequest): Promise<BootstrapRun>;
+      stopBootstrap(runId: string): Promise<void>;
+      getBootstrapRun(runId: string): Promise<BootstrapRun | null>;
+      sendBootstrapUserMessage(runId: string, message: string): Promise<void>;
+      approveBootstrapPlan(request: ApproveBootstrapPlanRequest): Promise<BootstrapRun>;
+      finishBootstrap(runId: string): Promise<void>;
+      listActiveBootstrapRuns(): Promise<BootstrapRun[]>;
+      listAllBootstrapRuns(): Promise<BootstrapRun[]>;
+      getBootstrapBufferedEvents(runId: string): Promise<BootstrapRunEvent['event'][]>;
+      getBootstrapTimeline(runId: string): Promise<BootstrapTimelineEntry[]>;
+      getBootstrapUsage(runId: string): Promise<FixUsage>;
+      onBootstrapEvent(cb: (event: BootstrapRunEvent) => void): () => void;
 
       // Create (skill-factory "create" command)
       startCreate(request: StartAuditRequest): Promise<AuditRun>;

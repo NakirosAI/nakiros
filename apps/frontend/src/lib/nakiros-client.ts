@@ -353,6 +353,21 @@ const client = {
   getFixTempMatrix: (runId: string) => invoke(C['fix:getFixTempMatrix'], runId),
   getFixUsage: (runId: string) => invoke(C['fix:getUsage'], runId),
 
+  // Project .claude Bootstrap
+  startBootstrap: (request: unknown) => invoke(C['bootstrap:start'], request),
+  stopBootstrap: (runId: string) => invoke(C['bootstrap:stopRun'], runId),
+  getBootstrapRun: (runId: string) => invoke(C['bootstrap:getRun'], runId),
+  sendBootstrapUserMessage: (runId: string, message: string) =>
+    invoke(C['bootstrap:sendUserMessage'], runId, message),
+  approveBootstrapPlan: (request: unknown) => invoke(C['bootstrap:approvePlan'], request),
+  finishBootstrap: (runId: string) => invoke(C['bootstrap:finish'], runId),
+  listActiveBootstrapRuns: () => invoke(C['bootstrap:listActive']),
+  listAllBootstrapRuns: () => invoke(C['bootstrap:listAll']),
+  getBootstrapBufferedEvents: (runId: string) => invoke(C['bootstrap:getBufferedEvents'], runId),
+  getBootstrapTimeline: (runId: string) => invoke(C['bootstrap:getTimeline'], runId),
+  getBootstrapUsage: (runId: string) => invoke(C['bootstrap:getUsage'], runId),
+  onBootstrapEvent: (cb: (event: unknown) => void) => subscribe(C['bootstrap:event'], cb),
+
   // Create
   startCreate: (request: unknown) => invoke(C['create:start'], request),
   stopCreate: (runId: string) => invoke(C['create:stopRun'], runId),

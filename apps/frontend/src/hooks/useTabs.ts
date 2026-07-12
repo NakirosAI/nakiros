@@ -38,6 +38,7 @@ export type ProjectTabView =
   | 'permissions'
   | 'mcp'
   | 'hooks'
+  | 'bootstrap'
   | 'recs'
   | 'settings';
 

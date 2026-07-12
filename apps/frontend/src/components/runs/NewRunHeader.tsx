@@ -9,6 +9,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Rocket,
   ShieldCheck,
   Square,
   Wrench,
@@ -320,6 +321,13 @@ function kindVisual(kind: AgentRunKind): { Icon: LucideIcon; color: string; labe
       return { Icon: Plus, color: 'var(--n-healthy)', label: 'Create skill' };
     case 'analyze-convo':
       return { Icon: Brain, color: 'var(--n-watch)', label: 'Analyze conversation' };
+    case 'bootstrap':
+      // Defense in depth only — a bootstrap run should never actually reach
+      // this header (`NewShell.handleOpenRun` routes it to `BootstrapScreen`
+      // instead of a `kind: 'run'` tab). Same icon/color as the sidebar nav
+      // item and `RunDock`'s `kindVisual`, so an impossible landing here
+      // still renders decently instead of the generic `GitCompare` fallback.
+      return { Icon: Rocket, color: 'var(--n-accent)', label: 'Project Bootstrap' };
     default:
       return { Icon: GitCompare, color: 'var(--n-fg-muted)', label: kind };
   }

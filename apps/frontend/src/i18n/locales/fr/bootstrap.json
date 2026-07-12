@@ -1,0 +1,71 @@
+{
+  "title": "Bootstrap du projet",
+  "sidebar": {
+    "label": "Bootstrap"
+  },
+  "back": "Retour",
+  "stop": "Arrêter",
+  "stopping": "Arrêt…",
+  "finish": "Fermer",
+  "finishing": "Fermeture…",
+  "error": {
+    "title": "Erreur"
+  },
+  "stats": {
+    "tokens": "Tokens",
+    "elapsed": "Écoulé"
+  },
+  "status": {
+    "starting": "démarrage",
+    "running": "en cours",
+    "waiting_for_input": "en attente",
+    "awaiting_approval": "en attente de validation",
+    "executing": "exécution",
+    "completed": "terminé",
+    "failed": "échoué",
+    "stopped": "arrêté"
+  },
+  "intro": {
+    "title": "Bootstrapper le .claude/ de ce projet",
+    "body": "Analyse le code, la configuration .claude/ existante et (en option) les frictions des conversations, puis propose un plan cohérent couvrant CLAUDE.md, les règles, les sous-agents, les hooks, les permissions, MCP et les output styles. Chaque entité est revue et validée avant toute écriture.",
+    "start": "Démarrer le bootstrap",
+    "starting": "Démarrage…"
+  },
+  "history": {
+    "title": "Runs précédents",
+    "loading": "Chargement…",
+    "proposalsCount_one": "{{count}} proposition",
+    "proposalsCount_other": "{{count}} propositions"
+  },
+  "boot": {
+    "notFound": "Run introuvable ou déjà abandonné.",
+    "loading": "Chargement…"
+  },
+  "composer": {
+    "waitingBanner": "L'agent attend votre réponse",
+    "placeholderWaiting": "Réponds ou demande à ajuster le plan… (Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne)",
+    "placeholderRunning": "L'agent travaille…",
+    "placeholderIdle": "Démarre un run de bootstrap pour en discuter ici.",
+    "send": "Envoyer",
+    "sendFailed": "Envoi impossible : {{message}}"
+  },
+  "plan": {
+    "title": "Plan de configuration",
+    "acceptedCount": "{{accepted}}/{{total}} inclus",
+    "usedFrictionDigests": "enrichi par les frictions de conversation",
+    "empty": "Rien à proposer — le projet est déjà bien configuré.",
+    "approve": "Valider et écrire",
+    "approving": "Validation…",
+    "complete": "Terminer",
+    "completing": "Finalisation…",
+    "executingBanner": "Écriture des entités approuvées dans le projet…"
+  },
+  "proposal": {
+    "acceptTooltip": "Inclure dans le plan",
+    "rejectTooltip": "Exclure du plan",
+    "edited": "modifié",
+    "edit": "Modifier",
+    "donePreview": "Aperçu",
+    "writtenTo": "Écrit dans"
+  }
+}

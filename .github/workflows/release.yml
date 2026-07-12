@@ -22,13 +22,17 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
-      # npm Trusted Publishing requires npm >= 11.5.1 (Node 20 ships with 10.x).
+      # npm Trusted Publishing requires npm >= 11.5.1 (Node 22 ships with 10.x).
+      # Pin to the 11.x line rather than `npm@latest`: npm 12 raised its engine
+      # floor to Node ^22.22.2 || ^24.15.0, so `npm@latest` breaks on the Node
+      # the runner actually provides. npm 11 supports Node 20.17+/22/24 and
+      # already satisfies the Trusted Publishing minimum.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@^11.5.1
 
       - name: Verify tag matches package version
         run: |

@@ -1,5 +1,16 @@
 # Nakiros Redesign — Modular AI Tooling Suite
 
+> **Status (2026-07-11): product vision kept, separate distribution on hold.**
+> The migration to separately-installable modules (phases 0–2 were implemented
+> on the now-deleted `migration/modular-suite` branch) was stopped by decision:
+> the plugin/distribution machinery (per-module npm packages, manifest scan,
+> catalog, dynamic front bundles) costs more than it buys while everything
+> ships as one package anyway. The **product identities** (Techne, Hestia,
+> Argos, Pinax), the naming, and the design principles below remain the target.
+> If module separation is revisited, prefer a *modular monolith*: clear
+> internal boundaries, one deliverable. Docs 02/03/05/06/07 + `migration-plan.md`
+> describe the abandoned distribution design — read them as reference, not plan.
+
 This folder consolidates the product + architecture redesign that turns Nakiros
 from a single "Claude `.claude` manager" into a **modular, open-source suite of
 independent products for AI agent tooling** — Claude first, but not Claude only.
@@ -20,6 +31,7 @@ design so the team can build in parallel against a shared, agreed target.
 | 07 | [`07-migration.md`](07-migration.md) | How today's `apps/nakiros` splits into modules (mapping + couplings) |
 | 07b | [`migration-plan.md`](migration-plan.md) | The sequenced, PR-by-PR execution plan + risk register |
 | 08 | [`modules/`](modules/) | One spec per module: Techne, Hestia, Argos, Pinax |
+| 09 | [`features/project-bootstrap.md`](features/project-bootstrap.md) | **Active** — bootstrap the whole `.claude` from the codebase (Hestia promise, built in the current app) |
 
 ## Glossary — the products
 

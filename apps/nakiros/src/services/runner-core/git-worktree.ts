@@ -311,7 +311,7 @@ export function sandboxRoot(): string {
  * `<kind>-<runId>` and `sweepOrphanSandboxes` reclaims them automatically
  * (it sweeps the entire `~/.nakiros/sandboxes/` directory at boot).
  */
-export type RunWorktreeKind = 'fix' | 'audit' | 'eval' | 'create' | 'edit';
+export type RunWorktreeKind = 'fix' | 'audit' | 'eval' | 'create' | 'edit' | 'bootstrap';
 
 /**
  * Create a detached worktree for a fix / audit / create / edit run.

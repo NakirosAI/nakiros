@@ -1,15 +1,13 @@
 import {
   copyFileSync,
   existsSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   statSync,
   unlinkSync,
-  writeFileSync,
 } from 'fs';
 import type { Dirent } from 'fs';
-import { join, normalize, resolve, relative, dirname } from 'path';
+import { join, normalize, resolve } from 'path';
 
 import type {
   RulesAuditHistoryEntry,
@@ -24,31 +22,9 @@ import {
   listRulesAudits,
   readRulesAudit,
 } from '../../services/rules-audit-history.js';
+import { resolveRulePath, writeRuleFile } from '../../services/rules-writer.js';
 import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
-
-// ---------------------------------------------------------------------------
-// Security helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Validate that `ruleName` is safe (no `..`, no leading `/`) and that
- * the resolved absolute path stays within `rulesDir`. Returns the resolved
- * absolute path on success, throws on traversal attempt.
- */
-function resolveRulePath(projectPath: string, ruleName: string): string {
-  // Reject any path component that could escape the rules directory.
-  if (ruleName.includes('..') || ruleName.startsWith('/')) {
-    throw new Error(`Invalid ruleName — path traversal detected: ${ruleName}`);
-  }
-  const rulesDir = join(projectPath, '.claude', 'rules');
-  const resolved = normalize(resolve(rulesDir, ruleName));
-  // Ensure the resolved path stays inside the rules directory.
-  if (!resolved.startsWith(normalize(rulesDir) + '/') && resolved !== normalize(rulesDir)) {
-    throw new Error(`Invalid ruleName — path escapes .claude/rules/: ${ruleName}`);
-  }
-  return resolved;
-}
 
 // ---------------------------------------------------------------------------
 // Frontmatter / metadata helpers
@@ -311,35 +287,7 @@ export const rulesHandlers: HandlerRegistry = {
       if (!project) {
         return { ok: false, code: 'project-not-found', message: `Project ${projectId} not found.` };
       }
-
-      let absolutePath: string;
-      try {
-        absolutePath = resolveRulePath(project.projectPath, ruleName);
-      } catch (err) {
-        return { ok: false, code: 'invalid-path', message: (err as Error).message };
-      }
-
-      // Optimistic-lock: if the file exists and was modified since read, reject.
-      if (existsSync(absolutePath) && mtimeAtRead) {
-        try {
-          const stat = statSync(absolutePath);
-          const currentMtime = stat.mtime.toISOString();
-          if (currentMtime !== mtimeAtRead) {
-            return { ok: false, code: 'conflict', message: `Rule "${ruleName}" was modified externally. Reload to continue.` };
-          }
-        } catch {
-          // Can't stat — proceed with write (best-effort).
-        }
-      }
-
-      try {
-        // Ensure the parent directory exists (handles nested rules like frontend/styling.md).
-        mkdirSync(dirname(absolutePath), { recursive: true });
-        writeFileSync(absolutePath, content, 'utf8');
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, code: 'write-failed', message: `Failed to write rule: ${(err as Error).message}` };
-      }
+      return writeRuleFile(project.projectPath, ruleName, content, mtimeAtRead);
     },
   ),
 

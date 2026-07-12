@@ -7,7 +7,8 @@
  * Exit code 0 = all checks pass. Non-zero = at least one failure.
  *
  * The detector logic is inlined here (no TS compilation needed), mirroring
- * the approach used by test-loop-detector.mjs.
+ * the approach used by test-loop-detector.mjs. Keep this in sync with
+ * topic-detector.ts.
  */
 
 import { homedir } from 'os';
@@ -52,12 +53,14 @@ function jaccard(a, b) {
   return union === 0 ? 0 : intersection / union;
 }
 
-// ── Inline topic detector ─────────────────────────────────────────────────────
+// ── Inline topic detector (mirrors topic-detector.ts) ─────────────────────────
 
 const MIN_USER_MESSAGES = 6;
-const TRANSITION_THRESHOLD = 0.15;
-const FIRST_LAST_THRESHOLD = 0.10;
+const MIN_CONTENT_TOKENS = 4;
+const CONTEXT_CONNECTION_THRESHOLD = 0.15;
+const END_OPENING_THRESHOLD = 0.10;
 const MIN_TRANSITIONS = 2;
+const OPENING_MESSAGES = 3;
 
 function findLastClearIndex(messages) {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -66,48 +69,71 @@ function findLastClearIndex(messages) {
   return -1;
 }
 
-function detectTopic(userMessages) {
+function topicText(text) {
+  return text
+    .replace(/<ide_[^>]*>[\s\S]*?<\/ide_[^>]*>/g, ' ')
+    .replace(/<ide_[^>]*>/g, ' ');
+}
+
+function isProceduralWrapper(text) {
+  return text.includes('<command-name>') || text.includes('<local-command-');
+}
+
+function connection(probe, context) {
+  if (probe.size === 0) return 1;
+  let shared = 0;
+  for (const t of probe) if (context.has(t)) shared++;
+  return shared / probe.size;
+}
+
+function computeTopicMetrics(userMessages) {
   const lastClearIdx = findLastClearIndex(userMessages);
-  const clearSlashFound = lastClearIdx >= 0;
-  const consideredAfterClearIdx = clearSlashFound ? lastClearIdx + 1 : null;
-  const window = clearSlashFound
-    ? userMessages.slice(lastClearIdx + 1)
-    : userMessages;
+  const windowed = lastClearIdx >= 0 ? userMessages.slice(lastClearIdx + 1) : userMessages;
 
-  if (window.length < MIN_USER_MESSAGES) return null;
+  const tokenSets = [];
+  for (const m of windowed) {
+    if (isProceduralWrapper(m.text)) continue;
+    const tokens = tokenizeForCluster(topicText(m.text));
+    if (tokens.size < MIN_CONTENT_TOKENS) continue;
+    tokenSets.push(tokens);
+  }
 
-  const tokenSets = window.map((m) => tokenizeForCluster(m.text));
+  if (tokenSets.length < MIN_USER_MESSAGES) return null;
 
+  const accumulated = new Set(tokenSets[0]);
   let transitions = 0;
   for (let i = 1; i < tokenSets.length; i++) {
-    const sim = jaccard(tokenSets[i - 1], tokenSets[i]);
-    if (sim < TRANSITION_THRESHOLD) transitions++;
+    if (connection(tokenSets[i], accumulated) < CONTEXT_CONNECTION_THRESHOLD) transitions++;
+    for (const t of tokenSets[i]) accumulated.add(t);
   }
 
-  const firstLastSimilarity = jaccard(tokenSets[0], tokenSets[tokenSets.length - 1]);
+  const openingCount = Math.min(OPENING_MESSAGES, Math.floor(tokenSets.length / 2));
+  const opening = new Set();
+  for (let i = 0; i < openingCount; i++) for (const t of tokenSets[i]) opening.add(t);
+  const endOpeningConnection = connection(tokenSets[tokenSets.length - 1], opening);
 
-  if (transitions < MIN_TRANSITIONS || firstLastSimilarity >= FIRST_LAST_THRESHOLD) {
-    return null;
-  }
+  return { transitionsDetected: transitions, endOpeningConnection, userMessageCount: tokenSets.length };
+}
 
-  const severity = transitions >= 3 || firstLastSimilarity < 0.05 ? 'high' : 'medium';
-  const similarityPercent = Math.round(firstLastSimilarity * 100);
+function detectTopic(userMessages) {
+  const metrics = computeTopicMetrics(userMessages);
+  if (!metrics) return null;
+  const { transitionsDetected: transitions, endOpeningConnection, userMessageCount } = metrics;
 
+  if (transitions < MIN_TRANSITIONS || endOpeningConnection >= END_OPENING_THRESHOLD) return null;
+
+  const severity = transitions >= 3 || endOpeningConnection < 0.02 ? 'high' : 'medium';
   return {
     type: 'topic',
     severity,
-    message:
-      `Nakiros a détecté que la conversation s'est éloignée de l'objectif initial ` +
-      `(${transitions} transitions de sujet, similarité avec le premier message : ${similarityPercent}%).`,
+    message: `Nakiros a détecté que la conversation s'est éloignée de l'objectif initial (${transitions} changements de sujet).`,
     suggestion: "Recentre la session sur la tâche d'origine, ou ouvre une nouvelle session avec un cadrage clair.",
     evidence: {
-      userMessageCount: window.length,
+      userMessageCount,
       transitionsDetected: transitions,
-      transitionThreshold: TRANSITION_THRESHOLD,
-      firstLastSimilarity,
-      firstLastThreshold: FIRST_LAST_THRESHOLD,
-      clearSlashFound,
-      consideredAfterClearIdx,
+      transitionThreshold: MIN_TRANSITIONS,
+      endOpeningConnection,
+      endOpeningThreshold: END_OPENING_THRESHOLD,
     },
   };
 }
@@ -131,11 +157,7 @@ function parseUserMessages(raw) {
       }
     }
     if (textParts.length === 0) continue;
-    messages.push({
-      index: msgIndex++,
-      timestamp: entry.timestamp ?? '',
-      text: textParts.join('\n'),
-    });
+    messages.push({ index: msgIndex++, timestamp: entry.timestamp ?? '', text: textParts.join('\n') });
   }
   return messages;
 }
@@ -170,8 +192,6 @@ const DOCKER_MSG = 'Docker container Dockerfile volume networking compose kubern
 const GIT_MSG = 'git rebase merge conflict cherry-pick stash bisect remote branch';
 const PYTHON_MSG = 'Python pandas dataframe matplotlib numpy scikit machine learning model';
 const BASH_MSG = 'bash shell script heredoc pipe redirect awk grep sed cron cronjob';
-const REACT_MSG = 'React component hook useState useEffect context provider render JSX';
-const NGINX_MSG = 'nginx reverse proxy server load balancing SSL certificate upstream config';
 
 // ── Test 1: All messages share same vocabulary → null ─────────────────────────
 
@@ -191,7 +211,7 @@ console.log('\n[Test 1] Cohesive 8-message conversation → null');
   assert('returns null for cohesive session', result === null, JSON.stringify(result?.evidence));
 }
 
-// ── Test 2: 8 msgs, 3 clear topic transitions → medium or high ───────────────
+// ── Test 2: 8 msgs, 3 distinct topic transitions → drift detected ────────────
 
 console.log('\n[Test 2] 8 msgs with 3 distinct topic transitions → drift detected');
 {
@@ -209,7 +229,7 @@ console.log('\n[Test 2] 8 msgs with 3 distinct topic transitions → drift detec
   assert('result is not null', result !== null);
   assert('type is topic', result?.type === 'topic');
   assert('transitions >= 3', (result?.evidence?.transitionsDetected ?? 0) >= 3);
-  assert('firstLastSimilarity < 0.10', (result?.evidence?.firstLastSimilarity ?? 1) < 0.10);
+  assert('endOpeningConnection < 0.10', (result?.evidence?.endOpeningConnection ?? 1) < 0.10);
   console.log('   severity:', result?.severity, '| transitions:', result?.evidence?.transitionsDetected);
 }
 
@@ -217,8 +237,6 @@ console.log('\n[Test 2] 8 msgs with 3 distinct topic transitions → drift detec
 
 console.log('\n[Test 3] /clear mid-session, after-clear cohesive → null');
 {
-  // Before /clear: chaotic (transitions)
-  // After /clear: 7 coherent Docker messages
   const msgs = makeMessages([
     RUST_MSG,
     TS_MSG,
@@ -245,9 +263,9 @@ console.log('\n[Test 4] Only 4 user messages → null (too short)');
   assert('returns null when < 6 messages', result === null);
 }
 
-// ── Test 5: 10 msgs, 4 transitions, very low first-last sim → high severity ──
+// ── Test 5: 10 msgs, 4 transitions, unrelated end → high severity ────────────
 
-console.log('\n[Test 5] 10 msgs, 4 transitions, low similarity → high severity');
+console.log('\n[Test 5] 10 msgs, 4 transitions, end unrelated to opening → high severity');
 {
   const msgs = makeMessages([
     RUST_MSG,
@@ -265,17 +283,13 @@ console.log('\n[Test 5] 10 msgs, 4 transitions, low similarity → high severity
   assert('result is not null', result !== null);
   assert('severity is high (transitions >= 3)', result?.severity === 'high', `got: ${result?.severity}`);
   assert('type is topic', result?.type === 'topic');
-  console.log('   transitions:', result?.evidence?.transitionsDetected, '| firstLast:', result?.evidence?.firstLastSimilarity?.toFixed(3));
+  console.log('   transitions:', result?.evidence?.transitionsDetected, '| endOpening:', result?.evidence?.endOpeningConnection?.toFixed(3));
 }
 
-// ── Test 6: exactly 6 messages, exactly 2 transitions, zero first-last → high ─
-//
-// Note: 3 totally disjoint vocabularies → firstLastSimilarity = 0 < 0.05,
-// which triggers high severity per spec regardless of transition count.
+// ── Test 6: 6 msgs, 2 transitions, end fully unrelated to opening → high ──────
 
-console.log('\n[Test 6] 6 msgs, 2 transitions, zero first-last similarity → high (firstLast < 0.05)');
+console.log('\n[Test 6] 6 msgs, 2 transitions, end disjoint from opening → high (endOpening < 0.02)');
 {
-  // 3 blocks of 2 messages, each block with totally different vocab
   const msgs = makeMessages([
     GIT_MSG,
     GIT_MSG + ' reflog remote upstream fetch pull push branch merge stash',
@@ -285,18 +299,16 @@ console.log('\n[Test 6] 6 msgs, 2 transitions, zero first-last similarity → hi
     BASH_MSG + ' while loop function variable array associative hash map',
   ]);
   const result = detectTopic(msgs);
-  // 2 transitions (git→python, python→bash), firstLast = 0 → high (firstLast < 0.05)
   assert('result is not null', result !== null);
   if (result !== null) {
     assert('type is topic', result.type === 'topic');
-    // firstLastSimilarity = 0 < 0.05 → high, even though only 2 transitions
-    assert('severity is high (firstLast < 0.05)', result.severity === 'high', `got: ${result.severity}`);
+    assert('severity is high (endOpening < 0.02)', result.severity === 'high', `got: ${result.severity}`);
     assert('exactly 2 transitions', result.evidence.transitionsDetected === 2);
-    console.log('   transitions:', result.evidence.transitionsDetected, '| firstLast:', result.evidence.firstLastSimilarity?.toFixed(3), '| severity:', result.severity);
+    console.log('   transitions:', result.evidence.transitionsDetected, '| endOpening:', result.evidence.endOpeningConnection?.toFixed(3), '| severity:', result.severity);
   }
 }
 
-// ── Test 7: /clear at end → window has 0 messages after it → null ────────────
+// ── Test 7: /clear at end → window empty after it → null ─────────────────────
 
 console.log('\n[Test 7] /clear as last message → null (empty after-clear window)');
 {
@@ -308,9 +320,85 @@ console.log('\n[Test 7] /clear as last message → null (empty after-clear windo
   assert('returns null when after-clear window is empty', result === null);
 }
 
-// ── Test 8: Real session from this repo ──────────────────────────────────────
+// ── Test 8: FP regression — coherent debugging session on one project → null ──
+//
+// Reproduces the real false positive: each message introduces a NEW sub-problem
+// of the same project (Nakiros), reusing recurring vocabulary (fix/audit/skill/
+// runner) and interleaving short procedural messages. Adjacent Jaccard is low,
+// but the session never leaves the project — must NOT fire.
 
-console.log('\n[Test 8] Real session from this repo');
+console.log('\n[Test 8] Coherent multi-subtopic debugging session → null');
+{
+  const msgs = makeMessages([
+    'After an audit of a subagent the Edit button in Nakiros opens a run on the wrong skill target',
+    'When I run the eval on a new Nakiros skill the agent says it does not know the skill in the sandbox',
+    'Our Nakiros drift detector fires too many false positives on the loop signal in a session',
+    'ok on peut commiter le fix',                          // procedural (filtered)
+    'The Nakiros fix run on a subagent cannot find the audit report and snapshot in its worktree',
+    'ok tu peux commit',                                   // procedural (filtered)
+    'Now the Nakiros audit runner writes the snapshot to the wrong root in a worktree run',
+    'ok on peut aussi faire un fix sur le topic detector de Nakiros',
+  ]);
+  const result = detectTopic(msgs);
+  assert('coherent session does not fire', result === null, JSON.stringify(result?.evidence));
+}
+
+// ── Test 9: FP regression — procedural/short messages don't inflate count ─────
+
+console.log('\n[Test 9] Session dominated by short procedural messages → null');
+{
+  const msgs = makeMessages([
+    'Fix the authentication token refresh flow in the login service module',
+    'ok', 'go ahead', 'on continue', 'yes do that', 'ok on y va', 'commit it',
+  ]);
+  const result = detectTopic(msgs);
+  // Only 1 substantive message survives filtering → < 6 → null.
+  assert('procedural noise filtered out → null', result === null, JSON.stringify(result?.evidence));
+}
+
+// ── Test 10: FP regression — IDE context injections are stripped ──────────────
+
+console.log('\n[Test 10] IDE-context injections do not create transitions → null');
+{
+  const ide = (path, body) =>
+    `<ide_opened_file>The user opened the file ${path} in the IDE.</ide_opened_file>${body}`;
+  const msgs = makeMessages([
+    'Refactor the payment processing pipeline to add idempotency keys per transaction',
+    ide('/src/payments/pipeline.ts', 'The payment pipeline needs idempotency on each transaction retry'),
+    ide('/src/payments/retry.ts', 'Payment retry idempotency keys should persist across transaction attempts'),
+    'The payment transaction idempotency key must survive a pipeline retry sequence',
+    'Payment pipeline idempotency transaction retry key persistence looks correct now',
+    'The payment idempotency transaction pipeline retry keys are consistent finally',
+  ]);
+  const result = detectTopic(msgs);
+  assert('IDE tags stripped, cohesive → null', result === null, JSON.stringify(result?.evidence));
+}
+
+// ── Test 11: True positive — genuine pivot away from the opening objective ────
+
+console.log('\n[Test 11] Genuine wandering session ending far from the start → drift');
+{
+  // Mirrors a real session that wandered: migration → meta-doubt → product
+  // vision → an unrelated bug → a new feature. Each sub-discussion brings its
+  // own vocabulary disconnected from everything before, and the final message
+  // shares nothing with the opening — the hallmark of genuine drift.
+  const msgs = makeMessages([
+    'Migrate the monolith into the modular suite architecture with separate packages',
+    'The modular suite needs each package versioned and published independently first',
+    'Actually I doubt this whole approach adds value are we overcomplicating everything',
+    'I want your honest opinion on the product vision and where the tool should head',
+    'Let us pause and instead investigate why projects cannot open their configuration',
+    'The bootstrap plan validation should happen before writing any files to disk',
+  ]);
+  const result = detectTopic(msgs);
+  assert('genuine wandering fires', result !== null, JSON.stringify(result?.evidence));
+  assert('type is topic', result?.type === 'topic');
+  console.log('   transitions:', result?.evidence?.transitionsDetected, '| endOpening:', result?.evidence?.endOpeningConnection?.toFixed(3));
+}
+
+// ── Test 12: Real session from this repo ──────────────────────────────────────
+
+console.log('\n[Test 12] Real session from this repo');
 {
   const projectDir = join(homedir(), '.claude', 'projects', '-Users-thomasailleaume-Perso-timetrackerAgent');
   if (!existsSync(projectDir)) {
@@ -318,7 +406,7 @@ console.log('\n[Test 8] Real session from this repo');
   } else {
     const files = readdirSync(projectDir)
       .filter(f => f.endsWith('.jsonl'))
-      .map(f => ({ f, size: (/** @type {any} */ (readFileSync)(join(projectDir, f))).length }))
+      .map(f => ({ f, size: readFileSync(join(projectDir, f)).length }))
       .sort((a, b) => b.size - a.size);
 
     if (files.length === 0) {
@@ -327,15 +415,9 @@ console.log('\n[Test 8] Real session from this repo');
       const { f } = files[0];
       const sessionId = f.replace('.jsonl', '');
       console.log(`  Using session: ${sessionId}`);
-
       const raw = readFileSync(join(projectDir, f), 'utf8');
       const userMessages = parseUserMessages(raw);
       console.log(`  Total user messages: ${userMessages.length}`);
-
-      if (userMessages.length > 0) {
-        console.log(`  First message preview: "${userMessages[0].text.slice(0, 80).replace(/\n/g, ' ')}…"`);
-      }
-
       const result = detectTopic(userMessages);
       if (result === null) {
         console.log('  ~ no topic drift detected (expected for a focused session)');

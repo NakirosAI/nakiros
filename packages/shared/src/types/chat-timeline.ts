@@ -31,3 +31,11 @@ export type ChatTimelineEntry =
  * kinds. Aliased rather than re-defined so the type tracks `ChatTimelineEntry`.
  */
 export type AuditTimelineEntry = ChatTimelineEntry;
+
+/**
+ * Bootstrap run conversation timeline. Same rationale as
+ * {@link AuditTimelineEntry} — the plan itself streams via the separate
+ * `plan_updated` event (`BootstrapRunEvent`), so the chat view only needs
+ * the three universal kinds.
+ */
+export type BootstrapTimelineEntry = ChatTimelineEntry;

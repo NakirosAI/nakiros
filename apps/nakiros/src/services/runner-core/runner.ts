@@ -11,6 +11,10 @@ import { persistRunJson, loadRunJson } from './run-store.js';
 /**
  * Shared lifecycle status for any run kind. Audit / fix / create use the
  * narrow subset (no `queued` / `grading`); eval extends with both.
+ * `awaiting_approval` / `executing` are bootstrap-only additions (plan
+ * review and post-approval dispatch have no equivalent in other runners) —
+ * same pattern as eval's `grading`, added here so `BootstrapRunStatus`
+ * stays assignable to this generic union.
  */
 export type RunStatus =
   | 'queued'
@@ -18,6 +22,8 @@ export type RunStatus =
   | 'running'
   | 'waiting_for_input'
   | 'grading'
+  | 'awaiting_approval'
+  | 'executing'
   | 'completed'
   | 'failed'
   | 'stopped';

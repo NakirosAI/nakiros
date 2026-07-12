@@ -1214,6 +1214,26 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         ? '- IMPORTANT: communique avec l\'utilisateur en français. Toutes tes questions, résumés, demandes de clarification et messages de progression doivent être en français.'
         : '- IMPORTANT: communicate with the user in English. All your questions, summaries, clarifications and progress updates must be in English.';
 
+    // The expert SKILL.mds locate the Nakiros artefacts (cross-entity
+    // snapshot, previous audit report, outputs/) relative to the shell cwd —
+    // but when a git worktree is used as the subprocess cwd, those artefacts
+    // live in the Nakiros workdir. Spell out absolute paths so the agent
+    // never resolves them against the wrong root.
+    const nonSkillArtefactLines = (command: 'fix' | 'create'): string[] => {
+      const lines: string[] = [
+        `- Cross-entity snapshot (absolute path): ${join(workdir, 'dot-claude-snapshot.json')} — read THIS file; do NOT look for a cwd-relative \`dot-claude-snapshot.json\`.`,
+        `- Write ALL run outputs (audit-report.md, fix-targets.jsonl, fix-findings.jsonl, …) under \`${join(workdir, 'outputs')}/\` — never relative to your shell cwd.`,
+      ];
+      if (command === 'fix') {
+        lines.push(
+          extras.latestAuditFile
+            ? `- Latest audit report (your fix targets): ${join(workdir, 'outputs', 'audit-report.md')}`
+            : `- No archived audit exists for this target — skip the audit-report input instead of searching the filesystem for it.`,
+        );
+      }
+      return lines;
+    };
+
     // Non-interactive apply-recommendation: skip the interactive first-turn
     // protocol entirely and embed the <apply-recommendation> block directly
     // so the expert skill executes without waiting for user input.
@@ -1258,6 +1278,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         '',
         `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
         `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+        ...nonSkillArtefactLines(command),
       ].join('\n');
     }
 
@@ -1303,6 +1324,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           ? `- An existing copy of the rule was seeded at ./draft.md. Read it first, then edit in place.`
           : `- ./draft.md does not exist yet — create it with the generated content.`,
         `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.md\` as the target instead of any \`.claude/rules/\` path.`,
+        ...nonSkillArtefactLines(command),
       ].join('\n');
     }
 
@@ -1348,6 +1370,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           ? `- An existing copy of the subagent was seeded at ./draft.md. Read it first, then edit in place.`
           : `- ./draft.md does not exist yet — create it with the generated content.`,
         `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.md\` as the target instead of any \`.claude/agents/\` path.`,
+        ...nonSkillArtefactLines(command),
       ].join('\n');
     }
 
@@ -1387,6 +1410,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY the workdir-relative file \`./draft.json\` (absolute: ${draftPath}). This file contains ONLY the "hooks" sub-block extracted from settings.json — it does NOT contain the full settings file. Write valid JSON representing the hooks block. Nakiros will merge it back into settings.json (preserving all other keys: permissions, env, model, etc.) when the user clicks "Terminer".`,
         `- ./draft.json was pre-seeded with the current hooks block (or "{}" if none existed). Read it first, then edit in place.`,
         `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.json\` as the target hooks block instead of any \`.claude/settings.json\` path.`,
+        ...nonSkillArtefactLines(command),
       ].join('\n');
     }
 
@@ -1430,6 +1454,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Edit ONLY the workdir-relative file \`./draft.json\` (absolute: ${draftPath}). This file contains ONLY the "permissions" sub-block extracted from ${filename} — it does NOT contain the full settings file. Write valid JSON representing the permissions block. Nakiros will merge it back into ${filename} (preserving all other keys: hooks, env, model, etc.) when the user clicks "Terminer".`,
         `- ./draft.json was pre-seeded with the current permissions block (or "{}" if none existed). Read it first, then edit in place.`,
         `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.json\` as the target permissions block instead of any \`.claude/${filename}\` path.`,
+        ...nonSkillArtefactLines(command),
       ].join('\n');
     }
 
@@ -1470,6 +1495,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         '',
         `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
         `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+        ...nonSkillArtefactLines(command),
       ].join('\n');
     }
 
@@ -1515,6 +1541,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           ? `- An existing copy of the style was seeded at ./draft.md. Read it first, then edit in place.`
           : `- ./draft.md does not exist yet — create it with the generated content.`,
         `- Follow the procedure for the "${command}" command in your SKILL.md, but treat \`./draft.md\` as the target instead of any \`.claude/output-styles/\` path.`,
+        ...nonSkillArtefactLines(command),
       ].join('\n');
     }
 

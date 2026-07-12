@@ -14,6 +14,7 @@ import OutputStylesScreen from '../../views/OutputStylesScreen';
 import PermissionsScreen from '../../views/PermissionsScreen';
 import McpScreen from '../../views/McpScreen';
 import HooksScreen from '../../views/HooksScreen';
+import BootstrapScreen from '../../views/BootstrapScreen';
 import ClaudeMdScreen from '../../views/ClaudeMdScreen';
 import MarketplaceScreen from '../../views/MarketplaceScreen';
 import RunScreen from '../../views/RunScreen';
@@ -70,7 +71,46 @@ export default function NewShell({
     openTab({ kind: 'home', label: 'Home' });
   };
 
+  /**
+   * Bootstrap runs never open as a `kind: 'run'` tab — their status set
+   * (`awaiting_approval` / `executing`) and `plan` field don't fit the
+   * generic `RunScreen`/`AuditLikeRunScreen` pipeline every other kind
+   * shares (see `lib/run-api.ts`'s `AuditLikeRun` doc comment). Clicking a
+   * bootstrap row in the `RunDock` instead focuses (or opens) that
+   * project's tab on the `'bootstrap'` sidebar view, which owns the run's
+   * entire lifecycle standalone (`BootstrapScreen.tsx`).
+   *
+   * Project lookup tries `target.projectId` first, then falls back to
+   * matching `target.projectPath` — a project can be re-scanned and get a
+   * fresh id while its path stays stable, so the fallback covers that
+   * skew. If neither resolves (project genuinely gone), this is a no-op
+   * rather than falling through to the generic `kind: 'run'` tab below:
+   * that tab would render `AuditLikeRunScreen` with no approve panel and
+   * a raw `'bootstrap'` header, which is worse than doing nothing. A
+   * `console.warn` is the extent of the feedback — the shell has no
+   * lightweight toast/notification primitive to reuse for this today.
+   */
   const handleOpenRun = (run: AgentRun) => {
+    if (run.kind === 'bootstrap' && run.target.type === 'bootstrap') {
+      const target = run.target;
+      const project =
+        projects.find((p) => p.id === target.projectId) ??
+        projects.find((p) => p.projectPath === target.projectPath);
+      if (project) {
+        const id = openTab({ kind: 'project', projectId: project.id, label: project.name, view: 'bootstrap' });
+        // `openTab` only sets `view` when it mints a *new* tab — if the
+        // project was already open on another view (e.g. Overview),
+        // force-navigate it to Bootstrap so the run is actually visible.
+        updateTab(id, { view: 'bootstrap', skillId: null });
+        return;
+      }
+      console.warn(
+        '[shell] could not resolve the project for bootstrap run',
+        run.id,
+        '— neither projectId nor projectPath matched an open project; not opening a tab.',
+      );
+      return;
+    }
     openTab({ kind: 'run', runId: run.id, runKind: run.kind, label: run.title });
   };
 
@@ -242,6 +282,9 @@ export default function NewShell({
                       onOpenRunTab={handleOpenRunByIds}
                     />
                   )}
+                  {view === 'bootstrap' && (
+                    <BootstrapScreen key={project.id} project={project} />
+                  )}
                   {view === 'recs' && (
                     <RecsScreen
                       key={project.id}
@@ -270,6 +313,7 @@ export default function NewShell({
                     view !== 'mcp' &&
                     view !== 'hooks' &&
                     view !== 'claudeMd' &&
+                    view !== 'bootstrap' &&
                     view !== 'recs' &&
                     view !== 'settings' && (
                       <ComingSoon view={view} onBack={() => setView('overview')} />

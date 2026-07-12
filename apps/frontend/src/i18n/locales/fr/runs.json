@@ -15,7 +15,8 @@
     "audit": "Audit",
     "fix": "Fix",
     "create": "Créer un skill",
-    "edit": "Edit"
+    "edit": "Edit",
+    "bootstrap": "Bootstrap du projet"
   },
   "unsupported": {
     "title": "Bientôt disponible",

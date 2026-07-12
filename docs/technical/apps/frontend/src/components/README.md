@@ -6,6 +6,7 @@ React components consumed by the views layer. Top-level files are app-shell piec
 
 ## Subfolders
 
+- [bootstrap/](./bootstrap/README.md) — Subcomponents for the Project `.claude` Bootstrap screen (plan-review proposal cards + approval panel + discuss-step composer).
 - [conversations/](./conversations/README.md) — Components powering the per-conversation diagnostic panel and the project-scoped Insights aggregation.
 - [markdown/](./markdown/README.md) — Reusable markdown authoring components (MarkdownEditor: Milkdown Crepe WYSIWYG + Raw toggle).
 - [dashboard/](./dashboard/README.md) — Shell-level pieces of the project dashboard (error boundary, router).
@@ -14,6 +15,7 @@ React components consumed by the views layer. Top-level files are app-shell piec
 - [fix/](./fix/README.md) — Components specific to the fix/create review flow.
 - [recommendations/](./recommendations/README.md) — Two-column friction-pattern recommendations screen: PatternList, PatternDetail, RecoCard, ApplyRecoModal, RecsScreen.
 - [runs/](./runs/README.md) — Shared component library for every agent-run kind (audit / fix / create / eval).
+- [shell/](./shell/README.md) — The new-design app shell: multi-tab main window, sidebar, topbar, and the cross-kind `RunDock`.
 - [skill/](./skill/README.md) — Components specific to the per-skill view.
 - [ui/](./ui/README.md) — Themed UI primitives shared by every feature view (Tailwind + Radix).
 

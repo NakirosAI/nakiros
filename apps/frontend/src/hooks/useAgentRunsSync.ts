@@ -3,6 +3,8 @@ import type {
   AgentRunStatus,
   AuditRun,
   AuditRunStatus,
+  BootstrapRun,
+  BootstrapRunStatus,
   ClassifyConvoRun,
   ClassifyConvoRunStatus,
   EvalRunStatus,
@@ -44,6 +46,56 @@ const CLASSIFY_CONVO_STATUS_MAP: Record<ClassifyConvoRunStatus, AgentRunStatus> 
   stopped: 'cancelled',
 };
 
+/**
+ * `awaiting_approval` maps to `awaiting_input` — from the dock's point of
+ * view it's the same "the user must act before this run can continue"
+ * state as a chat-style `waiting_for_input`, so it lands in the same
+ * "Waiting for input" group. `executing` maps to `running` — the writer
+ * dispatch runs synchronously as part of approval, so `executing` is
+ * normally a brief transitional state (not something the user needs to
+ * act on) before the run flips to `completed`/`failed`.
+ */
+const BOOTSTRAP_STATUS_MAP: Record<BootstrapRunStatus, AgentRunStatus> = {
+  starting: 'pending',
+  running: 'running',
+  waiting_for_input: 'awaiting_input',
+  awaiting_approval: 'awaiting_input',
+  executing: 'running',
+  completed: 'done',
+  failed: 'failed',
+  stopped: 'cancelled',
+};
+
+/**
+ * Adapts a `BootstrapRun` (Project `.claude` Bootstrap,
+ * `docs/redesign/features/project-bootstrap.md`) into the generic
+ * `AgentRun` shape so it surfaces in the topbar `RunDock` like every other
+ * kind. Title is a constant ("Project Bootstrap") rather than
+ * `Bootstrap · <name>` — bootstrap has no per-entity name, it targets the
+ * whole project; `RunDock.resolveTargetLabel` already resolves the
+ * project name from `target.projectId` for display.
+ */
+function bootstrapToAgentRun(run: BootstrapRun): AgentRun {
+  return {
+    id: run.runId,
+    kind: 'bootstrap',
+    title: 'Project Bootstrap',
+    target: {
+      type: 'bootstrap',
+      projectId: run.projectId,
+      projectPath: run.projectPath,
+    },
+    status: BOOTSTRAP_STATUS_MAP[run.status],
+    startedAt: run.startedAt,
+    endedAt: run.finishedAt ?? undefined,
+    capabilities: {
+      canSendMessage: true,
+      canApprove: true,
+      canStop: true,
+    },
+    tokensUsed: run.tokensUsed,
+  };
+}
 
 function classifyConvoToAgentRun(run: ClassifyConvoRun): AgentRun {
   return {
@@ -384,6 +436,50 @@ function groupEvalRuns(runs: SkillEvalRun[]): AgentRun[] {
   return Array.from(batches.values()).map(evalBatchToAgentRun);
 }
 
+// ── Per-family failure isolation ────────────────────────────────────────────
+
+/**
+ * Kinds that have logged a sync failure on the current streak — gates the
+ * `console.warn` below to "once per failure streak" instead of every 2s
+ * poll tick, and is cleared as soon as that family's call succeeds again
+ * (logging a one-line recovery notice) so a later, *different* outage on
+ * the same family still gets reported.
+ */
+const failedFamilies = new Set<string>();
+
+/**
+ * Applies `onOk` to a settled `Promise.allSettled` result for one run
+ * family, or logs (once-ish) and skips it on rejection — used so a single
+ * failing `window.nakiros.listAll*` call (e.g. an old daemon in service
+ * mode that predates the `bootstrap:*` IPC family during a version skew)
+ * can't take down sync for every other kind. Before this helper, all
+ * seven calls below were a single `Promise.all`: one rejection threw out
+ * of the polled callback before any `agentRunStore.syncKind` call ran,
+ * so *nothing* synced — repeating every 2s as an unhandled rejection.
+ *
+ * Deliberately does NOT call `syncKind(kind, [])` on failure — that would
+ * make the store think the family now has zero runs and flip any
+ * in-flight one to `done`, which is worse than just leaving last-known
+ * state alone until the next successful tick.
+ */
+function syncFamily<T>(
+  kind: string,
+  result: PromiseSettledResult<T[]>,
+  onOk: (data: T[]) => void,
+): void {
+  if (result.status === 'fulfilled') {
+    if (failedFamilies.delete(kind)) {
+      console.info(`[useAgentRunsSync] ${kind} sync recovered`);
+    }
+    onOk(result.value);
+    return;
+  }
+  if (!failedFamilies.has(kind)) {
+    failedFamilies.add(kind);
+    console.warn(`[useAgentRunsSync] ${kind} sync failed — leaving its runs as-is until it recovers`, result.reason);
+  }
+}
+
 /**
  * Mount this once at the app shell to keep `agentRunStore` mirrored with
  * the daemon's active runs across every kind. Audit / fix / create map
@@ -401,19 +497,37 @@ export function useAgentRunsSync(): void {
     // completed runs the daemon restored from disk and let the user
     // dismiss them once acknowledged. The store filters out anything in
     // its dismissed-ids localStorage entry on every upsert.
-    const [audits, fixes, creates, edits, evals, classifyConvos] = await Promise.all([
+    //
+    // `allSettled` (not `all`) + per-family `syncFamily` below: each of
+    // the seven kinds syncs independently, so one rejecting call never
+    // stops the other six from updating (see `syncFamily`'s doc comment).
+    const [auditsR, fixesR, createsR, editsR, evalsR, classifyConvosR, bootstrapsR] = await Promise.allSettled([
       window.nakiros.listAllAuditRuns(),
       window.nakiros.listAllFixRuns(),
       window.nakiros.listAllCreateRuns(),
       window.nakiros.listAllEditRuns(),
       window.nakiros.listEvalRuns(),
       window.nakiros.listAllClassifyConvoRuns(),
+      window.nakiros.listAllBootstrapRuns(),
     ]);
-    agentRunStore.syncKind('audit', audits.map((r) => auditLikeToAgentRun(r, 'audit', 'Audit')));
-    agentRunStore.syncKind('fix', fixes.map((r) => auditLikeToAgentRun(r, 'fix', 'Fix')));
-    agentRunStore.syncKind('create', creates.map((r) => auditLikeToAgentRun(r, 'create', 'Create')));
-    agentRunStore.syncKind('edit', edits.map((r) => auditLikeToAgentRun(r, 'edit', 'Edit')));
-    agentRunStore.syncKind('eval', groupEvalRuns(evals));
-    agentRunStore.syncKind('classify-convo', classifyConvos.map(classifyConvoToAgentRun));
+    syncFamily('audit', auditsR, (audits) =>
+      agentRunStore.syncKind('audit', audits.map((r) => auditLikeToAgentRun(r, 'audit', 'Audit'))),
+    );
+    syncFamily('fix', fixesR, (fixes) =>
+      agentRunStore.syncKind('fix', fixes.map((r) => auditLikeToAgentRun(r, 'fix', 'Fix'))),
+    );
+    syncFamily('create', createsR, (creates) =>
+      agentRunStore.syncKind('create', creates.map((r) => auditLikeToAgentRun(r, 'create', 'Create'))),
+    );
+    syncFamily('edit', editsR, (edits) =>
+      agentRunStore.syncKind('edit', edits.map((r) => auditLikeToAgentRun(r, 'edit', 'Edit'))),
+    );
+    syncFamily('eval', evalsR, (evals) => agentRunStore.syncKind('eval', groupEvalRuns(evals)));
+    syncFamily('classify-convo', classifyConvosR, (classifyConvos) =>
+      agentRunStore.syncKind('classify-convo', classifyConvos.map(classifyConvoToAgentRun)),
+    );
+    syncFamily('bootstrap', bootstrapsR, (bootstraps) =>
+      agentRunStore.syncKind('bootstrap', bootstraps.map(bootstrapToAgentRun)),
+    );
   }, 2000);
 }

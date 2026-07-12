@@ -29,6 +29,30 @@ export interface CreateSandboxResult {
 }
 ```
 
+### `type RunWorktreeKind`
+
+Run-kind labels accepted by `createRunWorktree`. Matches the prefixes used in run ids so the sandbox label is `<kind>-<runId>` and `sweepOrphanSandboxes` reclaims them automatically (it sweeps the entire `~/.nakiros/sandboxes/` directory at boot).
+
+```ts
+export type RunWorktreeKind = 'fix' | 'audit' | 'eval' | 'create' | 'edit' | 'bootstrap';
+```
+
+### `function createRunWorktree`
+
+Create a detached worktree for a fix / audit / create / edit / bootstrap run — the canonical way for non-eval runners to obtain a worktree-backed sandbox at `~/.nakiros/sandboxes/<kind>-<runId>/` with remotes neutralised. The label format `<kind>-<runId>` is intentionally distinct from eval sandboxes (`eval-<runId>`) so boot-time logs are easier to read. `sweepOrphanSandboxes` does NOT distinguish labels — it sweeps everything under `SANDBOX_ROOT`, so orphan run-worktrees are cleaned up on the next daemon start just like eval sandboxes.
+
+```ts
+export function createRunWorktree(gitRoot: string, runId: string, kind: RunWorktreeKind): CreateSandboxResult
+```
+
+### `function pruneWorktrees`
+
+Run `git worktree prune` on a git root to remove stale `.git/worktrees/` entries whose directories no longer exist. Safe to call after the sandbox directories have already been deleted (e.g. at boot sweep). Never throws.
+
+```ts
+export function pruneWorktrees(gitRoot: string): void
+```
+
 ### `function createEvalSandbox`
 
 Create a detached worktree of `gitRoot` at HEAD. The label is used as the sandbox directory name under `~/.nakiros/sandboxes/`. Force-removes any existing directory at the target path. Neutralises remotes inside the worktree.

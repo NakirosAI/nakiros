@@ -14,6 +14,7 @@ import type {
 } from '@nakiros/shared';
 
 import {
+  buildChatTimeline,
   cleanupRunWorkdir,
   computeSessionUsage,
   createRunner,
@@ -21,9 +22,7 @@ import {
   destroyEvalSandbox,
   encodeProjectPath,
   findGitRoot,
-  formatTool,
   isActiveRunStatus,
-  parseSessionBlocks,
   persistRunJson,
   type RehydrateResult,
   type RunEntry,
@@ -409,6 +408,12 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       }
     }
 
+    // The expert SKILL.mds read `dot-claude-snapshot.json` at the shell cwd
+    // root. When a worktree is in use it IS the cwd — writing to workdir
+    // would leave the snapshot invisible to the agent (same convention as
+    // bootstrap-runner and the outputs/ handling above).
+    const snapshotRoot = worktreePath ?? workdir;
+
     // For CLAUDE.md audits, write a cross-entity snapshot so the expert agent
     // can detect coherence issues across the full .claude/ configuration.
     if (req.claudemdTarget) {
@@ -418,7 +423,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.claudemdTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -437,7 +442,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.rulesTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -456,7 +461,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.subagentsTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -475,7 +480,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.hooksTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -494,7 +499,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.permissionsTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -513,7 +518,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.mcpTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -532,7 +537,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.outputStylesTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -1025,43 +1030,10 @@ export function getAuditTimeline(runId: string): AuditTimelineEntry[] {
   const { sessionId, workdir } = entry.run;
   if (!sessionId) return [];
 
-  const out: AuditTimelineEntry[] = [];
-
   // Claude Code indexes sessions by subprocess cwd. When a worktree was used,
   // that cwd was run.cwd (the worktree path), not workdir.
   const sessionBase = entry.run.cwd ?? workdir;
-
-  for (const block of parseSessionBlocks(sessionBase, sessionId)) {
-    if (block.kind === 'user_text') {
-      out.push({ kind: 'user', ts: block.ts, text: block.text });
-      continue;
-    }
-    if (block.kind === 'assistant_text') {
-      out.push({ kind: 'assistant_text', ts: block.ts, text: block.text });
-      continue;
-    }
-    // Assistant tool_use: skip Writes to the live-progress artefacts (already
-    // surfaced in the sidebar). Other tools — Bash, Read, the Write that
-    // produces `audits/audit-*.md`, etc. — render as the generic tool box.
-    if (
-      (block.name === 'Write' || block.name === 'Edit' || block.name === 'MultiEdit') &&
-      isAuditProgressPath(block.input, entry.run.cwd ?? workdir)
-    ) {
-      continue;
-    }
-    out.push({
-      kind: 'tool',
-      ts: block.ts,
-      name: block.name,
-      display: formatTool(block.name, block.input),
-    });
-  }
-
-  // Stable chronological order — `parseSessionBlocks` returns file order,
-  // which is already chronological in practice, but a sort defends against
-  // any out-of-order writes during streaming.
-  out.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
-  return out;
+  return buildChatTimeline(sessionBase, sessionId, isAuditProgressPath);
 }
 
 /**

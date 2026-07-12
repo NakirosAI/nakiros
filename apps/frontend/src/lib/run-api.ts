@@ -2,6 +2,8 @@ import type {
   AgentRunKind,
   AuditRun,
   AuditRunEvent,
+  BootstrapRun,
+  BootstrapRunEvent,
   ClassifyConvoRun,
   ClassifyConvoRunEvent,
   RecommendationAnalyzeRun,
@@ -27,9 +29,18 @@ import type { RunStateApi } from '../hooks/useRunState';
  * `BaseRun`-shaped object — fields specific to one kind (audit's
  * `manifest` / `checkResults` / `targets`, classify-convo's
  * `digestPath`) are narrowed at the call site by `runKind`.
+ *
+ * `BootstrapRun` is included so `getRunAPI('bootstrap')` can return a real
+ * `stop` action for the topbar `RunDock` (its stop button is gated on
+ * `getRunAPI(kind) !== null`) — this does NOT mean bootstrap runs flow
+ * through the generic `RunScreen`/`AuditLikeRunScreen` UI. They don't:
+ * `BootstrapScreen.tsx` owns their entire lifecycle standalone (its own
+ * `useRunState` wiring, plan/approval panel) and `NewShell.handleOpenRun`
+ * routes a `kind: 'bootstrap'` `AgentRun` to the project's Bootstrap view
+ * instead of ever opening a `kind: 'run'` tab for it.
  */
-export type AuditLikeRun = AuditRun | ClassifyConvoRun | RecommendationAnalyzeRun;
-export type AuditLikeEvent = AuditRunEvent['event'] | ClassifyConvoRunEvent['event'] | RecommendationAnalyzeRunEvent['event'];
+export type AuditLikeRun = AuditRun | ClassifyConvoRun | RecommendationAnalyzeRun | BootstrapRun;
+export type AuditLikeEvent = AuditRunEvent['event'] | ClassifyConvoRunEvent['event'] | RecommendationAnalyzeRunEvent['event'] | BootstrapRunEvent['event'];
 
 export interface RunUserActions {
   /** Send a free-form message while the run is `waiting_for_input`. */
@@ -152,6 +163,25 @@ export function getRunAPI(kind: AgentRunKind): KindRunAPI | null {
           stop: (id) => window.nakiros.stopRecommendationAnalyze(id),
           // No finish step — runner self-completes after the single turn.
           finish: () => Promise.resolve(),
+        },
+        readReport: null,
+      };
+    case 'bootstrap':
+      // Exposed so the RunDock's generic stop button works on an active
+      // bootstrap run. `BootstrapScreen.tsx` never calls `getRunAPI` itself —
+      // it talks to `window.nakiros.*Bootstrap*` directly, since its status
+      // set (`awaiting_approval` / `executing`) and its `plan` field don't
+      // fit the generic RunScreen pipeline this dispatcher otherwise feeds.
+      return {
+        state: {
+          getRun: (id) => window.nakiros.getBootstrapRun(id),
+          getBufferedEvents: (id) => window.nakiros.getBootstrapBufferedEvents(id),
+          onEvent: window.nakiros.onBootstrapEvent,
+        },
+        actions: {
+          sendUserMessage: (id, msg) => window.nakiros.sendBootstrapUserMessage(id, msg),
+          stop: (id) => window.nakiros.stopBootstrap(id),
+          finish: (id) => window.nakiros.finishBootstrap(id),
         },
         readReport: null,
       };

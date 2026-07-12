@@ -20,6 +20,7 @@ Shared TypeScript types consumed by the daemon, the frontend, and the landing. E
 - [installer.ts](./installer.md) — Persisted workspace record types stored under `~/.nakiros/`.
 - [onboarding.ts](./onboarding.md) — Editor detection + install-progress types driving the `onboarding:*` IPC channels.
 - [preferences.ts](./preferences.md) — App-level preference types (theme, language, agent provider) plus the default MCP daemon URL.
+- [project-bootstrap.ts](./project-bootstrap.md) — Types for the project `.claude` Bootstrap feature: the global configuration plan and the interactive plan → discuss → approve → execute runner.
 - [project.ts](./project.md) — Core shared types: project scanning, conversation analysis, skills, eval suite/run, audit run, fix benchmarks, dashboard stats.
 - [server.ts](./server.md) — Ambient-context types (`RepoContext`, `WorkspaceContext`) populated by the context-generation workflow.
 - [skill-diff.ts](./skill-diff.md) — Shapes for reviewing the diff between a skill's on-disk state and an in-progress fix/create edit.

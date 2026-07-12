@@ -5,6 +5,74 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] — 2026-07-12
+
+Reliability pass on `.claude/` entity runs (audit / fix / eval on CLAUDE.md,
+rules, subagents, hooks, permissions, mcp, output-styles) and a large cut to
+drift-detector false positives.
+
+### Fixed
+
+- **"Open an Edit session" (and "Fix run") on the audit-completed screen
+  targeted the bundled expert skill instead of the audited file.** For a
+  `.claude/` entity audit (e.g. a CLAUDE.md), the follow-up button relaunched
+  from the run's bare skill identity — `nakiros-claudemd-expert` — dropping the
+  entity target the run carried, so the Edit/Fix session ran on the expert
+  skill itself. The Edit button in the entity screen's own menu was unaffected
+  (it goes through the entity launcher). Applies to all seven `.claude/`
+  entity types.
+
+- **Eval `with_skill` runs on a project skill reported "I don't know this
+  skill".** Runs isolate execution in a detached git worktree checked out at
+  HEAD, which only contains committed files. A freshly created (still
+  untracked) skill was absent from the sandbox, so the `/skillName` invocation
+  found nothing; a committed-then-modified skill was evaluated against its
+  stale HEAD version.
+
+- **Fix runs on a `.claude/` entity could not find the prior audit report or
+  the cross-entity snapshot and restarted from scratch.** In a git project the
+  Claude subprocess runs with a worktree as `cwd` while Nakiros writes its
+  artefacts to the workdir; the expert SKILL.mds located those artefacts
+  relative to `cwd`, so in worktree runs the agent looked in the sandbox and
+  found nothing. The same mismatch left the fix "targets" sidebar empty
+  (`fix-targets.jsonl` was written relative to `cwd`, not where the watcher
+  polls), and the audit-runner wrote its cross-entity snapshot to the wrong
+  root in worktree runs.
+
+- **The drift detector fired too many false positives.** The stateless
+  detectors recomputed their verdict on every hook call, re-emitting the same
+  banner for many turns; the loop detector flagged normal iterative work (a
+  multi-step fix editing one file, chunked reads of a large file, the same
+  grep across different directories); and the topic detector counted a
+  "transition" on every low-similarity adjacent message pair, so a coherent
+  debugging session made of short follow-ups on one project looked like drift.
+
+### How
+
+- `run-launcher.ts`: new `launchFollowUpForTarget(run, mode)` reads the run's
+  `*Target` and redispatches to the matching entity launcher; the
+  audit-completed screen's Fix/Edit buttons use it and fall back to the
+  identity-based launchers only for plain skill audits.
+- `eval-runner.ts`: new `syncSkillIntoSandbox` (mirror of
+  `removeSkillFromSandbox`) copies the live skill directory into the worktree
+  for `with_skill` runs, excluding `evals/workspace/` and `evals/.fix-temp/`.
+- `fix-runner.ts`: the fix/create first prompts for all seven `.claude/`
+  targets now inject absolute workdir paths for the snapshot, the seeded audit
+  report (or an explicit "skip it" when none exists), and the `outputs/`
+  directory. `audit-runner.ts` writes `dot-claude-snapshot.json` to
+  `worktreePath ?? workdir`.
+- Drift: a new per-session alert gate re-emits only on new/grown signatures
+  (loop) or grown transitions / +6 user messages (topic, context) — killing
+  the repeat spam. The loop detector now counts per turn (not per tool-use),
+  requires a failure signal to flag repeated edits, and keys Read on offset /
+  Grep on path. The topic detector filters procedural noise (short messages,
+  IDE-context injections, slash-command wrappers), counts a transition only
+  when a message is disconnected from the whole accumulated context, and
+  measures how much the final message connects to the opening context instead
+  of comparing the first and last messages. Validated against real sessions:
+  coherent multi-subtopic debugging no longer fires; a genuine pivot still
+  does.
+
 ## [0.14.4] — 2026-05-27
 
 Worktree fixes: newly created skills now show up in the run panel, and

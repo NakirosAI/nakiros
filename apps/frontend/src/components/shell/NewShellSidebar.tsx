@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Bot,
   FileText,
@@ -7,6 +8,7 @@ import {
   Lightbulb,
   MessageSquare,
   Plug,
+  Rocket,
   Settings as SettingsIcon,
   ShieldCheck,
   Sliders,
@@ -60,12 +62,22 @@ const CLAUDE_ONLY_PROVIDERS: ProviderType[] = ['claude'];
 export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarProps) {
   const { project } = useProject();
   const provider = project.provider;
+  // Only the "Bootstrap" item is translated here — the rest of this file
+  // predates the i18n rule for this screen and is left untouched to avoid
+  // an unrelated refactor of every existing label in the same change.
+  const { t } = useTranslation('bootstrap');
 
   const allSections: SidebarSection[] = [
     {
       items: [
         { id: 'overview', label: 'Overview', icon: <Home size={18} strokeWidth={2} />, disabled: false },
         { id: 'convs', label: 'Conversations', icon: <MessageSquare size={18} strokeWidth={2} />, disabled: false },
+        {
+          id: 'bootstrap',
+          label: t('sidebar.label', { defaultValue: 'Bootstrap' }),
+          icon: <Rocket size={18} strokeWidth={2} />,
+          disabled: false,
+        },
       ],
     },
     {

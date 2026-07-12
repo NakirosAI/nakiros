@@ -15,7 +15,7 @@ export type { OutputStylesRunMode } from './project.js';
  * on the frontend. New kinds (e.g. `analyze-convo`) extend this union without
  * changing the surrounding contract.
  */
-export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'edit' | 'analyze-convo' | 'classify-convo' | 'recommendation-analyze';
+export type AgentRunKind = 'audit' | 'eval' | 'fix' | 'create' | 'edit' | 'analyze-convo' | 'classify-convo' | 'recommendation-analyze' | 'bootstrap';
 
 /**
  * Lifecycle status surfaced to the UI. Mapped from each runner's native
@@ -162,10 +162,24 @@ export interface OutputStylesRunTarget {
 }
 
 /**
+ * A project-bootstrap-bound target — used by the `bootstrap` kind (the
+ * Project `.claude` Bootstrap feature, see
+ * `docs/redesign/features/project-bootstrap.md`). Project-scoped like
+ * {@link ClaudeMdRunTarget}, but singleton per project and carries no
+ * `mode` — bootstrap isn't reused across audit/fix/create/edit flavors,
+ * it's its own self-contained plan → discuss → approve → execute run.
+ */
+export interface BootstrapRunTarget {
+  type: 'bootstrap';
+  projectId: string;
+  projectPath: string;
+}
+
+/**
  * Discriminated union of every supported target shape. New target kinds
  * extend this union when their corresponding agent-run kind ships.
  */
-export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget | PermissionsRunTarget | McpRunTarget | OutputStylesRunTarget;
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget | PermissionsRunTarget | McpRunTarget | OutputStylesRunTarget | BootstrapRunTarget;
 
 /**
  * Kind-specific opaque payload riding alongside an `AgentRun`. The store

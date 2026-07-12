@@ -3,6 +3,7 @@ import {
   Brain,
   FlaskConical,
   Plus,
+  Rocket,
   ShieldCheck,
   Sparkles,
   Square,
@@ -339,6 +340,11 @@ function kindVisual(kind: AgentRunKind): { Icon: typeof ShieldCheck; color: stri
       return { Icon: Brain, color: 'var(--n-watch)' };
     case 'classify-convo':
       return { Icon: Sparkles, color: 'var(--n-watch)' };
+    case 'bootstrap':
+      // Same icon/color as the sidebar "Bootstrap" nav item and the
+      // BootstrapScreen header — keeps the entity visually consistent
+      // across surfaces.
+      return { Icon: Rocket, color: 'var(--n-accent)' };
     default:
       return { Icon: Sparkles, color: 'var(--n-fg-muted)' };
   }
@@ -390,6 +396,9 @@ function resolveTargetLabel(run: AgentRun, projects: Project[]): string {
     return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
   }
   if (target.type === 'output-styles') {
+    return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
+  }
+  if (target.type === 'bootstrap') {
     return projects.find((p) => p.id === target.projectId)?.name ?? target.projectId;
   }
   switch (target.scope) {

@@ -109,6 +109,71 @@ export async function launchEdit(
 }
 
 /**
+ * Launch a follow-up run (fix / edit) that preserves the originating run's
+ * `.claude/` entity target — CLAUDE.md, rule, subagent, hooks, permissions,
+ * MCP, or output style. Without this, relaunching from the run's bare skill
+ * identity would start the run on the bundled expert skill itself (e.g. an
+ * edit session on `nakiros-claudemd-expert` instead of the project CLAUDE.md).
+ *
+ * Returns `false` when the run carries no `*Target` (plain skill runs) so the
+ * caller can fall back to the identity-based {@link launchFix} / {@link launchEdit}.
+ */
+export async function launchFollowUpForTarget(
+  run: AuditRun,
+  mode: 'fix' | 'edit',
+  openRunTab: OpenRunTabCallback,
+): Promise<boolean> {
+  if (run.claudemdTarget) {
+    const t = run.claudemdTarget;
+    await launchClaudemd({ projectId: t.projectId, projectPath: t.projectPath, mode }, openRunTab);
+    return true;
+  }
+  if (run.rulesTarget) {
+    const t = run.rulesTarget;
+    await launchRules(
+      { projectId: t.projectId, projectPath: t.projectPath, ruleName: t.ruleName, mode },
+      openRunTab,
+    );
+    return true;
+  }
+  if (run.subagentsTarget) {
+    const t = run.subagentsTarget;
+    await launchSubagents(
+      { projectId: t.projectId, projectPath: t.projectPath, subagentName: t.subagentName, mode },
+      openRunTab,
+    );
+    return true;
+  }
+  if (run.hooksTarget) {
+    const t = run.hooksTarget;
+    await launchHooks({ projectId: t.projectId, projectPath: t.projectPath, mode }, openRunTab);
+    return true;
+  }
+  if (run.permissionsTarget) {
+    const t = run.permissionsTarget;
+    await launchPermissions(
+      { projectId: t.projectId, projectPath: t.projectPath, scope: t.scope, mode },
+      openRunTab,
+    );
+    return true;
+  }
+  if (run.mcpTarget) {
+    const t = run.mcpTarget;
+    await launchMcp({ projectId: t.projectId, projectPath: t.projectPath, mode }, openRunTab);
+    return true;
+  }
+  if (run.outputStylesTarget) {
+    const t = run.outputStylesTarget;
+    await launchOutputStyles(
+      { projectId: t.projectId, projectPath: t.projectPath, styleName: t.styleName, mode },
+      openRunTab,
+    );
+    return true;
+  }
+  return false;
+}
+
+/**
  * Start an audit / fix / create run that targets the project-root `./CLAUDE.md`
  * via the bundled `nakiros-claudemd-expert`. Reuses the same `startAudit` /
  * `startFix` / `startCreate` IPC channels as skill runs — only the request

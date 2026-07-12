@@ -217,6 +217,42 @@ function removeSkillFromSandbox(sandboxPath: string, skillDir: string, gitRoot: 
   }
 }
 
+/**
+ * For `with_skill` runs the worktree sandbox must contain the CURRENT on-disk
+ * skill, not whatever HEAD had. `git worktree add` checks out committed state
+ * only: a freshly created (still untracked) skill is absent from the sandbox
+ * and a modified one shows up stale — either way the `/skillName` invocation
+ * targets the wrong content (the agent answers "I don't know this skill").
+ * Mirror of {@link removeSkillFromSandbox}: overwrite the skill's subtree in
+ * the sandbox with a copy of the live directory, filtering out
+ * `evals/workspace/` and `evals/.fix-temp/` so past iterations and fix
+ * sessions don't leak into the run (same exclusion as `createTmpSandbox`).
+ */
+function syncSkillIntoSandbox(sandboxPath: string, skillDir: string, gitRoot: string): void {
+  const rel = relative(gitRoot, skillDir);
+  // Defensive: `gitRoot` is derived from `skillDir`, so `rel` should never
+  // escape the root — but a no-op beats copying to a bogus path.
+  if (rel.startsWith('..') || rel === '') return;
+  const targetInSandbox = join(sandboxPath, rel);
+  try {
+    rmSync(targetInSandbox, { recursive: true, force: true });
+    mkdirSync(join(targetInSandbox, '..'), { recursive: true });
+    cpSync(skillDir, targetInSandbox, {
+      recursive: true,
+      filter: (src: string): boolean => {
+        const relSrc = src.slice(skillDir.length).replace(/\\/g, '/');
+        if (relSrc === '/evals/workspace' || relSrc.startsWith('/evals/workspace/')) return false;
+        if (relSrc === '/evals/.fix-temp' || relSrc.startsWith('/evals/.fix-temp/')) return false;
+        return true;
+      },
+    });
+  } catch (err) {
+    console.warn(
+      `[eval-runner] Failed to sync live skill into sandbox (${targetInSandbox}): ${(err as Error).message}`,
+    );
+  }
+}
+
 function copyFixtures(skillDir: string, targetDir: string, fixtureRelPaths: string[]): void {
   for (const relPath of fixtureRelPaths) {
     const src = join(skillDir, relPath);
@@ -648,8 +684,15 @@ export async function startEvalRuns(
       // Baseline isolation for worktrees: physically strip the skill from the
       // sandbox so it can't leak via CLAUDE.md auto-discovery or Read. (Tmp
       // sandboxes already omit the skill entirely when `includeSkill: false`.)
-      if (sandbox.kind === 'git-worktree' && config === 'without_skill') {
-        removeSkillFromSandbox(sandbox.path, skillDir, sandbox.gitRoot);
+      // For with_skill runs, do the opposite: sync the LIVE skill directory
+      // into the worktree — the checkout only has HEAD's version, so an
+      // uncommitted (or modified-since-commit) skill would be missing or stale.
+      if (sandbox.kind === 'git-worktree') {
+        if (config === 'without_skill') {
+          removeSkillFromSandbox(sandbox.path, skillDir, sandbox.gitRoot);
+        } else {
+          syncSkillIntoSandbox(sandbox.path, skillDir, sandbox.gitRoot);
+        }
       }
 
       // Fixtures + permission settings go where the agent will actually run.

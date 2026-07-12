@@ -1,0 +1,45 @@
+{
+  "projectId": "<copied verbatim from dot-claude-snapshot.json>",
+  "projectPath": "<copied verbatim from dot-claude-snapshot.json>",
+  "generatedAt": "<ISO-8601 timestamp, bump on every write>",
+  "summary": "<2-4 sentence cross-entity narrative tying the proposals together>",
+  "usedFrictionDigests": false,
+  "proposals": [
+    {
+      "id": "claudemd:root",
+      "artifactType": "claudemd",
+      "target": "root",
+      "title": "Create project CLAUDE.md",
+      "rationale": "<cite a real package.json/tsconfig/dir-listing fact>",
+      "content": "<full markdown body, no frontmatter>",
+      "status": "pending"
+    },
+    {
+      "id": "rules:<kebab-name>.md",
+      "artifactType": "rules",
+      "target": "<kebab-name>.md",
+      "title": "Add <kebab-name>.md rule",
+      "rationale": "<cite the glob/paths this guidance is scoped to and why>",
+      "content": "---\ndescription: <one line>\npaths:\n  - \"<glob>\"\n---\n\n# <Title>\n\n<body>",
+      "status": "pending"
+    },
+    {
+      "id": "subagent:<name>.md",
+      "artifactType": "subagent",
+      "target": "<name>.md",
+      "title": "Add <name> subagent",
+      "rationale": "<cite the top-level directory this subagent owns and why it's independently ownable>",
+      "content": "---\nname: <name>\ndescription: <one line>\ntools: <space-separated tool list or omit for all>\n---\n\n<system prompt body>",
+      "status": "pending"
+    },
+    {
+      "id": "permission:project",
+      "artifactType": "permission",
+      "target": "project",
+      "title": "Allow the project's real build/test/lint commands",
+      "rationale": "<cite the exact package.json scripts / CI steps found>",
+      "content": "{\"allow\":[\"Bash(pnpm build:*)\"],\"deny\":[]}",
+      "status": "pending"
+    }
+  ]
+}

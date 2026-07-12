@@ -35,6 +35,7 @@ import { outputStylesHandlers } from './output-styles.js';
 import { conversationIngestHandlers } from './conversation-ingest.js';
 import { driftHookHandlers } from './drift-hook.js';
 import { recommendationsHandlers } from './recommendations.js';
+import { bootstrapHandlers } from './bootstrap.js';
 
 /** Signature every IPC handler must implement — takes an arg array, returns a value or promise. */
 export type IpcHandler = (args: unknown[]) => Promise<unknown> | unknown;
@@ -89,5 +90,6 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...conversationIngestHandlers,
     ...driftHookHandlers,
     ...recommendationsHandlers,
+    ...bootstrapHandlers,
   };
 }

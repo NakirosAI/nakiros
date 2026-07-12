@@ -20,14 +20,14 @@
  *   4. Trigger when ALL THREE conditions hold:
  *      - `contextUsageRatio >= CONTEXT_USAGE_THRESHOLD` (≥ 50%)
  *      - `topicMetrics.transitionsDetected >= 1`
- *      - `topicMetrics.firstLastSimilarity < FIRST_LAST_THRESHOLD` (< 20%)
+ *      - `topicMetrics.endOpeningConnection < END_OPENING_THRESHOLD` (< 20%)
  *   5. Severity: `high` when `contextUsageRatio >= HIGH_USAGE_THRESHOLD` (≥ 75%)
- *      OR when transitions ≥ 2 AND firstLastSimilarity < 0.10. `medium` otherwise.
+ *      OR when transitions ≥ 2 AND endOpeningConnection < 0.10. `medium` otherwise.
  *
  * Note: the drift-analyzer.ts ensures this detector is only called when the
  * topic detector did not already fire. The topic detector fires on `transitions
- * >= 2 AND firstLastSimilarity < 0.10`. Context detector triggers on
- * `transitions >= 1 AND firstLastSimilarity < 0.20`, so there is an overlap
+ * >= 2 AND endOpeningConnection < 0.10`. Context detector triggers on
+ * `transitions >= 1 AND endOpeningConnection < 0.20`, so there is an overlap
  * zone where both could fire — prevented by the ordering in the analyzer.
  */
 
@@ -44,11 +44,11 @@ const CONTEXT_USAGE_THRESHOLD = 0.50;
 const HIGH_USAGE_THRESHOLD = 0.75;
 
 /**
- * Minimum Jaccard gap between first and last user message to combine with
- * context pressure. Uses a looser threshold than the topic detector (0.20 vs
- * 0.10) since context pressure itself amplifies the risk.
+ * The final message must connect to the opening context by less than this
+ * fraction to combine with context pressure. Looser than the topic detector
+ * (0.20 vs 0.10) since context pressure itself amplifies the risk.
  */
-const FIRST_LAST_THRESHOLD = 0.20;
+const END_OPENING_THRESHOLD = 0.20;
 
 /** Minimum number of user messages before the detector can fire. */
 const MIN_USER_MESSAGES = 10;
@@ -91,15 +91,15 @@ export function detectContext(
   const topicMetrics = computeTopicMetrics(userMessages);
   if (!topicMetrics) return null;
 
-  const { transitionsDetected, firstLastSimilarity } = topicMetrics;
+  const { transitionsDetected, endOpeningConnection } = topicMetrics;
 
-  if (transitionsDetected < 1 || firstLastSimilarity >= FIRST_LAST_THRESHOLD) {
+  if (transitionsDetected < 1 || endOpeningConnection >= END_OPENING_THRESHOLD) {
     return null;
   }
 
   // Severity.
   const isHighUsage = contextUsageRatio >= HIGH_USAGE_THRESHOLD;
-  const isHighTopic = transitionsDetected >= 2 && firstLastSimilarity < 0.10;
+  const isHighTopic = transitionsDetected >= 2 && endOpeningConnection < 0.10;
   const severity: 'high' | 'medium' = isHighUsage || isHighTopic ? 'high' : 'medium';
 
   const usagePct = Math.round(contextUsageRatio * 100);
@@ -119,7 +119,7 @@ export function detectContext(
       contextWindow,
       userMessageCount: userMessages.length,
       transitionsDetected,
-      firstLastSimilarity,
+      endOpeningConnection,
     },
   };
 }

@@ -43,7 +43,11 @@ nakiros bundled skills (with conflict resolution), Claude global skills,
 plugin skills, eval runner (start/stop/list/feedback/matrix/comparison),
 audit runner, fix runner, create runner, **analyze-convo runner** (start /
 stop / send / finish / list / event subscription — one method per channel
-in the `analyzeConvo:*` IPC group), meta version info, skill agent
-temp files. The browser `Notification` API is wrapped to display run
+in the `analyzeConvo:*` IPC group), **bootstrap runner** (project `.claude`
+Bootstrap plan → discuss → approve → execute lifecycle — start / stop /
+send / `approveBootstrapPlan` / finish / list / timeline / usage / event
+subscription, one method per channel in the `bootstrap:*` IPC group, see
+`docs/redesign/features/project-bootstrap.md`), meta version info, skill
+agent temp files. The browser `Notification` API is wrapped to display run
 completion notifications; clicks emit through `onOpenAgentRunChat`
 listeners.

@@ -57,7 +57,7 @@ read them — Claude Code surfaces the relevant rule for the file at hand.
 ## Validation before closing
 
 ```bash
-pnpm -F nakiros exec tsc --noEmit
+pnpm -F @nakirosai/nakiros exec tsc --noEmit
 pnpm -F @nakiros/frontend exec tsc --noEmit
 pnpm -F @nakiros/landing exec tsc --noEmit
 turbo build

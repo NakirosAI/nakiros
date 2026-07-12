@@ -52,6 +52,7 @@
     "config": "Configuration"
   },
   "config": {
+    "bootstrap": "Bootstrap",
     "rules": "Règles",
     "subagents": "Sous-agents",
     "hooks": "Hooks",

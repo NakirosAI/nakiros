@@ -23,10 +23,10 @@ export interface DaemonServerOptions {
 
 One-shot runtime initialization called at daemon boot:
 - Syncs bundled skills from the ROM into `~/.nakiros/skills/` (and symlinks them under `~/.claude/skills/`) so runners can resolve them.
-- Rehydrates in-flight fix/create runs from `~/.nakiros/tmp-skills/`, audit runs from `~/.nakiros/runs/audit/`, analyze-convo runs from `~/.nakiros/runs/analyze-convo/`, and eval runs by walking every known skill directory (project / bundled / claude-global / plugin scopes — failures are per-skill and logged).
+- Rehydrates in-flight fix/create runs from `~/.nakiros/tmp-skills/`, audit runs from `~/.nakiros/runs/audit/`, analyze-convo runs from `~/.nakiros/runs/analyze-convo/`, bootstrap runs from `~/.nakiros/runs/bootstrap/`, and eval runs by walking every known skill directory (project / bundled / claude-global / plugin scopes — failures are per-skill and logged).
 - Sweeps stray `nakiros-eval-*` skills left by previous eval sessions.
-- Reclaims `~/.claude/projects/*` entries whose workdir has been deleted, preserving entries still referenced by any registered run via `collectLiveProjectEntryNames()` (Nakiros-named orphans only).
-- Drops orphan worktrees from `~/.nakiros/sandboxes/`, preserving sandboxes still referenced by rehydrated `waiting_for_input` eval runs (`getResumableSandboxPaths()`) so the user's "Reprendre" doesn't `--resume` against a directory the sweep just deleted.
+- Reclaims `~/.claude/projects/*` entries whose workdir has been deleted, preserving entries still referenced by any registered run via `collectLiveProjectEntryNames()` (Nakiros-named orphans only; bootstrap runs are protected by both their `cwd` — the worktree, when one exists — and their `workdir`).
+- Drops orphan worktrees from `~/.nakiros/sandboxes/`, preserving sandboxes still referenced by rehydrated `waiting_for_input` eval runs (`getResumableSandboxPaths()`) **and** resumable bootstrap runs (`getResumableBootstrapWorktreePaths()`, unioned into the same keep-set) so the user's "Reprendre" doesn't `--resume` against a directory the sweep just deleted, and a bootstrap run's worktree isn't destroyed out from under it at every reboot. `collectGitRootsFromRuns()` also tracks bootstrap run worktrees for `git worktree prune`.
 
 Safe to call multiple times.
 

@@ -29,3 +29,11 @@ Audit run conversation timeline. Aliased to `ChatTimelineEntry` because audit do
 ```ts
 export type AuditTimelineEntry = ChatTimelineEntry;
 ```
+
+### `BootstrapTimelineEntry`
+
+Bootstrap run conversation timeline. Same rationale as `AuditTimelineEntry` — the plan itself streams via the separate `plan_updated` event (`BootstrapRunEvent`), so the chat view only needs the three universal kinds.
+
+```ts
+export type BootstrapTimelineEntry = ChatTimelineEntry;
+```

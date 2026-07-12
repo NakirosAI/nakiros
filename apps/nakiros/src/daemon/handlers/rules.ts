@@ -7,7 +7,7 @@ import {
   unlinkSync,
 } from 'fs';
 import type { Dirent } from 'fs';
-import { join, normalize, resolve, relative } from 'path';
+import { join, normalize, resolve } from 'path';
 
 import type {
   RulesAuditHistoryEntry,

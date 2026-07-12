@@ -36,12 +36,14 @@ function getSignatureKey(tool, input, hasError) {
     case 'Glob': {
       const pattern = input['pattern'];
       if (!pattern) return null;
-      return { signal: 'grepSamePattern', key: pattern };
+      const path = input['path'] ?? '';
+      return { signal: 'grepSamePattern', key: `${pattern}::${path}` };
     }
     case 'Read': {
       const fp = input['file_path'];
       if (!fp) return null;
-      return { signal: 'readSameFile', key: fp };
+      const offset = input['offset'] ?? 0;
+      return { signal: 'readSameFile', key: `${fp}#${offset}` };
     }
     default:
       return null;
@@ -62,12 +64,19 @@ function detectLoop(allTurns) {
 
   const window = allTurns.slice(-WINDOW_SIZE);
   const counts = new Map();
+  const editErrorFiles = new Set();
+  let windowHasBashError = false;
 
   for (const turn of window) {
+    const seenThisTurn = new Set();
     for (const tu of turn.toolUses) {
+      if (tu.tool === 'Bash' && tu.hasError) windowHasBashError = true;
       const match = getSignatureKey(tu.tool, tu.input, tu.hasError);
       if (!match) continue;
+      if (match.signal === 'editSameFile' && tu.hasError) editErrorFiles.add(match.key);
       const mapKey = `${match.signal}::${match.key}`;
+      if (seenThisTurn.has(mapKey)) continue;
+      seenThisTurn.add(mapKey);
       const existing = counts.get(mapKey);
       if (existing) {
         existing.count++;
@@ -80,9 +89,9 @@ function detectLoop(allTurns) {
   const triggered = [];
   for (const { signal, key, count } of counts.values()) {
     const threshold = SIGNALS[signal].threshold;
-    if (count >= threshold) {
-      triggered.push({ signature: `${SIGNALS[signal].label}:${key}`, count, threshold });
-    }
+    if (count < threshold) continue;
+    if (signal === 'editSameFile' && !editErrorFiles.has(key) && !windowHasBashError) continue;
+    triggered.push({ signature: `${SIGNALS[signal].label}:${key}`, count, threshold });
   }
 
   if (triggered.length === 0) return null;
@@ -127,8 +136,8 @@ function makeTurns(toolUseList) {
   }));
 }
 
-function editTool(filePath) {
-  return { tool: 'Edit', input: { file_path: filePath }, hasError: false, resultContent: '' };
+function editTool(filePath, hasError = false) {
+  return { tool: 'Edit', input: { file_path: filePath }, hasError, resultContent: hasError ? 'String not found' : '' };
 }
 
 function bashTool(command, hasError = false) {
@@ -152,20 +161,20 @@ console.log('\n[Test 1] Fewer than 8 turns → null');
   assert('returns null when < 8 turns', result === null);
 }
 
-// ── Test 2: 5 edits on same file in window of 12 → loop (medium, 5 ≥ 4) ────
+// ── Test 2: 5 edit turns on same file + failure signal → loop (5 ≥ 4) ──────
 
-console.log('\n[Test 2] 5 edits on same file → loop detected');
+console.log('\n[Test 2] 5 edit turns on same file with a bash error → loop detected');
 {
   const list = [
     [editTool('apps/foo/bar.ts')],
     [editTool('apps/other/baz.ts')], // noise
     [editTool('apps/foo/bar.ts')],
-    [bashTool('pnpm build')],        // noise
+    [bashTool('pnpm build', true)],  // failure signal qualifying the edit loop
     [editTool('apps/foo/bar.ts')],
     [readTool('apps/foo/bar.ts')],   // noise (Read, threshold 5 not reached)
     [editTool('apps/foo/bar.ts')],
     [bashTool('git status')],        // noise
-    [editTool('apps/foo/bar.ts')],   // 5th edit on same file
+    [editTool('apps/foo/bar.ts')],   // 5th edit turn on same file
     [readTool('README.md')],
     [bashTool('pnpm lint')],
     [bashTool('ls')],
@@ -178,6 +187,52 @@ console.log('\n[Test 2] 5 edits on same file → loop detected');
     t => t.signature.includes('bar.ts') && t.count === 5 && t.threshold === 4,
   ));
   console.log('   severity:', result?.severity, '| message:', result?.message);
+}
+
+// ── Test 2b: FP regression — successful distinct edits, no failure → null ───
+
+console.log('\n[Test 2b] 5 successful edit turns, no failure in window → null');
+{
+  const list = [
+    [editTool('apps/foo/bar.ts')],
+    [editTool('apps/foo/bar.ts')],
+    [bashTool('pnpm build')],        // build passes
+    [editTool('apps/foo/bar.ts')],
+    [editTool('apps/foo/bar.ts')],
+    [editTool('apps/foo/bar.ts')],
+    [bashTool('pnpm test')],         // tests pass
+    ...Array.from({ length: 5 }, (_, i) => [readTool(`docs/page-${i}.md`)]),
+  ];
+  const turns = makeTurns(list);
+  const result = detectLoop(turns);
+  assert('null for iterative fix without failures', result === null, JSON.stringify(result?.evidence));
+}
+
+// ── Test 2c: FP regression — many edits in ONE turn count once ──────────────
+
+console.log('\n[Test 2c] 4 edits of same file inside one turn + error → count 1 → null');
+{
+  const list = [
+    [editTool('apps/foo/bar.ts'), editTool('apps/foo/bar.ts'), editTool('apps/foo/bar.ts'), editTool('apps/foo/bar.ts')],
+    [bashTool('pnpm build', true)],
+    ...Array(10).fill([bashTool('echo ok')]),
+  ];
+  const turns = makeTurns(list);
+  const result = detectLoop(turns);
+  assert('per-turn dedup keeps count at 1', result === null, JSON.stringify(result?.evidence));
+}
+
+// ── Test 2d: FP regression — chunked reads (different offsets) → null ───────
+
+console.log('\n[Test 2d] 6 chunked reads of same file (offsets) → null');
+{
+  const chunked = Array.from({ length: 6 }, (_, i) => [
+    { tool: 'Read', input: { file_path: 'big.ts', offset: i * 500 }, hasError: false, resultContent: '' },
+  ]);
+  const list = [...chunked, ...Array(6).fill([bashTool('echo ok')])];
+  const turns = makeTurns(list);
+  const result = detectLoop(turns);
+  assert('chunked reads are not a loop', result === null, JSON.stringify(result?.evidence));
 }
 
 // ── Test 3: Only 3 edits → no trigger (threshold is 4) ──────────────────────
@@ -234,11 +289,11 @@ console.log('\n[Test 5] Bash same command without error → null');
   assert('null when bash has no error', result === null);
 }
 
-// ── Test 6: 6 edits on same file → high severity (>50% overshoot) ────────
+// ── Test 6: 12 failing edit turns on same file → high severity (>50% overshoot) ──
 
-console.log('\n[Test 6] 6 edits on same file → high severity');
+console.log('\n[Test 6] 12 failing edit turns on same file → high severity');
 {
-  const list = Array(12).fill([editTool('apps/foo/bar.ts')]);
+  const list = Array(12).fill([editTool('apps/foo/bar.ts', true)]);
   const turns = makeTurns(list);
   const result = detectLoop(turns);
   assert('result is not null', result !== null);

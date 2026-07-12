@@ -5,10 +5,18 @@
  * whether the agent is repeating the same tool actions without making progress.
  *
  * Four signals are tracked over the analysis window:
- *   - Edit/Write/MultiEdit on the same file  → threshold ≥ 4
- *   - Bash same command + error              → threshold ≥ 3 (with stderr)
- *   - Grep/Glob same pattern                 → threshold ≥ 5
- *   - Read same file                         → threshold ≥ 5
+ *   - Edit/Write/MultiEdit on the same file  → threshold ≥ 4 turns
+ *   - Bash same command + error              → threshold ≥ 3 turns (with stderr)
+ *   - Grep/Glob same pattern (+ path)        → threshold ≥ 5 turns
+ *   - Read same file (+ offset)              → threshold ≥ 5 turns
+ *
+ * Counting is per TURN, not per tool-use: a single assistant reply that edits
+ * the same file four times (multi-hunk change) is normal work, not a loop.
+ * Repetition only means "stuck" when it spans turns.
+ *
+ * The edit signal additionally requires a failure signal in the window (a
+ * failed Edit/Write on that file, or any Bash error): N successful, distinct
+ * edits of the same file is the normal shape of an iterative fix, not a loop.
  *
  * If at least one signature exceeds its threshold, a {@link LoopDriftResult}
  * is produced. Severity is `high` when multiple signatures fire simultaneously
@@ -73,12 +81,18 @@ function getSignatureKey(
     case 'Glob': {
       const pattern = input['pattern'] as string | undefined;
       if (!pattern) return null;
-      return { signal: 'grepSamePattern', key: pattern };
+      // Same pattern over different paths is normal exploration — only the
+      // exact same search repeated counts.
+      const path = (input['path'] as string | undefined) ?? '';
+      return { signal: 'grepSamePattern', key: `${pattern}::${path}` };
     }
     case 'Read': {
       const fp = input['file_path'] as string | undefined;
       if (!fp) return null;
-      return { signal: 'readSameFile', key: fp };
+      // Chunked reads of a large file (offset/limit sweeps) are one logical
+      // read, not a loop — keying on offset keeps them distinct.
+      const offset = (input['offset'] as number | undefined) ?? 0;
+      return { signal: 'readSameFile', key: `${fp}#${offset}` };
     }
     default:
       return null;
@@ -89,13 +103,15 @@ function getSignatureKey(
 function formatEvidenceLabel(signal: SignalKey, key: string): string {
   switch (signal) {
     case 'editSameFile':
-      return `modifications de \`${key}\``;
+      return `tours modifiant \`${key}\``;
     case 'bashSameCommandWithError':
       return `exécutions en erreur de \`${key.slice(0, 60)}${key.length > 60 ? '…' : ''}\``;
     case 'grepSamePattern':
-      return `recherches du pattern \`${key}\``;
+      // Key is `pattern::path` — show only the pattern part.
+      return `recherches du pattern \`${key.split('::')[0]}\``;
     case 'readSameFile':
-      return `lectures de \`${key}\``;
+      // Key is `file#offset` — show only the file part.
+      return `lectures de \`${key.replace(/#\d+$/, '')}\``;
   }
 }
 
@@ -127,14 +143,25 @@ export function detectLoop(allTurns: AssistantTurn[]): DriftReport | null {
   // Work on the last WINDOW_SIZE turns only.
   const window = allTurns.slice(-WINDOW_SIZE);
 
-  // Count occurrences for each (signal, key) pair.
+  // Count occurrences for each (signal, key) pair — at most once per turn.
+  // A single reply that edits (or reads, or greps) the same target several
+  // times is one action from the loop point of view, not N.
   const counts = new Map<`${SignalKey}::${string}`, { signal: SignalKey; key: string; count: number }>();
+  // Failure signals used to qualify the edit signal: files whose Edit/Write
+  // errored at least once, and whether any Bash command errored in the window.
+  const editErrorFiles = new Set<string>();
+  let windowHasBashError = false;
 
   for (const turn of window) {
+    const seenThisTurn = new Set<string>();
     for (const tu of turn.toolUses) {
+      if (tu.tool === 'Bash' && tu.hasError) windowHasBashError = true;
       const match = getSignatureKey(tu.tool, tu.input, tu.hasError);
       if (!match) continue;
+      if (match.signal === 'editSameFile' && tu.hasError) editErrorFiles.add(match.key);
       const mapKey = `${match.signal}::${match.key}` as const;
+      if (seenThisTurn.has(mapKey)) continue;
+      seenThisTurn.add(mapKey);
       const existing = counts.get(mapKey);
       if (existing) {
         existing.count++;
@@ -148,13 +175,17 @@ export function detectLoop(allTurns: AssistantTurn[]): DriftReport | null {
   const triggered: TriggeredSignature[] = [];
   for (const { signal, key, count } of counts.values()) {
     const threshold = SIGNALS[signal].threshold;
-    if (count >= threshold) {
-      triggered.push({
-        signature: `${SIGNALS[signal].label}:${key}`,
-        count,
-        threshold,
-      });
+    if (count < threshold) continue;
+    // Repeated successful edits with no failure in sight is the normal shape
+    // of an iterative multi-step change — only alert when something failed.
+    if (signal === 'editSameFile' && !editErrorFiles.has(key) && !windowHasBashError) {
+      continue;
     }
+    triggered.push({
+      signature: `${SIGNALS[signal].label}:${key}`,
+      count,
+      threshold,
+    });
   }
 
   if (triggered.length === 0) return null;

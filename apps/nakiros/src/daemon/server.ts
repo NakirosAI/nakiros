@@ -51,6 +51,7 @@ import {
   startWatcher as startConversationIngestWatcher,
 } from '../services/conversation-ingest/index.js';
 import { analyzeDrift, type DriftType } from '../services/drift-analyzer.js';
+import { gateDriftAlert } from '../services/drift/alert-gate.js';
 import {
   buildDriftHookDiff,
   getDriftHookStatus,
@@ -344,7 +345,10 @@ export async function createDaemonServer(opts: DaemonServerOptions = {}): Promis
             ? { force: force as DriftType }
             : undefined;
         const drift = await analyzeDrift(session, opts);
-        return { drift };
+        // Per-session gate: without it the stateless detectors re-emit the
+        // same alert on every hook call until the analysis window slides past
+        // the offending turns. Bypassed in force mode (plumbing tests).
+        return { drift: opts ? drift : gateDriftAlert(session, drift) };
       } catch (err) {
         app.log.warn({ err }, '[drift] analyzeDrift threw unexpectedly');
         reply.status(500);

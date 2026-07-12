@@ -7,7 +7,7 @@ Supports recursive discovery of `.md` files under `.claude/output-styles/` (sub-
 Path-traversal is rejected at the handler boundary. Audit history is served from
 `~/.nakiros/<projectId>/output-styles-audits/<encoded-styleName>/`.
 
-**Note:** These channels are distinct from `claudeOutputStyles:*` (Module 3 V2 form editor).
+**Note:** These channels are distinct from `claudeOutputStyles:*` (Module 3 V2 form editor). The path-resolution and write logic behind `outputStyles:save` now live in [`output-styles-writer.ts`](../../services/output-styles-writer.md) (`resolveStylePath`, `writeOutputStyleFile`) — extracted so the bootstrap dispatch (`bootstrap-dispatch.ts`) can reuse the exact same write path instead of forking a variant.
 
 ## IPC channels
 

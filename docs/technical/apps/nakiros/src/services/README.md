@@ -19,6 +19,8 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 - [fix-runner.ts](./fix-runner.md) — Shared fix + create flow with temp workdir isolation. The tmp_skill pattern is load-bearing (eval-against-candidate before sync-back).
 - [comparison-runner.ts](./comparison-runner.md) — A/B/C eval comparison across Haiku / Sonnet / Opus with fingerprint-aware artefact reuse.
 - [analyze-convo-runner.ts](./analyze-convo-runner.md) — Streaming deep-analysis runner promoting the legacy one-shot `runDeepAnalysis` into a first-class agent run via `createRunner`.
+- [bootstrap-runner.ts](./bootstrap-runner.md) — Interactive plan → discuss → approve → execute lifecycle for the Project `.claude` Bootstrap feature; worktree-backed codebase access, optional friction-digest enrichment, delegates execution to `bootstrap-dispatch.ts`.
+- [bootstrap-dispatch.ts](./bootstrap-dispatch.md) — Step-5 execution: writes every approved bootstrap proposal via the matching existing per-entity writer (`claude-md-writer`, `rules-writer`, `subagents-writer`, `output-styles-writer`, `hooks-writer`, `permissions-writer`, `mcp-writer`). No new write path.
 
 ## Readers (skill scopes)
 
@@ -56,6 +58,9 @@ Service layer behind the Nakiros daemon. Each run kind (eval / audit / fix / cre
 - [hooks-audit-history.ts](./hooks-audit-history.md) — Singleton archive of hooks audit reports at `~/.nakiros/<projectId>/hooks-audits/`; list and read helpers for the IPC layer.
 - [mcp-writer.ts](./mcp-writer.md) — Read/write the entire `.mcp.json` project-root file with mtime optimistic-lock; deletes the file when content becomes empty.
 - [mcp-audit-history.ts](./mcp-audit-history.md) — Singleton archive of MCP audit reports at `~/.nakiros/<projectId>/mcp-audits/`; list and read helpers for the IPC layer.
+- [rules-writer.ts](./rules-writer.md) — Raw-content writer for `.claude/rules/<name>.md`; shared by `rules:save` and the bootstrap dispatch.
+- [subagents-writer.ts](./subagents-writer.md) — Raw-content writer for `.claude/agents/<name>.md`; shared by `subagents:save` and the bootstrap dispatch.
+- [output-styles-writer.ts](./output-styles-writer.md) — Raw-content writer for `.claude/output-styles/<name>.md`; shared by `outputStyles:save` and the bootstrap dispatch.
 
 ## App-level + identity
 

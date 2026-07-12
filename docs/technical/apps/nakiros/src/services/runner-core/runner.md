@@ -12,10 +12,11 @@ Kind-agnostic lifecycle backbone for Nakiros runners. The factory `createRunner(
 export type RunStatus =
   | 'queued' | 'starting' | 'running'
   | 'waiting_for_input' | 'grading'
+  | 'awaiting_approval' | 'executing'
   | 'completed' | 'failed' | 'stopped';
 ```
 
-Shared lifecycle status union. Audit / fix / create use the narrow subset (no `queued` / `grading`); eval extends with both — it doesn't run on this factory but the type stays inclusive so a future migration is type-compatible.
+Shared lifecycle status union. Audit / fix / create use the narrow subset (no `queued` / `grading`); eval extends with both — it doesn't run on this factory but the type stays inclusive so a future migration is type-compatible. `awaiting_approval` / `executing` are bootstrap-only additions (plan review and post-approval dispatch have no equivalent in other runners) — same pattern as eval's `grading`, added so `BootstrapRunStatus` stays assignable to this generic union.
 
 ### `interface BaseTurn`
 

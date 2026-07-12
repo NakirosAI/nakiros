@@ -8,7 +8,7 @@ relative paths from `.claude/rules/`. Path-traversal is rejected at the handler 
 Save uses optimistic-lock (mtime). Audit history served from
 `~/.nakiros/<projectId>/rules-audits/<encoded-ruleName>/`.
 
-**Note:** These channels are distinct from `claudeRules:*` (Module 1 V2 form editor).
+**Note:** These channels are distinct from `claudeRules:*` (Module 1 V2 form editor). The path-resolution and write logic behind `rules:save` now live in [`rules-writer.ts`](../../services/rules-writer.md) (`resolveRulePath`, `writeRuleFile`) — extracted so the bootstrap dispatch (`bootstrap-dispatch.ts`) can reuse the exact same write path instead of forking a variant.
 
 ## IPC channels
 

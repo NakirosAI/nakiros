@@ -20,6 +20,7 @@ The tmp_skill pattern (eval/fix/create isolated from the real skill) is load-bea
 - [tool-format.ts](./tool-format.md) — Shared tool-invocation label formatter.
 - [execution-settings.ts](./execution-settings.md) — Writes `.claude/settings.local.json` (allow/deny list, auto-accept edits).
 - [event-log.ts](./event-log.md) — Broadcast + in-memory ring + persistent `events.jsonl` with restore on boot.
+- [chat-timeline-builder.ts](./chat-timeline-builder.md) — Shared `user`/`assistant_text`/`tool` conversation timeline builder, extracted from audit + bootstrap's near-identical implementations.
 
 ### Sandboxing
 - [git-worktree.ts](./git-worktree.md) — Detached-HEAD worktree for skills inside a git repo. Captures `diff.patch` at end-of-run. Neutralises remotes.

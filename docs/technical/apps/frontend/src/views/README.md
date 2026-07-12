@@ -12,6 +12,7 @@ Top-level view components mounted directly by `App.tsx` (boot/onboarding/scan/ho
 
 - [AnalyzeConvoView.tsx](./AnalyzeConvoView.md) — Tabbed overlay (conversation / report) hosting a streaming `analyze-convo` agent run.
 - [AuditView.tsx](./AuditView.md) — Full-screen overlay rendering an in-flight or terminal audit run for a single skill.
+- [BootstrapScreen.tsx](./BootstrapScreen.md) — Project-level entry point for the Project `.claude` Bootstrap feature (plan → discuss → approve → execute).
 - [BundledSkillConflictsView.tsx](./BundledSkillConflictsView.md) — Conflict resolution UI for bundled-skill upgrade collisions.
 - [ConversationsView.tsx](./ConversationsView.md) — Dashboard tab listing every analyzed Claude Code JSONL conversation, ranked health-first.
 - [Dashboard.tsx](./Dashboard.md) — Top-level dashboard shell with project tabs and sub-route sidebar.
@@ -24,5 +25,6 @@ Top-level view components mounted directly by `App.tsx` (boot/onboarding/scan/ho
 - [PluginSkillsView.tsx](./PluginSkillsView.md) — Full-screen view for skills installed by Claude Code plugins.
 - [ProjectOverview.tsx](./ProjectOverview.md) — Dashboard "Overview" tab aggregating conversation analyses into health signals.
 - [RecommendationsView.tsx](./RecommendationsView.md) — Placeholder dashboard tab for the upcoming Insights / proposal-engine surface.
+- [RunScreen.tsx](./RunScreen.md) — Full-screen view hosting an in-flight or completed agent run, dispatched by `runKind` (audit-like / IDE 3-pane / eval batch).
 - [ScanView.tsx](./ScanView.md) — Boot-time view scanning `~/.claude/projects/` with per-project progress.
 - [SkillsView.tsx](./SkillsView.md) — Dashboard "Skills" tab for project-scoped skills (`.claude/skills/`).

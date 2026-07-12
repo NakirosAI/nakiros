@@ -99,3 +99,19 @@ Read the content of an archived audit report. Returns `null` on miss or read err
 ```ts
 export function readAuditReport(path: string): string | null
 ```
+
+### `function getAuditTimeline`
+
+Build the audit-conversation timeline directly from Claude Code's session jsonl. Delegates to the shared `buildChatTimeline` (runner-core, extracted from this function and bootstrap-runner's near-identical `getBootstrapTimeline` — see `.claude/rules/runners.md`) — universal `user` / `assistant_text` / `tool` kinds; the audit-progress sidebar (manifest, sections, findings) is driven by a separate event stream and does not appear in this timeline. Filters Write/Edit/MultiEdit on Nakiros-internal artefacts (the audit-progress jsonl and the manifest json) via the `isAuditProgressPath` predicate so they don't surface as generic tool calls. Returns an empty array when the run has no sessionId yet or the file is missing.
+
+```ts
+export function getAuditTimeline(runId: string): AuditTimelineEntry[]
+```
+
+### `function getAuditUsage`
+
+Compute the billed-equivalent + agent-active stats for an audit run by walking its Claude Code session JSONL. Delegates to the shared `computeSessionUsage` helper — same algorithm and pricing rules as fix and eval. Returns the empty-state value when the run has no sessionId yet.
+
+```ts
+export function getAuditUsage(runId: string): FixUsage
+```

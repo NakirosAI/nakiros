@@ -10,6 +10,7 @@ The library is consumed by `AuditView`, `FixView` and `EvalRunsView`. Run-level 
 
 - [AgentActivityFeed.tsx](./AgentActivityFeed.md) — Chat-style activity feed shared by every run kind; renders persisted turns + the streaming bubble + the thinking indicator.
 - [HumanInteractionPanel.tsx](./HumanInteractionPanel.md) — Permanent input bar (textarea + Send) for the human-in-the-loop interaction with any agent run.
+- [NewRunHeader.tsx](./NewRunHeader.md) — New-design run header (kind pill, status tone, title, stats, action buttons, progress bar) used by `RunScreen`'s audit-like and IDE-style bodies.
 - [RunControlHeader.tsx](./RunControlHeader.md) — Top header with Back + icon + title + status badge + tokens / elapsed + kind-specific action / extras / badgeExtras slots.
 - [RunErrorBanner.tsx](./RunErrorBanner.md) — Inline banner surfacing a terminal error, identical across run kinds.
 - [RunInterruptedBadge.tsx](./RunInterruptedBadge.md) — Amber "Interrupted by reboot" badge shown next to the status pill on rehydrated `waiting_for_input` runs.

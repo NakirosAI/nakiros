@@ -357,6 +357,25 @@ export const IPC_CHANNELS = {
   'recommendations:patternsUpdated': 'recommendations:patternsUpdated',
   'recommendations:patternAnalyzed': 'recommendations:patternAnalyzed',
   'recommendations:recoApplied': 'recommendations:recoApplied',
+
+  // Project `.claude` bootstrap — interactive whole-project analyse → discuss
+  // → approve → execute runner. Mirrors the `audit:*` family (single-target
+  // conversational agent with a live timeline) plus one bootstrap-specific
+  // channel, `approvePlan`, for the plan-validation step (feature doc:
+  // `docs/redesign/features/project-bootstrap.md`). Execution writes go
+  // through the existing per-entity writers/experts — no new write path.
+  'bootstrap:start': 'bootstrap:start',
+  'bootstrap:stopRun': 'bootstrap:stopRun',
+  'bootstrap:getRun': 'bootstrap:getRun',
+  'bootstrap:sendUserMessage': 'bootstrap:sendUserMessage',
+  'bootstrap:approvePlan': 'bootstrap:approvePlan',
+  'bootstrap:finish': 'bootstrap:finish',
+  'bootstrap:event': 'bootstrap:event',
+  'bootstrap:listActive': 'bootstrap:listActive',
+  'bootstrap:listAll': 'bootstrap:listAll',
+  'bootstrap:getBufferedEvents': 'bootstrap:getBufferedEvents',
+  'bootstrap:getTimeline': 'bootstrap:getTimeline',
+  'bootstrap:getUsage': 'bootstrap:getUsage',
 } as const;
 
 /** Union of every IPC channel key declared in {@link IPC_CHANNELS}. */

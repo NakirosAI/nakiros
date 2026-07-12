@@ -12,7 +12,13 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { AuditCheckSeverity, AuditRun, Skill } from '@nakiros/shared';
-import { launchEdit, launchEvalBatch, launchFix, type OpenRunTabCallback } from '../../lib/run-launcher';
+import {
+  launchEdit,
+  launchEvalBatch,
+  launchFix,
+  launchFollowUpForTarget,
+  type OpenRunTabCallback,
+} from '../../lib/run-launcher';
 import { useActiveFixForSkill } from '../../hooks/useAgentRun';
 import type { SkillTabIdentity } from '../../hooks/useTabs';
 import { runDisplayContext } from '../../lib/run-display';
@@ -36,8 +42,10 @@ interface AuditCompletedReportProps {
  * drifts.
  *
  * Next-steps actions wired:
- *   - Fix run: `launchFix(identity, openRunTab)`. Disabled while a fix
- *     run is already in flight for this skill (`useActiveFixForSkill`).
+ *   - Fix run: `launchFollowUpForTarget(run, 'fix')` when the audit carries
+ *     a `.claude/` entity target (CLAUDE.md, rule, hooks, …), otherwise
+ *     `launchFix(identity, openRunTab)`. Disabled while a fix run is
+ *     already in flight for this skill (`useActiveFixForSkill`).
  *   - Eval batch: `launchEvalBatch`. Disabled when the skill has no eval
  *     suite defined (`!skill.hasEvals`).
  *   - Open markdown report: forwards to `onOpenReport` (system editor).
@@ -101,7 +109,8 @@ export default function AuditCompletedReport({
     if (!identity || !onOpenRunTab || activeFix) return;
     setIsLaunchingFix(true);
     try {
-      await launchFix(identity, onOpenRunTab);
+      const handled = await launchFollowUpForTarget(run, 'fix', onOpenRunTab);
+      if (!handled) await launchFix(identity, onOpenRunTab);
     } catch (err) {
       console.error('[audit-completed] launchFix failed', err);
     } finally {
@@ -115,7 +124,8 @@ export default function AuditCompletedReport({
     if (!identity || !onOpenRunTab) return;
     setIsLaunchingEdit(true);
     try {
-      await launchEdit(identity, onOpenRunTab);
+      const handled = await launchFollowUpForTarget(run, 'edit', onOpenRunTab);
+      if (!handled) await launchEdit(identity, onOpenRunTab);
     } catch (err) {
       console.error('[audit-completed] launchEdit failed', err);
     } finally {

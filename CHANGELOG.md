@@ -5,13 +5,45 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.15.0] — 2026-07-12
+## [0.15.1] — 2026-07-12
 
-Reliability pass on `.claude/` entity runs (audit / fix / eval on CLAUDE.md,
-rules, subagents, hooks, permissions, mcp, output-styles) and a large cut to
-drift-detector false positives.
+Headline feature: **project `.claude` bootstrap** — an agent that reads your
+codebase (and, optionally, your conversation frictions) and proposes a
+complete Claude Code configuration for you to review and approve, entity by
+entity. Plus a reliability pass on `.claude/` entity runs, a large cut to
+drift-detector false positives, and an npm-publish CI fix.
+
+(0.15.0 was tagged but never reached npm — its publish job failed on the CI
+issue fixed below, so this cycle ships as 0.15.1.)
+
+### Added
+
+- **Project `.claude` bootstrap.** A new user-invocable orchestrator
+  (`nakiros-project-bootstrap`, the 8th bundled `.claude/` expert) analyses a
+  project's codebase, its existing (often empty or minimal) `.claude/`
+  inventory, and optional aggregated conversation-friction digests, then
+  proposes **one coherent plan** across every entity type at once — CLAUDE.md,
+  path-scoped rules, subagents, hooks, permissions, MCP servers, and
+  output-styles — so cross-entity decisions (what belongs in CLAUDE.md vs a
+  rule, whether a subagent is warranted, whether permissions match the
+  commands actually run) are made in a single pass instead of piecemeal.
+  - You **review, discuss, and approve the plan entity by entity** before
+    anything is written. The orchestrator writes no `.claude/` file itself —
+    once approved, execution is delegated to the existing per-entity experts
+    (claudemd / rules / subagents / hooks / permissions / mcp / output-styles).
+  - New bootstrap screen with a plan-review UI and RunDock integration, a
+    `ProjectBootstrapPlan` type family, and a `bootstrap:*` IPC channel family.
+  - Triggers: "bootstrap this project", "set up .claude for this repo",
+    "generate my Claude Code config", "onboard this project to Nakiros".
 
 ### Fixed
+
+- **`npm publish` failed on the CI runner, so 0.15.0 never reached npm.** The
+  release workflow ran `npm install -g npm@latest` on Node 20; npm 12 raised
+  its engine floor to Node `^22.22.2 || ^24.15.0`, so the install aborted with
+  `EBADENGINE` before publishing. Both workflows now run on Node 22 and pin the
+  npm upgrade to the 11.x line (satisfies the npm ≥ 11.5.1 Trusted Publishing
+  minimum without chasing npm's moving Node floor).
 
 - **"Open an Edit session" (and "Fix run") on the audit-completed screen
   targeted the bundled expert skill instead of the audited file.** For a

@@ -408,6 +408,12 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       }
     }
 
+    // The expert SKILL.mds read `dot-claude-snapshot.json` at the shell cwd
+    // root. When a worktree is in use it IS the cwd — writing to workdir
+    // would leave the snapshot invisible to the agent (same convention as
+    // bootstrap-runner and the outputs/ handling above).
+    const snapshotRoot = worktreePath ?? workdir;
+
     // For CLAUDE.md audits, write a cross-entity snapshot so the expert agent
     // can detect coherence issues across the full .claude/ configuration.
     if (req.claudemdTarget) {
@@ -417,7 +423,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.claudemdTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -436,7 +442,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.rulesTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -455,7 +461,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.subagentsTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -474,7 +480,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.hooksTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -493,7 +499,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.permissionsTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -512,7 +518,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.mcpTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );
@@ -531,7 +537,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
           projectPath: req.outputStylesTarget.projectPath,
         });
         writeFileSync(
-          join(workdir, 'dot-claude-snapshot.json'),
+          join(snapshotRoot, 'dot-claude-snapshot.json'),
           JSON.stringify(snapshot, null, 2),
           'utf8',
         );

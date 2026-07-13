@@ -1,5 +1,5 @@
 /**
- * Drift detection service for Claude Code sessions.
+ * Provider-neutral drift detection service for Claude Code and Codex sessions.
  *
  * Detects three types of conversation drift:
  * - `loop`    — the session keeps retrying the same task without progress
@@ -24,6 +24,7 @@ import { detectTopic } from './drift/topic-detector.js';
 import { detectContext } from './drift/context-detector.js';
 import { loadSessionTurns, loadUserMessages, loadContextMetrics } from './drift/session-loader.js';
 import type { AssistantTurn, ContextMetrics, UserMessage } from './drift/session-loader.js';
+import { loadCodexDriftSession } from './drift/codex-session-adapter.js';
 
 // Re-export so drift sub-modules and callers importing from this module can
 // continue to use `DriftReport` as a type alias for `ConversationDrift`.
@@ -74,11 +75,17 @@ const STUBS: Record<DriftType, DriftReport> = {
  */
 export async function analyzeDrift(
   sessionId: string,
-  opts?: { force?: DriftType },
+  opts?: { force?: DriftType; provider?: 'claude' | 'codex'; transcriptPath?: string },
 ): Promise<DriftReport | null> {
   // Force mode: return a hardcoded stub for integration/plumbing tests.
   if (opts?.force) {
     return STUBS[opts.force] ?? null;
+  }
+
+  if (opts?.provider === 'codex') {
+    if (!opts.transcriptPath) return null;
+    const data = loadCodexDriftSession(opts.transcriptPath, sessionId);
+    return data ? analyzeDriftFromPreparsed(data) : null;
   }
 
   // Stage 2 — loop detector.
@@ -91,7 +98,7 @@ export async function analyzeDrift(
   // Stage 3 — topic detector.
   const userMessages = loadUserMessages(sessionId);
   if (userMessages) {
-    const topicDrift = detectTopic(userMessages);
+    const topicDrift = detectTopic(userMessages, turns);
     if (topicDrift) return topicDrift;
   }
 
@@ -101,7 +108,7 @@ export async function analyzeDrift(
   if (userMessages) {
     const contextMetrics = loadContextMetrics(sessionId);
     if (contextMetrics) {
-      const contextDrift = detectContext(contextMetrics, userMessages);
+      const contextDrift = detectContext(contextMetrics, userMessages, turns);
       if (contextDrift) return contextDrift;
     }
   }
@@ -154,12 +161,12 @@ export function analyzeDriftFromPreparsed(data: PreparsedSessionData): DriftRepo
   if (loopDrift) return loopDrift;
 
   // Stage 3 — topic detector.
-  const topicDrift = detectTopic(userMessages);
+  const topicDrift = detectTopic(userMessages, assistantTurns);
   if (topicDrift) return topicDrift;
 
   // Stage 4 — context detector.
   // Only runs when topic drift was NOT detected (prevents double-reporting).
-  const contextDrift = detectContext(contextMetrics, userMessages);
+  const contextDrift = detectContext(contextMetrics, userMessages, assistantTurns);
   if (contextDrift) return contextDrift;
 
   return null;

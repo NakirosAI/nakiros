@@ -16,6 +16,11 @@ import {
 import type { ProjectAggregate, Project, ScanProgress, Skill } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
 import appIcon from '../assets/icon.svg';
+import {
+  isProjectAggregateStale,
+  listProjectAggregatesOnce,
+  scheduleProjectAggregateRefreshes,
+} from '../lib/project-aggregate-refresh';
 
 interface HomeScreenProps {
   /** Projects loaded by App.tsx at boot — cheap pre-render data. */
@@ -55,8 +60,8 @@ type HomeTabKey = 'projects' | 'cowork' | 'plugins' | 'globals' | 'nakiros';
  * Data is fully real: projects come from `listProjects` (already
  * loaded by App.tsx), plugin skills via `listPluginSkills`, and
  * global skills via `listClaudeGlobalSkills`. Per-project health and
- * score are derived from `listProjectConversationsWithAnalysis`,
- * fetched in parallel for every project on mount.
+ * score come from one persisted aggregate batch, with stale Claude-backed
+ * snapshots refreshed through a bounded idle queue.
  *
  * Out of scope (notes in code):
  * - "Nakiros Skills" hero button — disabled until the bundled
@@ -93,8 +98,8 @@ export default function HomeScreen({
   const [bundledSkills, setBundledSkills] = useState<Skill[] | null>(null);
   const [bundledError, setBundledError] = useState<string | null>(null);
 
-  const claudeProjects = useMemo(
-    () => projects.filter((p) => p.provider === 'claude'),
+  const agentProjects = useMemo(
+    () => projects.filter((p) => p.provider !== 'cowork'),
     [projects],
   );
   const coworkProjects = useMemo(
@@ -203,9 +208,9 @@ export default function HomeScreen({
   const tabs: Array<{ id: HomeTabKey; label: string; icon: React.ReactNode; count: number | null }> = [
     {
       id: 'projects',
-      label: t('tabs.projects', { defaultValue: 'Claude Code' }),
+      label: t('tabs.projects', { defaultValue: 'Projects' }),
       icon: <Folder size={13} strokeWidth={2} />,
-      count: claudeProjects.length,
+      count: agentProjects.length,
     },
     {
       id: 'cowork',
@@ -248,7 +253,7 @@ export default function HomeScreen({
           <p className="m-0 max-w-[480px] text-[14px] text-n-muted">
             {t('hero.tagline', {
               defaultValue:
-                'Analyze, audit, and improve the skills powering your Claude Code agents — entirely on your machine.',
+                'Configure and understand the agents working on your projects — entirely on your machine.',
             })}
           </p>
         </div>
@@ -338,7 +343,7 @@ export default function HomeScreen({
       {/* Body */}
       {tab === 'projects' && (
         <>
-          <ProjectsTab projects={claudeProjects} kind="claude" search={search} onOpen={onOpenProject} />
+          <ProjectsTab projects={agentProjects} kind="agents" search={search} onOpen={onOpenProject} />
           <DismissedToggle
             open={showDismissed}
             count={dismissedProjects?.length ?? null}
@@ -432,7 +437,7 @@ function ProjectsTab({
 }: {
   projects: Project[];
   /** Determines which i18n section to use for labels. */
-  kind: 'claude' | 'cowork';
+  kind: 'agents' | 'cowork';
   search: string;
   onOpen(projectId: string): void;
 }) {
@@ -440,11 +445,9 @@ function ProjectsTab({
   const tabKey = kind === 'cowork' ? 'coworkTab' : 'projectsTab';
   const [aggregates, setAggregates] = useState<Map<string, ProjectAggregate>>(new Map());
 
-  // Stale-while-revalidate: read every project's persisted aggregate so the
-  // cards paint instantly, then trigger a background refresh on the daemon.
-  // The daemon broadcasts `project:aggregateUpdated` per project, which we
-  // subscribe to via `onProjectAggregateUpdated` to swap each card's data
-  // in as it lands. Errors per project are swallowed silently.
+  // Stale-while-revalidate: one batch paints every persisted snapshot. Only
+  // missing or outdated Claude/Cowork aggregates enter the deferred refresh
+  // queue; Codex-only projects never hit the Claude aggregate pipeline.
   useEffect(() => {
     let cancelled = false;
     if (projects.length === 0) {
@@ -452,35 +455,9 @@ function ProjectsTab({
       return;
     }
 
-    // Phase 1 — instant paint from cache.
-    Promise.all(
-      projects.map(async (p) => {
-        try {
-          const agg = await window.nakiros.getProjectAggregate(p.id);
-          return agg;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((results) => {
-      if (cancelled) return;
-      setAggregates((prev) => {
-        const next = new Map(prev);
-        for (const agg of results) {
-          if (agg) next.set(agg.projectId, agg);
-        }
-        return next;
-      });
-    });
-
-    // Phase 2 — kick off background revalidation. Results land via the
-    // `aggregateUpdated` broadcast subscription below.
-    for (const p of projects) {
-      window.nakiros.refreshProjectAggregate(p.id).catch(() => undefined);
-    }
-
+    const projectIds = new Set(projects.map((project) => project.id));
     const unsubscribe = window.nakiros.onProjectAggregateUpdated((agg) => {
-      if (cancelled) return;
+      if (cancelled || !projectIds.has(agg.projectId)) return;
       setAggregates((prev) => {
         const next = new Map(prev);
         next.set(agg.projectId, agg);
@@ -488,8 +465,38 @@ function ProjectsTab({
       });
     });
 
+    let cancelScheduledRefresh: () => void = () => undefined;
+    listProjectAggregatesOnce([...projectIds])
+      .catch(() => [] as ProjectAggregate[])
+      .then((results) => {
+        if (cancelled) return;
+        const snapshot = new Map(results.map((aggregate) => [aggregate.projectId, aggregate]));
+        setAggregates((prev) => {
+          const next = new Map<string, ProjectAggregate>();
+          for (const projectId of projectIds) {
+            const cached = snapshot.get(projectId);
+            const broadcast = prev.get(projectId);
+            if (cached && broadcast) {
+              const cachedTime = Date.parse(cached.computedAt);
+              const broadcastTime = Date.parse(broadcast.computedAt);
+              const useBroadcast = Number.isNaN(cachedTime)
+                || (!Number.isNaN(broadcastTime) && broadcastTime > cachedTime);
+              next.set(projectId, useBroadcast ? broadcast : cached);
+            } else if (broadcast || cached) {
+              next.set(projectId, broadcast ?? cached!);
+            }
+          }
+          return next;
+        });
+        const staleIds = projects
+          .filter((project) => isProjectAggregateStale(project, snapshot.get(project.id)))
+          .map((project) => project.id);
+        cancelScheduledRefresh = scheduleProjectAggregateRefreshes(staleIds);
+      });
+
     return () => {
       cancelled = true;
+      cancelScheduledRefresh();
       unsubscribe();
     };
   }, [projects]);
@@ -509,11 +516,11 @@ function ProjectsTab({
         right={
           <span className="font-n-mono text-[11px] text-n-faint">
             {t(`${tabKey}.found`, { count: filtered.length, defaultValue: '{{count}} found' })} ·{' '}
-            {t(`${tabKey}.scannedFrom`, { defaultValue: 'scanned ~/.claude/projects' })}
+            {t(`${tabKey}.scannedFrom`, { defaultValue: 'scanned from local agent sessions' })}
           </span>
         }
       >
-        {t(`${tabKey}.heading`, { defaultValue: kind === 'cowork' ? 'Cowork projects' : 'Claude Code projects' })}
+        {t(`${tabKey}.heading`, { defaultValue: kind === 'cowork' ? 'Cowork projects' : 'Agent projects' })}
       </SectionLabel>
       {filtered.length === 0 ? (
         <EmptyCard
@@ -548,6 +555,12 @@ function ProjectCard({
   agg: ProjectAggregate | null;
   onOpen(): void;
 }) {
+  const { t } = useTranslation('home');
+  const agents = project.agents?.length
+    ? Array.from(new Set(project.agents.map((agent) => agent.provider)))
+    : project.provider !== 'cowork'
+      ? [project.provider]
+      : [];
   const scoreColor =
     agg?.score == null
       ? 'var(--n-fg-faint)'
@@ -575,10 +588,28 @@ function ProjectCard({
       {/* Top row */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="mb-0.5 flex items-center gap-2">
+          <div className="mb-0.5 flex flex-wrap items-center gap-2">
             <strong className="truncate font-n-mono text-[14px] font-medium text-n-fg">
               {project.name}
             </strong>
+            {agents.length > 0 && (
+              <span
+                className="inline-flex items-center gap-1"
+                aria-label={t('projectCard.agentsLabel', {
+                  agents: agents.map((provider) => t(`providers.${provider}`)).join(', '),
+                })}
+              >
+                {agents.map((provider) => (
+                  <span
+                    key={provider}
+                    title={t(`providers.${provider}`)}
+                    className="rounded-n-xs border border-n-border-subtle bg-n-sunken px-1.5 py-0.5 font-n-mono text-[9.5px] text-n-muted"
+                  >
+                    {t(`providers.${provider}`)}
+                  </span>
+                ))}
+              </span>
+            )}
             {project.skillCount > 0 && (
               <span className="rounded-n-xs border border-n-accent-line bg-n-accent-soft px-1.5 py-0.5 font-n-mono text-[10px] text-n-accent-strong">
                 {project.skillCount} skills
@@ -610,7 +641,7 @@ function ProjectCard({
           />
         </div>
         <span className="font-n-mono text-[11px] tabular-nums text-n-muted">
-          {agg ? agg.totalConvs : project.sessionCount} convs
+          {project.sessionCount} convs
         </span>
       </div>
 

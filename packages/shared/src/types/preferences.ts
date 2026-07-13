@@ -10,8 +10,8 @@ export type ResolvedTheme = 'light' | 'dark';
 /** Effective language after resolving the `system` preference. */
 export type ResolvedLanguage = 'fr' | 'en';
 
-/** Supported agent providers across installers, runners, and scanners. */
-export type AgentProvider = 'claude' | 'codex' | 'cursor';
+/** @deprecated Import AgentProvider from `types/agent` (re-exported by the package root). */
+export type { AgentProvider } from './agent.js';
 
 /**
  * UI density preference for the new-design token system. Drives

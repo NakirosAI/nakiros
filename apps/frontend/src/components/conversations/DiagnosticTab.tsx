@@ -1,438 +1,175 @@
+import { AlertTriangle, CheckCircle2, Compass, Info, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { ConversationAnalysis, ConversationDrift, ConversationTip } from '@nakiros/shared';
-import { AlertTriangle, Compass, Zap, Info } from 'lucide-react';
-import { Sismograph } from './Sismograph';
+import type {
+  ConversationDrift,
+  ConversationTip,
+  ProviderConversationAnalysis,
+} from '@nakiros/shared';
+
 import { formatLongDuration } from '../../utils/format';
+import { isCodexConversationAnalysis } from '../../hooks/useConversationAnalyses';
+import { ConvSparkline } from './ConvSparkline';
+import { diagnosticViewModel, type DiagnosticRecommendation } from './diagnostic-view-model';
+import { Sismograph } from './Sismograph';
+import { ConversationDeepAnalysisSection } from './ConversationDeepAnalysisSection';
 
-interface Props {
-  analysis: ConversationAnalysis;
-}
+interface Props { projectId: string; analysis: ProviderConversationAnalysis }
 
-/**
- * Diagnostic tab body of the conversation drawer. Mirrors the layout of the
- * mockup `ConvDrawer.diagnostic` (`apps/Nakiros-new-design/screens-conversations.jsx`):
- * narrative card, recommendations, sismograph (cost-stacked + ctx), reading
- * guide, KPI grid, cache efficiency, and a 1fr/1fr split for top tools and
- * hot files. Reads `ConversationAnalysis` straight from IPC — no derived/mocked data.
- */
-export function DiagnosticTab({ analysis }: Props) {
+/** Shared diagnostic hierarchy for every provider understood by Argos. */
+export function DiagnosticTab({ projectId, analysis }: Props) {
   const { t } = useTranslation('conversations');
-
-  const totalK = formatTokensK(analysis.totalTokens);
-  const peakK = formatTokensK(analysis.maxContextTokens);
-  const winLabel =
-    analysis.contextWindow >= 1_000_000
-      ? '1M'
-      : `${Math.round(analysis.contextWindow / 1000)}k`;
-  const ctxPct = Math.round((analysis.maxContextTokens / analysis.contextWindow) * 100);
-
-  const cacheReadK = formatTokensK(analysis.cacheReadTokens);
-  const cacheCreationK = formatTokensK(analysis.cacheCreationTokens);
-  const wastedK = formatTokensK(analysis.wastedCacheTokens);
-
-  const compactions = analysis.compactions.length;
-  const frictions = analysis.frictionPoints.length;
-  const toolErrors = analysis.toolErrorCount;
-  const cacheMisses = analysis.cacheMissTurns;
-  const topHotFile = analysis.hotFiles[0];
-
-  const sortedTools = Object.entries(analysis.toolStats)
-    .map(([name, s]) => ({ name, count: s.count, errorCount: s.errorCount }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
-
-  const cacheTone: KpiTone = analysis.wastedCacheTokens > 5000 ? 'critical' : 'neutral';
-  const ctxTone: KpiTone = analysis.healthZone === 'degraded' ? 'critical' : analysis.healthZone === 'watch' ? 'watch' : 'neutral';
+  const view = diagnosticViewModel(analysis);
+  const codex = isCodexConversationAnalysis(analysis);
+  const contextPct = view.contextWindow && view.maxContextTokens != null
+    ? Math.round((view.maxContextTokens / view.contextWindow) * 100)
+    : null;
+  const contextTone: KpiTone = contextPct != null && contextPct >= 75
+    ? 'critical'
+    : contextPct != null && contextPct >= 50 ? 'watch' : 'neutral';
 
   return (
     <div className="flex flex-col gap-4 px-5 py-4">
-      {/* === Analyse — narrative card === */}
-      <Card>
+      <Panel>
         <SectionLabel>{t('drawer.overview')}</SectionLabel>
-        <p className="mt-2 text-[13px] leading-relaxed text-n-muted">
-          {analysis.diagnostic}
-        </p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-n-muted">
-          {compactions > 0 && (
-            <>
-              <span className="text-n-info">{t('badge.compactions', { count: compactions })}</span>
-              {' · '}
-            </>
-          )}
-          <span className="font-n-mono text-n-fg">{peakK}</span>{' '}
-          <span>{t('drawer.fields.maxContext')}</span>
-          {' '}
-          <span className="font-n-mono text-n-faint">/{winLabel} ({ctxPct}%)</span>
-          {frictions > 0 && (
-            <>
-              {' · '}
-              <span className="text-n-critical">{t('badge.friction', { count: frictions })}</span>
-            </>
-          )}
-          {toolErrors > 0 && (
-            <>
-              {' · '}
-              <span className="text-n-watch">{t('badge.toolErrors', { count: toolErrors })}</span>
-            </>
-          )}
-          {cacheMisses >= 3 && (
-            <>
-              {' · '}
-              <span className="text-n-violet">
-                ~<span className="font-n-mono">{wastedK}</span> {t('drawer.fields.wasted').toLowerCase()}
-              </span>
-            </>
-          )}
-          {topHotFile && (
-            <>
-              {' · '}
-              <span>hot:</span>{' '}
-              <span className="font-n-mono text-n-accent">{topHotFile.path}</span>
-            </>
-          )}
-        </p>
-      </Card>
+        <p className="mt-2 max-w-[72ch] text-[13px] leading-relaxed text-n-muted">{view.overview}</p>
+        <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 font-n-mono text-[11px] text-n-subtle">
+          <span>{t(`providerFilter.${view.provider}`)}</span>
+          <span>·</span><span>{t('badge.compactions', { count: view.compactionCount })}</span>
+          <span>·</span><span>{t('badge.friction', { count: view.frictionCount })}</span>
+          <span>·</span><span>{t('badge.toolErrors', { count: view.toolErrorCount })}</span>
+        </div>
+      </Panel>
 
-      {/* === Tips — what to do next time === */}
+      <ConversationDeepAnalysisSection projectId={projectId} analysis={analysis} />
+
       <section>
         <SectionLabel>{t('drawer.tips')}</SectionLabel>
-        {analysis.tips.length > 0 ? (
-          <ul className="mt-2 grid gap-1.5">
-            {analysis.tips.map((tip, idx) => (
-              <RecRow key={idx} tip={tip} />
+        {view.recommendations.length === 0 ? (
+          <div className="mt-2 flex items-center gap-2 border-y border-n-border-subtle py-3 text-[12.5px] text-n-muted">
+            <CheckCircle2 size={14} className="text-n-healthy" /> {t('native.noPenalty')}
+          </div>
+        ) : (
+          <ul className="mt-2 divide-y divide-n-border-subtle border-y border-n-border-subtle">
+            {view.recommendations.map((recommendation, index) => (
+              <RecommendationRow key={`${recommendation.kind}:${index}`} recommendation={recommendation} />
             ))}
           </ul>
-        ) : (
-          <p className="mt-2 font-n-mono text-[11.5px] text-n-faint">{t('drawer.tipsEmpty')}</p>
         )}
       </section>
 
-      {/* === Drift — session-level drift signal (undefined = old analysis, null = no drift) === */}
-      {analysis.drift != null && <DriftSection drift={analysis.drift} />}
+      {view.drift && <DriftSection drift={view.drift} />}
 
-      {/* === Sismograph — context curve with compactions + frictions === */}
       <section>
         <div className="flex items-baseline justify-between gap-3">
           <SectionLabel>{t('drawer.timeline')}</SectionLabel>
           <span className="font-n-mono text-[10.5px] text-n-subtle">
-            {formatLongDuration(analysis.durationMs)} · {analysis.messageCount} msgs
+            {formatLongDuration(view.durationMs)} · {t('messageCount', { count: view.messageCount })}
           </span>
         </div>
-        <Card padded={false} className="mt-2">
+        <Panel padded={false} className="mt-2">
           <div className="flex flex-wrap items-center gap-3 border-b border-n-border-subtle px-3.5 py-2.5">
-            <span className="font-n-mono text-[10px] uppercase tracking-[0.6px] text-n-faint">
-              {t('drawer.markers')}
-            </span>
-            <MarkerLegend dot="bg-n-info" label={t('badge.compactions', { count: compactions })} />
-            <MarkerLegend dot="bg-n-critical" label={t('badge.friction', { count: frictions })} />
-            <MarkerLegend dot="bg-n-watch" label={t('badge.toolErrors', { count: toolErrors })} />
+            <Marker label={t('badge.compactions', { count: view.compactionCount })} tone="bg-n-info" />
+            <Marker label={t('badge.friction', { count: view.frictionCount })} tone="bg-n-critical" />
+            <Marker label={t('badge.toolErrors', { count: view.toolErrorCount })} tone="bg-n-watch" />
           </div>
           <div className="px-3 pb-3 pt-2">
-            <Sismograph analysis={analysis} />
+            {codex
+              ? <div className="flex h-40 items-end"><ConvSparkline analysis={analysis} width={920} height={148} /></div>
+              : <Sismograph analysis={analysis} />}
           </div>
-        </Card>
-        <div className="mt-2 rounded-n-md bg-n-sunken px-3.5 py-2.5">
-          <div className="font-n-mono text-[10px] uppercase tracking-[0.6px] text-n-faint">
-            {t('drawer.readingGuide')}
-          </div>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-n-muted">
-            {t('drawer.readingGuideBody', { window: winLabel })}
-          </p>
+        </Panel>
+        <div className="mt-2 flex items-start gap-2 rounded-n-md bg-n-sunken px-3.5 py-2.5 text-[11.5px] leading-relaxed text-n-muted">
+          <Info size={13} className="mt-0.5 flex-none text-n-info" />
+          <span>{codex ? t('native.contextReadingGuide') : t('drawer.readingGuideBody', { window: formatTokens(view.contextWindow) })}</span>
         </div>
       </section>
 
-      {/* === KPI grid — fundamentals === */}
       <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Kpi label={t('drawer.fields.messages')} value={String(analysis.messageCount)} />
-        <Kpi label={t('drawer.fields.duration')} value={formatLongDuration(analysis.durationMs)} />
-        <Kpi
-          label={t('drawer.fields.maxContext')}
-          value={peakK}
-          unit={`/${winLabel}`}
-          tone={ctxTone}
-        />
-        <Kpi label={t('drawer.fields.tokensTotal')} value={totalK} />
+        <Kpi label={t('drawer.fields.messages')} value={String(view.messageCount)} />
+        <Kpi label={t('drawer.fields.duration')} value={formatLongDuration(view.durationMs)} />
+        <Kpi label={t('drawer.fields.maxContext')} value={formatTokens(view.maxContextTokens)} unit={view.contextWindow == null ? undefined : `/${formatTokens(view.contextWindow)}${contextPct == null ? '' : ` (${contextPct}%)`}`} tone={contextTone} />
+        <Kpi label={t('drawer.fields.tokensTotal')} value={formatTokens(view.totalTokens)} />
       </section>
 
-      {/* === Cache efficiency — surprise often === */}
-      <section>
-        <SectionLabel>{t('drawer.cache')}</SectionLabel>
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Kpi label={t('drawer.fields.cacheRead')} value={cacheReadK} tone="healthy" />
-          <Kpi label={t('drawer.fields.cacheCreation')} value={cacheCreationK} />
-          <Kpi
-            label={t('drawer.fields.cacheMisses', { ttlMin: analysis.cacheTtlMin })}
-            value={String(cacheMisses)}
-            tone={cacheMisses >= 5 ? 'watch' : 'neutral'}
-          />
-          <Kpi label={t('drawer.fields.wasted')} value={wastedK} tone={cacheTone} />
-        </div>
-      </section>
+      {view.cache ? (
+        <section>
+          <SectionLabel>{t('drawer.cache')}</SectionLabel>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Kpi label={t('drawer.fields.cacheRead')} value={formatTokens(view.cache.readTokens)} tone="healthy" />
+            <Kpi label={t('drawer.fields.cacheCreation')} value={formatTokens(view.cache.creationTokens)} />
+            <Kpi label={t('drawer.fields.cacheMisses', { ttlMin: view.cache.ttlMin })} value={String(view.cache.missTurns)} tone={view.cache.missTurns >= 5 ? 'watch' : 'neutral'} />
+            <Kpi label={t('drawer.fields.wasted')} value={formatTokens(view.cache.wastedTokens)} tone={view.cache.wastedTokens > 5000 ? 'critical' : 'neutral'} />
+          </div>
+        </section>
+      ) : (
+        <section>
+          <SectionLabel>{t('native.turnsTitle')}</SectionLabel>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Kpi label={t('native.abortsLabel', { defaultValue: 'Interrupted turns' })} value={String(view.abortedTurns)} tone={view.abortedTurns > 0 ? 'watch' : 'neutral'} />
+            <Kpi label={t('native.turnAverageLabel', { defaultValue: 'Average turn' })} value={averageDuration(view.turnDurationsMs)} />
+          </div>
+        </section>
+      )}
 
-      {/* === Top tools + Hot files — side by side === */}
       <section className="grid gap-3 sm:grid-cols-2">
-        <Card padded={false}>
-          <div className="px-4 pt-3 pb-1.5">
-            <SectionLabel>{t('drawer.tools')}</SectionLabel>
-          </div>
-          {sortedTools.length === 0 ? (
-            <div className="px-4 pb-3 font-n-mono text-[11px] text-n-faint">—</div>
-          ) : (
-            <ul>
-              {sortedTools.map((tool) => {
-                const errPct = tool.count > 0 ? Math.round((tool.errorCount / tool.count) * 100) : 0;
-                return (
-                  <li
-                    key={tool.name}
-                    className="flex items-center justify-between border-t border-n-border-subtle/60 px-4 py-2 font-n-mono text-[12px]"
-                  >
-                    <span className="text-n-fg">{tool.name}</span>
-                    <span className="flex items-center gap-3 tabular-nums">
-                      <span className="text-n-muted">×{tool.count}</span>
-                      {tool.errorCount > 0 && (
-                        <span className={errPct >= 30 ? 'text-n-critical' : 'text-n-watch'}>
-                          {tool.errorCount} err
-                        </span>
-                      )}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-
-        <Card padded={false}>
-          <div className="px-4 pt-3 pb-1.5">
-            <SectionLabel>{t('drawer.hotFiles')}</SectionLabel>
-          </div>
-          {analysis.hotFiles.length === 0 ? (
-            <div className="px-4 pb-3 font-n-mono text-[11px] text-n-faint">—</div>
-          ) : (
-            <ul>
-              {analysis.hotFiles.slice(0, 6).map((hot) => (
-                <li
-                  key={hot.path}
-                  className="flex items-center justify-between gap-3 border-t border-n-border-subtle/60 px-4 py-2 font-n-mono text-[12px]"
-                >
-                  <span className="truncate text-n-fg">{hot.path}</span>
-                  <span className="flex-shrink-0 tabular-nums text-n-muted">×{hot.editCount}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <DataList title={t('drawer.tools')} empty={view.tools.length === 0}>
+          {view.tools.map((tool) => (
+            <li key={tool.name} className="flex items-center justify-between border-t border-n-border-subtle/60 px-4 py-2 font-n-mono text-[12px]">
+              <span className="truncate text-n-fg">{tool.name}</span>
+              <span className={tool.errorCount > 0 ? 'text-n-watch' : 'text-n-muted'}>×{tool.count}{tool.errorCount > 0 ? ` · ${tool.errorCount} err` : ''}</span>
+            </li>
+          ))}
+        </DataList>
+        <DataList title={t('drawer.hotFiles')} empty={view.hotFiles.length === 0} unavailable={codex}>
+          {view.hotFiles.map((file) => (
+            <li key={file.path} className="flex items-center justify-between gap-3 border-t border-n-border-subtle/60 px-4 py-2 font-n-mono text-[12px]">
+              <span className="truncate text-n-fg">{file.path}</span><span className="text-n-muted">×{file.editCount}</span>
+            </li>
+          ))}
+        </DataList>
       </section>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-
-function DriftSection({ drift }: { drift: ConversationDrift }) {
+function RecommendationRow({ recommendation }: { recommendation: DiagnosticRecommendation }) {
   const { t } = useTranslation('conversations');
-
-  const toneStyles: Record<typeof drift.severity, { bar: string; bg: string; icon: string; badge: string }> = {
-    low: {
-      bar: 'bg-n-info',
-      bg: 'bg-n-info-soft',
-      icon: 'text-n-info',
-      badge: 'bg-n-info-soft text-n-info',
-    },
-    medium: {
-      bar: 'bg-n-watch',
-      bg: 'bg-n-watch-soft',
-      icon: 'text-n-watch',
-      badge: 'bg-n-watch-soft text-n-watch',
-    },
-    high: {
-      bar: 'bg-n-critical',
-      bg: 'bg-n-critical-soft',
-      icon: 'text-n-critical',
-      badge: 'bg-n-critical-soft text-n-critical',
-    },
-  };
-  const tone = toneStyles[drift.severity];
-
+  if (recommendation.kind === 'tip') return <TipRow tip={recommendation.tip} />;
   return (
-    <section>
-      <SectionLabel>{t('drawer.drift.sectionLabel')}</SectionLabel>
-      <div className="mt-2 flex items-start gap-3 rounded-n-md border border-n-border-subtle bg-n-surface px-3.5 py-3">
-        {/* Severity bar */}
-        <div className={'mt-0.5 h-full w-0.5 self-stretch rounded-full ' + tone.bar} aria-hidden="true" />
-        <span
-          className={'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-n-xs ' + tone.bg}
-          aria-hidden="true"
-        >
-          <Compass size={13} className={tone.icon} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={'inline-flex items-center rounded-n-xs px-1.5 py-0.5 font-n-mono text-[11px] font-medium ' + tone.badge}>
-              {t(`drawer.drift.${drift.type}`)}
-            </span>
-            <span className="font-n-mono text-[10.5px] text-n-muted">
-              {t(`drawer.drift.severity${drift.severity.charAt(0).toUpperCase() + drift.severity.slice(1)}`)}
-            </span>
-          </div>
-          <p className="mt-1.5 break-words text-[12.5px] leading-relaxed text-n-fg whitespace-pre-wrap">
-            {drift.message}
-          </p>
-          <p className="mt-1 break-words text-[12px] leading-relaxed text-n-muted whitespace-pre-wrap">
-            {drift.suggestion}
-          </p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function Card({
-  children,
-  padded = true,
-  className = '',
-}: {
-  children: React.ReactNode;
-  padded?: boolean;
-  className?: string;
-}) {
-  return (
-    <div
-      className={
-        'rounded-n-md border border-n-border-subtle bg-n-surface ' +
-        (padded ? 'px-4 py-3 ' : '') +
-        className
-      }
-    >
-      {children}
-    </div>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-faint">
-      {children}
-    </div>
-  );
-}
-
-type KpiTone = 'neutral' | 'critical' | 'watch' | 'healthy';
-
-function Kpi({
-  label,
-  value,
-  unit,
-  tone = 'neutral',
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  tone?: KpiTone;
-}) {
-  const valueClass: Record<KpiTone, string> = {
-    neutral: 'text-n-fg',
-    critical: 'text-n-critical',
-    watch: 'text-n-watch',
-    healthy: 'text-n-healthy',
-  };
-  return (
-    <div className="rounded-n-md border border-n-border-subtle bg-n-sunken px-3 py-2.5">
-      <div className="font-n-mono text-[9.5px] uppercase tracking-[0.6px] text-n-faint">
-        {label}
-      </div>
-      <div className={'mt-1 font-n-mono text-[15px] tabular-nums ' + valueClass[tone]}>
-        {value}
-        {unit && <span className="ml-0.5 text-[10.5px] text-n-muted">{unit}</span>}
-      </div>
-    </div>
-  );
-}
-
-function MarkerLegend({ dot, label }: { dot: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 font-n-mono text-[11px] text-n-muted">
-      <span className={'h-1.5 w-1.5 rounded-full ' + dot} />
-      {label}
-    </span>
-  );
-}
-
-function RecRow({ tip }: { tip: ConversationTip }) {
-  const { t } = useTranslation('conversations');
-
-  const tone = toneForSeverity(tip.severity);
-  const Icon = iconForCategory(tip.category);
-  const economyTokens =
-    typeof tip.data['economyTokens'] === 'number' ? (tip.data['economyTokens'] as number) : 0;
-
-  return (
-    <li className="flex items-start gap-3 rounded-n-md border border-n-border-subtle bg-n-surface px-3.5 py-2.5">
-      <span
-        className={
-          'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-n-xs ' + tone.iconBg
-        }
-        aria-hidden="true"
-      >
-        <Icon size={13} className={tone.iconFg} />
-      </span>
+    <li className="flex items-start gap-3 py-2.5">
+      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-n-xs bg-n-watch-soft text-n-watch"><AlertTriangle size={13} /></span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <div className="text-[13px] font-medium text-n-fg">
-            {t(`tips.${tip.id}.title`, { defaultValue: tip.id, ...tip.data })}
-          </div>
-          {economyTokens > 0 && (
-            <span
-              className={
-                'flex-shrink-0 font-n-mono text-[11px] tabular-nums ' +
-                (tip.severity === 'critical'
-                  ? 'text-n-critical'
-                  : tip.severity === 'warning'
-                    ? 'text-n-watch'
-                    : 'text-n-muted')
-              }
-            >
-              {formatEconomy(economyTokens)}
-            </span>
-          )}
-        </div>
-        <div className="mt-0.5 text-[12px] leading-relaxed text-n-muted">
-          {t(`tips.${tip.id}.body`, { defaultValue: '', ...tip.data })}
-        </div>
+        <div className="flex justify-between gap-3"><span className="text-[13px] font-medium text-n-fg">{t(`native.factors.${recommendation.signal}`)}</span><span className="font-n-mono text-[11px] text-n-critical">−{recommendation.penalty}</span></div>
+        <p className="mt-0.5 text-[12px] text-n-muted">{t(`native.factorAdvice.${recommendation.signal}`, { count: recommendation.count })}</p>
       </div>
     </li>
   );
 }
 
-function formatEconomy(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M billed`;
-  if (tokens >= 1000) return `${Math.round(tokens / 1000)}k billed`;
-  return `${tokens} billed`;
+function TipRow({ tip }: { tip: ConversationTip }) {
+  const { t } = useTranslation('conversations');
+  const Icon = tip.category === 'cache' ? Zap : AlertTriangle;
+  return (
+    <li className="flex items-start gap-3 py-2.5">
+      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-n-xs bg-n-watch-soft text-n-watch"><Icon size={13} /></span>
+      <div className="min-w-0 flex-1"><div className="text-[13px] font-medium text-n-fg">{t(`tips.${tip.id}.title`, { defaultValue: tip.id, ...tip.data })}</div><div className="mt-0.5 text-[12px] text-n-muted">{t(`tips.${tip.id}.body`, { defaultValue: '', ...tip.data })}</div></div>
+    </li>
+  );
 }
 
-function toneForSeverity(severity: ConversationTip['severity']): {
-  iconBg: string;
-  iconFg: string;
-} {
-  if (severity === 'critical') {
-    return { iconBg: 'bg-n-critical-soft', iconFg: 'text-n-critical' };
-  }
-  if (severity === 'warning') {
-    return { iconBg: 'bg-n-watch-soft', iconFg: 'text-n-watch' };
-  }
-  return { iconBg: 'bg-n-info-soft', iconFg: 'text-n-info' };
+function DriftSection({ drift }: { drift: ConversationDrift }) {
+  const { t } = useTranslation('conversations');
+  const tone = drift.severity === 'high' ? 'text-n-critical bg-n-critical-soft' : drift.severity === 'medium' ? 'text-n-watch bg-n-watch-soft' : 'text-n-info bg-n-info-soft';
+  return <section><SectionLabel>{t('drawer.drift.sectionLabel')}</SectionLabel><div className="mt-2 flex items-start gap-3 rounded-n-md border border-n-border-subtle bg-n-surface px-3.5 py-3"><span className={`flex h-6 w-6 flex-none items-center justify-center rounded-n-xs ${tone}`}><Compass size={13} /></span><div><div className="font-n-mono text-[11px] text-n-fg">{t(`drawer.drift.${drift.type}`)}</div><p className="mt-1 text-[12.5px] text-n-fg">{drift.message}</p><p className="mt-1 text-[12px] text-n-muted">{drift.suggestion}</p></div></div></section>;
 }
 
-function iconForCategory(category: ConversationTip['category']) {
-  if (category === 'workflow' || category === 'skills') return Zap;
-  if (category === 'context' || category === 'cache') return Info;
-  return AlertTriangle;
-}
+function Panel({ children, padded = true, className = '' }: { children: React.ReactNode; padded?: boolean; className?: string }) { return <div className={`rounded-n-md border border-n-border-subtle bg-n-surface ${padded ? 'px-4 py-3 ' : ''}${className}`}>{children}</div>; }
+function SectionLabel({ children }: { children: React.ReactNode }) { return <div className="font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-faint">{children}</div>; }
+function Marker({ label, tone }: { label: string; tone: string }) { return <span className="inline-flex items-center gap-1.5 font-n-mono text-[11px] text-n-muted"><span className={`h-1.5 w-1.5 rounded-full ${tone}`} />{label}</span>; }
 
-function formatTokensK(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
-  if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`;
-  return String(tokens);
-}
+type KpiTone = 'neutral' | 'critical' | 'watch' | 'healthy';
+function Kpi({ label, value, unit, tone = 'neutral' }: { label: string; value: string; unit?: string; tone?: KpiTone }) { const colors = { neutral: 'text-n-fg', critical: 'text-n-critical', watch: 'text-n-watch', healthy: 'text-n-healthy' }; return <div className="rounded-n-md border border-n-border-subtle bg-n-sunken px-3 py-2.5"><div className="font-n-mono text-[9.5px] uppercase tracking-[0.6px] text-n-faint">{label}</div><div className={`mt-1 font-n-mono text-[15px] tabular-nums ${colors[tone]}`}>{value}{unit && <span className="ml-0.5 text-[10.5px] text-n-muted">{unit}</span>}</div></div>; }
+
+function DataList({ title, empty, unavailable = false, children }: { title: string; empty: boolean; unavailable?: boolean; children: React.ReactNode }) { const { t } = useTranslation('conversations'); return <Panel padded={false}><div className="px-4 pb-1.5 pt-3"><SectionLabel>{title}</SectionLabel></div>{empty ? <div className="px-4 pb-3 font-n-mono text-[11px] text-n-faint">{unavailable ? t('native.unavailable', { defaultValue: 'Not exposed by this provider' }) : '—'}</div> : <ul>{children}</ul>}</Panel>; }
+function formatTokens(value: number | null): string { if (value == null) return '—'; if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`; if (value >= 1_000) return `${Math.round(value / 1_000)}k`; return String(value); }
+function averageDuration(values: number[]): string { if (values.length === 0) return '—'; return formatLongDuration(values.reduce((sum, value) => sum + value, 0) / values.length); }

@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 
 import type {
   ConversationAnalysis,
+  Project,
   ProjectAggregate,
 } from '@nakiros/shared';
 import { IPC_CHANNELS } from '@nakiros/shared';
@@ -63,6 +64,37 @@ export function loadProjectAggregate(projectId: string): ProjectAggregate | null
   }
 }
 
+/** Batch cache lookup. Never indexes conversations or recomputes aggregates. */
+export function loadProjectAggregates(
+  projectIds: string[],
+  loader: (projectId: string) => ProjectAggregate | null = loadProjectAggregate,
+): ProjectAggregate[] {
+  const aggregates: ProjectAggregate[] = [];
+  for (const projectId of new Set(projectIds)) {
+    const aggregate = loader(projectId);
+    if (aggregate) aggregates.push(aggregate);
+  }
+  return aggregates;
+}
+
+/**
+ * Whether a cached aggregate needs an explicit refresh. Aggregate computation
+ * is currently Claude/Cowork-native; Codex-only projects are never marked
+ * stale and must use their native Argos analysis path instead.
+ */
+export function isProjectAggregateStale(
+  project: Pick<Project, 'provider' | 'lastActivityAt'>,
+  aggregate: ProjectAggregate | null,
+): boolean {
+  if (project.provider !== 'claude' && project.provider !== 'cowork') return false;
+  if (!aggregate) return true;
+  if (!project.lastActivityAt) return false;
+  const computedAt = new Date(aggregate.computedAt).getTime();
+  const lastActivityAt = new Date(project.lastActivityAt).getTime();
+  if (!Number.isFinite(computedAt) || !Number.isFinite(lastActivityAt)) return true;
+  return computedAt < lastActivityAt;
+}
+
 /**
  * Recompute the aggregate for `projectId` by walking every conversation
  * through the per-conversation analysis cache, persist the result, and
@@ -80,6 +112,11 @@ export function refreshProjectAggregate(projectId: string): Promise<ProjectAggre
 async function computeAggregate(projectId: string): Promise<ProjectAggregate | null> {
   const project = getProject(projectId);
   if (!project) return null;
+
+  // Conversation ingestion is still Claude/Cowork-specific. Codex projects
+  // must not be parsed through the Claude JSONL pipeline while their native
+  // Argos adapter is being introduced.
+  if (project.provider !== 'claude' && project.provider !== 'cowork') return null;
 
   // Trigger lazy ingest so the aggregate is always based on up-to-date data,
   // even when the HomeScreen card is opened before the user navigates into the

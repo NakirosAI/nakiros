@@ -69,6 +69,18 @@ export type RecommendationArtifactType =
   | 'mcp'
   | 'output-style';
 
+export type RecommendationTargetDomain = 'techne' | 'hestia';
+
+/** Explicit cross-domain route prepared by Argos for user review. */
+export interface RecommendationReviewRoute {
+  sourceDomain: 'argos';
+  targetDomain: RecommendationTargetDomain;
+  artifactType: RecommendationArtifactType;
+  action: 'fix' | 'create';
+  target: string;
+  reviewRequired: true;
+}
+
 /**
  * One atomic recommendation card produced by an analyser run.
  * Persisted as a markdown file with YAML frontmatter under
@@ -80,6 +92,8 @@ export interface RecoCard {
   patternId: string;
   action: 'fix' | 'create';
   artifactType: RecommendationArtifactType;
+  /** Computed by the bridge when the card crosses the IPC boundary. */
+  route?: RecommendationReviewRoute;
   /**
    * Identifier of the existing artefact when `action === 'fix'`; `'new'` when
    * `action === 'create'`.
@@ -122,8 +136,20 @@ export interface StartRecommendationAnalyzeRequest {
  * On success the downstream runner has been spawned and `runId` identifies it.
  */
 export type ApplyRecoResponse =
-  | { ok: true; runId: string; runKind: 'fix' | 'create' | 'edit' }
-  | { ok: false; error: 'target-missing' | 'unknown-artifact-type' | 'reco-not-found' };
+  | {
+      ok: true;
+      runId: string;
+      runKind: 'fix' | 'create' | 'edit';
+      targetDomain: RecommendationTargetDomain;
+    }
+  | {
+      ok: false;
+      error: 'target-missing' | 'unknown-artifact-type' | 'reco-not-found' | 'review-required';
+    };
+
+export type GetRecommendationReviewRouteResponse =
+  | { ok: true; route: RecommendationReviewRoute }
+  | { ok: false; error: 'reco-not-found' | 'unknown-artifact-type' };
 
 // ─── Runner status & run ─────────────────────────────────────────────────────
 

@@ -15,6 +15,7 @@
 
 import type {
   ApplyRecoResponse,
+  GetRecommendationReviewRouteResponse,
   RecoCard,
   RecommendationAnalyzeRunEvent,
   RecommendationPattern,
@@ -27,6 +28,7 @@ import { listSessionsForProject } from '../../services/conversation-ingest/proje
 import { groupPatterns, wrapZone } from '../../services/recommendation-cluster.js';
 import {
   listRecoCards,
+  readRecoCard,
   readPatterns,
   updatePatternAnalysis,
   updateRecoStatus,
@@ -41,6 +43,10 @@ import {
   getRecommendationAnalyzeBufferedEvents,
 } from '../../services/recommendation-analyze-runner.js';
 import { applyReco } from '../../services/recommendation-apply.js';
+import {
+  decorateRecommendationRoute,
+  reviewRouteResponse,
+} from '../../services/recommendation-route.js';
 import { createEventBroadcaster, createTypedHandler, withBroadcastOnError } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
 
@@ -122,7 +128,7 @@ export const recommendationsHandlers: HandlerRegistry = {
     ): { pattern: RecommendationPattern | null; recos: RecoCard[] } => {
       const patterns = readPatterns(projectId) ?? [];
       const pattern = patterns.find((p) => p.id === patternId) ?? null;
-      const recos = listRecoCards(projectId, patternId);
+      const recos = listRecoCards(projectId, patternId).map(decorateRecommendationRoute);
       return { pattern, recos };
     },
   ),
@@ -217,14 +223,25 @@ export const recommendationsHandlers: HandlerRegistry = {
       patternId: string,
       recId: string,
       editedBrief?: string,
+      reviewed: boolean = false,
     ): Promise<ApplyRecoResponse> => {
       const { projectPath } = resolveProject(projectId);
       return applyReco(projectId, patternId, recId, {
         projectPath,
         editedBrief,
+        reviewed,
         onEvent: () => undefined,
       });
     },
+  ),
+
+  'recommendations:getReviewRoute': createTypedHandler(
+    (
+      projectId: string,
+      patternId: string,
+      recId: string,
+    ): GetRecommendationReviewRouteResponse =>
+      reviewRouteResponse(readRecoCard(projectId, patternId, recId)),
   ),
 
   /**

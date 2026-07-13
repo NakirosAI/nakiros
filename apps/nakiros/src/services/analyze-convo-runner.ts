@@ -5,6 +5,7 @@ import { homedir } from 'os';
 import type {
   AnalyzeConvoRun,
   AnalyzeConvoRunEvent,
+  NormalizedConversation,
   StartAnalyzeConvoRequest,
 } from '@nakiros/shared';
 
@@ -43,11 +44,17 @@ interface AnalyzeConvoExtras {
   modelId: string;
   /** Estimated input tokens — exposed via the run for cost transparency. */
   estimatedInputTokens: number;
+  /** Provider of the conversation being analyzed. */
+  sourceProvider: NormalizedConversation['provider'];
+  /** Agent CLI producing the report. */
+  analyzerProvider: NormalizedConversation['provider'];
+  sourceFingerprint?: string;
 }
 
 /** Internal start request — the public type + the resolved providerProjectDir. */
 interface AnalyzeConvoStartReq extends StartAnalyzeConvoRequest {
   providerProjectDir: string;
+  conversation?: NormalizedConversation;
 }
 
 type AnalyzeConvoEvent = AnalyzeConvoRunEvent['event'];
@@ -67,12 +74,14 @@ function preparePromptForRun(req: AnalyzeConvoStartReq): {
   modelId: string;
   estimatedInputTokens: number;
 } {
-  const stage1 = analyzeConversation(req.providerProjectDir, req.sessionId, req.projectId);
+  const stage1 = req.conversation?.analysis ??
+    analyzeConversation(req.providerProjectDir, req.sessionId, req.projectId);
   if (!stage1) {
     throw new Error(`Conversation ${req.sessionId} not found or unreadable.`);
   }
 
-  const messages = getConversationMessages(req.providerProjectDir, req.sessionId);
+  const messages = req.conversation?.messages ??
+    getConversationMessages(req.providerProjectDir, req.sessionId);
   const prompt = buildAnalyzeConvoPrompt(stage1, messages);
   const estimatedInputTokens = estimatePromptTokens(prompt);
 
@@ -82,7 +91,10 @@ function preparePromptForRun(req: AnalyzeConvoStartReq): {
     );
   }
 
-  const modelId = estimatedInputTokens <= HAIKU_INPUT_BUDGET ? HAIKU_MODEL : SONNET_MODEL;
+  const analyzerProvider = req.analyzerProvider ?? req.conversation?.provider ?? 'claude';
+  const modelId = analyzerProvider === 'claude'
+    ? estimatedInputTokens <= HAIKU_INPUT_BUDGET ? HAIKU_MODEL : SONNET_MODEL
+    : 'default';
   return { prompt, modelId, estimatedInputTokens };
 }
 
@@ -104,13 +116,19 @@ function archiveReport(entry: AnalyzeConvoEntry): { ok: true; reportPath: string
     return { ok: false, error: `Failed to read report: ${(err as Error).message}` };
   }
 
-  const cachePath = analysisFilePath(entry.run.sessionId);
+  const cachePath = analysisFilePath(
+    entry.run.sessionId,
+    entry.extras.sourceProvider,
+    entry.extras.analyzerProvider,
+  );
   try {
     persistAnalysis({
+      provider: entry.extras.sourceProvider,
+      analyzerProvider: entry.extras.analyzerProvider,
       sessionId: entry.run.sessionId,
-      // The model field on `ConversationDeepAnalysis` is a coarse 'haiku' | 'sonnet' label.
-      model: entry.extras.modelId === HAIKU_MODEL ? 'haiku' : 'sonnet',
+      model: entry.extras.modelId,
       inputTokens: entry.extras.estimatedInputTokens,
+      sourceFingerprint: entry.extras.sourceFingerprint,
       report,
       generatedAt: new Date().toISOString(),
     });
@@ -134,6 +152,7 @@ const spec: RunnerSpec<AnalyzeConvoRun, AnalyzeConvoStartReq, AnalyzeConvoEvent,
     writeExecutionSettings(workdir);
 
     const { prompt, modelId, estimatedInputTokens } = preparePromptForRun(req);
+    const analyzerProvider = req.analyzerProvider ?? req.conversation?.provider ?? 'claude';
 
     return {
       workdir,
@@ -142,6 +161,11 @@ const spec: RunnerSpec<AnalyzeConvoRun, AnalyzeConvoStartReq, AnalyzeConvoEvent,
         initialPrompt: prompt,
         modelId,
         estimatedInputTokens,
+        sourceProvider: req.conversation?.provider ?? 'claude',
+        analyzerProvider,
+        sourceFingerprint: req.conversation
+          ? `${req.conversation.lastMessageAt}:${req.conversation.messageCount}`
+          : undefined,
       },
     };
   },
@@ -152,7 +176,7 @@ const spec: RunnerSpec<AnalyzeConvoRun, AnalyzeConvoStartReq, AnalyzeConvoEvent,
     // agent has Write tool access via `writeExecutionSettings`.
     return `${ctx.extras.initialPrompt}
 
-Write the final Markdown report to ./${REPORT_RELATIVE_PATH} using your Write tool. Do not return the report inline — only write the file. Once written, end your turn.`;
+Write the final Markdown report to ./${REPORT_RELATIVE_PATH} using your file-editing tools. Do not return the report inline. Once written, end your turn.`;
   },
 
   createInitialRun(req, runId, workdir, extras): AnalyzeConvoRun {
@@ -161,9 +185,10 @@ Write the final Markdown report to ./${REPORT_RELATIVE_PATH} using your Write to
       projectId: req.projectId,
       sessionId: req.sessionId,
       status: 'starting',
-      sessionClaudeId: null,
+      agentSessionId: null,
       workdir,
       model: extras.modelId,
+      analyzerProvider: extras.analyzerProvider,
       estimatedInputTokens: extras.estimatedInputTokens,
       reportPath: null,
       turns: [],
@@ -178,9 +203,21 @@ Write the final Markdown report to ./${REPORT_RELATIVE_PATH} using your Write to
   buildCliArgs(prompt, entry, isFirstTurn) {
     return {
       prompt,
-      resumeSessionId: isFirstTurn ? undefined : (entry.run.sessionClaudeId ?? undefined),
-      model: entry.extras.modelId,
+      resumeSessionId: isFirstTurn ? undefined : (entry.run.agentSessionId ?? undefined),
+      model: entry.extras.analyzerProvider === 'claude' ? entry.extras.modelId : undefined,
     };
+  },
+
+  agentProvider(entry) {
+    return entry.extras.analyzerProvider;
+  },
+
+  getAgentSessionId(entry) {
+    return entry.run.agentSessionId;
+  },
+
+  setAgentSessionId(entry, sessionId) {
+    entry.run.agentSessionId = sessionId;
   },
 
   onTurnComplete(entry, helpers) {
@@ -203,6 +240,8 @@ Write the final Markdown report to ./${REPORT_RELATIVE_PATH} using your Write to
     for (const entry of registry.values()) {
       if (entry.run.projectId !== req.projectId) continue;
       if (entry.run.sessionId !== req.sessionId) continue;
+      const analyzerProvider = req.analyzerProvider ?? req.conversation?.provider ?? 'claude';
+      if (entry.extras.analyzerProvider !== analyzerProvider) continue;
       if (isActiveRunStatus(entry.run.status)) return entry;
     }
     return null;
@@ -218,6 +257,8 @@ Write the final Markdown report to ./${REPORT_RELATIVE_PATH} using your Write to
     if (!extras || !extras.providerProjectDir || !extras.initialPrompt || !extras.modelId) {
       return { kind: 'cleanup' };
     }
+    extras.sourceProvider ??= 'claude';
+    extras.analyzerProvider ??= 'claude';
 
     if (blob.status === 'stopped' || blob.status === 'failed') return { kind: 'cleanup' };
 
@@ -225,10 +266,15 @@ Write the final Markdown report to ./${REPORT_RELATIVE_PATH} using your Write to
     // Defensive: only mark as resumable if the Claude session file actually
     // lives on disk — a stale sessionId without its `.jsonl` would make
     // `--resume` throw "No conversation found with session ID …".
-    const sessionFile = blob.sessionClaudeId
-      ? join(homedir(), '.claude', 'projects', encodeProjectPath(workdir), `${blob.sessionClaudeId}.jsonl`)
+    const agentSessionId = blob.agentSessionId ?? blob.sessionClaudeId ?? null;
+    const sessionFile = extras.analyzerProvider === 'claude' && agentSessionId
+      ? join(homedir(), '.claude', 'projects', encodeProjectPath(workdir), `${agentSessionId}.jsonl`)
       : null;
-    const canResume = !wasActive || (Boolean(blob.sessionClaudeId) && sessionFile !== null && existsSync(sessionFile));
+    const canResume = !wasActive || (
+      Boolean(agentSessionId) && (
+        extras.analyzerProvider === 'codex' || (sessionFile !== null && existsSync(sessionFile))
+      )
+    );
     const restoredStatus: AnalyzeConvoRun['status'] = wasActive
       ? canResume
         ? 'waiting_for_input'
@@ -240,9 +286,10 @@ Write the final Markdown report to ./${REPORT_RELATIVE_PATH} using your Write to
       projectId: blob.projectId,
       sessionId: blob.sessionId,
       status: restoredStatus,
-      sessionClaudeId: blob.sessionClaudeId ?? null,
+      agentSessionId,
       workdir,
       model: blob.model,
+      analyzerProvider: blob.analyzerProvider ?? extras.analyzerProvider,
       estimatedInputTokens: blob.estimatedInputTokens,
       reportPath: blob.reportPath ?? null,
       turns: Array.isArray(blob.turns) ? blob.turns : [],
@@ -270,6 +317,7 @@ const runner = createRunner(spec);
 
 interface RunOpts {
   providerProjectDir: string;
+  conversation?: NormalizedConversation;
   onEvent(event: AnalyzeConvoRunEvent): void;
 }
 
@@ -301,7 +349,7 @@ export function listAllAnalyzeConvoRuns(): AnalyzeConvoRun[] {
  */
 export function startAnalyzeConvo(request: StartAnalyzeConvoRequest, opts: RunOpts): AnalyzeConvoRun {
   return runner.start(
-    { ...request, providerProjectDir: opts.providerProjectDir },
+    { ...request, providerProjectDir: opts.providerProjectDir, conversation: opts.conversation },
     { onEvent: opts.onEvent },
   );
 }
@@ -371,8 +419,13 @@ export function getAnalyzeConvoWorkdirStats(runId: string): { workdir: string; s
 }
 
 /** Copy the canonical cached report into `dest` (used by future export flow). */
-export function copyAnalyzeConvoReport(sessionId: string, dest: string): void {
-  const src = analysisFilePath(sessionId);
+export function copyAnalyzeConvoReport(
+  sessionId: string,
+  dest: string,
+  provider: NormalizedConversation['provider'] = 'claude',
+  analyzerProvider: NormalizedConversation['provider'] = provider,
+): void {
+  const src = analysisFilePath(sessionId, provider, analyzerProvider);
   if (!existsSync(src)) throw new Error(`No cached analysis for session ${sessionId}`);
   copyFileSync(src, dest);
 }

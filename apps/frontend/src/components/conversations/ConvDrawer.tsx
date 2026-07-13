@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ConversationAnalysis } from '@nakiros/shared';
+import type { ConversationHealthZone } from '@nakiros/shared';
 import { X } from 'lucide-react';
 import { DiagnosticTab } from './DiagnosticTab';
 import { TimelineTab } from './TimelineTab';
+import { isCodexConversationAnalysis, type ProviderConversationAnalysis } from '../../hooks/useConversationAnalyses';
 
 interface Props {
-  analysis: ConversationAnalysis;
+  projectId: string;
+  analysis: ProviderConversationAnalysis;
   onClose(): void;
 }
 
@@ -30,7 +32,7 @@ const TABS: TabDef[] = [
  * live tabs; Transcript and Frictions were removed (redundant with Timeline
  * and superseded by frictionZones in Diagnostic respectively).
  */
-export function ConvDrawer({ analysis, onClose }: Props) {
+export function ConversationDrawer({ projectId, analysis, onClose }: Props) {
   const { t } = useTranslation('conversations');
   const tone = toneFor(analysis.healthZone);
   const [tab, setTab] = useState<DrawerTab>('diagnostic');
@@ -46,6 +48,7 @@ export function ConvDrawer({ analysis, onClose }: Props) {
 
   const sessionShort = analysis.sessionId.slice(0, 8);
   const date = new Date(analysis.lastMessageAt).toLocaleDateString();
+  const provider = isCodexConversationAnalysis(analysis) ? 'codex' : 'claude';
 
   return (
     <div className="fixed inset-0 z-40 flex" role="dialog" aria-modal="true">
@@ -64,12 +67,15 @@ export function ConvDrawer({ analysis, onClose }: Props) {
                 'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-n-md font-n-mono text-[13px] font-medium ' +
                 tone.chip
               }
-              aria-label={`score ${analysis.score}`}
+              aria-label={t('native.scoreLabel', { score: analysis.score })}
             >
               {analysis.score}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-n-xs border border-n-border-subtle bg-n-raised px-1.5 py-0.5 font-n-mono text-[10px] text-n-fg">
+                  {t(`providerFilter.${provider}`)}
+                </span>
                 <span
                   className={
                     'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-[0.4px] ' +
@@ -79,7 +85,7 @@ export function ConvDrawer({ analysis, onClose }: Props) {
                   <span className={'inline-block h-1.5 w-1.5 rounded-full ' + tone.dot} />
                   {t(`health.${analysis.healthZone}`)}
                 </span>
-                <span className="font-n-mono text-[11px] text-n-subtle">session {sessionShort}</span>
+                <span className="font-n-mono text-[11px] text-n-subtle">{t('native.session', { id: sessionShort })}</span>
                 <span className="text-n-subtle">·</span>
                 <span className="font-n-mono text-[11px] text-n-subtle">{date}</span>
                 {analysis.gitBranch && (
@@ -103,7 +109,7 @@ export function ConvDrawer({ analysis, onClose }: Props) {
         </header>
 
         {/* Tab nav */}
-        <nav className="flex gap-5 border-b border-n-border-subtle px-5 pt-3" aria-label="Drawer tabs">
+        <nav className="flex gap-5 border-b border-n-border-subtle px-5 pt-3" aria-label={t('drawer.navigation')}>
           {TABS.map((def) => {
             const active = def.id === tab;
             return (
@@ -126,7 +132,7 @@ export function ConvDrawer({ analysis, onClose }: Props) {
         </nav>
 
         <div className="flex-1 overflow-y-auto">
-          {tab === 'diagnostic' && <DiagnosticTab analysis={analysis} />}
+          {tab === 'diagnostic' && <DiagnosticTab projectId={projectId} analysis={analysis} />}
           {tab === 'timeline' && <TimelineTab analysis={analysis} />}
         </div>
       </aside>
@@ -134,7 +140,7 @@ export function ConvDrawer({ analysis, onClose }: Props) {
   );
 }
 
-function toneFor(zone: ConversationAnalysis['healthZone']): {
+function toneFor(zone: ConversationHealthZone): {
   chip: string;
   badge: string;
   dot: string;

@@ -38,9 +38,10 @@ import type {
   ResolvedLanguage,
   Project,
   ProjectAggregate,
+  ArgosConversationDashboard,
   ProjectConversation,
   ConversationMessage,
-  ConversationAnalysis,
+  ProviderConversationAnalysis,
   ConversationDeepAnalysis,
   ConversationDigest,
   ConversationDigestSummary,
@@ -63,6 +64,7 @@ import type {
   AuditTimelineEntry,
   AnalyzeConvoRun,
   AnalyzeConvoRunEvent,
+  StartAnalyzeConvoRequest,
   FixBenchmarks,
   FixEdit,
   FixTimelineEntry,
@@ -129,6 +131,7 @@ import type {
   DriftHookStatus,
   DriftHookDiff,
   ApplyRecoResponse,
+  GetRecommendationReviewRouteResponse,
   RecoCard,
   RecommendationAnalyzeRun,
   RecommendationAnalyzeRunEvent,
@@ -214,9 +217,11 @@ declare global {
 
       listProjectConversations(projectId: string): Promise<ProjectConversation[]>;
       getProjectConversationMessages(projectId: string, sessionId: string): Promise<ConversationMessage[]>;
-      analyzeProjectConversation(projectId: string, sessionId: string): Promise<ConversationAnalysis | null>;
-      listProjectConversationsWithAnalysis(projectId: string): Promise<ConversationAnalysis[]>;
+      analyzeProjectConversation(projectId: string, sessionId: string): Promise<ProviderConversationAnalysis | null>;
+      listProjectConversationsWithAnalysis(projectId: string): Promise<ProviderConversationAnalysis[]>;
+      getArgosConversationDashboard(projectId: string): Promise<ArgosConversationDashboard | null>;
       getProjectAggregate(projectId: string): Promise<ProjectAggregate | null>;
+      listProjectAggregates(projectIds: string[]): Promise<ProjectAggregate[]>;
       refreshProjectAggregate(projectId: string): Promise<ProjectAggregate | null>;
       onProjectAggregateUpdated(cb: (aggregate: ProjectAggregate) => void): () => void;
       loadConversationDeepAnalysis(projectId: string, sessionId: string): Promise<ConversationDeepAnalysis | null>;
@@ -241,7 +246,7 @@ declare global {
       onClassifyConvoEvent(cb: (event: ClassifyConvoRunEvent) => void): () => void;
 
       // Conversation deep-analysis runner (analyze-convo Run kind)
-      startAnalyzeConvo(request: { projectId: string; sessionId: string }): Promise<AnalyzeConvoRun>;
+      startAnalyzeConvo(request: StartAnalyzeConvoRequest): Promise<AnalyzeConvoRun>;
       stopAnalyzeConvo(runId: string): Promise<void>;
       getAnalyzeConvoRun(runId: string): Promise<AnalyzeConvoRun | null>;
       sendAnalyzeConvoUserMessage(runId: string, message: string): Promise<void>;
@@ -627,7 +632,13 @@ declare global {
         patternId: string,
         recId: string,
         editedBrief?: string,
+        reviewed?: boolean,
       ): Promise<ApplyRecoResponse>;
+      getRecommendationReviewRoute(
+        projectId: string,
+        patternId: string,
+        recId: string,
+      ): Promise<GetRecommendationReviewRouteResponse>;
       dismissReco(
         projectId: string,
         patternId: string,

@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import type { ConversationAnalysis } from '@nakiros/shared';
+import type { CodexConversationAnalysis, ConversationAnalysis } from '@nakiros/shared';
 
 interface Props {
-  analysis: ConversationAnalysis;
+  analysis: ConversationAnalysis | CodexConversationAnalysis;
   width?: number;
   height?: number;
 }
@@ -15,7 +15,7 @@ const MAX_SAMPLES = 80;
  * health zone so the eye groups rows by trajectory at a glance.
  */
 export function ConvSparkline({ analysis, width = 120, height = 28 }: Props) {
-  const yMax = analysis.contextWindow;
+  const yMax = analysis.contextWindow ?? analysis.maxContextTokens ?? 1;
 
   const samples = useMemo(
     () => downsample(analysis.contextSamples, MAX_SAMPLES),

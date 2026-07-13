@@ -12,6 +12,7 @@ import {
   stopAnalyzeConvo,
 } from '../../services/analyze-convo-runner.js';
 import { getProject } from '../../services/project-scanner.js';
+import { loadNormalizedProjectConversation } from '../../services/project-conversation-source.js';
 import {
   createEventBroadcaster,
   createTypedHandler,
@@ -42,8 +43,17 @@ function resolveProviderDir(projectId: string): string {
 export const analyzeConvoHandlers: HandlerRegistry = {
   'analyzeConvo:start': createTypedHandler((request: StartAnalyzeConvoRequest) => {
     const providerProjectDir = resolveProviderDir(request.projectId);
+    const project = getProject(request.projectId);
+    if (!project) throw new Error(`Project ${request.projectId} not found`);
+    const conversation = loadNormalizedProjectConversation(
+      project,
+      request.projectId,
+      request.sessionId,
+    );
+    if (!conversation) throw new Error(`Conversation ${request.sessionId} not found`);
     return startAnalyzeConvo(request, {
       providerProjectDir,
+      conversation,
       onEvent: broadcastAnalyzeConvoEvent,
     });
   }),

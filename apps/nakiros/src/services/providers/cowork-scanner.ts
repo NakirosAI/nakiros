@@ -4,6 +4,8 @@ import { join, basename } from 'path';
 
 import type { DetectedProject } from '@nakiros/shared';
 
+import { projectStatusFromActivity } from '../project-activity.js';
+
 /**
  * Root directory where Cowork stores its session data. Each child is a
  * `<spaceId>` UUID directory; under it sits one or more `<userId>` UUID dirs,
@@ -17,8 +19,6 @@ const COWORK_ROOT = join(
   'Claude',
   'local-agent-mode-sessions',
 );
-
-const INACTIVITY_THRESHOLD_DAYS = 30;
 
 const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -218,15 +218,6 @@ export function scanCoworkProjects(
 
     const lastActivityAt = lastMtime > 0 ? new Date(lastMtime).toISOString() : null;
 
-    let status: 'active' | 'inactive' = 'active';
-    if (lastActivityAt) {
-      const daysSinceActivity =
-        (Date.now() - new Date(lastActivityAt).getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceActivity > INACTIVITY_THRESHOLD_DAYS) {
-        status = 'inactive';
-      }
-    }
-
     projects.push({
       id: `cowork:${space.id}`,
       name: space.name ?? basename(projectPath) ?? space.id,
@@ -238,7 +229,7 @@ export function scanCoworkProjects(
       // Cowork projects don't store skills inside space.folders[0]; skill audits
       // will only find skills if the user happens to have a .claude/skills/ dir there.
       skillCount: 0,
-      status,
+      status: projectStatusFromActivity(lastActivityAt),
     });
   }
 

@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
-  ConversationAnalysis,
   ConversationMessage,
 } from '@nakiros/shared';
 import { useConversationMessages } from '../../hooks/useConversationMessages';
 import { LoadingState } from '../ui';
+import type { ProviderConversationAnalysis } from '../../hooks/useConversationAnalyses';
 
 interface Props {
-  analysis: ConversationAnalysis;
+  analysis: ProviderConversationAnalysis;
 }
 
 /**
@@ -107,25 +107,27 @@ interface EnrichedMessage extends ConversationMessage {
  */
 function enrichMessages(
   messages: ConversationMessage[],
-  analysis: ConversationAnalysis,
+  analysis: ProviderConversationAnalysis,
 ): EnrichedMessage[] {
-  const compactionByTs = new Map<number, ConversationAnalysis['compactions'][number]>();
+  const compactionByTs = new Map<number, { preTokens?: number; postTokens?: number }>();
   for (const c of analysis.compactions) {
     const ts = Date.parse(c.timestamp);
-    if (!Number.isNaN(ts)) compactionByTs.set(ts, c);
+    if (!Number.isNaN(ts)) {
+      compactionByTs.set(ts, 'preTokens' in c
+        ? { preTokens: c.preTokens, postTokens: c.postTokens }
+        : {});
+    }
   }
-  const frictionByTs = new Map<
-    number,
-    ConversationAnalysis['frictionPoints'][number]
-  >();
-  for (const f of analysis.frictionPoints) {
+  const frictionByTs = new Map<number, { matchedPattern: string }>();
+  const frictionPoints = analysis.frictionPoints;
+  for (const f of frictionPoints) {
     const ts = Date.parse(f.timestamp);
     if (!Number.isNaN(ts)) frictionByTs.set(ts, f);
   }
 
   // Pre-compute zone ranges as [startMs, endMs] pairs once — avoids
   // re-parsing ISO strings in the inner loop over messages.
-  const zoneRanges: Array<[number, number]> = (analysis.frictionZones ?? [])
+  const zoneRanges: Array<[number, number]> = ('frictionZones' in analysis ? analysis.frictionZones ?? [] : [])
     .map((z) => [Date.parse(z.startTimestamp), Date.parse(z.endTimestamp)] as [number, number])
     .filter(([s, e]) => !Number.isNaN(s) && !Number.isNaN(e));
 

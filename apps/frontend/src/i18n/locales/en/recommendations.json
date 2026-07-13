@@ -7,9 +7,14 @@
   "running": "Running…",
   "failed": "Failed — try again",
   "noRecosProduced": "The agent did not identify a clear preventive action for this pattern.",
+  "domains": {
+    "techne": "Techne",
+    "hestia": "Hestia"
+  },
   "card": {
     "applyFix": "Apply Fix",
     "create": "Create",
+    "review": "Review in {{domain}}",
     "dismiss": "Dismiss",
     "openRun": "Open run",
     "showDismissed": "Show dismissed ({{count}})",
@@ -18,14 +23,15 @@
     "cancelEdit": "Cancel"
   },
   "confirmApply": {
-    "title": "Apply recommendation",
-    "description": "The brief below will be sent verbatim to the {{kind}} runner. You can edit it before confirming.",
+    "title": "Review in {{domain}}",
+    "description": "Argos supplies the evidence. {{domain}} validates the target, then sends this brief to the {{kind}} runner. You can edit it before confirming.",
     "confirm": "Confirm and launch",
     "cancel": "Cancel"
   },
   "errors": {
     "targetMissing": "Target artefact no longer exists. Switch to Create?",
     "unknownArtifactType": "Unknown artefact type — cannot apply this recommendation.",
-    "recoNotFound": "Recommendation no longer exists."
+    "recoNotFound": "Recommendation no longer exists.",
+    "reviewRequired": "This recommendation must be reviewed before launch."
   }
 }

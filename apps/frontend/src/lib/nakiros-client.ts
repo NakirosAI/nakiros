@@ -12,11 +12,13 @@ import {
   IPC_CHANNELS,
   type IpcChannel,
   type ApplyRecoResponse,
+  type GetRecommendationReviewRouteResponse,
   type RecoCard,
   type RecommendationAnalyzeRun,
   type RecommendationAnalyzeRunEvent,
   type RecommendationPattern,
   type StartRecommendationAnalyzeRequest,
+  type StartAnalyzeConvoRequest,
 } from '@nakiros/shared';
 
 const HTTP_BASE = typeof window !== 'undefined' ? window.location.origin : '';
@@ -218,8 +220,12 @@ const client = {
     invoke(C['project:analyzeConversation'], projectId, sessionId),
   listProjectConversationsWithAnalysis: (projectId: string) =>
     invoke(C['project:listConversationsWithAnalysis'], projectId),
+  getArgosConversationDashboard: (projectId: string) =>
+    invoke(C['project:getArgosDashboard'], projectId),
   getProjectAggregate: (projectId: string) =>
     invoke(C['project:getAggregate'], projectId),
+  listProjectAggregates: (projectIds: string[]) =>
+    invoke(C['project:listAggregates'], projectIds),
   refreshProjectAggregate: (projectId: string) =>
     invoke(C['project:refreshAggregate'], projectId),
   onProjectAggregateUpdated: (cb: (aggregate: unknown) => void) =>
@@ -559,7 +565,7 @@ const client = {
   uninstallDriftHook: () => invoke(C['driftHook:uninstall']),
 
   // Conversation deep-analysis runner (analyze-convo)
-  startAnalyzeConvo: (request: unknown) => invoke(C['analyzeConvo:start'], request),
+  startAnalyzeConvo: (request: StartAnalyzeConvoRequest) => invoke(C['analyzeConvo:start'], request),
   stopAnalyzeConvo: (runId: string) => invoke(C['analyzeConvo:stopRun'], runId),
   getAnalyzeConvoRun: (runId: string) => invoke(C['analyzeConvo:getRun'], runId),
   sendAnalyzeConvoUserMessage: (runId: string, message: string) =>
@@ -703,12 +709,20 @@ const client = {
     patternId: string,
     recId: string,
     editedBrief?: string,
+    reviewed = false,
   ) =>
     invoke<ApplyRecoResponse>(
       C['recommendations:applyReco'],
-      ...(editedBrief !== undefined
-        ? [projectId, patternId, recId, editedBrief]
-        : [projectId, patternId, recId]),
+      projectId,
+      patternId,
+      recId,
+      editedBrief,
+      reviewed,
+    ),
+
+  getRecommendationReviewRoute: (projectId: string, patternId: string, recId: string) =>
+    invoke<GetRecommendationReviewRouteResponse>(
+      C['recommendations:getReviewRoute'], projectId, patternId, recId,
     ),
 
   dismissReco: (projectId: string, patternId: string, recId: string) =>

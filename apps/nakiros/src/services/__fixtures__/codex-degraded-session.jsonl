@@ -1,0 +1,12 @@
+{"timestamp":"2026-07-12T11:00:00.000Z","type":"session_meta","payload":{"id":"codex-degraded-session","cwd":"/synthetic/project","git":{"branch":"feature/degraded"}}}
+{"timestamp":"2026-07-12T11:00:01.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","model_context_window":100}}
+{"timestamp":"2026-07-12T11:00:02.000Z","type":"event_msg","payload":{"type":"user_message","message":"Implement the feature"}}
+{"timestamp":"2026-07-12T11:00:03.000Z","type":"turn_context","payload":{"model":"gpt-test"}}
+{"timestamp":"2026-07-12T11:00:04.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":90,"cached_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0,"total_tokens":95},"last_token_usage":{"input_tokens":90,"cached_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0,"total_tokens":95},"model_context_window":100}}}
+{"timestamp":"2026-07-12T11:00:05.000Z","type":"compacted","payload":{"message":"","replacement_history":[]}}
+{"timestamp":"2026-07-12T11:00:05.001Z","type":"event_msg","payload":{"type":"context_compacted"}}
+{"timestamp":"2026-07-12T11:00:06.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"false\"}","call_id":"failed-call"}}
+{"timestamp":"2026-07-12T11:00:07.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"failed-call","output":"Exit code: 2\nOutput:\nfailed"}}
+{"timestamp":"2026-07-12T11:00:08.000Z","type":"event_msg","payload":{"type":"turn_aborted","reason":"interrupted"}}
+{"timestamp":"2026-07-12T11:00:09.000Z","type":"event_msg","payload":{"type":"user_message","message":"Non, ce n'est pas ça, annule"}}
+{"timestamp":"2026-07-12T11:00:10.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Understood"}}

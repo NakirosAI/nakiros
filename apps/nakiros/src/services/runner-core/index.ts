@@ -9,6 +9,11 @@ export {
   type SpawnTurnOptions,
   type SpawnTurnResult,
 } from './claude-stream.js';
+export {
+  buildCodexArgs,
+  handleCodexStreamEvent,
+  spawnCodexTurn,
+} from './codex-stream.js';
 export { EventLog, type EventLogOptions } from './event-log.js';
 export { persistRunJson, loadRunJson } from './run-store.js';
 export {

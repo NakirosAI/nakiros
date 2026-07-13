@@ -1,4 +1,7 @@
-# Module — Argos
+# Domain — Argos
+
+> Argos is an internal business domain of Nakiros, not a separately installed
+> product or npm package.
 
 > Ἄργος, *the all-seeing*. Conversation analysis, drift detection, friction
 > recommendations.
@@ -7,7 +10,8 @@
 
 Analyse a single conversation, detect topic/context drift, and aggregate
 friction patterns across conversations into actionable recommendations. **An
-optional module** — other modules do not depend on it.
+optional workflow** — users can use Techne and Hestia without analysing their
+conversations, and those domains do not depend on Argos internals.
 
 ## Capabilities
 
@@ -65,18 +69,47 @@ This nuance is a product differentiator, not an edge case.
 
 See [`argos-design.md`](argos-design.md). Key resolved decisions:
 
-- Reworked **topic** detector: semantic goal anchor + plan/navigation awareness
-  + sustained-departure (drop `firstLastSimilarity`, the main false-positive
-  source).
+- Reworked **topic** detector: a Unicode lexical anchor after structural resets
+  and sustained departure replace `firstLastSimilarity` and the monotonic
+  transition trigger. No intent vocabulary is encoded; intentional reframing
+  and plan progression are resolved by agent adjudication.
 - **Two-tier with in-conversation adjudication**: the cheap local gate only
   *suspects*; the agent already in the conversation confirms or denies via a
   hidden verdict tag, read by the `Stop` hook. A denied drift is remembered and
   **suppressed** — no re-firing every message (today's bug: 12× in one session).
 - Self-adjudication kills false positives; a strong+sustained local signal
   overrides complacency for real drift.
-- v1: Claude JSONL ingestion; other agents later.
+- Claude and Codex JSONL ingestion feed the same provider-neutral detectors.
+- The Argos hook installer targets only compatible agents detected locally;
+  single-agent setups remain first-class and comparison is never required.
+- Topic adjudication decisions survive daemon restarts and an old transcript
+  verdict can never resolve a newer pending review.
+- Codex friction scoring uses only structural repetition and native abort
+  events. No correction or intent vocabulary is embedded in the analyzer.
+- Claude and Codex are adapted into one `NormalizedConversation` contract
+  before deep analysis. The deep-analysis prompt, cache and streaming runner
+  are provider-neutral; cache keys isolate providers and reject changed
+  transcripts.
+- The narrative analyzer follows the source provider by default: Claude
+  conversations run through Claude, Codex conversations through
+  `codex exec --json`. Both receive the same embedded analysis protocol and
+  feed the same report UI; projects with a single agent keep a single path.
+- Conversation diagnostics share one screen hierarchy. Provider capability
+  gaps remain explicit instead of creating a second Codex-only workflow.
+- Agent comparison is progressive: it stays absent for a single-agent project
+  and appears only when at least two providers have real conversations. It
+  exposes normalized metrics, coverage and uncertainty without ranking agents
+  whose tasks are not paired.
+- Topic/context drift uses a bounded conversation-local semantic graph. Early
+  assistant plans and repeated explanations enrich the user goal without a
+  language dictionary, network call or downloaded model.
+- Recommendations cross domains through an explicit review route. Skills target
+  Techne; agent configuration targets Hestia. The target domain launches its
+  own runner only after the user confirms the reviewed brief.
 
 ## Remaining open questions
 
-- Embedding source for local semantic similarity; thread-signature for the
-  suppression key; calibration of the sustained-departure window.
+- Embedding source for local semantic similarity and calibration of the
+  sustained-departure window.
+- Replace the temporary `/clear` boundary thread signature with a semantic goal
+  signature when the goal-anchor model lands.

@@ -1,10 +1,20 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RefreshCw } from 'lucide-react';
-import type { ConversationAnalysis, Project } from '@nakiros/shared';
-import { useConversationAnalyses } from '../../hooks/useConversationAnalyses';
-import { ConvRow } from './ConvRow';
-import { ConvDrawer } from './ConvDrawer';
+import type {
+  AgentProvider,
+  CodexConversationAnalysis,
+  ConversationAnalysis,
+  Project,
+} from '@nakiros/shared';
+import {
+  isCodexConversationAnalysis,
+  isClaudeConversationAnalysis,
+  useArgosConversationDashboard,
+} from '../../hooks/useConversationAnalyses';
+import { ConversationRow } from './ConvRow';
+import { ConversationDrawer } from './ConvDrawer';
+import { AgentComparisonPanel } from './AgentComparisonPanel';
 
 interface Props {
   /** Project whose JSONL conversation analyses are shown. */
@@ -21,16 +31,42 @@ type FilterKey =
 
 interface FilterDef {
   id: FilterKey;
-  match(a: ConversationAnalysis): boolean;
+  matchClaude(a: ConversationAnalysis): boolean;
+  matchCodex(a: CodexConversationAnalysis): boolean;
 }
 
+type ProviderFilter = 'all' | AgentProvider;
+type ConversationListEntry =
+  | { kind: 'claude'; conversation: ConversationAnalysis }
+  | { kind: 'codex'; conversation: CodexConversationAnalysis };
+
 const FILTERS: FilterDef[] = [
-  { id: 'all', match: () => true },
-  { id: 'critical', match: (a) => a.healthZone === 'degraded' || a.score <= 40 },
-  { id: 'compactions', match: (a) => a.compactions.length > 0 },
-  { id: 'friction', match: (a) => a.frictionPoints.length > 0 },
-  { id: 'cacheWaste', match: (a) => a.cacheMissTurns >= 3 },
-  { id: 'toolErrors', match: (a) => a.toolErrorCount > 0 },
+  { id: 'all', matchClaude: () => true, matchCodex: () => true },
+  {
+    id: 'critical',
+    matchClaude: (a) => a.healthZone === 'degraded' || a.score <= 40,
+    matchCodex: (a) => a.healthZone === 'degraded' || a.score <= 40,
+  },
+  {
+    id: 'compactions',
+    matchClaude: (a) => a.compactions.length > 0,
+    matchCodex: (a) => a.compactions.length > 0,
+  },
+  {
+    id: 'friction',
+    matchClaude: (a) => a.frictionPoints.length > 0,
+    matchCodex: (a) => a.frictionPoints.length > 0,
+  },
+  {
+    id: 'cacheWaste',
+    matchClaude: (a) => a.cacheMissTurns >= 3,
+    matchCodex: () => false,
+  },
+  {
+    id: 'toolErrors',
+    matchClaude: (a) => a.toolErrorCount > 0,
+    matchCodex: (a) => a.toolErrorCount > 0,
+  },
 ];
 
 /**
@@ -45,26 +81,52 @@ const FILTERS: FilterDef[] = [
  */
 export default function ConversationsScreen({ project }: Props) {
   const { t } = useTranslation('conversations');
-  const fetched = useConversationAnalyses(project.id);
-  const analyses = fetched ?? [];
-  const loading = fetched === null;
+  const dashboard = useArgosConversationDashboard(project.id);
+  const analyses = dashboard?.analyses ?? [];
+  const loading = dashboard === null;
 
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [providerFilter, setProviderFilter] = useState<ProviderFilter>('all');
   const [showSynthetic, setShowSynthetic] = useState(false);
-  const [open, setOpen] = useState<ConversationAnalysis | null>(null);
+  const [open, setOpen] = useState<ConversationListEntry['conversation'] | null>(null);
+
+  const claudeAnalyses = useMemo(
+    () => analyses.filter(isClaudeConversationAnalysis),
+    [analyses],
+  );
+  const codexAnalyses = useMemo(
+    () => analyses.filter(isCodexConversationAnalysis),
+    [analyses],
+  );
 
   // Hide synthetic conversations (sandbox / fix-temp / eval-iteration runs)
   // by default — they're tagged at ingest time and almost never relevant
   // when the user is reviewing their actual coding sessions.
   const userScopedAnalyses = useMemo(
-    () => (showSynthetic ? analyses : analyses.filter((a) => a.kind !== 'synthetic')),
-    [analyses, showSynthetic],
+    () => (showSynthetic ? claudeAnalyses : claudeAnalyses.filter((a) => a.kind !== 'synthetic')),
+    [claudeAnalyses, showSynthetic],
   );
 
   const syntheticCount = useMemo(
-    () => analyses.filter((a) => a.kind === 'synthetic').length,
-    [analyses],
+    () => claudeAnalyses.filter((a) => a.kind === 'synthetic').length,
+    [claudeAnalyses],
   );
+
+  const providerFilteredAnalyses = useMemo(
+    () => providerFilter === 'all' || providerFilter === 'claude' ? userScopedAnalyses : [],
+    [providerFilter, userScopedAnalyses],
+  );
+  const providerFilteredCodex = useMemo(
+    () => providerFilter === 'all' || providerFilter === 'codex' ? codexAnalyses : [],
+    [codexAnalyses, providerFilter],
+  );
+
+  const providers = useMemo(() => {
+    const found = new Set<AgentProvider>();
+    if (userScopedAnalyses.length > 0) found.add('claude');
+    if (codexAnalyses.length > 0) found.add('codex');
+    return [...found];
+  }, [codexAnalyses.length, userScopedAnalyses.length]);
 
   const counts = useMemo(() => {
     const out: Record<FilterKey, number> = {
@@ -76,22 +138,25 @@ export default function ConversationsScreen({ project }: Props) {
       toolErrors: 0,
     };
     for (const f of FILTERS) {
-      out[f.id] = userScopedAnalyses.filter(f.match).length;
+      out[f.id] = providerFilteredAnalyses.filter(f.matchClaude).length
+        + providerFilteredCodex.filter(f.matchCodex).length;
     }
     return out;
-  }, [userScopedAnalyses]);
+  }, [providerFilteredAnalyses, providerFilteredCodex]);
 
   const visible = useMemo(() => {
-    const matcher = FILTERS.find((f) => f.id === filter)!.match;
-    // Sort by health (critical first); ties broken by recency.
-    return userScopedAnalyses
-      .filter(matcher)
-      .slice()
-      .sort((a, b) => {
-        if (a.score !== b.score) return a.score - b.score;
-        return new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime();
-      });
-  }, [userScopedAnalyses, filter]);
+    const matcher = FILTERS.find((f) => f.id === filter)!;
+    const analyzed: ConversationListEntry[] = providerFilteredAnalyses
+      .filter(matcher.matchClaude)
+      .map((conversation) => ({ kind: 'claude', conversation }));
+    const native: ConversationListEntry[] = providerFilteredCodex
+      .filter(matcher.matchCodex)
+      .map((conversation) => ({ kind: 'codex', conversation }));
+    return [...analyzed, ...native].sort((a, b) =>
+      new Date(b.conversation.lastMessageAt).getTime()
+      - new Date(a.conversation.lastMessageAt).getTime(),
+    );
+  }, [filter, providerFilteredAnalyses, providerFilteredCodex]);
 
   if (loading) {
     return (
@@ -107,15 +172,35 @@ export default function ConversationsScreen({ project }: Props) {
       <header className="flex items-start justify-between gap-6 border-b border-n-border-subtle px-7 py-4">
         <div>
           <h2 className="text-[15px] font-medium text-n-fg">
-            {t('headingAnalysis', { count: analyses.length })}
+            {t('headingAll', { count: analyses.length })}
           </h2>
           <p className="mt-1 font-n-mono text-[11px] text-n-subtle">
-            {t('subheadingByHealth')}
+            {t('subheadingRecent')}
           </p>
         </div>
       </header>
 
+      {dashboard && <AgentComparisonPanel comparison={dashboard.comparison} />}
+
       <div className="flex flex-wrap items-center gap-1.5 border-b border-n-border-subtle bg-n-sunken px-7 py-2.5">
+        {providers.length > 1 && (
+          <div className="mr-2 inline-flex items-center gap-0.5 rounded-n-xs border border-n-border-subtle bg-n-canvas p-0.5" aria-label={t('providerFilter.label')}>
+            {(['all', ...providers] as ProviderFilter[]).map((provider) => (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => setProviderFilter(provider)}
+                aria-pressed={providerFilter === provider}
+                className={'rounded-[3px] px-2 py-0.5 font-n-mono text-[10.5px] transition-colors ' +
+                  (providerFilter === provider
+                    ? 'bg-n-raised text-n-fg'
+                    : 'text-n-subtle hover:text-n-fg')}
+              >
+                {t(`providerFilter.${provider}`)}
+              </button>
+            ))}
+          </div>
+        )}
         {FILTERS.map((f) => {
           const active = f.id === filter;
           const count = counts[f.id];
@@ -168,9 +253,9 @@ export default function ConversationsScreen({ project }: Props) {
           </div>
         ) : (
           <ul className="flex flex-col">
-            {visible.map((a) => (
-              <li key={a.sessionId}>
-                <ConvRow analysis={a} onOpen={() => setOpen(a)} />
+            {visible.map((entry) => (
+              <li key={`${entry.kind}:${entry.conversation.sessionId}`}>
+                <ConversationRow analysis={entry.conversation} onOpen={() => setOpen(entry.conversation)} />
               </li>
             ))}
           </ul>
@@ -178,7 +263,8 @@ export default function ConversationsScreen({ project }: Props) {
       </div>
 
       {open && (
-        <ConvDrawer
+        <ConversationDrawer
+          projectId={project.id}
           analysis={open}
           onClose={() => setOpen(null)}
         />

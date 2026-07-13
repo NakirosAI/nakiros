@@ -7,9 +7,22 @@
  * or uninstalled. Their CJS scripts land under `~/.nakiros/drift/`.
  */
 
+export type DriftHookProvider = 'claude' | 'codex';
+
+/** Status of the Argos hook pair for one installed agent. */
+export interface DriftHookTargetStatus {
+  provider: DriftHookProvider;
+  installed: boolean;
+  stopHookPresent: boolean;
+  userPromptSubmitHookPresent: boolean;
+  settingsPath: string;
+  /** Codex asks the user to review non-managed hooks before trusting them. */
+  requiresTrustReview: boolean;
+}
+
 /** Full status of the drift hook installation as reported to the UI. */
 export interface DriftHookStatus {
-  /** True when both hooks are present in settings.json AND both scripts are materialized on disk. */
+  /** True when every detected agent has both hooks and both scripts exist. */
   installed: boolean;
   /** Whether the Stop hook command string is found in `~/.claude/settings.json`. */
   stopHookPresent: boolean;
@@ -21,6 +34,17 @@ export interface DriftHookStatus {
   settingsPath: string;
   /** Absolute paths of the two hook scripts. */
   scriptPaths: { stop: string; userPromptSubmit: string };
+  /** Per-agent registration status. Claude-only and Codex-only setups remain valid. */
+  targets: DriftHookTargetStatus[];
+}
+
+export interface DriftHookTargetDiff {
+  provider: DriftHookProvider;
+  settingsPath: string;
+  exists: boolean;
+  current: string;
+  next: string;
+  requiresTrustReview: boolean;
 }
 
 /**
@@ -38,4 +62,6 @@ export interface DriftHookDiff {
   next: string;
   /** Absolute paths of the two CJS scripts that will be written. */
   scriptPaths: { stop: string; userPromptSubmit: string };
+  /** Exact configuration mutation for each detected agent. */
+  targets: DriftHookTargetDiff[];
 }

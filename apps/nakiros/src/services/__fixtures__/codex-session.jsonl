@@ -1,0 +1,12 @@
+{"timestamp":"2026-07-12T10:00:00.000Z","type":"session_meta","payload":{"id":"codex-test-session","timestamp":"2026-07-12T10:00:00.000Z","cwd":"/synthetic/project","cli_version":"1.2.3","model_provider":"openai","git":{"branch":"feature/test"}}}
+{"timestamp":"2026-07-12T10:00:01.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","model_context_window":200000,"started_at":"2026-07-12T10:00:01.000Z"}}
+{"timestamp":"2026-07-12T10:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"duplicate user message"}]}}
+{"timestamp":"2026-07-12T10:00:02.000Z","type":"event_msg","payload":{"type":"user_message","message":"Implement the parser","images":[]}}
+{"timestamp":"2026-07-12T10:00:03.000Z","type":"turn_context","payload":{"turn_id":"turn-1","cwd":"/synthetic/project","model":"gpt-test"}}
+{"timestamp":"2026-07-12T10:00:04.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"false\"}","call_id":"call-1"}}
+{"timestamp":"2026-07-12T10:00:05.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"Exit code: 1\nOutput:\nfailed"}}
+{"timestamp":"2026-07-12T10:00:06.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Parser implemented","phase":"final_answer"}}
+{"timestamp":"2026-07-12T10:00:06.500Z","type":"session_meta","payload":{"id":"later-fork-meta","cwd":"/synthetic/project","thread_source":"subagent"}}
+{"timestamp":"2026-07-12T10:00:07.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"duplicate agent message"}]}}
+{"timestamp":"2026-07-12T10:00:08.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":20,"reasoning_output_tokens":5,"total_tokens":120},"last_token_usage":{"input_tokens":100,"cached_input_tokens":25,"output_tokens":20,"reasoning_output_tokens":5,"total_tokens":120},"model_context_window":200000}}}
+{"timestamp":"2026-07-12T10:00:10.000Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1","duration_ms":9000,"completed_at":"2026-07-12T10:00:10.000Z"}}

@@ -3,7 +3,42 @@
   "empty": "Aucune conversation trouvée pour ce projet.",
   "emptyForFilter": "Aucune conversation ne correspond à ce filtre.",
   "headingAnalysis": "Conversations — {{count}} analysées",
+  "headingAll": "Conversations — {{count}} trouvées",
   "subheadingByHealth": "Triées par santé (critiques d'abord)",
+  "subheadingRecent": "Sessions natives des agents, plus récentes d’abord",
+  "providerFilter": {
+    "label": "Filtrer par agent",
+    "all": "Tous les agents",
+    "claude": "Claude",
+    "codex": "Codex",
+    "gemini": "Gemini",
+    "cursor": "Cursor"
+  },
+  "comparison": {
+    "title": "Comparaison observée",
+    "scope": "Métriques calculées sur les conversations de ce projet. Les tâches ne sont pas appariées, ces valeurs décrivent l’usage observé et ne désignent pas un meilleur agent.",
+    "metric": "Métrique normalisée",
+    "sample_one": "{{count}} conv.",
+    "sample_other": "{{count}} conv.",
+    "sameProject": "même projet",
+    "periodOverlap": "périodes croisées",
+    "periodSeparate": "périodes distinctes",
+    "tasksUnpaired": "tâches non appariées",
+    "coverage": "{{value}}% couvert",
+    "confidence": {
+      "insufficient": "preuves insuffisantes",
+      "directional": "tendance seulement",
+      "supported": "preuves appariées"
+    },
+    "metrics": {
+      "health-score": "Score de santé moyen",
+      "tokens-per-conversation": "Tokens par conversation",
+      "duration-per-conversation": "Durée par conversation",
+      "friction-per-100-messages": "Frictions pour 100 messages",
+      "tool-errors-per-100-calls": "Erreurs pour 100 appels d’outil",
+      "compactions-per-conversation": "Compactions par conversation"
+    }
+  },
   "sort": {
     "label": "Tri",
     "score": "Par santé (critiques d'abord)",
@@ -60,6 +95,7 @@
   "drawer": {
     "title": "Diagnostic",
     "close": "Fermer",
+    "navigation": "Vues de la conversation",
     "tabs": {
       "diagnostic": "Diagnostic",
       "timeline": "Timeline"
@@ -131,16 +167,103 @@
   },
   "messageCount_one": "{{count}} message",
   "messageCount_other": "{{count}} messages",
+  "native": {
+    "untitled": "Session sans titre",
+    "transcript": "Transcription",
+    "unknown": "inconnu",
+    "scoreLabel": "score {{score}}",
+    "context": "contexte {{value}}",
+    "contextPeak": "contexte {{peak}} / {{window}}",
+    "totalTokens": "{{value}} tokens",
+    "corrections_one": "{{count}} correction",
+    "corrections_other": "{{count}} corrections",
+    "aborts_one": "{{count}} tour interrompu",
+    "aborts_other": "{{count}} tours interrompus",
+    "drawerTitle": "Conversation Codex",
+    "session": "session {{id}}",
+    "metadata": "Métadonnées de la session",
+    "scoreFactors": "Facteurs du score",
+    "noPenalty": "Aucun signal de pénalité n’a été détecté.",
+    "providerMethodHint": "Ce diagnostic utilise les événements natifs Codex. Les métriques de cache ne sont pas exposées par Codex et sont volontairement absentes.",
+    "providerSpecific": "Les durées de tours sont natives au fournisseur et ne sont pas comparées aux temps Claude.",
+    "signalsTitle": "Signaux observés",
+    "turnsTitle": "Tours du modèle",
+    "abortsLabel": "Tours interrompus",
+    "turnAverageLabel": "Durée moyenne",
+    "unavailable": "Non exposé par ce fournisseur",
+    "contextReadingGuide": "La courbe suit les observations de contexte Codex par rapport à la fenêtre déclarée. Les marqueurs et pénalités utilisent uniquement les événements présents dans le rollout.",
+    "factorOccurrences_one": "{{count}} occurrence",
+    "factorOccurrences_other": "{{count}} occurrences",
+    "factors": {
+      "context": "Saturation du contexte",
+      "compaction": "Compactions",
+      "tool-errors": "Erreurs outils",
+      "aborts": "Tours interrompus",
+      "friction": "Demandes répétées"
+    },
+    "factorAdvice": {
+      "context": "Le contexte a approché la fenêtre déclarée {{count}} fois. Découpe la tâche avant saturation.",
+      "compaction_one": "{{count}} compaction a été émise. Reformule l’objectif actif après une compaction.",
+      "compaction_other": "{{count}} compactions ont été émises. Reformule l’objectif actif après une compaction.",
+      "tool-errors_one": "{{count}} erreur outil a été observée. Vérifie la commande ou son environnement avant de réessayer.",
+      "tool-errors_other": "{{count}} erreurs outils ont été observées. Vérifie la commande ou son environnement avant de réessayer.",
+      "aborts_one": "{{count}} tour modèle a été interrompu. Réduis la demande ou vérifie la chaîne d’outils si cela se répète.",
+      "aborts_other": "{{count}} tours modèle ont été interrompus. Réduis la demande ou vérifie la chaîne d’outils si cela se répète.",
+      "friction_one": "{{count}} demande répétée a été observée sans interpréter son vocabulaire. Vérifie ce qui bloque la progression.",
+      "friction_other": "{{count}} demandes répétées ont été observées sans interpréter leur vocabulaire. Vérifie ce qui bloque la progression."
+    },
+    "contextTitle": "Contexte et tours",
+    "contextPeakValue": "Pic : {{value}}",
+    "contextWindowValue": "Fenêtre : {{value}}",
+    "contextSamples_one": "{{count}} observation",
+    "contextSamples_other": "{{count}} observations",
+    "turnDuration_one": "{{count}} tour modèle, moyenne {{average}}",
+    "turnDuration_other": "{{count}} tours modèle, moyenne {{average}}",
+    "noTurnDuration": "Aucune durée de tour modèle exposée.",
+    "toolsTitle": "Utilisation native des outils",
+    "noTools": "Aucun appel d’outil exposé.",
+    "toolStat": "{{count}} appels · {{errors}} erreurs",
+    "timeline": {
+      "title": "Chronologie native",
+      "empty": "Aucun événement natif exposé pour cette session.",
+      "context": "Observation du contexte",
+      "compaction": "Compaction",
+      "correction": "Correction explicite",
+      "contextDetail": "{{tokens}} tokens d’entrée, {{total}} tokens cumulés",
+      "compactionDetail": "Le fournisseur a émis un marqueur de compaction."
+    },
+    "noMessages": "Aucun message lisible n’a été trouvé dans cette session.",
+    "fields": {
+      "score": "Score",
+      "messages": "Messages",
+      "duration": "Durée",
+      "tokens": "Tokens totaux",
+      "context": "Fenêtre de contexte",
+      "toolErrors": "Erreurs outils",
+      "aborts": "Tours interrompus"
+    },
+    "roles": {
+      "system": "Système",
+      "user": "Utilisateur",
+      "assistant": "Assistant"
+    }
+  },
   "deepAnalysis": {
     "title": "Analyse approfondie",
+    "analyzer": "Moteur : {{provider}}",
     "checking": "Vérification du cache…",
     "pitch": "Lance une analyse narrative par LLM pour détecter la frustration implicite, la dérive contextuelle, et recevoir des recommandations concrètes.",
+    "pitchProvider": "{{provider}} relit cette conversation et produit un diagnostic narratif à partir des preuves collectées par Argos.",
     "estimate": "Modèle prévu : {{model}} · contexte ~{{tokensK}}k tokens · résultat mis en cache après le run",
     "run": "Lancer l'analyse approfondie",
     "running": "Analyse en cours…",
     "runningHint": "Claude lit la conversation et rédige le rapport — quelques secondes à quelques dizaines de secondes selon la taille.",
+    "runningHintProvider": "{{provider}} lit la conversation et rédige le rapport. Le résultat sera conservé localement.",
+    "stop": "Arrêter",
+    "failed": "L’analyse n’a pas pu être terminée.",
     "rerun": "Relancer",
-    "generated": "{{model}} · ~{{tokensK}}k tokens · {{date}}"
+    "generated": "{{model}} · ~{{tokensK}}k tokens · {{date}}",
+    "generatedBy": "Produit par {{provider}} · {{model}} · {{date}}"
   },
   "tips": {
     "split-sessions": {

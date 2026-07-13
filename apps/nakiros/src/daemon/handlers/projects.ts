@@ -9,6 +9,14 @@ import {
   undismissProject,
 } from '../../services/project-scanner.js';
 import { listConversations, getConversationMessages } from '../../services/conversation-parser.js';
+import {
+  getCodexConversationMessages,
+  listCodexConversations,
+} from '../../services/codex-conversation-parser.js';
+import {
+  getCachedCodexAnalysis,
+  listCachedCodexAnalyses,
+} from '../../services/codex-conversation-analysis-cache.js';
 import { getOrComputeAnalysis } from '../../services/conversation-analysis-cache.js';
 import {
   ensureProjectIndexed,
@@ -22,12 +30,19 @@ import {
 } from '../../services/conversation-ingest/index.js';
 import {
   loadProjectAggregate,
+  loadProjectAggregates,
   refreshProjectAggregate,
 } from '../../services/project-aggregate-cache.js';
 import {
+  conversationFingerprint,
   loadDeepAnalysis,
-  runDeepAnalysis,
+  runNormalizedDeepAnalysis,
 } from '../../services/conversation-deep-analyzer.js';
+import {
+  codexSessionsDir,
+  loadNormalizedProjectConversation,
+} from '../../services/project-conversation-source.js';
+import { buildArgosAgentComparison } from '../../services/argos-agent-comparison.js';
 import {
   listSkills,
   getSkill,
@@ -38,7 +53,7 @@ import {
 import { eventBus } from '../event-bus.js';
 import { createTypedHandler } from './run-helpers.js';
 import type { HandlerRegistry } from './index.js';
-import type { Project } from '@nakiros/shared';
+import type { Project, ProviderConversationAnalysis } from '@nakiros/shared';
 
 /**
  * Route to the correct lazy indexer based on the project's provider.
@@ -49,9 +64,56 @@ import type { Project } from '@nakiros/shared';
 function ensureIndexed(project: Project): void {
   if (project.provider === 'cowork') {
     ensureCoworkProjectIndexed(project.providerProjectDir, project.projectPath);
-  } else {
+  } else if (project.provider === 'claude') {
     ensureProjectIndexed(project.providerProjectDir);
   }
+}
+
+function listNativeCodexConversations(project: Project, projectId: string) {
+  const sessionsDir = codexSessionsDir(project);
+  return sessionsDir
+    ? listCodexConversations(sessionsDir, project.projectPath, projectId)
+    : [];
+}
+
+function listProjectAnalyses(
+  project: Project,
+  projectId: string,
+): ProviderConversationAnalysis[] {
+  ensureIndexed(project);
+  const sessions = listSessionsForProject(project.projectPath);
+  const sessionsDir = codexSessionsDir(project);
+  const codexAnalyses = sessionsDir
+    ? listCachedCodexAnalyses(sessionsDir, project.projectPath, projectId)
+    : [];
+  if (sessions.length > 0) {
+    return [
+      ...sessions
+        .map((session) => {
+          const analysisDir = dirname(session.transcriptPath);
+          const analysis = getOrComputeAnalysis(analysisDir, session.sessionId, projectId);
+          if (!analysis) return null;
+          return session.kind ? { ...analysis, kind: session.kind } : analysis;
+        })
+        .filter((analysis): analysis is NonNullable<typeof analysis> => analysis !== null),
+      ...codexAnalyses,
+    ];
+  }
+  const conversations = listConversations(project.providerProjectDir, projectId);
+  return [
+    ...conversations
+      .map((conversation) => {
+        const analysis = getOrComputeAnalysis(
+          project.providerProjectDir,
+          conversation.sessionId,
+          projectId,
+        );
+        if (!analysis) return null;
+        return conversation.kind ? { ...analysis, kind: conversation.kind } : analysis;
+      })
+      .filter((analysis): analysis is NonNullable<typeof analysis> => analysis !== null),
+    ...codexAnalyses,
+  ];
 }
 
 /**
@@ -103,10 +165,21 @@ export const projectHandlers: HandlerRegistry = {
     if (!project) return [];
     ensureIndexed(project);
     const sessions = listSessionsForProject(project.projectPath);
-    if (sessions.length > 0) return sessions.map((s) => toProjectConversation(s, projectId));
+    const codex = listNativeCodexConversations(project, projectId);
+    if (sessions.length > 0) {
+      return [...sessions.map((s) => toProjectConversation(s, projectId)), ...codex].sort(
+        (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+      );
+    }
     // Fallback: project hasn't been indexed (e.g. fresh after purge or the
     // ingest dir was wiped manually) — read the live JSONL.
-    return listConversations(project.providerProjectDir, projectId);
+    const primary =
+      project.provider === 'claude'
+        ? listConversations(project.providerProjectDir, projectId)
+        : [];
+    return [...primary, ...codex].sort(
+      (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+    );
   }),
 
   'project:getConversationMessages': createTypedHandler((projectId: string, sessionId: string) => {
@@ -115,13 +188,35 @@ export const projectHandlers: HandlerRegistry = {
     ensureIndexed(project);
     const body = readSessionBody(project.projectPath, sessionId);
     if (body) return body.messages;
+    const sessionsDir = codexSessionsDir(project);
+    if (sessionsDir) {
+      const codexMessages = getCodexConversationMessages(
+        sessionsDir,
+        project.projectPath,
+        projectId,
+        sessionId,
+      );
+      if (codexMessages) return codexMessages;
+    }
     // Fallback when the session was just deleted from the ingest store.
-    return getConversationMessages(project.providerProjectDir, sessionId);
+    return project.provider === 'claude'
+      ? getConversationMessages(project.providerProjectDir, sessionId)
+      : [];
   }),
 
   'project:analyzeConversation': createTypedHandler((projectId: string, sessionId: string) => {
     const project = getProject(projectId);
     if (!project) return null;
+    const sessionsDir = codexSessionsDir(project);
+    if (sessionsDir) {
+      const codexAnalysis = getCachedCodexAnalysis(
+        sessionsDir,
+        project.projectPath,
+        projectId,
+        sessionId,
+      );
+      if (codexAnalysis) return codexAnalysis;
+    }
     const analysisDir =
       getSessionTranscriptDir(project.projectPath, sessionId) ?? project.providerProjectDir;
     return getOrComputeAnalysis(analysisDir, sessionId, projectId);
@@ -130,53 +225,51 @@ export const projectHandlers: HandlerRegistry = {
   'project:listConversationsWithAnalysis': createTypedHandler((projectId: string) => {
     const project = getProject(projectId);
     if (!project) return [];
-    ensureIndexed(project);
-    const sessions = listSessionsForProject(project.projectPath);
-    // Carry the `kind` tag from the ingest store onto each analysis so the
-    // ConversationsScreen can hide synthetic runs by default without a
-    // second IPC round-trip.
-    if (sessions.length > 0) {
-      return sessions
-        .map((s) => {
-          // For providers like 'cowork', the JSONL does not live directly under
-          // providerProjectDir — use the per-session transcriptPath instead.
-          const analysisDir = dirname(s.transcriptPath);
-          const analysis = getOrComputeAnalysis(analysisDir, s.sessionId, projectId);
-          if (!analysis) return null;
-          return s.kind ? { ...analysis, kind: s.kind } : analysis;
-        })
-        .filter((x): x is NonNullable<typeof x> => x !== null);
-    }
-    // Fallback: not yet indexed — read live JSONL directly (non-cowork only).
-    const convs = listConversations(project.providerProjectDir, projectId);
-    return convs
-      .map((c) => {
-        const analysis = getOrComputeAnalysis(project.providerProjectDir, c.sessionId, projectId);
-        if (!analysis) return null;
-        return c.kind ? { ...analysis, kind: c.kind } : analysis;
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null);
+    return listProjectAnalyses(project, projectId);
+  }),
+
+  'project:getArgosDashboard': createTypedHandler((projectId: string) => {
+    const project = getProject(projectId);
+    if (!project) return null;
+    const analyses = listProjectAnalyses(project, projectId);
+    return {
+      analyses,
+      comparison: buildArgosAgentComparison(projectId, analyses),
+    };
   }),
 
   'project:getAggregate': createTypedHandler((projectId: string) =>
     loadProjectAggregate(projectId),
   ),
 
+  'project:listAggregates': createTypedHandler((projectIds: string[]) =>
+    loadProjectAggregates(projectIds),
+  ),
+
   'project:refreshAggregate': createTypedHandler((projectId: string) =>
     refreshProjectAggregate(projectId),
   ),
 
-  'project:loadDeepAnalysis': createTypedHandler((_projectId: string, sessionId: string) =>
-    loadDeepAnalysis(sessionId),
-  ),
+  'project:loadDeepAnalysis': createTypedHandler((projectId: string, sessionId: string) => {
+    const project = getProject(projectId);
+    if (!project) return null;
+    const conversation = loadNormalizedProjectConversation(project, projectId, sessionId);
+    if (!conversation) return null;
+    const cached = loadDeepAnalysis(sessionId, conversation.provider);
+    if (!cached) return null;
+    return cached.sourceFingerprint === undefined ||
+      cached.sourceFingerprint === conversationFingerprint(conversation)
+      ? cached
+      : null;
+  }),
 
   'project:deepAnalyzeConversation': createTypedHandler(
     async (projectId: string, sessionId: string) => {
       const project = getProject(projectId);
       if (!project) throw new Error(`Project ${projectId} not found`);
-      const analysisDir =
-        getSessionTranscriptDir(project.projectPath, sessionId) ?? project.providerProjectDir;
-      return runDeepAnalysis(analysisDir, sessionId, projectId);
+      const conversation = loadNormalizedProjectConversation(project, projectId, sessionId);
+      if (!conversation) throw new Error(`Conversation ${sessionId} not found or unreadable.`);
+      return runNormalizedDeepAnalysis(conversation);
     },
   ),
 

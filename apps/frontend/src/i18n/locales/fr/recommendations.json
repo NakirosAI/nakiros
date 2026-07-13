@@ -7,9 +7,14 @@
   "running": "En cours…",
   "failed": "Échec — réessayer",
   "noRecosProduced": "L'agent n'a pas identifié d'action préventive claire pour ce pattern.",
+  "domains": {
+    "techne": "Techne",
+    "hestia": "Hestia"
+  },
   "card": {
     "applyFix": "Appliquer le fix",
     "create": "Créer",
+    "review": "Revoir dans {{domain}}",
     "dismiss": "Ignorer",
     "openRun": "Ouvrir le run",
     "showDismissed": "Afficher ignorées ({{count}})",
@@ -18,14 +23,15 @@
     "cancelEdit": "Annuler"
   },
   "confirmApply": {
-    "title": "Appliquer la recommandation",
-    "description": "Le brief ci-dessous sera envoyé tel quel au runner {{kind}}. Tu peux l'éditer avant de confirmer.",
+    "title": "Revue par {{domain}}",
+    "description": "Argos fournit les preuves. {{domain}} validera la cible puis transmettra ce brief au runner {{kind}}. Tu peux le modifier avant de confirmer.",
     "confirm": "Confirmer et lancer",
     "cancel": "Annuler"
   },
   "errors": {
     "targetMissing": "Cible introuvable. Convertir en création ?",
     "unknownArtifactType": "Type d'artefact inconnu — impossible d'appliquer cette recommandation.",
-    "recoNotFound": "La recommandation n'existe plus."
+    "recoNotFound": "La recommandation n'existe plus.",
+    "reviewRequired": "Cette recommandation doit être revue avant le lancement."
   }
 }

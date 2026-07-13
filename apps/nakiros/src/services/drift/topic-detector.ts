@@ -1,42 +1,18 @@
 /**
  * Topic drift detector.
  *
- * Detects that a Claude Code session has progressively strayed away from its
- * original objective (the opening messages) without a `/clear` having reset
- * the context.
- *
- * A naive "consecutive Jaccard < threshold = transition" count produces heavy
- * false positives: real debugging sessions send short, terse follow-ups
- * ("ok, commit this") and each message often introduces a new *sub-problem*
- * of the same project, so adjacent messages rarely share vocabulary even when
- * the session is perfectly coherent. Three ideas fix that:
- *
- *   1. **Filter procedural noise.** Messages with fewer than
- *      {@link MIN_CONTENT_TOKENS} meaningful tokens ("ok on peut commit"),
- *      IDE-context injections (`<ide_…>`), and slash-command stdout wrappers
- *      carry no topic — they are dropped before analysis.
- *   2. **Transitions vs accumulated context, not the previous message.** A
- *      message is a transition only when it is disconnected from *everything*
- *      discussed so far (it shares < {@link CONTEXT_CONNECTION_THRESHOLD} of
- *      its own vocabulary with the union of all prior messages). A new
- *      sub-problem that reuses recurring project vocabulary is NOT a
- *      transition; a genuine jump to an unrelated area is.
- *   3. **End-vs-opening connection, not first-vs-last message.** Drift means
- *      the session *ended somewhere unrelated to where it began*. We measure
- *      how much the final message connects to the opening context (union of
- *      the first few substantive messages) rather than comparing two single
- *      messages, which is brittle when one is long and one is terse.
- *
- * Trigger: `transitions >= MIN_TRANSITIONS` AND
- * `endOpeningConnection < END_OPENING_THRESHOLD`.
+ * The detector builds a language-neutral lexical anchor from the beginning of
+ * the current session and requires the recent trajectory to stay disconnected
+ * for several substantive messages. The result is a cheap local suspicion
+ * gate; the in-conversation agent adjudicates intent (including an intentional
+ * reframe) before Argos surfaces a topic alert.
  *
  * This file imports only from `runner-core/cluster-tokens` — no cross-package
  * deps, no network, no async I/O.
  */
 
-import { jaccard, tokenizeForCluster } from '../runner-core/cluster-tokens.js';
 import type { DriftReport } from '../drift-analyzer.js';
-import type { UserMessage } from './session-loader.js';
+import type { AssistantTurn, UserMessage } from './session-loader.js';
 
 // ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -54,24 +30,25 @@ const MIN_USER_MESSAGES = 6;
 const MIN_CONTENT_TOKENS = 4;
 
 /**
- * A message is a transition when the fraction of its own tokens that already
- * appeared in the accumulated session vocabulary is below this value — i.e.
- * it is (almost) entirely new vocabulary, disconnected from everything so far.
+ * A message is outside the current goal anchor below this connection ratio.
  */
-const CONTEXT_CONNECTION_THRESHOLD = 0.15;
+const GOAL_CONNECTION_THRESHOLD = 0.12;
 
 /**
- * The session is considered to have drifted only when its final message shares
- * less than this fraction of its vocabulary with the opening context. Above
- * it, the conversation is still anchored to where it started.
+ * Maximum connection of the recent trajectory to the current goal anchor.
  */
-const END_OPENING_THRESHOLD = 0.10;
+const RECENT_WINDOW_THRESHOLD = 0.12;
 
-/** Minimum number of transitions required to trigger. */
-const MIN_TRANSITIONS = 2;
+/** Consecutive substantive departures required before opening adjudication. */
+const SUSTAINED_DEPARTURE_MESSAGES = 3;
 
-/** How many leading substantive messages define the "opening context". */
-const OPENING_MESSAGES = 3;
+/** Leading substantive messages used to form the current goal anchor. */
+const GOAL_ANCHOR_MESSAGES = 3;
+
+/** Recent messages combined to measure whether the trajectory returned. */
+const RECENT_WINDOW_MESSAGES = 3;
+
+const WORD_SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'word' });
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -82,18 +59,27 @@ const OPENING_MESSAGES = 3;
  */
 export interface TopicMetrics {
   /**
-   * Number of messages that were disconnected from the accumulated context at
-   * the point they appeared (see {@link CONTEXT_CONNECTION_THRESHOLD}).
+   * Number of times the trajectory crossed from connected to disconnected.
    */
   transitionsDetected: number;
   /**
-   * Fraction of the final message's vocabulary that connects back to the
-   * opening context (union of the first {@link OPENING_MESSAGES} substantive
-   * messages). Low = the session ended on an unrelated topic.
+   * Backward-compatible alias of {@link recentWindowConnection}.
    */
   endOpeningConnection: number;
   /** Number of substantive user messages after filtering procedural noise. */
   userMessageCount: number;
+  /** Connection of the combined recent trajectory to the current goal anchor. */
+  recentWindowConnection: number;
+  /** Number of consecutive disconnected messages at the end of the session. */
+  sustainedDepartureCount: number;
+  /** Connection of only the trailing departure run to the current goal. */
+  departureWindowConnection: number;
+  /** Original user-message index after the latest structural reset. */
+  goalBoundaryIndex: number | null;
+  /** Local evidence source used to enrich the lexical goal anchor. */
+  similarityMethod: 'lexical' | 'conversation-graph';
+  /** Number of plan/concept tokens added from early assistant explanations. */
+  semanticAnchorTokens: number;
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -105,7 +91,7 @@ export interface TopicMetrics {
  */
 function findLastClearIndex(messages: UserMessage[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].text.trim().toLowerCase() === '/clear') return i;
+    if (messages[i]!.text.trim().toLowerCase() === '/clear') return i;
   }
   return -1;
 }
@@ -132,16 +118,100 @@ function isProceduralWrapper(text: string): boolean {
 }
 
 /**
- * Fraction of `probe`'s tokens that appear in `context`. Unlike Jaccard, this
- * is normalised by the probe size only, so it stays meaningful when `context`
- * (the accumulated vocabulary) is much larger than the single probe message.
+ * Tokenize topic text with Unicode word boundaries. This deliberately has no
+ * language-specific stop-word list or intent keywords: German, Chinese and
+ * other scripts follow the same structural rules. Very short turns naturally
+ * remain below {@link MIN_CONTENT_TOKENS} and are treated as non-substantive.
+ */
+function tokenizeTopic(text: string): Set<string> {
+  const tokens = new Set<string>();
+  const normalized = text.normalize('NFKC').toLowerCase();
+  for (const part of WORD_SEGMENTER.segment(normalized)) {
+    if (!part.isWordLike) continue;
+    if ([...part.segment].length < 2) continue;
+    tokens.add(part.segment);
+  }
+  return tokens;
+}
+
+/**
+ * Weighted fraction of `probe`'s tokens that appear in `context`. Longer terms
+ * carry more signal than short structural words without requiring a stop-word
+ * dictionary. Unlike Jaccard, this is normalised by the probe only, so it stays
+ * meaningful when `context` (the goal anchor) is much larger.
  * Returns 1 for an empty probe (nothing new → fully connected).
  */
+function tokenWeight(token: string): number {
+  const length = Math.min([...token].length, 12);
+  return length * length;
+}
+
 function connection(probe: Set<string>, context: Set<string>): number {
   if (probe.size === 0) return 1;
-  let shared = 0;
-  for (const t of probe) if (context.has(t)) shared++;
-  return shared / probe.size;
+  let sharedWeight = 0;
+  let probeWeight = 0;
+  for (const token of probe) {
+    const weight = tokenWeight(token);
+    probeWeight += weight;
+    if (context.has(token)) sharedWeight += weight;
+  }
+  return probeWeight === 0 ? 1 : sharedWeight / probeWeight;
+}
+
+const PLAN_ITEM = /^\s*(?:[-*+]\s+|\d+[.)]\s+|\[[ xX]\]\s+)/;
+const MAX_SEMANTIC_ANCHOR_TOKENS = 160;
+
+function timestampAtOrBefore(value: string, limit: string): boolean {
+  const time = Date.parse(value);
+  const end = Date.parse(limit);
+  return !Number.isFinite(time) || !Number.isFinite(end) || time <= end;
+}
+
+/**
+ * Expand the opening goal with concepts the agent explicitly connected to it
+ * before the opening window closed. Structured list items are treated as plan
+ * nodes. Prose replies form one-hop concept edges only when they share at
+ * least one opening token. This is conversation-local and language-neutral:
+ * no dictionary, model download or provider API is involved.
+ */
+function enrichGoalFromConversation(
+  goalAnchor: Set<string>,
+  assistantTurns: AssistantTurn[],
+  anchorEndTimestamp: string,
+  resetTimestamp: string | null,
+): number {
+  const original = new Set(goalAnchor);
+  const planTokens = new Set<string>();
+  const proseTokenCounts = new Map<string, number>();
+  for (const turn of assistantTurns) {
+    if (!turn.text?.trim()) continue;
+    if (resetTimestamp && !timestampAtOrBefore(resetTimestamp, turn.timestamp)) continue;
+    if (!timestampAtOrBefore(turn.timestamp, anchorEndTimestamp)) continue;
+
+    const allTokens = tokenizeTopic(topicText(turn.text));
+    const connectedToOpening = [...allTokens].some((token) => original.has(token));
+    if (!connectedToOpening) continue;
+
+    const planLines = turn.text.split('\n').filter((line) => PLAN_ITEM.test(line));
+    if (planLines.length >= 2) {
+      for (const token of tokenizeTopic(topicText(planLines.join('\n')))) planTokens.add(token);
+      continue;
+    }
+    for (const token of allTokens) {
+      proseTokenCounts.set(token, (proseTokenCounts.get(token) ?? 0) + 1);
+    }
+  }
+  const candidates = [
+    ...planTokens,
+    ...[...proseTokenCounts.entries()]
+      .filter(([, count]) => count >= 2)
+      .map(([token]) => token),
+  ];
+  for (const token of candidates) {
+    if (goalAnchor.size >= MAX_SEMANTIC_ANCHOR_TOKENS) break;
+    goalAnchor.add(token);
+  }
+  return Math.max(0, goalAnchor.size - original.size);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -150,58 +220,83 @@ function connection(probe: Set<string>, context: Set<string>): number {
  * Compute raw topic-drift metrics from a list of user messages without
  * deciding whether drift has occurred.
  *
- * Applies /clear windowing, procedural-noise filtering, accumulated-context
- * transition counting, and the end-vs-opening connection. Returns the raw
- * counters so other detectors (e.g. the context detector) can factor them in
- * without duplicating logic.
+ * Applies the structural `/clear` boundary, procedural filtering, Unicode
+ * tokenization, goal anchoring, and sustained-departure scoring.
  *
  * Returns `null` when fewer than {@link MIN_USER_MESSAGES} substantive messages
  * remain after filtering (not enough signal).
  *
  * @param userMessages - Ordered list of real user messages for the session.
  */
-export function computeTopicMetrics(userMessages: UserMessage[]): TopicMetrics | null {
+export function computeTopicMetrics(
+  userMessages: UserMessage[],
+  assistantTurns: AssistantTurn[] = [],
+): TopicMetrics | null {
   // Determine the slice to consider (after last /clear if any).
   const lastClearIdx = findLastClearIndex(userMessages);
   const windowed = lastClearIdx >= 0
     ? userMessages.slice(lastClearIdx + 1)
     : userMessages;
+  const goalBoundaryIndex = windowed[0]?.index ?? null;
 
   // Drop procedural noise, then keep only messages substantial enough to
-  // establish a topic. `tokenizeForCluster` already removes stop words and
-  // sub-3-char tokens, so the size check counts meaningful tokens.
-  const tokenSets: Set<string>[] = [];
+  // establish a topic. This threshold is structural and independent of the
+  // language used by the user.
+  const topicMessages: Array<{ tokens: Set<string>; timestamp: string }> = [];
   for (const m of windowed) {
     if (isProceduralWrapper(m.text)) continue;
-    const tokens = tokenizeForCluster(topicText(m.text));
+    const tokens = tokenizeTopic(topicText(m.text));
     if (tokens.size < MIN_CONTENT_TOKENS) continue;
-    tokenSets.push(tokens);
+    topicMessages.push({ tokens, timestamp: m.timestamp });
   }
 
-  if (tokenSets.length < MIN_USER_MESSAGES) return null;
+  if (topicMessages.length < MIN_USER_MESSAGES) return null;
 
-  // Count transitions against the accumulated vocabulary of all prior messages.
-  const accumulated = new Set<string>(tokenSets[0]);
+  const anchorCount = Math.min(GOAL_ANCHOR_MESSAGES, Math.floor(topicMessages.length / 2));
+  const goalAnchor = new Set<string>();
+  for (let index = 0; index < anchorCount; index++) {
+    for (const token of topicMessages[index]!.tokens) goalAnchor.add(token);
+  }
+  const semanticAnchorTokens = enrichGoalFromConversation(
+    goalAnchor,
+    assistantTurns,
+    topicMessages[anchorCount - 1]?.timestamp ?? '',
+    lastClearIdx >= 0 ? userMessages[lastClearIdx]?.timestamp ?? null : null,
+  );
+
   let transitions = 0;
-  for (let i = 1; i < tokenSets.length; i++) {
-    if (connection(tokenSets[i]!, accumulated) < CONTEXT_CONNECTION_THRESHOLD) {
-      transitions++;
-    }
-    for (const t of tokenSets[i]!) accumulated.add(t);
+  let outsideGoal = false;
+  let sustainedDepartureCount = 0;
+  for (let index = anchorCount; index < topicMessages.length; index++) {
+    const disconnected = connection(topicMessages[index]!.tokens, goalAnchor) < GOAL_CONNECTION_THRESHOLD;
+    if (disconnected && !outsideGoal) transitions++;
+    outsideGoal = disconnected;
+    sustainedDepartureCount = disconnected ? sustainedDepartureCount + 1 : 0;
   }
 
-  // Opening context = union of the first few substantive messages.
-  const openingCount = Math.min(OPENING_MESSAGES, Math.floor(tokenSets.length / 2));
-  const opening = new Set<string>();
-  for (let i = 0; i < openingCount; i++) {
-    for (const t of tokenSets[i]!) opening.add(t);
+  const recentTokens = new Set<string>();
+  for (const message of topicMessages.slice(-RECENT_WINDOW_MESSAGES)) {
+    for (const token of message.tokens) recentTokens.add(token);
   }
-  const endOpeningConnection = connection(tokenSets[tokenSets.length - 1]!, opening);
+  const recentWindowConnection = connection(recentTokens, goalAnchor);
+  const departureTokens = new Set<string>();
+  for (const message of topicMessages.slice(-sustainedDepartureCount)) {
+    for (const token of message.tokens) departureTokens.add(token);
+  }
+  const departureWindowConnection = sustainedDepartureCount > 0
+    ? connection(departureTokens, goalAnchor)
+    : recentWindowConnection;
 
   return {
     transitionsDetected: transitions,
-    endOpeningConnection,
-    userMessageCount: tokenSets.length,
+    endOpeningConnection: recentWindowConnection,
+    userMessageCount: topicMessages.length,
+    recentWindowConnection,
+    sustainedDepartureCount,
+    departureWindowConnection,
+    goalBoundaryIndex,
+    similarityMethod: semanticAnchorTokens > 0 ? 'conversation-graph' : 'lexical',
+    semanticAnchorTokens,
   };
 }
 
@@ -212,44 +307,59 @@ export function computeTopicMetrics(userMessages: UserMessage[]): TopicMetrics |
  *   session, as returned by {@link loadUserMessages}.
  * @returns A {@link DriftReport} when topic drift is detected, `null` otherwise.
  */
-export function detectTopic(userMessages: UserMessage[]): DriftReport | null {
+export function detectTopic(
+  userMessages: UserMessage[],
+  assistantTurns: AssistantTurn[] = [],
+): DriftReport | null {
   const lastClearIdx = findLastClearIndex(userMessages);
   const clearSlashFound = lastClearIdx >= 0;
-  const consideredAfterClearIdx = clearSlashFound ? lastClearIdx + 1 : null;
 
-  const metrics = computeTopicMetrics(userMessages);
+  const metrics = computeTopicMetrics(userMessages, assistantTurns);
   if (!metrics) return null;
 
-  const { transitionsDetected: transitions, endOpeningConnection, userMessageCount } = metrics;
+  const {
+    transitionsDetected: transitions,
+    recentWindowConnection,
+    sustainedDepartureCount,
+    userMessageCount,
+  } = metrics;
 
-  // Trigger condition: enough disconnected topic jumps AND the session ended
-  // on something unrelated to where it began.
-  if (transitions < MIN_TRANSITIONS || endOpeningConnection >= END_OPENING_THRESHOLD) {
+  if (
+    sustainedDepartureCount < SUSTAINED_DEPARTURE_MESSAGES ||
+    recentWindowConnection >= RECENT_WINDOW_THRESHOLD
+  ) {
     return null;
   }
 
-  // Severity.
   const severity: 'high' | 'medium' =
-    transitions >= 3 || endOpeningConnection < 0.02 ? 'high' : 'medium';
+    sustainedDepartureCount >= 5 || recentWindowConnection < 0.02 ? 'high' : 'medium';
 
-  const connectionPercent = Math.round(endOpeningConnection * 100);
+  const connectionPercent = Math.round(recentWindowConnection * 100);
 
   return {
     type: 'topic',
     severity,
     message:
       `Nakiros a détecté que la conversation s'est éloignée de l'objectif initial ` +
-      `(${transitions} changements de sujet, le fil actuel n'a que ${connectionPercent}% de vocabulaire commun avec le début).`,
+      `(${sustainedDepartureCount} messages durablement éloignés, ` +
+      `le fil récent n'a que ${connectionPercent}% de vocabulaire commun avec l'objectif courant).`,
     suggestion:
       "Recentre la session sur la tâche d'origine, ou ouvre une nouvelle session avec un cadrage clair.",
     evidence: {
       userMessageCount,
       transitionsDetected: transitions,
-      transitionThreshold: MIN_TRANSITIONS,
-      endOpeningConnection,
-      endOpeningThreshold: END_OPENING_THRESHOLD,
+      transitionThreshold: 1,
+      endOpeningConnection: recentWindowConnection,
+      endOpeningThreshold: RECENT_WINDOW_THRESHOLD,
+      recentWindowConnection,
+      recentWindowThreshold: RECENT_WINDOW_THRESHOLD,
+      sustainedDepartureCount,
+      sustainedDepartureThreshold: SUSTAINED_DEPARTURE_MESSAGES,
+      departureWindowConnection: metrics.departureWindowConnection,
       clearSlashFound,
-      consideredAfterClearIdx,
+      consideredAfterClearIdx: metrics.goalBoundaryIndex,
+      similarityMethod: metrics.similarityMethod,
+      semanticAnchorTokens: metrics.semanticAnchorTokens,
     },
   };
 }

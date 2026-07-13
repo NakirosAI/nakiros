@@ -11,6 +11,18 @@
   "toolCount_one": "{{count}} tool",
   "toolCount_other": "{{count}} tools",
   "noAnalyzedHint": "No conversation analyzed yet for this project.",
+  "agents": {
+    "selectorLabel": "Project agents",
+    "coherence": "Coherence",
+    "coherenceHint": "Cross-agent coherence review will be available here.",
+    "capabilities": "Available here",
+    "providers": { "claude": "Claude", "codex": "Codex", "gemini": "Gemini", "cursor": "Cursor" },
+    "capability": {
+      "instructions": "Instructions", "skills": "Skills", "rules": "Rules", "subagents": "Subagents",
+      "hooks": "Hooks", "permissions": "Permissions", "mcp": "MCP", "output-styles": "Output styles",
+      "conversations": "Conversations"
+    }
+  },
   "window": {
     "label": "Window",
     "10": "Last 10",

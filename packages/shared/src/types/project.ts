@@ -5,6 +5,8 @@
 import type { AuditCheckOutcome, AuditManifest } from './audit-checks.js';
 import type { FixEvalResult, FixFinding, FixTarget } from './fix-progress.js';
 import type { RecommendationArtifactType } from './recommendation.js';
+import type { ProjectAgentInstallation } from './agent.js';
+import type { AgentProvider } from './agent.js';
 
 /** Supported AI coding agents that Nakiros can scan for projects and skills. */
 export type ProviderType = 'claude' | 'cowork' | 'gemini' | 'cursor' | 'codex';
@@ -19,6 +21,12 @@ export interface Project {
   projectPath: string;
   provider: ProviderType;
   providerProjectDir: string;
+  /**
+   * Agent environments detected for this repository. Optional on disk for
+   * backward compatibility with pre-multi-agent `projects.json` records.
+   * `provider` and `providerProjectDir` remain the primary legacy installation.
+   */
+  agents?: ProjectAgentInstallation[];
   lastActivityAt: string | null;
   sessionCount: number;
   skillCount: number;
@@ -38,13 +46,14 @@ export interface DetectedProject {
   projectPath: string;
   provider: ProviderType;
   providerProjectDir: string;
+  agents?: ProjectAgentInstallation[];
   lastActivityAt: string | null;
   sessionCount: number;
   skillCount: number;
   status: ProjectStatus;
 }
 
-/** Compact metadata extracted from a single Claude Code JSONL conversation. */
+/** Compact metadata extracted from one provider-native JSONL conversation. */
 export interface ProjectConversation {
   sessionId: string;
   projectId: string;
@@ -56,6 +65,25 @@ export interface ProjectConversation {
   cwd: string;
   claudeVersion: string | null;
   summary: string;
+  /** Native agent source. Optional for records ingested before multi-agent support. */
+  provider?: AgentProvider;
+  /** Provider-native model identifier when the transcript exposes it. */
+  model?: string | null;
+  /** Session wall-clock duration derived from transcript timestamps. */
+  durationMs?: number;
+  /** Provider-reported model context window, when exposed. */
+  contextWindow?: number;
+  /** Explicit non-zero tool exit codes observed in the transcript. */
+  toolErrorCount?: number;
+  /** Latest cumulative provider token counters, when exposed. */
+  tokenUsage?: {
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+    reasoningOutputTokens: number;
+    totalTokens: number;
+    contextWindow?: number;
+  };
   /**
    * Real user activity (`'user'`) vs Nakiros-internal sandbox run
    * (`'synthetic'`: fix-temp / eval iterations / `~/.nakiros/` workdirs).
@@ -65,7 +93,7 @@ export interface ProjectConversation {
   kind?: 'user' | 'synthetic';
 }
 
-/** Normalized message extracted from a Claude Code JSONL entry. */
+/** Normalized message extracted from a provider-native JSONL entry. */
 export interface ConversationMessage {
   uuid: string;
   parentUuid: string | null;
@@ -74,6 +102,75 @@ export interface ConversationMessage {
   timestamp: string;
   isSidechain: boolean;
   toolUse?: { name: string; input: unknown }[];
+  /** Native agent source. Optional for backward compatibility. */
+  provider?: AgentProvider;
+}
+
+/** One native Codex context observation emitted by token_count. */
+export interface CodexContextSample {
+  timestamp: string;
+  offsetPct: number;
+  /** Input tokens reported for the latest turn. */
+  tokens: number;
+  /** Cumulative total tokens reported for the session at this point. */
+  totalTokens: number;
+}
+
+/** A provider-native Codex compaction marker. Token deltas are not exposed. */
+export interface CodexCompaction {
+  timestamp: string;
+  offsetPct: number;
+}
+
+/** Per-tool native Codex invocation/error totals. */
+export interface CodexToolStats {
+  count: number;
+  /** Outputs with an explicit non-zero exit code. */
+  errorCount: number;
+}
+
+/** Explainable penalty contribution to a Codex health score. */
+export interface CodexScoreFactor {
+  signal: 'context' | 'compaction' | 'tool-errors' | 'aborts' | 'friction';
+  count: number;
+  penalty: number;
+}
+
+/** Native Codex turn interruption, preserved without interpreting user text. */
+export interface CodexAbortEvent {
+  timestamp: string;
+  offsetPct: number;
+}
+
+/**
+ * Deterministic analysis of one native Codex rollout. This deliberately does
+ * not reuse Claude cache/cost fields that Codex does not expose.
+ */
+export interface CodexConversationAnalysis {
+  provider: 'codex';
+  sessionId: string;
+  projectId: string;
+  startedAt: string;
+  lastMessageAt: string;
+  durationMs: number;
+  messageCount: number;
+  summary: string;
+  gitBranch: string | null;
+  model: string | null;
+  contextWindow: number | null;
+  maxContextTokens: number | null;
+  totalTokens: number | null;
+  contextSamples: CodexContextSample[];
+  compactions: CodexCompaction[];
+  toolStats: Record<string, CodexToolStats>;
+  toolErrorCount: number;
+  /** Structurally observed friction, never inferred from language keywords. */
+  frictionPoints: ConversationFrictionPoint[];
+  turnDurationsMs: number[];
+  abortedTurns: number;
+  score: number;
+  healthZone: ConversationHealthZone;
+  scoreFactors: CodexScoreFactor[];
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +202,7 @@ export interface ConversationFrictionPoint {
   timestamp: string;
   /** First ~200 chars of the user message that triggered the friction flag. */
   snippet: string;
-  /** Which keyword/pattern matched ("stop", "revert", "pas ça"…). */
+  /** Structural detector evidence (`abort`, `backtrack:*`, `repetition:*`, etc.). */
   matchedPattern: string;
   /** Tool name the assistant used just before this friction, if any. */
   precedingTool: string | null;
@@ -391,6 +488,75 @@ export interface ConversationAnalysis {
   tips: ConversationTip[];
 }
 
+/** Deterministic provider analysis returned by Argos conversation IPC. */
+export type ProviderConversationAnalysis = ConversationAnalysis | CodexConversationAnalysis;
+
+/** A normalized, provider-neutral metric derived from Argos conversations. */
+export interface ArgosComparisonMetric {
+  id: 'health-score' | 'tokens-per-conversation' | 'duration-per-conversation'
+    | 'friction-per-100-messages' | 'tool-errors-per-100-calls'
+    | 'compactions-per-conversation';
+  value: number | null;
+  /** Number of conversations that exposed the source data for this metric. */
+  observedSamples: number;
+  /** Fraction of this provider's sample exposing the metric, from 0 to 1. */
+  coverage: number;
+}
+
+/** Evidence column for one agent provider in an Argos comparison. */
+export interface ArgosProviderComparison {
+  provider: 'claude' | 'codex';
+  sampleSize: number;
+  startedAt: string | null;
+  endedAt: string | null;
+  models: Array<{ model: string; conversations: number }>;
+  metrics: ArgosComparisonMetric[];
+}
+
+/**
+ * Observational comparison across providers in one project. It deliberately
+ * exposes evidence and uncertainty instead of selecting a winner: native
+ * transcripts do not prove that two agents performed the same task.
+ */
+export interface ArgosAgentComparison {
+  projectId: string;
+  generatedAt: string;
+  providers: ArgosProviderComparison[];
+  evidence: {
+    sameProject: true;
+    overlappingPeriod: boolean;
+    tasksPaired: false;
+  };
+  confidence: 'insufficient' | 'directional' | 'supported';
+  reasons: Array<'single-provider' | 'small-sample' | 'periods-do-not-overlap' | 'tasks-not-paired'>;
+}
+
+/** One-shot payload for the Argos conversation list and comparison evidence. */
+export interface ArgosConversationDashboard {
+  analyses: ProviderConversationAnalysis[];
+  comparison: ArgosAgentComparison;
+}
+
+/**
+ * Provider-neutral input consumed by deep analysis and future Argos modules.
+ * Adapters preserve provider-specific metrics in `analysis`; consumers use
+ * the normalized metadata, messages and structural friction fields first.
+ */
+export interface NormalizedConversation {
+  provider: 'claude' | 'codex';
+  sessionId: string;
+  projectId: string;
+  startedAt: string;
+  lastMessageAt: string;
+  durationMs: number;
+  messageCount: number;
+  summary: string;
+  gitBranch: string | null;
+  messages: ConversationMessage[];
+  frictionPoints: ConversationFrictionPoint[];
+  analysis: ProviderConversationAnalysis;
+}
+
 // ---------------------------------------------------------------------------
 // Project aggregate — cheap rollup of all conversation analyses for a
 // project, used by the Home screen to paint cards instantly. Persisted under
@@ -422,11 +588,17 @@ export interface ProjectAggregate {
 
 /** LLM-generated narrative report produced by the deep-analysis skill. */
 export interface ConversationDeepAnalysis {
+  /** Provider of the source conversation, not the model producing the report. */
+  provider: 'claude' | 'codex';
+  /** Agent CLI that produced the narrative report. */
+  analyzerProvider: 'claude' | 'codex';
   sessionId: string;
-  /** Which Claude model produced the report. */
-  model: 'haiku' | 'sonnet';
+  /** Provider-native model label, or `default` when the CLI resolved it. */
+  model: string;
   /** Approximate input tokens sent to the model — helps the UI show cost. */
   inputTokens: number;
+  /** Source revision used to reject a report after the transcript changes. */
+  sourceFingerprint?: string;
   /** Markdown report emitted by the skill. */
   report: string;
   generatedAt: string;
@@ -1017,10 +1189,15 @@ export interface AnalyzeConvoRun {
   projectId: string;
   sessionId: string;
   status: AnalyzeConvoRunStatus;
-  sessionClaudeId: string | null;
+  /** Session created by the analyzer CLI, separate from the source conversation id. */
+  agentSessionId: string | null;
+  /** @deprecated persisted by older Claude-only runs. */
+  sessionClaudeId?: string | null;
   workdir: string;
   /** `claude --model` id pinned at start (haiku for small convs, sonnet for big). */
   model: string;
+  /** Agent CLI producing the report. */
+  analyzerProvider: 'claude' | 'codex';
   /** Estimated input tokens of the synthesised prompt — used for cost transparency. */
   estimatedInputTokens: number;
   /** Path to the persisted markdown report inside `~/.nakiros/analyses/`. */
@@ -1051,6 +1228,8 @@ export interface AnalyzeConvoRunEvent {
 export interface StartAnalyzeConvoRequest {
   projectId: string;
   sessionId: string;
+  /** Defaults to the provider of the source conversation. */
+  analyzerProvider?: 'claude' | 'codex';
 }
 
 // ---------------------------------------------------------------------------

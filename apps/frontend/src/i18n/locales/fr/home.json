@@ -24,7 +24,7 @@
   "dismiss": "Ignorer ce projet",
   "noProjects": "Aucun projet Claude Code détecté. Lance un rescan ou commence à utiliser Claude Code.",
   "hero": {
-    "tagline": "Analyse, audite et améliore les skills qui pilotent tes agents Claude Code — entièrement sur ta machine.",
+    "tagline": "Configure et comprends les agents qui travaillent sur tes projets — entièrement sur ta machine.",
     "nakirosSkills": "Nakiros Skills",
     "rescan": "Rescanner",
     "rescanning": "Scan en cours…",
@@ -45,7 +45,7 @@
     "restore": "Restaurer"
   },
   "tabs": {
-    "projects": "Claude Code",
+    "projects": "Projets",
     "cowork": "Cowork",
     "plugins": "Plugins",
     "globals": "Globaux",
@@ -53,11 +53,20 @@
   },
   "searchPlaceholder": "Rechercher projets, skills, chemins…",
   "projectsTab": {
-    "heading": "Projets Claude Code",
+    "heading": "Projets avec agents",
     "found": "{{count}} trouvés",
-    "scannedFrom": "scanné depuis ~/.claude/projects",
+    "scannedFrom": "scannés depuis les sessions locales des agents",
     "noMatch": "Aucun projet ne correspond à ta recherche.",
-    "empty": "Aucun projet scanné."
+    "empty": "Aucun projet avec agent scanné."
+  },
+  "providers": {
+    "claude": "Claude Code",
+    "codex": "Codex",
+    "gemini": "Gemini",
+    "cursor": "Cursor"
+  },
+  "projectCard": {
+    "agentsLabel": "Agents : {{agents}}"
   },
   "coworkTab": {
     "heading": "Projets Cowork",

@@ -15,24 +15,22 @@
  *   1. Load `{ maxContextTokens, contextWindow }` from the session JSONL via a
  *      lightweight single-pass scan (no analysis cache needed).
  *   2. Compute `contextUsageRatio = maxContextTokens / contextWindow`.
- *   3. Compute topic metrics via {@link computeTopicMetrics} (reuses the topic
- *      detector's logic — no duplication).
+ *   3. Compute the current goal-anchor trajectory via
+ *      {@link computeTopicMetrics} (no duplicate topic model).
  *   4. Trigger when ALL THREE conditions hold:
  *      - `contextUsageRatio >= CONTEXT_USAGE_THRESHOLD` (≥ 50%)
- *      - `topicMetrics.transitionsDetected >= 1`
- *      - `topicMetrics.endOpeningConnection < END_OPENING_THRESHOLD` (< 20%)
- *   5. Severity: `high` when `contextUsageRatio >= HIGH_USAGE_THRESHOLD` (≥ 75%)
- *      OR when transitions ≥ 2 AND endOpeningConnection < 0.10. `medium` otherwise.
+ *      - at least two consecutive off-goal messages
+ *      - recent-to-goal connection below 20%
+ *   5. Severity: `high` above 75% context usage or when the departure itself
+ *      is long and strongly disconnected. `medium` otherwise.
  *
  * Note: the drift-analyzer.ts ensures this detector is only called when the
- * topic detector did not already fire. The topic detector fires on `transitions
- * >= 2 AND endOpeningConnection < 0.10`. Context detector triggers on
- * `transitions >= 1 AND endOpeningConnection < 0.20`, so there is an overlap
- * zone where both could fire — prevented by the ordering in the analyzer.
+ * topic detector did not already fire. Context uses a shorter persistence
+ * requirement because context pressure provides the second corroborating signal.
  */
 
 import type { DriftReport } from '../drift-analyzer.js';
-import type { ContextMetrics, UserMessage } from './session-loader.js';
+import type { AssistantTurn, ContextMetrics, UserMessage } from './session-loader.js';
 import { computeTopicMetrics } from './topic-detector.js';
 
 // ── Configuration ─────────────────────────────────────────────────────────────
@@ -44,11 +42,12 @@ const CONTEXT_USAGE_THRESHOLD = 0.50;
 const HIGH_USAGE_THRESHOLD = 0.75;
 
 /**
- * The final message must connect to the opening context by less than this
- * fraction to combine with context pressure. Looser than the topic detector
- * (0.20 vs 0.10) since context pressure itself amplifies the risk.
+ * Maximum connection of the trailing departure run to the current goal.
  */
-const END_OPENING_THRESHOLD = 0.20;
+const DEPARTURE_CONNECTION_THRESHOLD = 0.20;
+
+/** Context pressure needs less persistence than a standalone topic alert. */
+const MIN_SUSTAINED_DEPARTURE = 2;
 
 /** Minimum number of user messages before the detector can fire. */
 const MIN_USER_MESSAGES = 10;
@@ -72,6 +71,7 @@ const MIN_USER_MESSAGES = 10;
 export function detectContext(
   contextMetrics: ContextMetrics,
   userMessages: UserMessage[],
+  assistantTurns: AssistantTurn[] = [],
 ): DriftReport | null {
   // Guard: not enough messages to judge.
   if (userMessages.length < MIN_USER_MESSAGES) return null;
@@ -86,20 +86,26 @@ export function detectContext(
   // Condition 1: context window must be at least half full.
   if (contextUsageRatio < CONTEXT_USAGE_THRESHOLD) return null;
 
-  // Condition 2 + 3: topic metrics must show at least one transition and
-  // enough vocabulary drift between first and last message.
-  const topicMetrics = computeTopicMetrics(userMessages);
+  // Condition 2 + 3: the off-goal trajectory must persist and remain detached.
+  const topicMetrics = computeTopicMetrics(userMessages, assistantTurns);
   if (!topicMetrics) return null;
 
-  const { transitionsDetected, endOpeningConnection } = topicMetrics;
+  const {
+    transitionsDetected,
+    departureWindowConnection,
+    sustainedDepartureCount,
+  } = topicMetrics;
 
-  if (transitionsDetected < 1 || endOpeningConnection >= END_OPENING_THRESHOLD) {
+  if (
+    sustainedDepartureCount < MIN_SUSTAINED_DEPARTURE ||
+    departureWindowConnection >= DEPARTURE_CONNECTION_THRESHOLD
+  ) {
     return null;
   }
 
   // Severity.
   const isHighUsage = contextUsageRatio >= HIGH_USAGE_THRESHOLD;
-  const isHighTopic = transitionsDetected >= 2 && endOpeningConnection < 0.10;
+  const isHighTopic = sustainedDepartureCount >= 3 && departureWindowConnection < 0.10;
   const severity: 'high' | 'medium' = isHighUsage || isHighTopic ? 'high' : 'medium';
 
   const usagePct = Math.round(contextUsageRatio * 100);
@@ -109,7 +115,8 @@ export function detectContext(
     severity,
     message:
       `Nakiros a détecté que le contexte accumulé devient un poids ` +
-      `(${usagePct}% du contexte utilisé, ${transitionsDetected} transition${transitionsDetected > 1 ? 's' : ''} de sujet depuis le début).`,
+      `(${usagePct}% du contexte utilisé, ${sustainedDepartureCount} messages ` +
+      `consécutifs éloignés de l'objectif courant).`,
     suggestion:
       "Un /clear avant la prochaine tâche évitera que l'agent mélange ancien et nouveau contexte.",
     evidence: {
@@ -119,7 +126,11 @@ export function detectContext(
       contextWindow,
       userMessageCount: userMessages.length,
       transitionsDetected,
-      endOpeningConnection,
+      endOpeningConnection: departureWindowConnection,
+      recentWindowConnection: topicMetrics.recentWindowConnection,
+      departureWindowConnection,
+      sustainedDepartureCount,
+      sustainedDepartureThreshold: MIN_SUSTAINED_DEPARTURE,
     },
   };
 }

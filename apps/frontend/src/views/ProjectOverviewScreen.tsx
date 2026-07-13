@@ -15,15 +15,15 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import type { ConversationAnalysis, Project } from '@nakiros/shared';
-import { ConvDrawer } from '../components/conversations/ConvDrawer';
+import type { AgentCapability, AgentProvider, ConversationAnalysis, Project } from '@nakiros/shared';
+import { ConversationDrawer } from '../components/conversations/ConvDrawer';
 import {
   aggregate,
   recurringHotFiles,
   topFailingTools,
   topTipFrequencies,
 } from '../components/conversations/ConversationsAggregation';
-import { useConversationAnalyses } from '../hooks/useConversationAnalyses';
+import { isClaudeConversationAnalysis, useConversationAnalyses } from '../hooks/useConversationAnalyses';
 import Sparkline from '../components/viz/Sparkline';
 import HBar from '../components/viz/HBar';
 import { bucketizeForOverview } from '../lib/overview-buckets';
@@ -61,13 +61,44 @@ const WINDOW_KEYS: WindowKey[] = ['10', '30', '90', 'all'];
  */
 export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigate }: Props) {
   const { t } = useTranslation('overview');
-  const analyses = useConversationAnalyses(project.id);
+  const providerAnalyses = useConversationAnalyses(project.id);
+  // The overview KPIs remain Claude-specific until an explicit cross-provider
+  // aggregation model is designed. Codex health is available in Argos.
+  const analyses = useMemo(
+    () => providerAnalyses?.filter(isClaudeConversationAnalysis) ?? null,
+    [providerAnalyses],
+  );
+  const installations = useMemo(
+    () => project.agents?.length
+      ? project.agents
+      : project.provider === 'cowork'
+        ? []
+        : [{
+            provider: project.provider as AgentProvider,
+            surface: 'cli' as const,
+            providerProjectDir: project.providerProjectDir,
+            capabilities: project.provider === 'claude'
+              ? ['instructions', 'skills', 'rules', 'subagents', 'hooks', 'permissions', 'mcp', 'output-styles', 'conversations'] as AgentCapability[]
+              : ['conversations'] as AgentCapability[],
+          }],
+    [project.agents, project.provider, project.providerProjectDir],
+  );
+  const [selectedProvider, setSelectedProvider] = useState<AgentProvider>(
+    installations[0]?.provider ?? 'claude',
+  );
+  const selectedInstallation = installations.find(
+    (installation) => installation.provider === selectedProvider,
+  ) ?? installations[0];
+  const hasClaudeConfiguration = installations.some(
+    (installation) => installation.provider === 'claude' && installation.capabilities.includes('instructions'),
+  );
   const [windowKey, setWindowKey] = useState<WindowKey>('30');
   const [selected, setSelected] = useState<ConversationAnalysis | null>(null);
 
   // Rules count — fetched via the rules-expert IPC channel.
   const [rulesCount, setRulesCount] = useState<number | null>(null);
   useEffect(() => {
+    if (!hasClaudeConfiguration) return;
     let cancelled = false;
     window.nakiros
       .listRules(project.id)
@@ -82,11 +113,12 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [hasClaudeConfiguration, project.id]);
 
   // Subagents count — fetched via the subagents IPC channel.
   const [subagentsCount, setSubagentsCount] = useState<number | null>(null);
   useEffect(() => {
+    if (!hasClaudeConfiguration) return;
     let cancelled = false;
     window.nakiros
       .listSubagents(project.id)
@@ -101,11 +133,12 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [hasClaudeConfiguration, project.id]);
 
   // MCP server count — fetched via mcp-expert IPC, parsed from .mcp.json.
   const [mcpCount, setMcpCount] = useState<number | null>(null);
   useEffect(() => {
+    if (!hasClaudeConfiguration) return;
     let cancelled = false;
     window.nakiros
       .readMcp(project.id)
@@ -135,11 +168,12 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [hasClaudeConfiguration, project.id]);
 
   // Hooks event count — fetched via hooks-expert IPC, parsed from the JSON block.
   const [hooksCount, setHooksCount] = useState<number | null>(null);
   useEffect(() => {
+    if (!hasClaudeConfiguration) return;
     let cancelled = false;
     window.nakiros
       .readHooks(project.id)
@@ -171,7 +205,7 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [hasClaudeConfiguration, project.id]);
 
   // Permissions rules count — combined total from both project (settings.json)
   // and local (settings.local.json) scopes. Displayed as "X project · Y local"
@@ -182,6 +216,7 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     local: number;
   } | null>(null);
   useEffect(() => {
+    if (!hasClaudeConfiguration) return;
     let cancelled = false;
 
     function countRules(content: string | undefined | null): number {
@@ -214,11 +249,12 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [hasClaudeConfiguration, project.id]);
 
   // Output styles count — fetched via the output-styles expert IPC channel.
   const [outputStylesCount, setOutputStylesCount] = useState<number | null>(null);
   useEffect(() => {
+    if (!hasClaudeConfiguration) return;
     let cancelled = false;
     window.nakiros
       .listOutputStyles(project.id)
@@ -233,7 +269,7 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [hasClaudeConfiguration, project.id]);
 
   const windowed = useMemo(() => {
     if (!analyses) return [];
@@ -298,14 +334,40 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
             <h1 className="m-0 truncate font-n-mono text-[18px] font-medium text-n-fg">
               {project.name}
             </h1>
-            <span className="rounded-n-xs border border-n-border-subtle bg-n-sunken px-1.5 py-0.5 font-n-mono text-[10.5px] uppercase tracking-wide text-n-subtle">
-              claude
-            </span>
+            {installations.length === 1 && selectedInstallation && (
+              <span className="rounded-n-xs border border-n-border-subtle bg-n-sunken px-1.5 py-0.5 font-n-mono text-[10.5px] uppercase tracking-wide text-n-subtle">
+                {t(`agents.providers.${selectedInstallation.provider}`)}
+              </span>
+            )}
           </div>
           <div className="truncate font-n-mono text-[11.5px] text-n-faint" title={project.projectPath}>
             {project.projectPath}
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          {installations.length > 1 && (
+            <div className="inline-flex items-center gap-1 rounded-n-md border border-n-border-subtle bg-n-sunken p-0.5" aria-label={t('agents.selectorLabel')}>
+              {installations.map((installation) => (
+                <button
+                  key={`${installation.provider}:${installation.surface}`}
+                  type="button"
+                  onClick={() => setSelectedProvider(installation.provider)}
+                  aria-pressed={selectedProvider === installation.provider}
+                  className={'rounded-n-xs px-2.5 py-1 font-n-mono text-[11px] transition-colors ' +
+                    (selectedProvider === installation.provider
+                      ? 'bg-n-raised text-n-fg'
+                      : 'text-n-muted hover:text-n-fg')}
+                >
+                  {t(`agents.providers.${installation.provider}`)}
+                </button>
+              ))}
+            </div>
+          )}
+          {installations.length > 1 && (
+            <span className="rounded-n-md border border-n-border-subtle px-2.5 py-1.5 text-[11.5px] text-n-muted" title={t('agents.coherenceHint')}>
+              {t('agents.coherence')}
+            </span>
+          )}
         <div className="inline-flex items-center gap-1 rounded-n-md border border-n-border-subtle bg-n-sunken p-0.5">
           {WINDOW_KEYS.map((v) => {
             const active = windowKey === v;
@@ -325,11 +387,24 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
             );
           })}
         </div>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto px-7 py-6">
         {/* Configuration shortcuts — always visible regardless of conversation data */}
-        {onNavigate && (
+        {selectedInstallation && (
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            <span className="font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-subtle">
+              {t('agents.capabilities')}
+            </span>
+            {selectedInstallation.capabilities.map((capability) => (
+              <span key={capability} className="rounded-n-xs border border-n-border-subtle bg-n-sunken px-2 py-1 font-n-mono text-[10.5px] text-n-muted">
+                {t(`agents.capability.${capability}`)}
+              </span>
+            ))}
+          </div>
+        )}
+        {onNavigate && hasClaudeConfiguration && selectedProvider === 'claude' && (
           <div className="mb-5">
             <div className="mb-2 font-n-mono text-[10.5px] uppercase tracking-[1.2px] text-n-subtle">
               {t('sections.config')}
@@ -590,7 +665,8 @@ export default function ProjectOverviewScreen({ project, onOpenRunTab, onNavigat
       </div>
 
       {selected && (
-        <ConvDrawer
+        <ConversationDrawer
+          projectId={project.id}
           analysis={selected}
           onClose={() => setSelected(null)}
         />

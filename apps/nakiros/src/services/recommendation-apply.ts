@@ -35,6 +35,7 @@ import {
   startFix,
 } from './fix-runner.js';
 import { readRecoCard, updateRecoStatus, writeRecoBody } from './recommendation-store.js';
+import { recommendationReviewRoute } from './recommendation-route.js';
 
 // ─── ExternalRunOpts replica ─────────────────────────────────────────────────
 // Mirrors the private `ExternalRunOpts` in fix-runner.ts. Kept local to avoid
@@ -331,6 +332,8 @@ export interface ApplyRecoCtx {
    * artefact runs (runner ignores `skillDir` when a `*Target` field is set).
    */
   skillDir?: string;
+  /** Explicit confirmation from the review surface. */
+  reviewed: boolean;
 }
 
 /**
@@ -355,10 +358,20 @@ export async function applyReco(
 ): Promise<ApplyRecoResponse> {
   const card = readRecoCard(projectId, patternId, recId);
   if (!card) return { ok: false, error: 'reco-not-found' };
+  if (!ctx.reviewed) return { ok: false, error: 'review-required' };
+  const route = recommendationReviewRoute(card);
+  if (!route) return { ok: false, error: 'unknown-artifact-type' };
 
   // Idempotency: already applied → return the prior runId without re-spawning.
   if (card.status === 'applied' && card.appliedRunId) {
-    return { ok: true, runId: card.appliedRunId, runKind: 'edit' };
+    return {
+      ok: true,
+      runId: card.appliedRunId,
+      runKind: card.artifactType === 'skill'
+        ? card.action === 'create' ? 'create' : 'fix'
+        : 'edit',
+      targetDomain: route.targetDomain,
+    };
   }
 
   const mapping = mappingFor(card);
@@ -405,5 +418,10 @@ export async function applyReco(
     appliedRunId: run.runId,
   });
 
-  return { ok: true, runId: run.runId, runKind: mapping.runKind };
+  return {
+    ok: true,
+    runId: run.runId,
+    runKind: mapping.runKind,
+    targetDomain: route.targetDomain,
+  };
 }

@@ -20,6 +20,7 @@ const DIFF_INITIAL: DriftHookDiff = {
   current: '',
   next: '',
   scriptPaths: { stop: '', userPromptSubmit: '' },
+  targets: [],
 };
 
 export default function DriftDetectionPanel() {
@@ -127,6 +128,29 @@ export default function DriftDetectionPanel() {
         )}
       </div>
 
+      {status && (status.targets ?? []).length > 0 && (
+        <div className="mt-3 divide-y divide-n-border-subtle border-y border-n-border-subtle">
+          {(status.targets ?? []).map((target) => (
+            <div key={target.provider} className="flex items-center gap-3 py-2">
+              <span className="w-16 font-n-mono text-[11px] capitalize text-n-fg">
+                {target.provider}
+              </span>
+              <span className="flex flex-1 items-center gap-1.5 text-[11.5px] text-n-muted">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${target.installed && status.scriptsMaterialized ? 'bg-n-accent-strong' : 'bg-n-border-default'}`}
+                />
+                {target.installed && status.scriptsMaterialized
+                  ? t('targetInstalled')
+                  : t('targetNotInstalled')}
+              </span>
+              <span className="max-w-[55%] truncate font-n-mono text-[10.5px] text-n-subtle">
+                {target.settingsPath}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {installed && status && (
         <PathsSection status={status} />
       )}
@@ -153,7 +177,13 @@ function PathsSection({ status }: { status: DriftHookStatus }) {
       <div className="mt-2 flex flex-col gap-1">
         <PathRow label={t('pathStopLabel')} value={status.scriptPaths.stop} />
         <PathRow label={t('pathUserPromptLabel')} value={status.scriptPaths.userPromptSubmit} />
-        <PathRow label={t('pathSettingsLabel')} value={status.settingsPath} />
+        {(status.targets ?? []).map((target) => (
+          <PathRow
+            key={target.provider}
+            label={t('pathAgentSettingsLabel', { agent: target.provider })}
+            value={target.settingsPath}
+          />
+        ))}
       </div>
     </div>
   );
@@ -194,17 +224,35 @@ function DriftDiffModal({ diff, busy, onCancel, onConfirm }: DriftDiffModalProps
         </header>
 
         <div className="flex-1 overflow-auto px-5 py-4">
-          <DiffField label={t('diffPathLabel')} value={diff.settingsPath} />
           <DiffField label={t('diffScriptStopLabel')} value={diff.scriptPaths.stop} />
           <DiffField label={t('diffScriptUserPromptLabel')} value={diff.scriptPaths.userPromptSubmit} />
 
-          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <DiffPane
-              title={t('diffBeforeLabel')}
-              content={diff.exists ? diff.current : t('diffNotExistsLabel')}
-              tone="neutral"
-            />
-            <DiffPane title={t('diffAfterLabel')} content={diff.next} tone="accent" />
+          <div className="mt-4 space-y-5">
+            {diff.targets.map((target) => (
+              <section key={target.provider}>
+                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <h3 className="m-0 font-n-mono text-[12px] capitalize text-n-fg">
+                    {target.provider}
+                  </h3>
+                  <span className="break-all font-n-mono text-[10.5px] text-n-subtle">
+                    {target.settingsPath}
+                  </span>
+                </div>
+                {target.requiresTrustReview && (
+                  <p className="mb-2 mt-0 text-[11.5px] text-n-muted">
+                    {t('codexTrustReview')}
+                  </p>
+                )}
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <DiffPane
+                    title={t('diffBeforeLabel')}
+                    content={target.exists ? target.current : t('diffNotExistsLabel')}
+                    tone="neutral"
+                  />
+                  <DiffPane title={t('diffAfterLabel')} content={target.next} tone="accent" />
+                </div>
+              </section>
+            ))}
           </div>
         </div>
 

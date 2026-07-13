@@ -13,7 +13,7 @@
  * sibling `package.json` — `~/.nakiros/` has none, but this is defensive.
  *
  * Protocol:
- *  - Read JSON payload from stdin (Claude Code populates it for hook events).
+ *  - Read JSON payload from stdin (Claude Code and Codex populate it for hook events).
  *  - Call `GET http://localhost:4242/api/drift?session=<id>` via `node:http`.
  *  - If the daemon is unreachable / returns an error / session absent: exit 0
  *    with no output — never break the conversation.
@@ -58,7 +58,13 @@ process.stdin.on('end', function() {
   var sessionId = input.session_id;
   if (!sessionId || typeof sessionId !== 'string') { process.exit(0); return; }
 
-  var urlStr = DAEMON_URL + '/api/drift?session=' + encodeURIComponent(sessionId);
+  var urlStr = DAEMON_URL + '/api/drift?event=stop&session=' + encodeURIComponent(sessionId);
+  var transcriptPath = typeof input.transcript_path === 'string' ? input.transcript_path : '';
+  var normalisedTranscript = transcriptPath.replace(/\\\\/g, '/');
+  if (transcriptPath) urlStr += '&transcript=' + encodeURIComponent(transcriptPath);
+  if (normalisedTranscript.indexOf('/.codex/sessions/') !== -1) {
+    urlStr += '&provider=codex';
+  }
   if (FORCE) urlStr += '&force=' + encodeURIComponent(FORCE);
 
   var parsed;
@@ -131,7 +137,13 @@ process.stdin.on('end', function() {
   var sessionId = input.session_id;
   if (!sessionId || typeof sessionId !== 'string') { process.exit(0); return; }
 
-  var urlStr = DAEMON_URL + '/api/drift?session=' + encodeURIComponent(sessionId);
+  var urlStr = DAEMON_URL + '/api/drift?event=userPromptSubmit&session=' + encodeURIComponent(sessionId);
+  var transcriptPath = typeof input.transcript_path === 'string' ? input.transcript_path : '';
+  var normalisedTranscript = transcriptPath.replace(/\\\\/g, '/');
+  if (transcriptPath) urlStr += '&transcript=' + encodeURIComponent(transcriptPath);
+  if (normalisedTranscript.indexOf('/.codex/sessions/') !== -1) {
+    urlStr += '&provider=codex';
+  }
   if (FORCE) urlStr += '&force=' + encodeURIComponent(FORCE);
 
   var parsed;
@@ -155,15 +167,19 @@ process.stdin.on('end', function() {
       if (res.statusCode !== 200) { process.exit(0); return; }
       var data;
       try { data = JSON.parse(body); } catch (e) { process.exit(0); return; }
+      var adjudication = data && data.adjudication;
       var drift = data && data.drift;
-      if (!drift) { process.exit(0); return; }
-      var additionalContext = [
-        '[Nakiros drift detector] type=' + drift.type + ' severity=' + drift.severity,
-        'Message au user : ' + (drift.message || ''),
-        'Suggestion : ' + (drift.suggestion || ''),
-        'Evidence : ' + JSON.stringify(drift.evidence || {}),
-        'Note : un encart vient d\\'etre affiche au user via systemMessage. Adapte ton prochain tour : rappelle la suggestion si pertinent, propose un /clear ou une nouvelle session.',
-      ].join('\\n');
+      var additionalContext = adjudication && adjudication.additionalContext;
+      if (!additionalContext && drift) {
+        additionalContext = [
+          '[Argos drift detector] type=' + drift.type + ' severity=' + drift.severity,
+          'Signal : ' + (drift.message || ''),
+          'Suggestion : ' + (drift.suggestion || ''),
+          'Evidence : ' + JSON.stringify(drift.evidence || {}),
+          'Adapte ce tour pour sortir de la boucle ou reduire la pression du contexte.',
+        ].join('\\n');
+      }
+      if (!additionalContext) { process.exit(0); return; }
       var out = {
         hookSpecificOutput: {
           hookEventName: 'UserPromptSubmit',

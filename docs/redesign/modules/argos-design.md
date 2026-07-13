@@ -1,4 +1,7 @@
-# Module — Argos (detailed design)
+# Domain — Argos (detailed design)
+
+> Argos is an internal business domain of Nakiros. It may be unused by a user,
+> but it ships and runs inside the same product as Techne and Hestia.
 
 > Detailed design for [Argos](argos.md). Read [03-module-contract.md](../03-module-contract.md)
 > and [05-inter-module-contracts.md](../05-inter-module-contracts.md) first.
@@ -30,7 +33,7 @@ DEEP-DIVE (on-task)                    DRIFT (off-task)
 A focused session that works through an agenda visits many sub-topics yet never
 leaves its goal. A naive detector reads that as maximal drift.
 
-## Why the current detector false-positives
+## Why the legacy detector false-positive
 
 `topic-detector.ts` uses lexical Jaccard between consecutive messages
 (`< 0.15` = a transition) and Jaccard between the first and last user message
@@ -60,19 +63,29 @@ was written:
 
 Four changes of substance:
 
-1. **Semantic goal anchor.** Derive the goal from the opening messages **plus
-   any explicit re-framing** detected later — not message[0] alone. Measure the
-   distance of the *recent window* to this anchor, never first↔last.
+1. **Semantic goal anchor.** Derive the goal from the opening messages after a
+   structural reset — not message[0] alone. Measure the distance of the
+   *recent window* to this anchor, never first↔last. Intentional re-framing is
+   judged by the conversational agent, not by language-specific keywords.
 2. **Semantic similarity (embeddings)**, not Jaccard, so vision↔architecture↔
    modules read as related.
-3. **Plan / navigation awareness.** Detect that the session is executing a
-   checklist (the agent proposes a list, the user says "let's do X"); following
-   a plan does not fire. Short navigation messages are not topic introductions.
+3. **Plan / navigation awareness.** The conversational agent decides whether
+   the session is executing a checklist. The local gate only excludes short,
+   non-substantive messages using a language-neutral token-count threshold.
 4. **Sustained departure, not a counter.** Drift = a trajectory that moves away
    from the goal **and stays away** over K messages with no return. A deep-dive
    orbits the goal; drift escapes it.
 
 ## Two-tier detection with in-conversation adjudication
+
+> Implemented for `topic` signals. `UserPromptSubmit` opens one pending review,
+> `Stop` reads the fresh sentinel verdict from the provider transcript, and the
+> decision is persisted under `~/.nakiros/drift/adjudications.json`. The local
+> gate now uses a Unicode lexical anchor after structural resets and a
+> sustained-departure window. It contains no intent or navigation keyword
+> dictionary. Early assistant explanations now form a conversation-local
+> semantic graph: structured plan nodes enrich the goal directly and prose
+> concepts require repeated connections. No model is downloaded by the daemon.
 
 The key architectural decision (and the cheapest accurate design): **do not
 spawn a separate LLM to adjudicate. Ask the agent already in the conversation —
@@ -151,22 +164,27 @@ false-positive-prone, via the same verdict tag + suppression memory.
 
 `conversation-{analyzer,deep-analyzer,analysis-cache}` do single-conversation
 analysis; `recommendation-*` cluster friction zones and run the analyser that
-emits `RecoCard`s. Argos `provides: recommendation.producer`. `baseline-store`
+emits recommendation cards through the shared contract. `baseline-store`
 and `comparison-runner` support before/after comparison. `project-scanner` /
 `claude-config-reader` are **read via the kernel layer** (coupling #3, doc 07).
 
 ## Multi-AI
 
-- **v1:** ingest Claude Code conversations (JSONL), as today.
-- **Later:** other agents' transcript formats (Codex, Cursor, …) behind an
-  ingestion adapter. The drift model is format-agnostic once messages are
-  normalised.
+- **Current:** ingest Claude Code and Codex conversations through native JSONL
+  adapters. Both are normalised before reaching the shared analysis and drift
+  detectors.
+- **Real time:** Argos installs the same opt-in `Stop` and `UserPromptSubmit`
+  observation pair for each detected compatible agent. Claude writes to
+  `~/.claude/settings.json`; Codex writes to `~/.codex/hooks.json` and keeps its
+  own trust-review flow.
+- **Later:** Gemini, Cursor and other transcript formats can add adapters
+  without changing the drift model.
 
 ## Inter-module
 
-`provides: ["recommendation.producer"]`, `consumes: []`. When Hestia/Techne are
-installed, their `consumes` match and the host renders "Apply" on cards; when
-absent, Argos shows diagnostics only. See doc 05.
+Argos produces recommendations but never applies them. Hestia and Techne
+register consumers for their target types; the shell renders "Apply" only when
+the target and action are supported. See doc 05.
 
 ## Screens / services / IPC
 
@@ -181,37 +199,50 @@ absent, Argos shows diagnostics only. See doc 05.
 
 ## v1 scope
 
-- Reworked `topic` detector (semantic anchor + plan awareness + sustained
-  departure) with two-tier in-conversation adjudication + suppression memory.
+- Two-tier in-conversation adjudication and persistent suppression memory for
+  `topic` signals.
+- Language-neutral Unicode lexical fallback with `/clear` as a structural
+  boundary and sustained-departure scoring.
+- Conversation-local semantic links and structured plan awareness from early
+  assistant messages are implemented. Optional offline embeddings remain a
+  future calibration path, not a runtime dependency.
 - Existing analysis + recommendation features re-homed into Argos.
-- Claude JSONL ingestion.
+- Claude and Codex JSONL ingestion, including native Codex context and tool
+  error signals.
+- Structural Codex friction signals, a shared `NormalizedConversation`
+  contract, provider-aware deep analysis and one diagnostic screen are
+  implemented. Provider-specific data remains visible inside the common
+  hierarchy.
+- Deep narrative analysis is provider-matched, not provider-first navigation:
+  the conversation determines whether Claude or Codex executes the shared
+  protocol. Reports retain both the source provider and analyzer provider so
+  cached evidence cannot be confused across engines.
+- Mixed Claude/Codex projects expose an observational comparison table. The
+  daemon returns analyses and comparison evidence in one snapshot so the UI
+  does not rescan conversations. Metrics include sample coverage and period
+  overlap; unpaired tasks prevent Argos from presenting a winner.
 
 ## Annex — concrete fix to `topic-detector.ts`
 
-Design-level, ready to implement. Target behaviour:
+Implementation status and remaining semantic upgrade:
 
-1. **Drop `firstLastSimilarity` as a trigger.** It is the primary false-positive
-   source. Replace with `recentWindowToAnchorDistance`.
-2. **Build a goal anchor**: aggregate tokens/embedding of the first N user
-   messages and of any message flagged as an explicit re-framing; refresh on
-   `/clear`.
-3. **Switch similarity to embeddings** (semantic) where available; keep Jaccard
-   only as an offline fallback.
-4. **Stop counting transitions monotonically.** Track instead the trajectory of
-   `distance(recentWindow, anchor)` and require it to exceed the margin and
-   **persist** over K consecutive messages.
-5. **Classify navigation messages** (short, confirmatory/imperative) and exclude
-   them from topic-introduction counting.
-6. **Add a `planMode` signal**: if the session is executing an agreed checklist,
-   raise the firing bar sharply.
-7. **Gate, don't fire.** Tier 1 returns a `suspicion` with evidence; the banner
-   is surfaced only after the agent's verdict (Tier 2) is `drifting`.
-8. **Persist verdict + thread signature** so a confirmed `on-track` suppresses
-   re-injection until a re-adjudication trigger fires.
+1. **Implemented:** `firstLastSimilarity` and the monotonic transition trigger
+   are gone.
+2. **Implemented:** the lexical goal anchor resets on the structural `/clear`
+   boundary. Intentional re-framing is left to Tier 2 adjudication.
+3. **Implemented:** a departure must persist for three substantive messages.
+4. **Implemented:** short non-substantive messages are excluded by token count,
+   without matching words or languages.
+5. **Implemented:** Tier 1 suspicion, Tier 2 verdict and persistent suppression.
+6. **Implemented:** enrich lexical connection with a bounded, conversation-local
+   semantic graph built from assistant explanations.
+7. **Implemented:** derive early plan state from language-neutral Markdown list
+   structure and connect its concepts to the goal anchor.
 
 ## Open questions for implementation
 
-- Embedding source for local semantic similarity (local model? cached?).
+- Whether an optional bundled embedding model materially improves calibration
+  enough to justify its binary size and platform cost.
 - Exact thread-signature definition for the suppression key.
 - Calibration of K (sustained-departure window) and the strong-signal override.
 - Verdict tag vs heuristic parse robustness across agent phrasings.

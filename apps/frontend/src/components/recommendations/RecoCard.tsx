@@ -28,6 +28,7 @@ export function RecoCard({ card, onApply, onDismiss, onOpenRun }: Props) {
   const [showModal, setShowModal] = useState(false);
 
   const isCreate = card.action === 'create';
+  const targetDomain = card.route?.targetDomain ?? (card.artifactType === 'skill' ? 'techne' : 'hestia');
 
   return (
     <article className="border border-n-border-subtle rounded bg-n-surface mb-4 overflow-hidden">
@@ -41,6 +42,9 @@ export function RecoCard({ card, onApply, onDismiss, onOpenRun }: Props) {
           {/* Artifact type badge */}
           <span className="flex-shrink-0 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-n-xs bg-n-raised text-n-muted">
             {card.artifactType}
+          </span>
+          <span className="flex-shrink-0 font-n-mono text-[9.5px] text-n-faint">
+            Argos → {t(`domains.${targetDomain}`)}
           </span>
           {/* Target path — shown only when it references an existing artefact */}
           {card.target !== 'new' && (
@@ -74,7 +78,7 @@ export function RecoCard({ card, onApply, onDismiss, onOpenRun }: Props) {
               onClick={() => setShowModal(true)}
               className="text-sm px-3 py-1.5 rounded border border-n-accent-line bg-n-accent-soft text-n-accent hover:bg-n-accent-line hover:text-n-canvas"
             >
-              {isCreate ? t('card.create') : t('card.applyFix')}
+              {t('card.review', { domain: t(`domains.${targetDomain}`) })}
             </button>
           </>
         )}

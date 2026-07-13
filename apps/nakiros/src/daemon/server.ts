@@ -53,6 +53,10 @@ import {
 import { analyzeDrift, type DriftType } from '../services/drift-analyzer.js';
 import { gateDriftAlert } from '../services/drift/alert-gate.js';
 import {
+  requestTopicDriftAdjudication,
+  resolveTopicDriftAdjudication,
+} from '../services/drift/adjudication.js';
+import {
   buildDriftHookDiff,
   getDriftHookStatus,
   installDriftHook,
@@ -328,27 +332,71 @@ export async function createDaemonServer(opts: DaemonServerOptions = {}): Promis
   app.get('/health', async () => ({ status: 'ok', ts: new Date().toISOString() }));
 
   // ── Drift detection ─────────────────────────────────────────────────────────
-  // GET /api/drift?session=<sessionId>[&force=loop|topic|context]
+  // GET /api/drift?session=<sessionId>[&provider=claude|codex][&transcript=<path>]
+  //              [&force=loop|topic|context]
   // Returns { drift: DriftReport | null }. No auth required (daemon is localhost-only).
-  app.get<{ Querystring: { session?: string; force?: string } }>(
+  app.get<{
+    Querystring: {
+      session?: string;
+      force?: string;
+      provider?: string;
+      transcript?: string;
+      event?: string;
+    };
+  }>(
     '/api/drift',
     async (request, reply) => {
-      const { session, force } = request.query;
+      const { session, force, provider, transcript, event } = request.query;
       if (!session) {
         reply.status(400);
         return { error: 'Missing required query param: session' };
       }
       try {
         const validForce: DriftType[] = ['loop', 'topic', 'context'];
-        const opts =
-          force && validForce.includes(force as DriftType)
-            ? { force: force as DriftType }
-            : undefined;
+        const forced = force && validForce.includes(force as DriftType)
+          ? force as DriftType
+          : undefined;
+        const selectedProvider = provider === 'codex' ? 'codex' : 'claude';
+        const opts = {
+          ...(forced ? { force: forced } : {}),
+          provider: selectedProvider,
+          ...(selectedProvider === 'codex' && transcript ? { transcriptPath: transcript } : {}),
+        } as const;
+        const adjudicationRequest = {
+          provider: selectedProvider,
+          sessionId: session,
+          ...(transcript ? { transcriptPath: transcript } : {}),
+        } as const;
+
+        if (!forced && event === 'stop') {
+          const confirmedDrift = resolveTopicDriftAdjudication(adjudicationRequest);
+          if (confirmedDrift) {
+            return {
+              drift: gateDriftAlert(`${selectedProvider}:${session}`, confirmedDrift),
+              adjudication: null,
+            };
+          }
+        }
+
         const drift = await analyzeDrift(session, opts);
+        if (!forced && event === 'userPromptSubmit' && drift?.type === 'topic') {
+          return {
+            drift: null,
+            adjudication: requestTopicDriftAdjudication(adjudicationRequest, drift),
+          };
+        }
+        // Topic drift is visible only after the agent confirms it. Stop still
+        // handles loop/context directly because those signals are operational.
+        if (!forced && event === 'stop' && drift?.type === 'topic') {
+          return { drift: null, adjudication: null };
+        }
         // Per-session gate: without it the stateless detectors re-emit the
         // same alert on every hook call until the analysis window slides past
         // the offending turns. Bypassed in force mode (plumbing tests).
-        return { drift: opts ? drift : gateDriftAlert(session, drift) };
+        return {
+          drift: forced ? drift : gateDriftAlert(`${selectedProvider}:${session}`, drift),
+          adjudication: null,
+        };
       } catch (err) {
         app.log.warn({ err }, '[drift] analyzeDrift threw unexpectedly');
         reply.status(500);

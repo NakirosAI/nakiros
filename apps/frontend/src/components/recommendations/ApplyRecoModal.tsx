@@ -21,6 +21,7 @@ export function ApplyRecoModal({ card, onConfirm, onClose }: Props) {
   const [brief, setBrief] = useState(card.brief);
 
   const runKind = card.action === 'create' ? 'create' : 'edit';
+  const targetDomain = card.route?.targetDomain ?? (card.artifactType === 'skill' ? 'techne' : 'hestia');
   const trimmed = brief.trim();
 
   return (
@@ -42,10 +43,13 @@ export function ApplyRecoModal({ card, onConfirm, onClose }: Props) {
         {/* Header */}
         <div className="mb-4">
           <h3 className="m-0 mb-1 text-[14px] font-semibold text-n-fg">
-            {t('confirmApply.title')}
+            {t('confirmApply.title', { domain: t(`domains.${targetDomain}`) })}
           </h3>
           <p className="m-0 text-[12px] leading-relaxed text-n-muted">
-            {t('confirmApply.description', { kind: runKind })}
+            {t('confirmApply.description', {
+              kind: runKind,
+              domain: t(`domains.${targetDomain}`),
+            })}
           </p>
         </div>
 

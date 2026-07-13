@@ -66,7 +66,7 @@ export function PatternDetail({ projectId, pattern, onRunOpen, onAnalyzeRunOpen,
   };
 
   const handleApply = async (recId: string, editedBrief: string) => {
-    const res = await window.nakiros.applyReco(projectId, pattern.id, recId, editedBrief);
+    const res = await window.nakiros.applyReco(projectId, pattern.id, recId, editedBrief, true);
     if (res.ok) {
       onRunOpen(res.runId);
       const { recos: loaded } = await window.nakiros.getRecommendationPattern(projectId, pattern.id);
@@ -77,7 +77,9 @@ export function PatternDetail({ projectId, pattern, onRunOpen, onAnalyzeRunOpen,
           ? 'targetMissing'
           : res.error === 'unknown-artifact-type'
             ? 'unknownArtifactType'
-            : 'recoNotFound';
+            : res.error === 'review-required'
+              ? 'reviewRequired'
+              : 'recoNotFound';
       // For v1, surface via alert. A toast system can replace this later.
       window.alert(t(`errors.${errKey}`));
     }

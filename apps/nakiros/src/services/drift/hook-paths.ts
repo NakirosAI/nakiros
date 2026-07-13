@@ -14,6 +14,7 @@ import { nakirosFile } from '../../utils/nakiros-dir.js';
 const DRIFT_DIR_NAME = 'drift';
 const DRIFT_STOP_HOOK_FILENAME = 'hook-stop.cjs';
 const DRIFT_USER_PROMPT_SUBMIT_HOOK_FILENAME = 'hook-userpromptsubmit.cjs';
+const DRIFT_ADJUDICATION_STORE_FILENAME = 'adjudications.json';
 
 /** Absolute path of the `~/.nakiros/drift/` directory (not auto-created here). */
 export function getDriftHookDir(): string {
@@ -28,6 +29,11 @@ export function getDriftStopHookScriptPath(): string {
 /** Absolute path of `~/.nakiros/drift/hook-userpromptsubmit.cjs`. */
 export function getDriftUserPromptSubmitHookScriptPath(): string {
   return join(getDriftHookDir(), DRIFT_USER_PROMPT_SUBMIT_HOOK_FILENAME);
+}
+
+/** Persistent Argos decisions and pending adjudications. */
+export function getDriftAdjudicationStorePath(): string {
+  return join(getDriftHookDir(), DRIFT_ADJUDICATION_STORE_FILENAME);
 }
 
 /**
@@ -55,4 +61,9 @@ export function getDriftUserPromptSubmitHookCommandString(): string {
  */
 export function getClaudeGlobalSettingsPath(): string {
   return join(homedir(), '.claude', 'settings.json');
+}
+
+/** Absolute path of the user-global Codex hooks configuration. */
+export function getCodexGlobalHooksPath(): string {
+  return join(homedir(), '.codex', 'hooks.json');
 }

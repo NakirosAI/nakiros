@@ -92,6 +92,8 @@ export interface AssistantTurn {
   timestamp: string;
   /** All tool-use events inside this assistant message, in order. */
   toolUses: ToolUseEvent[];
+  /** Plain assistant text, used by the conversation-local semantic graph. */
+  text?: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -240,9 +242,14 @@ function parseAssistantTurns(raw: string): AssistantTurn[] {
     const timestamp = (entry['timestamp'] as string | undefined) ?? '';
 
     const toolUses: ToolUseEvent[] = [];
+    const textParts: string[] = [];
     if (Array.isArray(msg?.content)) {
       for (const block of msg!.content as unknown[]) {
         const b = block as Record<string, unknown>;
+        if (b['type'] === 'text' && typeof b['text'] === 'string') {
+          textParts.push(b['text']);
+          continue;
+        }
         if (b['type'] !== 'tool_use') continue;
         const id = b['id'] as string | undefined;
         const name = b['name'] as string | undefined;
@@ -258,7 +265,7 @@ function parseAssistantTurns(raw: string): AssistantTurn[] {
       }
     }
 
-    turns.push({ index: assistantIndex, timestamp, toolUses });
+    turns.push({ index: assistantIndex, timestamp, toolUses, text: textParts.join('\n') });
   }
 
   return turns;

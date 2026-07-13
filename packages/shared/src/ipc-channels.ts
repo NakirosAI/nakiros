@@ -47,6 +47,7 @@ export const IPC_CHANNELS = {
   'project:getConversationMessages': 'project:getConversationMessages',
   'project:analyzeConversation': 'project:analyzeConversation',
   'project:listConversationsWithAnalysis': 'project:listConversationsWithAnalysis',
+  'project:getArgosDashboard': 'project:getArgosDashboard',
   'project:deepAnalyzeConversation': 'project:deepAnalyzeConversation',
   'project:loadDeepAnalysis': 'project:loadDeepAnalysis',
   // Lazy-load helpers for classify-convo digests. The runner family lives
@@ -61,6 +62,7 @@ export const IPC_CHANNELS = {
   'project:saveSkillFile': 'project:saveSkillFile',
   'project:getRecommendations': 'project:getRecommendations',
   'project:getAggregate': 'project:getAggregate',
+  'project:listAggregates': 'project:listAggregates',
   'project:refreshAggregate': 'project:refreshAggregate',
   'project:aggregateUpdated': 'project:aggregateUpdated',
   'project:listDismissed': 'project:listDismissed',
@@ -351,6 +353,7 @@ export const IPC_CHANNELS = {
   'recommendations:listActiveAnalyzeRuns': 'recommendations:listActiveAnalyzeRuns',
   'recommendations:getAnalyzeBufferedEvents': 'recommendations:getAnalyzeBufferedEvents',
   'recommendations:applyReco': 'recommendations:applyReco',
+  'recommendations:getReviewRoute': 'recommendations:getReviewRoute',
   'recommendations:dismissReco': 'recommendations:dismissReco',
   'recommendations:editRecoBrief': 'recommendations:editRecoBrief',
   'recommendations:event': 'recommendations:event',

@@ -15,52 +15,29 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 
-// ── Inline tokenize + jaccard (mirrors runner-core/cluster-tokens) ────────────
+// ── Language-neutral Unicode tokenizer (mirrors topic-detector.ts) ───────────
 
-const STOP_WORDS = new Set([
-  // FR
-  'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'donc',
-  'car', 'que', 'qui', 'quoi', 'comment', 'pourquoi', 'tu', 'je', 'il',
-  'elle', 'on', 'nous', 'vous', 'ils', 'elles', 'ce', 'cette', 'ces',
-  'mon', 'ton', 'son', 'ma', 'ta', 'sa', 'mes', 'tes', 'ses', 'avec',
-  'sans', 'pour', 'par', 'dans', 'sur', 'sous', 'entre', 'aussi',
-  'pas', 'plus', 'moins', 'tout', 'tous', 'toute', 'toutes', 'fait',
-  'faire', 'voir', 'avoir', 'être', 'etre', 'pouvoir', 'falloir',
-  'vouloir', 'savoir', 'oui', 'non', 'peut', 'doit', 'va',
-  // EN
-  'the', 'a', 'an', 'and', 'or', 'but', 'so', 'because', 'that',
-  'this', 'these', 'those', 'is', 'are', 'was', 'were', 'be',
-  'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
-  'will', 'would', 'should', 'can', 'could', 'may', 'might',
-  'i', 'you', 'he', 'she', 'we', 'they', 'it', 'us',
-  'for', 'in', 'on', 'at', 'to', 'of', 'with', 'as', 'by',
-  'yes', 'no', 'not', 'just', 'only',
-]);
+const WORD_SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'word' });
 
-function tokenizeForCluster(text) {
+function tokenizeTopic(text) {
   const tokens = new Set();
-  for (const t of text.toLowerCase().split(/\W+/)) {
-    if (t.length >= 3 && !STOP_WORDS.has(t)) tokens.add(t);
+  const normalized = text.normalize('NFKC').toLowerCase();
+  for (const part of WORD_SEGMENTER.segment(normalized)) {
+    if (!part.isWordLike || [...part.segment].length < 2) continue;
+    tokens.add(part.segment);
   }
   return tokens;
-}
-
-function jaccard(a, b) {
-  if (a.size === 0 || b.size === 0) return 0;
-  let intersection = 0;
-  for (const t of a) if (b.has(t)) intersection++;
-  const union = a.size + b.size - intersection;
-  return union === 0 ? 0 : intersection / union;
 }
 
 // ── Inline topic detector (mirrors topic-detector.ts) ─────────────────────────
 
 const MIN_USER_MESSAGES = 6;
 const MIN_CONTENT_TOKENS = 4;
-const CONTEXT_CONNECTION_THRESHOLD = 0.15;
-const END_OPENING_THRESHOLD = 0.10;
-const MIN_TRANSITIONS = 2;
-const OPENING_MESSAGES = 3;
+const GOAL_CONNECTION_THRESHOLD = 0.12;
+const RECENT_WINDOW_THRESHOLD = 0.12;
+const SUSTAINED_DEPARTURE_MESSAGES = 3;
+const GOAL_ANCHOR_MESSAGES = 3;
+const RECENT_WINDOW_MESSAGES = 3;
 
 function findLastClearIndex(messages) {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -79,11 +56,21 @@ function isProceduralWrapper(text) {
   return text.includes('<command-name>') || text.includes('<local-command-');
 }
 
+function tokenWeight(token) {
+  const length = Math.min([...token].length, 12);
+  return length * length;
+}
+
 function connection(probe, context) {
   if (probe.size === 0) return 1;
-  let shared = 0;
-  for (const t of probe) if (context.has(t)) shared++;
-  return shared / probe.size;
+  let sharedWeight = 0;
+  let probeWeight = 0;
+  for (const token of probe) {
+    const weight = tokenWeight(token);
+    probeWeight += weight;
+    if (context.has(token)) sharedWeight += weight;
+  }
+  return probeWeight === 0 ? 1 : sharedWeight / probeWeight;
 }
 
 function computeTopicMetrics(userMessages) {
@@ -93,47 +80,63 @@ function computeTopicMetrics(userMessages) {
   const tokenSets = [];
   for (const m of windowed) {
     if (isProceduralWrapper(m.text)) continue;
-    const tokens = tokenizeForCluster(topicText(m.text));
+    const tokens = tokenizeTopic(topicText(m.text));
     if (tokens.size < MIN_CONTENT_TOKENS) continue;
     tokenSets.push(tokens);
   }
 
   if (tokenSets.length < MIN_USER_MESSAGES) return null;
 
-  const accumulated = new Set(tokenSets[0]);
+  const anchorCount = Math.min(GOAL_ANCHOR_MESSAGES, Math.floor(tokenSets.length / 2));
+  const goalAnchor = new Set();
+  for (let i = 0; i < anchorCount; i++) for (const token of tokenSets[i]) goalAnchor.add(token);
+
   let transitions = 0;
-  for (let i = 1; i < tokenSets.length; i++) {
-    if (connection(tokenSets[i], accumulated) < CONTEXT_CONNECTION_THRESHOLD) transitions++;
-    for (const t of tokenSets[i]) accumulated.add(t);
+  let outsideGoal = false;
+  let sustainedDepartureCount = 0;
+  for (let i = anchorCount; i < tokenSets.length; i++) {
+    const disconnected = connection(tokenSets[i], goalAnchor) < GOAL_CONNECTION_THRESHOLD;
+    if (disconnected && !outsideGoal) transitions++;
+    outsideGoal = disconnected;
+    sustainedDepartureCount = disconnected ? sustainedDepartureCount + 1 : 0;
   }
 
-  const openingCount = Math.min(OPENING_MESSAGES, Math.floor(tokenSets.length / 2));
-  const opening = new Set();
-  for (let i = 0; i < openingCount; i++) for (const t of tokenSets[i]) opening.add(t);
-  const endOpeningConnection = connection(tokenSets[tokenSets.length - 1], opening);
+  const recent = new Set();
+  for (const tokens of tokenSets.slice(-RECENT_WINDOW_MESSAGES)) {
+    for (const token of tokens) recent.add(token);
+  }
+  const recentWindowConnection = connection(recent, goalAnchor);
 
-  return { transitionsDetected: transitions, endOpeningConnection, userMessageCount: tokenSets.length };
+  return {
+    transitionsDetected: transitions,
+    endOpeningConnection: recentWindowConnection,
+    recentWindowConnection,
+    sustainedDepartureCount,
+    goalBoundaryIndex: windowed[0]?.index ?? null,
+    userMessageCount: tokenSets.length,
+  };
 }
 
 function detectTopic(userMessages) {
   const metrics = computeTopicMetrics(userMessages);
   if (!metrics) return null;
-  const { transitionsDetected: transitions, endOpeningConnection, userMessageCount } = metrics;
+  const { transitionsDetected: transitions, recentWindowConnection, sustainedDepartureCount, userMessageCount } = metrics;
 
-  if (transitions < MIN_TRANSITIONS || endOpeningConnection >= END_OPENING_THRESHOLD) return null;
+  if (sustainedDepartureCount < SUSTAINED_DEPARTURE_MESSAGES || recentWindowConnection >= RECENT_WINDOW_THRESHOLD) return null;
 
-  const severity = transitions >= 3 || endOpeningConnection < 0.02 ? 'high' : 'medium';
+  const severity = sustainedDepartureCount >= 5 || recentWindowConnection < 0.02 ? 'high' : 'medium';
   return {
     type: 'topic',
     severity,
-    message: `Nakiros a détecté que la conversation s'est éloignée de l'objectif initial (${transitions} changements de sujet).`,
+    message: `Nakiros a détecté ${sustainedDepartureCount} messages durablement éloignés de l'objectif courant.`,
     suggestion: "Recentre la session sur la tâche d'origine, ou ouvre une nouvelle session avec un cadrage clair.",
     evidence: {
       userMessageCount,
       transitionsDetected: transitions,
-      transitionThreshold: MIN_TRANSITIONS,
-      endOpeningConnection,
-      endOpeningThreshold: END_OPENING_THRESHOLD,
+      endOpeningConnection: recentWindowConnection,
+      recentWindowConnection,
+      sustainedDepartureCount,
+      sustainedDepartureThreshold: SUSTAINED_DEPARTURE_MESSAGES,
     },
   };
 }
@@ -228,7 +231,7 @@ console.log('\n[Test 2] 8 msgs with 3 distinct topic transitions → drift detec
   const result = detectTopic(msgs);
   assert('result is not null', result !== null);
   assert('type is topic', result?.type === 'topic');
-  assert('transitions >= 3', (result?.evidence?.transitionsDetected ?? 0) >= 3);
+  assert('sustained departure >= 3', (result?.evidence?.sustainedDepartureCount ?? 0) >= 3);
   assert('endOpeningConnection < 0.10', (result?.evidence?.endOpeningConnection ?? 1) < 0.10);
   console.log('   severity:', result?.severity, '| transitions:', result?.evidence?.transitionsDetected);
 }
@@ -281,14 +284,14 @@ console.log('\n[Test 5] 10 msgs, 4 transitions, end unrelated to opening → hig
   ]);
   const result = detectTopic(msgs);
   assert('result is not null', result !== null);
-  assert('severity is high (transitions >= 3)', result?.severity === 'high', `got: ${result?.severity}`);
+  assert('severity is high for a long departure', result?.severity === 'high', `got: ${result?.severity}`);
   assert('type is topic', result?.type === 'topic');
   console.log('   transitions:', result?.evidence?.transitionsDetected, '| endOpening:', result?.evidence?.endOpeningConnection?.toFixed(3));
 }
 
-// ── Test 6: 6 msgs, 2 transitions, end fully unrelated to opening → high ──────
+// ── Test 6: 7 msgs, 3 sustained departures, end unrelated → high ─────────────
 
-console.log('\n[Test 6] 6 msgs, 2 transitions, end disjoint from opening → high (endOpening < 0.02)');
+console.log('\n[Test 6] 7 msgs, 3 sustained departures → high');
 {
   const msgs = makeMessages([
     GIT_MSG,
@@ -297,13 +300,14 @@ console.log('\n[Test 6] 6 msgs, 2 transitions, end disjoint from opening → hig
     PYTHON_MSG + ' neural network activation gradient descent backpropagation',
     BASH_MSG,
     BASH_MSG + ' while loop function variable array associative hash map',
+    BASH_MSG + ' process substitution trap signal exit status environment',
   ]);
   const result = detectTopic(msgs);
   assert('result is not null', result !== null);
   if (result !== null) {
     assert('type is topic', result.type === 'topic');
-    assert('severity is high (endOpening < 0.02)', result.severity === 'high', `got: ${result.severity}`);
-    assert('exactly 2 transitions', result.evidence.transitionsDetected === 2);
+    assert('severity is high (recent connection < 0.02)', result.severity === 'high', `got: ${result.severity}`);
+    assert('three sustained departures', result.evidence.sustainedDepartureCount === 3);
     console.log('   transitions:', result.evidence.transitionsDetected, '| endOpening:', result.evidence.endOpeningConnection?.toFixed(3), '| severity:', result.severity);
   }
 }

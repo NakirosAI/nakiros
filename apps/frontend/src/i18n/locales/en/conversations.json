@@ -3,7 +3,42 @@
   "empty": "No conversations found for this project.",
   "emptyForFilter": "No conversations match this filter.",
   "headingAnalysis": "Conversations — {{count}} analyzed",
+  "headingAll": "Conversations — {{count}} found",
   "subheadingByHealth": "Sorted by health (critical first)",
+  "subheadingRecent": "Provider-native sessions, most recent first",
+  "providerFilter": {
+    "label": "Filter by agent",
+    "all": "All agents",
+    "claude": "Claude",
+    "codex": "Codex",
+    "gemini": "Gemini",
+    "cursor": "Cursor"
+  },
+  "comparison": {
+    "title": "Observed comparison",
+    "scope": "Metrics computed from this project's conversations. Tasks are not paired, so these values describe observed usage and do not select a better agent.",
+    "metric": "Normalized metric",
+    "sample_one": "{{count}} conv.",
+    "sample_other": "{{count}} conv.",
+    "sameProject": "same project",
+    "periodOverlap": "overlapping periods",
+    "periodSeparate": "separate periods",
+    "tasksUnpaired": "unpaired tasks",
+    "coverage": "{{value}}% coverage",
+    "confidence": {
+      "insufficient": "insufficient evidence",
+      "directional": "directional only",
+      "supported": "paired evidence"
+    },
+    "metrics": {
+      "health-score": "Average health score",
+      "tokens-per-conversation": "Tokens per conversation",
+      "duration-per-conversation": "Duration per conversation",
+      "friction-per-100-messages": "Frictions per 100 messages",
+      "tool-errors-per-100-calls": "Errors per 100 tool calls",
+      "compactions-per-conversation": "Compactions per conversation"
+    }
+  },
   "sort": {
     "label": "Sort",
     "score": "By health (critical first)",
@@ -60,6 +95,7 @@
   "drawer": {
     "title": "Diagnostic",
     "close": "Close",
+    "navigation": "Conversation views",
     "tabs": {
       "diagnostic": "Diagnostic",
       "timeline": "Timeline"
@@ -130,16 +166,103 @@
   },
   "messageCount_one": "{{count}} message",
   "messageCount_other": "{{count}} messages",
+  "native": {
+    "untitled": "Untitled session",
+    "transcript": "Transcript",
+    "unknown": "unknown",
+    "scoreLabel": "score {{score}}",
+    "context": "{{value}} context",
+    "contextPeak": "{{peak}} / {{window}} context",
+    "totalTokens": "{{value}} tokens",
+    "corrections_one": "{{count}} correction",
+    "corrections_other": "{{count}} corrections",
+    "aborts_one": "{{count}} aborted turn",
+    "aborts_other": "{{count}} aborted turns",
+    "drawerTitle": "Codex conversation",
+    "session": "session {{id}}",
+    "metadata": "Session metadata",
+    "scoreFactors": "Score factors",
+    "noPenalty": "No penalty signal was detected.",
+    "providerMethodHint": "This diagnosis uses provider-native Codex events. Cache metrics are not exposed by Codex and are intentionally omitted.",
+    "providerSpecific": "Turn durations are provider-native and are not compared with Claude timings.",
+    "signalsTitle": "Observed signals",
+    "turnsTitle": "Model turns",
+    "abortsLabel": "Interrupted turns",
+    "turnAverageLabel": "Average duration",
+    "unavailable": "Not exposed by this provider",
+    "contextReadingGuide": "The curve follows Codex context observations against the provider-reported window. Markers and penalties only use events present in the rollout.",
+    "factorOccurrences_one": "{{count}} occurrence",
+    "factorOccurrences_other": "{{count}} occurrences",
+    "factors": {
+      "context": "Context saturation",
+      "compaction": "Compactions",
+      "tool-errors": "Tool errors",
+      "aborts": "Aborted turns",
+      "friction": "Repeated requests"
+    },
+    "factorAdvice": {
+      "context": "The context approached the reported window {{count}} times. Consider splitting the task before saturation.",
+      "compaction_one": "{{count}} compaction was emitted. Restate the active objective after a compaction.",
+      "compaction_other": "{{count}} compactions were emitted. Restate the active objective after a compaction.",
+      "tool-errors_one": "{{count}} tool error was observed. Review the failing command or its environment before retrying.",
+      "tool-errors_other": "{{count}} tool errors were observed. Review the failing command or its environment before retrying.",
+      "aborts_one": "{{count}} model turn was interrupted. Narrow the request or verify the tool chain if this repeats.",
+      "aborts_other": "{{count}} model turns were interrupted. Narrow the request or verify the tool chain if this repeats.",
+      "friction_one": "{{count}} repeated request was observed without interpreting its wording. Review what blocked progress.",
+      "friction_other": "{{count}} repeated requests were observed without interpreting their wording. Review what blocked progress."
+    },
+    "contextTitle": "Context and turns",
+    "contextPeakValue": "Peak: {{value}}",
+    "contextWindowValue": "Window: {{value}}",
+    "contextSamples_one": "{{count}} observation",
+    "contextSamples_other": "{{count}} observations",
+    "turnDuration_one": "{{count}} model turn, {{average}} average",
+    "turnDuration_other": "{{count}} model turns, {{average}} average",
+    "noTurnDuration": "No model turn duration exposed.",
+    "toolsTitle": "Native tool usage",
+    "noTools": "No tool invocation exposed.",
+    "toolStat": "{{count}} calls · {{errors}} errors",
+    "timeline": {
+      "title": "Native timeline",
+      "empty": "No native event exposed for this session.",
+      "context": "Context observation",
+      "compaction": "Compaction",
+      "correction": "Explicit correction",
+      "contextDetail": "{{tokens}} input tokens, {{total}} cumulative tokens",
+      "compactionDetail": "The provider emitted a compaction marker."
+    },
+    "noMessages": "No readable message was found in this session.",
+    "fields": {
+      "score": "Score",
+      "messages": "Messages",
+      "duration": "Duration",
+      "tokens": "Total tokens",
+      "context": "Context window",
+      "toolErrors": "Tool errors",
+      "aborts": "Aborted turns"
+    },
+    "roles": {
+      "system": "System",
+      "user": "User",
+      "assistant": "Assistant"
+    }
+  },
   "deepAnalysis": {
     "title": "Deep analysis",
+    "analyzer": "Engine: {{provider}}",
     "checking": "Checking cache…",
     "pitch": "Run an LLM-powered narrative analysis to catch implicit frustration, context drift, and get concrete recommendations.",
+    "pitchProvider": "{{provider}} reviews this conversation and produces a narrative diagnosis from the evidence collected by Argos.",
     "estimate": "Likely model: {{model}} · context ~{{tokensK}}k tokens · cached after the run",
     "run": "Run deep analysis",
     "running": "Analyzing…",
     "runningHint": "Claude is reading the conversation and drafting the report — seconds to tens of seconds depending on size.",
+    "runningHintProvider": "{{provider}} is reading the conversation and writing the report. The result will be stored locally.",
+    "stop": "Stop",
+    "failed": "The analysis could not be completed.",
     "rerun": "Re-run",
-    "generated": "{{model}} · ~{{tokensK}}k tokens · {{date}}"
+    "generated": "{{model}} · ~{{tokensK}}k tokens · {{date}}",
+    "generatedBy": "Produced by {{provider}} · {{model}} · {{date}}"
   },
   "tips": {
     "split-sessions": {

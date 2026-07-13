@@ -115,11 +115,6 @@ export default function App() {
   async function handleRescan() {
     const next = await window.nakiros.scanProjects();
     setProjects(next);
-    await Promise.all(
-      next.map((p) =>
-        window.nakiros.refreshProjectAggregate(p.id).catch(() => undefined),
-      ),
-    );
   }
 
   async function handleDismissProject(id: string) {

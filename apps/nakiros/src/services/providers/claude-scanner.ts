@@ -1,12 +1,13 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
+import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join, basename } from 'path';
 
 import type { DetectedProject } from '@nakiros/shared';
 
-const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects');
+import { projectStatusFromActivity } from '../project-activity.js';
 
-const INACTIVITY_THRESHOLD_DAYS = 30;
+const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects');
+const SESSION_HEADER_BYTES = 64 * 1024;
 
 /**
  * Decode a Claude project folder name back to a filesystem path.
@@ -48,9 +49,12 @@ function getLastConversationInfo(projectDir: string): { cwd: string | null; time
   const latestFile = sorted[0].file;
   const timestamp = new Date(sorted[0].mtime).toISOString();
 
+  let fd: number | null = null;
   try {
-    const raw = readFileSync(latestFile, 'utf8');
-    const firstLines = raw.split('\n').slice(0, 10);
+    fd = openSync(latestFile, 'r');
+    const buffer = Buffer.alloc(SESSION_HEADER_BYTES);
+    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
+    const firstLines = buffer.toString('utf8', 0, bytesRead).split('\n').slice(0, 10);
     for (const line of firstLines) {
       if (!line.trim()) continue;
       try {
@@ -64,6 +68,8 @@ function getLastConversationInfo(projectDir: string): { cwd: string | null; time
     }
   } catch {
     // ignore
+  } finally {
+    if (fd !== null) closeSync(fd);
   }
 
   return { cwd: null, timestamp };
@@ -134,14 +140,6 @@ export function scanClaudeProjects(
 
     if (sessionCount === 0 && skillCount === 0) continue;
 
-    let status: 'active' | 'inactive' = 'active';
-    if (timestamp) {
-      const daysSinceActivity = (Date.now() - new Date(timestamp).getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceActivity > INACTIVITY_THRESHOLD_DAYS) {
-        status = 'inactive';
-      }
-    }
-
     projects.push({
       id: encoded,
       name: projectNameFromPath(projectPath),
@@ -151,7 +149,7 @@ export function scanClaudeProjects(
       lastActivityAt: timestamp,
       sessionCount,
       skillCount,
-      status,
+      status: projectStatusFromActivity(timestamp),
     });
   }
 

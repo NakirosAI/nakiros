@@ -1,4 +1,5 @@
 export * from './types/project.js';
+export * from './types/agent.js';
 export * from './types/workspace.js';
 export * from './types/server.js';
 export * from './types/electron.js';

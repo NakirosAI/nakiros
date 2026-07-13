@@ -414,6 +414,7 @@ export function analyzeConversation(
             };
           }
         | undefined;
+      const assistantTextParts: string[] = [];
 
       // Tool use + hot file tracking.
       let turnLastTool: string | null = lastAssistantToolName;
@@ -426,10 +427,15 @@ export function analyzeConversation(
         for (const block of msg!.content) {
           const b = block as {
             type?: string;
+            text?: string;
             id?: string;
             name?: string;
             input?: Record<string, unknown>;
           };
+          if (b.type === 'text' && b.text) {
+            assistantTextParts.push(b.text);
+            continue;
+          }
           if (b.type !== 'tool_use' || !b.name) continue;
           const stats = toolStats[b.name] ?? { count: 0, errorCount: 0 };
           stats.count++;
@@ -493,6 +499,7 @@ export function analyzeConversation(
         index: currentTurn,
         timestamp: timestamp ?? '',
         toolUses: driftToolUses,
+        text: assistantTextParts.join('\n'),
       });
 
       // Token accounting from message.usage.

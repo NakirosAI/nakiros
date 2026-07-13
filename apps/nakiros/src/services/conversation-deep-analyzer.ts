@@ -1,12 +1,20 @@
 import { spawn } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { homedir } from 'os';
+import { fileURLToPath } from 'url';
 
-import type { ConversationAnalysis, ConversationDeepAnalysis } from '@nakiros/shared';
+import type {
+  ConversationAnalysis,
+  ConversationDeepAnalysis,
+  ConversationMessage,
+  NormalizedConversation,
+  ProviderConversationAnalysis,
+} from '@nakiros/shared';
 
 import { analyzeConversation } from './conversation-analyzer.js';
 import { getConversationMessages } from './conversation-parser.js';
+import { isCodexAnalysis } from './provider-conversation.js';
 
 // ---------------------------------------------------------------------------
 // Model routing — we pick the cheapest model that fits the prompt.
@@ -35,16 +43,44 @@ export const ANALYSES_DIR = join(homedir(), '.nakiros', 'analyses');
 /** Alias of {@link ConversationDeepAnalysis} for modules that only import from this file. */
 export type DeepAnalysisResult = ConversationDeepAnalysis;
 
+export function conversationFingerprint(
+  conversation: Pick<NormalizedConversation, 'lastMessageAt' | 'messageCount'>,
+): string {
+  return `${conversation.lastMessageAt}:${conversation.messageCount}`;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /** Lazy cache read — returns a prior analysis if one exists, without re-running. */
-export function loadDeepAnalysis(sessionId: string): DeepAnalysisResult | null {
-  const path = analysisFilePath(sessionId);
-  if (!existsSync(path)) return null;
+export function loadDeepAnalysis(
+  sessionId: string,
+  provider: NormalizedConversation['provider'] = 'claude',
+  analyzerProvider: NormalizedConversation['provider'] = provider,
+): DeepAnalysisResult | null {
+  const path = analysisFilePath(sessionId, provider, analyzerProvider);
+  const providerLegacyPath = join(ANALYSES_DIR, `${provider}--${sessionId}.json`);
+  const legacyPath = join(ANALYSES_DIR, `${sessionId}.json`);
+  const readablePath = existsSync(path)
+    ? path
+    : analyzerProvider === 'claude' && existsSync(providerLegacyPath)
+      ? providerLegacyPath
+      : analyzerProvider === 'claude' && provider === 'claude'
+        ? legacyPath
+        : path;
+  if (!existsSync(readablePath)) return null;
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as DeepAnalysisResult;
+    const result = JSON.parse(readFileSync(readablePath, 'utf8')) as
+      Omit<DeepAnalysisResult, 'provider' | 'analyzerProvider'> & {
+        provider?: DeepAnalysisResult['provider'];
+        analyzerProvider?: DeepAnalysisResult['analyzerProvider'];
+      };
+    const sourceProvider = result.provider ?? 'claude';
+    const reportAnalyzer = result.analyzerProvider ?? 'claude';
+    return sourceProvider === provider && reportAnalyzer === analyzerProvider
+      ? { ...result, provider: sourceProvider, analyzerProvider: reportAnalyzer }
+      : null;
   } catch {
     return null;
   }
@@ -82,6 +118,8 @@ export async function runDeepAnalysis(
   const report = await spawnClaude(prompt, modelId);
 
   const result: DeepAnalysisResult = {
+    provider: 'claude',
+    analyzerProvider: 'claude',
     sessionId,
     model,
     inputTokens,
@@ -89,6 +127,38 @@ export async function runDeepAnalysis(
     generatedAt: new Date().toISOString(),
   };
 
+  persistAnalysis(result);
+  return result;
+}
+
+/** Run provider-neutral deep analysis from an already normalized session. */
+export async function runNormalizedDeepAnalysis(
+  conversation: NormalizedConversation,
+  analyzerProvider: NormalizedConversation['provider'] = conversation.provider,
+): Promise<DeepAnalysisResult> {
+  const prompt = buildAnalyzeConvoPrompt(conversation.analysis, conversation.messages);
+  const inputTokens = estimatePromptTokens(prompt);
+  if (inputTokens > MAX_PROMPT_TOKENS) {
+    throw new Error(
+      `Conversation too large for deep analysis (~${Math.round(inputTokens / 1000)}k tokens, max ${Math.round(MAX_PROMPT_TOKENS / 1000)}k).`,
+    );
+  }
+  const model = analyzerProvider === 'claude'
+    ? inputTokens <= HAIKU_INPUT_BUDGET ? HAIKU_MODEL : SONNET_MODEL
+    : 'default';
+  const report = analyzerProvider === 'claude'
+    ? await spawnClaude(prompt, model)
+    : await spawnCodex(prompt);
+  const result: DeepAnalysisResult = {
+    provider: conversation.provider,
+    analyzerProvider,
+    sessionId: conversation.sessionId,
+    model,
+    inputTokens,
+    sourceFingerprint: conversationFingerprint(conversation),
+    report: report.trim(),
+    generatedAt: new Date().toISOString(),
+  };
   persistAnalysis(result);
   return result;
 }
@@ -107,11 +177,47 @@ export async function runDeepAnalysis(
  * shape as the legacy one-shot `runDeepAnalysis`.
  */
 export function buildAnalyzeConvoPrompt(
-  stage1: ConversationAnalysis,
-  messages: ReturnType<typeof getConversationMessages>,
+  stage1: ProviderConversationAnalysis,
+  messages: ConversationMessage[],
 ): string {
+  const codexAnalysis = isCodexAnalysis(stage1);
+  const provider = codexAnalysis ? 'codex' : 'claude';
+  const providerSignals = codexAnalysis
+    ? {
+        model: stage1.model,
+        compactions: stage1.compactions,
+        maxContextTokens: stage1.maxContextTokens,
+        contextWindow: stage1.contextWindow,
+        totalTokens: stage1.totalTokens,
+        frictionPoints: stage1.frictionPoints,
+        toolStats: stage1.toolStats,
+        toolErrorCount: stage1.toolErrorCount,
+        abortedTurns: stage1.abortedTurns,
+        scoreFactors: stage1.scoreFactors,
+      }
+    : {
+        compactions: stage1.compactions,
+        maxContextTokens: stage1.maxContextTokens,
+        contextWindow: stage1.contextWindow,
+        totalTokens: stage1.totalTokens,
+        cacheReadTokens: stage1.cacheReadTokens,
+        cacheCreationTokens: stage1.cacheCreationTokens,
+        cacheMissTurns: stage1.cacheMissTurns,
+        wastedCacheTokens: stage1.wastedCacheTokens,
+        frictionPoints: stage1.frictionPoints,
+        frictionZones: stage1.frictionZones,
+        toolStats: stage1.toolStats,
+        toolErrorCount: stage1.toolErrorCount,
+        hotFiles: stage1.hotFiles,
+        sidechainCount: stage1.sidechainCount,
+        slashCommands: stage1.slashCommands,
+        drift: stage1.drift,
+        diagnostic: stage1.diagnostic,
+        tips: stage1.tips,
+      };
   const stage1Block = JSON.stringify(
     {
+      provider,
       sessionId: stage1.sessionId,
       score: stage1.score,
       healthZone: stage1.healthZone,
@@ -119,22 +225,7 @@ export function buildAnalyzeConvoPrompt(
       messageCount: stage1.messageCount,
       summary: stage1.summary,
       gitBranch: stage1.gitBranch,
-      compactions: stage1.compactions,
-      maxContextTokens: stage1.maxContextTokens,
-      contextWindow: stage1.contextWindow,
-      totalTokens: stage1.totalTokens,
-      cacheReadTokens: stage1.cacheReadTokens,
-      cacheCreationTokens: stage1.cacheCreationTokens,
-      cacheMissTurns: stage1.cacheMissTurns,
-      wastedCacheTokens: stage1.wastedCacheTokens,
-      frictionPoints: stage1.frictionPoints,
-      toolStats: stage1.toolStats,
-      toolErrorCount: stage1.toolErrorCount,
-      hotFiles: stage1.hotFiles,
-      sidechainCount: stage1.sidechainCount,
-      slashCommands: stage1.slashCommands,
-      diagnostic: stage1.diagnostic,
-      tips: stage1.tips,
+      ...providerSignals,
     },
     null,
     2,
@@ -160,11 +251,16 @@ export function buildAnalyzeConvoPrompt(
     convLines.push('');
   });
   const convBlock = convLines.join('\n');
+  const protocol = loadAnalysisProtocol();
 
   return (
     '<instructions>\n' +
-    'Analyze the following Claude Code conversation and produce the Markdown report per your skill.\n' +
+    `Analyze the following ${provider} coding-agent conversation and produce the Markdown report defined by the supplied protocol.\n` +
+    'Use only the supplied evidence. Treat missing provider capabilities as unavailable, not as zero.\n' +
     '</instructions>\n\n' +
+    '<analysis-protocol>\n' +
+    protocol +
+    '\n</analysis-protocol>\n\n' +
     '<stage1-signals>\n' +
     stage1Block +
     '\n</stage1-signals>\n\n' +
@@ -172,6 +268,33 @@ export function buildAnalyzeConvoPrompt(
     convBlock +
     '</conversation>\n'
   );
+}
+
+function loadAnalysisProtocol(): string {
+  const managed = join(homedir(), '.nakiros', 'skills', 'nakiros-conversation-analyst');
+  const source = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    'bundled-skills',
+    'nakiros-conversation-analyst',
+  );
+  const root = existsSync(join(source, 'SKILL.md')) ? source : managed;
+  const files = [
+    'SKILL.md',
+    join('references', 'friction-patterns.md'),
+    join('assets', 'templates', 'analysis-report.md'),
+  ];
+  const protocol = files.map((relativePath) => {
+    const path = join(root, relativePath);
+    return existsSync(path)
+      ? `<!-- ${relativePath} -->\n${readFileSync(path, 'utf8').trim()}`
+      : '';
+  }).filter(Boolean).join('\n\n');
+  if (!protocol) {
+    throw new Error('Nakiros conversation analysis protocol is not installed');
+  }
+  return protocol;
 }
 
 // ---------------------------------------------------------------------------
@@ -233,17 +356,48 @@ function spawnClaude(prompt: string, model: string): Promise<string> {
   });
 }
 
+function spawnCodex(prompt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    const child = spawn(
+      'codex',
+      ['exec', '--sandbox', 'read-only', '--skip-git-repo-check', prompt],
+      { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    child.stdout?.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8'); });
+    child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8'); });
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`codex exited with code ${code}: ${stderr.slice(-500) || '(no stderr)'}`));
+      } else if (!stdout.trim()) {
+        reject(new Error('codex returned empty output'));
+      } else {
+        resolve(stdout);
+      }
+    });
+    child.on('error', (error) => reject(new Error(`Failed to spawn codex: ${error.message}`)));
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
 
 /** Cached report path for a session id. */
-export function analysisFilePath(sessionId: string): string {
-  return join(ANALYSES_DIR, `${sessionId}.json`);
+export function analysisFilePath(
+  sessionId: string,
+  provider: NormalizedConversation['provider'] = 'claude',
+  analyzerProvider: NormalizedConversation['provider'] = provider,
+): string {
+  return join(ANALYSES_DIR, `${provider}--${analyzerProvider}--${sessionId}.json`);
 }
 
 /** Persist a completed deep-analysis report to the shared cache directory. */
 export function persistAnalysis(result: DeepAnalysisResult): void {
   if (!existsSync(ANALYSES_DIR)) mkdirSync(ANALYSES_DIR, { recursive: true });
-  writeFileSync(analysisFilePath(result.sessionId), JSON.stringify(result, null, 2));
+  writeFileSync(
+    analysisFilePath(result.sessionId, result.provider, result.analyzerProvider),
+    JSON.stringify(result, null, 2),
+  );
 }

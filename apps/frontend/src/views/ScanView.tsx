@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, X, AlertTriangle } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import type { Project, ScanProgress } from '@nakiros/shared';
 
 interface ScanViewProps {
@@ -9,9 +9,9 @@ interface ScanViewProps {
 }
 
 /**
- * First-run / boot-time view that scans `~/.claude/projects/` for Claude Code
- * project sessions, displays per-project progress, and lets the user dismiss
- * unwanted entries before continuing into the app.
+ * First-run / boot-time view that scans local agent sessions, displays
+ * per-project progress, and lets the user dismiss unwanted entries before
+ * continuing into the app. Inactive projects are filtered by the daemon.
  *
  * Subscribes to `window.nakiros.onScanProgress` for live progress updates,
  * triggers the scan via `scanProjects`, and removes individual entries via
@@ -44,8 +44,6 @@ export default function ScanView({ onComplete }: ScanViewProps) {
   function handleContinue() {
     onComplete(projects);
   }
-
-  const inactiveThresholdDays = 30;
 
   return (
     <div className="flex h-screen flex-col items-center justify-center gap-8 bg-[var(--bg)] p-8">
@@ -82,12 +80,7 @@ export default function ScanView({ onComplete }: ScanViewProps) {
 
         {/* Project list */}
         <div className="max-h-80 space-y-2 overflow-y-auto">
-          {projects.map((project) => {
-            const isInactive = project.lastActivityAt
-              ? (Date.now() - new Date(project.lastActivityAt).getTime()) / (1000 * 60 * 60 * 24) > inactiveThresholdDays
-              : false;
-
-            return (
+          {projects.map((project) => (
               <div
                 key={project.id}
                 className="flex items-center justify-between rounded-lg border border-[var(--line)] bg-[var(--bg-card)] px-4 py-3"
@@ -100,12 +93,6 @@ export default function ScanView({ onComplete }: ScanViewProps) {
                     <span className="rounded-full bg-[var(--bg-muted)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
                       {project.provider}
                     </span>
-                    {isInactive && (
-                      <span className="flex items-center gap-1 text-xs text-amber-400">
-                        <AlertTriangle className="h-3 w-3" />
-                        {t('inactive')}
-                      </span>
-                    )}
                   </div>
                   <div className="mt-0.5 flex gap-3 text-xs text-[var(--text-muted)]">
                     <span>{project.sessionCount} sessions</span>
@@ -125,8 +112,7 @@ export default function ScanView({ onComplete }: ScanViewProps) {
                   <X className="h-4 w-4" />
                 </button>
               </div>
-            );
-          })}
+          ))}
         </div>
 
         {/* Footer */}

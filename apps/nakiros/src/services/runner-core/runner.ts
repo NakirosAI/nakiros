@@ -4,6 +4,7 @@ import { join } from 'path';
 
 import { EventLog } from './event-log.js';
 import { buildClaudeArgs, spawnClaudeTurn, type BuildArgsOptions } from './claude-stream.js';
+import { buildCodexArgs, spawnCodexTurn } from './codex-stream.js';
 import { generateRunId } from './run-id.js';
 import { isActiveRunStatus } from './run-status.js';
 import { persistRunJson, loadRunJson } from './run-store.js';
@@ -158,6 +159,15 @@ export interface RunnerSpec<TRun extends BaseRun, TStartReq, TEvent, TExtras> {
     entry: RunEntry<TRun, TEvent, TExtras>,
     isFirstTurn: boolean,
   ): BuildArgsOptions;
+
+  /** Agent CLI used for this run. Existing runners default to Claude. */
+  agentProvider?(entry: RunEntry<TRun, TEvent, TExtras>): 'claude' | 'codex';
+
+  /** Read the provider session id without conflating it with a domain target id. */
+  getAgentSessionId?(entry: RunEntry<TRun, TEvent, TExtras>): string | null;
+
+  /** Persist a provider session id emitted by the selected CLI. */
+  setAgentSessionId?(entry: RunEntry<TRun, TEvent, TExtras>, sessionId: string): void;
 
   /**
    * After a successful turn the spec decides where the run goes:
@@ -317,12 +327,18 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
     persist(entry);
     entry.eventLog.emit({ type: 'status', status: 'starting' } as unknown as TEvent);
 
-    const cliArgs = spec.buildCliArgs
-      ? buildClaudeArgs(spec.buildCliArgs(userMessage, entry, isFirstTurn))
-      : buildClaudeArgs({
+    const cliOptions = spec.buildCliArgs
+      ? spec.buildCliArgs(userMessage, entry, isFirstTurn)
+      : ({
           prompt: userMessage,
-          resumeSessionId: isFirstTurn ? undefined : (run.sessionId ?? undefined),
+          resumeSessionId: isFirstTurn
+            ? undefined
+            : (spec.getAgentSessionId?.(entry) ?? run.sessionId ?? undefined),
         });
+    const agentProvider = spec.agentProvider?.(entry) ?? 'claude';
+    const cliArgs = agentProvider === 'codex'
+      ? buildCodexArgs(cliOptions)
+      : buildClaudeArgs(cliOptions);
 
     const started = Date.now();
     run.turns.push({ role: 'user', content: userMessage, timestamp: new Date().toISOString() });
@@ -338,7 +354,7 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
     // `run.cwd` is set by runners that need the Claude subprocess to land in a
     // git worktree of the user's project (fix / audit / create / edit). When
     // absent we fall back to `run.workdir` — the Nakiros artefact sandbox.
-    const result = await spawnClaudeTurn({
+    const result = await (agentProvider === 'codex' ? spawnCodexTurn : spawnClaudeTurn)({
       workdir: run.cwd ?? run.workdir,
       cliArgs,
       onChildSpawned: (c) => {
@@ -346,7 +362,8 @@ export function createRunner<TRun extends BaseRun, TStartReq, TEvent, TExtras>(
       },
       isKilled: () => entry.killed,
       onSession: (id) => {
-        run.sessionId = id;
+        if (spec.setAgentSessionId) spec.setAgentSessionId(entry, id);
+        else run.sessionId = id;
         // Persist immediately — without this, a daemon kill mid-turn would
         // leave `run.json` on disk with `sessionId: null` (from the last
         // persist at status='running'), and rehydrate would then have no

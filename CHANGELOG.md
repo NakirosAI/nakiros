@@ -5,6 +5,41 @@ All notable changes to `@nakirosai/nakiros` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Codex-native Argos deep analysis.** A Codex conversation now launches
+  `codex exec --json` for its narrative report, while Claude conversations keep
+  the existing Claude runner. Both engines receive the same embedded Nakiros
+  analysis protocol, stream into the same run lifecycle and keep separate
+  provider-aware report caches.
+- **Argos conversation-local semantic graph.** Topic and context drift now
+  consume early assistant explanations as well as user turns. Structured plans
+  enrich the goal anchor directly; prose concepts require repeated early
+  connections. The model is local, deterministic and contains no language
+  keyword dictionary or downloaded embedding model.
+- **Argos recommendation review bridge.** Recommendation cards expose an
+  explicit `Argos → Techne` or `Argos → Hestia` route. A reviewed confirmation
+  is required before the target domain launches its existing runner; Argos
+  remains evidence-only and never writes configuration or skills itself.
+- **Argos Claude/Codex analysis parity, phases 1–4.** Conversations now enter a
+  shared provider-neutral contract before deep analysis. Deep reports and
+  streaming runs accept either provider, isolate their cache entries by
+  provider, and invalidate reports when the source conversation changes.
+- One diagnostic hierarchy and timeline for Claude and Codex, with unavailable
+  provider capabilities shown explicitly instead of opening a separate screen.
+- **Argos observational agent comparison.** Mixed Claude/Codex projects expose
+  one evidence table with normalized health, usage, friction, tool-error and
+  compaction metrics. Sample size, data coverage, time overlap and unpaired
+  tasks remain visible; Argos never selects a winner from unmatched sessions.
+
+### Changed
+
+- Codex friction scoring no longer searches French or English correction
+  phrases. It uses structural request repetition and native turn-abort events,
+  with Unicode segmentation tested on Chinese input.
+
 ## [0.15.1] — 2026-07-12
 
 Headline feature: **project `.claude` bootstrap** — an agent that reads your

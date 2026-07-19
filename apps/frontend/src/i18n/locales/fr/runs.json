@@ -16,7 +16,8 @@
     "fix": "Fix",
     "create": "Créer un skill",
     "edit": "Edit",
-    "bootstrap": "Bootstrap du projet"
+    "bootstrap": "Bootstrap du projet",
+    "providerCodexSuffix": " · Codex"
   },
   "unsupported": {
     "title": "Bientôt disponible",
@@ -89,6 +90,7 @@
     "pending": "en attente"
   },
   "thinking": {
+    "label": "Réflexion Codex",
     "verbs": [
       "Réflexion…",
       "Lecture…",

@@ -902,9 +902,10 @@ export interface McpExpertMutationResult {
 
 /**
  * One archived MCP audit produced by the audit-runner when the run carries a
- * `mcpTarget`. Stored under `~/.nakiros/<projectId>/mcp-audits/audit-<ISO>.md`.
- * Singleton — no sub-folder per target name. The list IPC returns these sorted
- * newest-first.
+ * `mcpTarget`. Stored under
+ * `~/.nakiros/<projectId>/mcp-audits/<provider>/audit-<ISO>.md`. The provider
+ * boundary prevents Claude and Codex reports from being mixed. The list IPC
+ * returns entries sorted newest-first.
  */
 export interface McpAuditHistoryEntry {
   /** Absolute path of the archived markdown report on disk. */

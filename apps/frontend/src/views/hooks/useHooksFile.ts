@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { HooksAuditHistoryEntry, HooksExpertMutationResult, HooksReadResult } from '@nakiros/shared';
+import type { ConfigurationProvider, HooksAuditHistoryEntry, HooksExpertMutationResult, HooksReadResult } from '@nakiros/shared';
+import { absoluteProjectPath, codexResourceDriver, isCodex } from '../../lib/hestia-provider-driver';
 
 interface UseHooksFileApi {
   file: HooksReadResult | null;
@@ -19,6 +20,8 @@ interface UseHooksFileApi {
  */
 export function useHooksFile(
   projectId: string,
+  provider: ConfigurationProvider,
+  projectPath: string,
   onRefreshAudits?: () => void,
 ): UseHooksFileApi {
   const [file, setFile] = useState<HooksReadResult | null>(null);
@@ -30,8 +33,23 @@ export function useHooksFile(
     let cancelled = false;
     setLoading(true);
     setError(null);
-    window.nakiros
-      .readHooks(projectId)
+    const request = isCodex(provider)
+      ? codexResourceDriver.read(projectId, 'hooks', 'hooks').then((result) => {
+          if (!result.ok) throw new Error(result.message);
+          let content = '{}';
+          if (result.file.content.trim()) {
+            const root = JSON.parse(result.file.content) as Record<string, unknown>;
+            content = JSON.stringify(root.hooks ?? root, null, 2);
+          }
+          return {
+            content,
+            mtime: result.file.mtime,
+            exists: result.file.exists,
+            path: absoluteProjectPath(projectPath, result.file.path),
+          } satisfies HooksReadResult;
+        })
+      : window.nakiros.readHooks(projectId);
+    request
       .then((result) => {
         if (cancelled) return;
         setFile((result as HooksReadResult | null) ?? null);
@@ -47,23 +65,52 @@ export function useHooksFile(
     return () => {
       cancelled = true;
     };
-  }, [projectId, reloadKey]);
+  }, [projectId, projectPath, provider, reloadKey]);
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const save = useCallback(
     async (content: string, mtimeAtRead: string): Promise<HooksExpertMutationResult> => {
-      const result = await window.nakiros.saveHooks(projectId, content, mtimeAtRead);
+      const result = isCodex(provider)
+        ? await saveCodexHooks(projectId, content, mtimeAtRead)
+        : await window.nakiros.saveHooks(projectId, content, mtimeAtRead);
       if (result.ok) {
         refresh();
         onRefreshAudits?.();
       }
       return result;
     },
-    [projectId, refresh, onRefreshAudits],
+    [projectId, provider, refresh, onRefreshAudits],
   );
 
   return { file, loading, error, refresh, save };
+}
+
+async function saveCodexHooks(
+  projectId: string,
+  content: string,
+  mtimeAtRead: string,
+): Promise<HooksExpertMutationResult> {
+  const current = await codexResourceDriver.read(projectId, 'hooks', 'hooks');
+  if (!current.ok) return { ok: false, code: current.code, message: current.message };
+  let root: Record<string, unknown> = {};
+  if (current.file.content.trim()) {
+    const parsed = JSON.parse(current.file.content) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      root = parsed as Record<string, unknown>;
+    }
+  }
+  root.hooks = JSON.parse(content || '{}') as unknown;
+  const result = await codexResourceDriver.save(
+    projectId,
+    'hooks',
+    'hooks',
+    `${JSON.stringify(root, null, 2)}\n`,
+    mtimeAtRead,
+  );
+  return result.ok
+    ? { ok: true }
+    : { ok: false, code: result.code, message: result.message };
 }
 
 // Re-export for convenience — screens that only need the audit list can use

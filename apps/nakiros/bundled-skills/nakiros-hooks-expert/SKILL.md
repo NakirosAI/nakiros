@@ -1,6 +1,6 @@
 ---
 name: nakiros-hooks-expert
-description: "Creates, audits, and fixes the hooks block in .claude/settings.json for any project, following Claude Code's official hooks conventions. Use when bootstrapping new hooks, auditing an existing hooks configuration against best practices, or patching hooks based on Nakiros friction signals."
+description: "Creates, audits, and fixes lifecycle hooks for Claude Code (.claude/settings.json) and Codex (.codex/hooks.json), following each provider's native conventions."
 user-invocable: true
 ---
 
@@ -24,6 +24,21 @@ server configuration, permissions, output styles, skills.
 **Key structural difference**: hooks are not markdown files — they live as
 nested JSON inside `settings.json`. The audit is **singleton**: one audit covers
 the entire `hooks` block. There is no per-hook or per-event granularity.
+
+## Provider dispatch
+
+Determine the provider from the target path before applying any schema:
+
+- **Claude** — edit only the `hooks` block in `.claude/settings.json`; use the
+  detailed Claude event and matcher workflow below.
+- **Codex** — edit `.codex/hooks.json`; use Codex's native JSON hook schema.
+  Never wrap it in Claude settings or copy Claude-only event names blindly.
+
+For Codex, validate JSON syntax, supported event names, matcher shape, command
+presence, timeout values, and whether each hook's exit behavior is safe for its
+event. Commands must be project-portable, quote paths safely, avoid secrets,
+and keep expensive work off high-frequency events. In runner isolation, only
+modify the supplied `draft.json`; Nakiros deploys it after confirmation.
 
 ## Output language
 

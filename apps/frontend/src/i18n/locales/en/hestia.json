@@ -1,0 +1,38 @@
+{
+  "navigation": "Hestia",
+  "title": "Hestia",
+  "subtitle": "Configure the agent environment for {{project}}.",
+  "agentSelector": "Project agents",
+  "detected": "Detected",
+  "empty": "No configurable agent was detected for this project.",
+  "agentDescription": "{{provider}} is available in this project. Hestia only exposes capabilities detected for this environment.",
+  "capabilitiesTitle": "Detected capabilities",
+  "configurationTitle": "Configuration",
+  "configurationHint": "Open a resource to review or edit its native project configuration.",
+  "nativeEditingPending": "Native editing is not available for this agent yet.",
+  "providerReadOnly": "Hestia has detected {{provider}} and its capabilities. Native configuration editing will be added here; no Claude configuration is used for this agent.",
+  "coherenceTitle": "Cross-agent coherence",
+  "coherenceHint": "More than one agent is active in this project. Each keeps its own configuration; a future review will highlight meaningful differences without forcing them to match.",
+  "providers": {
+    "claude": "Claude Code",
+    "codex": "Codex",
+    "gemini": "Gemini",
+    "cursor": "Cursor"
+  },
+  "surfaces": {
+    "cli": "CLI agent",
+    "cowork": "Cowork"
+  },
+  "capabilities": {
+    "instructions": "Instructions",
+    "skills": "Skills",
+    "rules": "Rules",
+    "subagents": "Subagents",
+    "hooks": "Hooks",
+    "permissions": "Permissions",
+    "mcp": "MCP",
+    "output-styles": "Output styles",
+    "native-config": "Native configuration",
+    "conversations": "Conversations"
+  }
+}

@@ -17,7 +17,7 @@ import AuditHistoryPicker from '../../components/skill/AuditHistoryPicker';
 import type { GenericAuditEntry } from '../../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../../components/skill/AuditMarkdownViewer';
 import ScoreRing from '../../components/viz/ScoreRing';
-import { MarkdownEditor } from '../../components/markdown/MarkdownEditor';
+import { ResourceEditorMain } from '../../components/configuration/ResourceEditPane';
 import ConfirmModal from '../../components/ConfirmModal';
 import { launchOutputStyles, type OpenRunTabCallback } from '../../lib/run-launcher';
 
@@ -577,36 +577,19 @@ function EditTab({
 
   return (
     <div className="flex flex-1 overflow-hidden" style={{ height: '100%' }}>
-      {/* Main editor area */}
-      <div className="flex flex-1 flex-col gap-1.5 overflow-auto px-7 pb-8 pt-4">
-        {/* Save / delete toolbar */}
-        <div className="flex items-center justify-end gap-1.5">
-          {exists && (
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={submitting}
-              className="inline-flex items-center gap-1.5 rounded-n-sm border border-[oklch(0.74_0.16_25_/_0.4)] bg-transparent px-3 py-1.5 font-n-mono text-[11.5px] text-[oklch(0.50_0.16_25)] hover:bg-[oklch(0.74_0.16_25_/_0.08)] disabled:opacity-50"
-            >
-              {t('editTab.delete')}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!isDirty || submitting}
-            className="inline-flex items-center gap-1.5 rounded-n-md border border-n-accent-line bg-n-accent-soft px-3 py-2 font-n-mono text-[12px] text-n-accent-strong hover:bg-n-accent-soft/80 disabled:opacity-50"
-          >
-            {t('editTab.save')}
-          </button>
-        </div>
-
-        <MarkdownEditor
-          value={body}
-          onChange={setBody}
-          placeholder={t('editTab.bodyPlaceholder')}
-        />
-      </div>
+      <ResourceEditorMain
+        value={body}
+        onChange={setBody}
+        editorKind="markdown"
+        exists={exists}
+        dirty={isDirty}
+        submitting={submitting}
+        saveLabel={t('editTab.save')}
+        deleteLabel={t('editTab.delete')}
+        onSave={onSave}
+        onDelete={onDelete}
+        placeholder={t('editTab.bodyPlaceholder')}
+      />
 
       {/* Sidebar */}
       <aside className="hidden w-72 flex-shrink-0 flex-col gap-4 overflow-auto border-l border-n-border-subtle bg-n-surface px-4 py-4 lg:flex">

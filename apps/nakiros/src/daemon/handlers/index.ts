@@ -36,6 +36,8 @@ import { conversationIngestHandlers } from './conversation-ingest.js';
 import { driftHookHandlers } from './drift-hook.js';
 import { recommendationsHandlers } from './recommendations.js';
 import { bootstrapHandlers } from './bootstrap.js';
+import { codexConfigHandlers } from './codex-config.js';
+import { codexResourceHandlers } from './codex-resources.js';
 
 /** Signature every IPC handler must implement — takes an arg array, returns a value or promise. */
 export type IpcHandler = (args: unknown[]) => Promise<unknown> | unknown;
@@ -91,5 +93,7 @@ export function buildHandlerRegistry(): HandlerRegistry {
     ...driftHookHandlers,
     ...recommendationsHandlers,
     ...bootstrapHandlers,
+    ...codexConfigHandlers,
+    ...codexResourceHandlers,
   };
 }

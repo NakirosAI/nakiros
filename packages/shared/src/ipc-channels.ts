@@ -198,6 +198,16 @@ export const IPC_CHANNELS = {
   'claudeConfig:scan': 'claudeConfig:scan',
   'claudeConfig:readFile': 'claudeConfig:readFile',
 
+  // Project-scoped Codex native configuration (`.codex/config.toml`)
+  'codexConfig:read': 'codexConfig:read',
+  'codexConfig:save': 'codexConfig:save',
+
+  // Provider-native Codex resources managed by Hestia.
+  'codexResources:list': 'codexResources:list',
+  'codexResources:read': 'codexResources:read',
+  'codexResources:save': 'codexResources:save',
+  'codexResources:delete': 'codexResources:delete',
+
   // .claude/rules/ editor (Module 1 V2)
   'claudeRules:list': 'claudeRules:list',
   'claudeRules:read': 'claudeRules:read',

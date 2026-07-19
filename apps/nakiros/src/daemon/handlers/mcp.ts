@@ -1,7 +1,12 @@
 import { homedir } from 'os';
 import { join, normalize } from 'path';
 
-import type { McpAuditHistoryEntry, McpExpertMutationResult, McpReadResult } from '@nakiros/shared';
+import type {
+  ConfigurationProvider,
+  McpAuditHistoryEntry,
+  McpExpertMutationResult,
+  McpReadResult,
+} from '@nakiros/shared';
 
 import { getProject } from '../../services/project-scanner.js';
 import { readMcpConfig, saveMcpConfig } from '../../services/mcp-writer.js';
@@ -48,7 +53,8 @@ export const mcpHandlers: HandlerRegistry = {
   ),
 
   'mcp:listAudits': createTypedHandler(
-    (projectId: string): McpAuditHistoryEntry[] => listMcpAudits(projectId),
+    (projectId: string, provider: ConfigurationProvider = 'claude'): McpAuditHistoryEntry[] =>
+      listMcpAudits(projectId, provider),
   ),
 
   'mcp:readAudit': createTypedHandler((path: string): string | null => {

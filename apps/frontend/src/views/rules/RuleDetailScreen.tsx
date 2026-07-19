@@ -10,18 +10,26 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
-import type { RulesAuditHistoryEntry, RulesRunMode } from '@nakiros/shared';
+import type { ConfigurationProvider, RulesAuditHistoryEntry, RulesRunMode } from '@nakiros/shared';
 import AuditHistoryPicker from '../../components/skill/AuditHistoryPicker';
 import type { GenericAuditEntry } from '../../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../../components/skill/AuditMarkdownViewer';
 import ScoreRing from '../../components/viz/ScoreRing';
-import { MarkdownEditor } from '../../components/markdown/MarkdownEditor';
+import { ResourceEditorMain } from '../../components/configuration/ResourceEditPane';
 import ConfirmModal from '../../components/ConfirmModal';
 import { launchRules, type OpenRunTabCallback } from '../../lib/run-launcher';
+import {
+  absoluteProjectPath,
+  codexMutationResult,
+  codexReadResult,
+  codexResourceDriver,
+  isCodex,
+} from '../../lib/hestia-provider-driver';
 
 interface RuleDetailScreenProps {
   projectId: string;
   projectPath: string;
+  provider: ConfigurationProvider;
   /** Relative path from `.claude/rules/` — may include `/` (e.g. `frontend/styling.md`). */
   ruleName: string;
   onBack(): void;
@@ -49,6 +57,7 @@ interface AuditScore {
 export default function RuleDetailScreen({
   projectId,
   projectPath,
+  provider,
   ruleName,
   onBack,
   onOpenRunTab,
@@ -85,12 +94,19 @@ export default function RuleDetailScreen({
     setLoading(true);
     setFileError(null);
     try {
-      const result = await window.nakiros.readRule(projectId, ruleName);
+      const result = isCodex(provider)
+        ? codexReadResult(
+            await codexResourceDriver.read(projectId, 'rules', ruleName),
+            projectPath,
+          )
+        : await window.nakiros.readRule(projectId, ruleName);
       if (!result) {
         setExists(false);
         setBody('');
         setMtime('');
-        setFilePath(`${projectPath}/.claude/rules/${ruleName}`);
+        setFilePath(isCodex(provider)
+          ? absoluteProjectPath(projectPath, `.codex/rules/${ruleName}.rules`)
+          : `${projectPath}/.claude/rules/${ruleName}`);
       } else {
         setExists(result.exists);
         setBody(result.content);
@@ -102,7 +118,7 @@ export default function RuleDetailScreen({
     } finally {
       setLoading(false);
     }
-  }, [projectId, ruleName, projectPath]);
+  }, [projectId, ruleName, projectPath, provider]);
 
   useEffect(() => {
     void loadFile();
@@ -111,7 +127,7 @@ export default function RuleDetailScreen({
   // ── Load audits ──────────────────────────────────────────────────────────
   const loadAudits = useCallback(async () => {
     try {
-      const result = await window.nakiros.listRulesAudits(projectId, ruleName);
+      const result = await window.nakiros.listRulesAudits(projectId, ruleName, provider);
       setAudits(result ?? []);
       if (result && result.length > 0 && !selectedAudit) {
         setSelectedAudit(result[0] ?? null);
@@ -119,7 +135,7 @@ export default function RuleDetailScreen({
     } catch {
       setAudits([]);
     }
-  }, [projectId, ruleName]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [projectId, provider, ruleName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     void loadAudits();
@@ -164,7 +180,15 @@ export default function RuleDetailScreen({
     setErrorBanner(null);
     setSubmitting(true);
     try {
-      const result = await window.nakiros.saveRule(projectId, ruleName, body, mtime);
+      const result = isCodex(provider)
+        ? codexMutationResult(await codexResourceDriver.save(
+            projectId,
+            'rules',
+            ruleName,
+            body,
+            mtime,
+          ))
+        : await window.nakiros.saveRule(projectId, ruleName, body, mtime);
       if (!result.ok) {
         setErrorBanner({
           code: result.code,
@@ -173,7 +197,12 @@ export default function RuleDetailScreen({
         });
       } else {
         // Refresh mtime after successful save.
-        const refreshed = await window.nakiros.readRule(projectId, ruleName);
+        const refreshed = isCodex(provider)
+          ? codexReadResult(
+              await codexResourceDriver.read(projectId, 'rules', ruleName),
+              projectPath,
+            )
+          : await window.nakiros.readRule(projectId, ruleName);
         if (refreshed) {
           setMtime(refreshed.mtime);
           setOriginalBody(body);
@@ -198,7 +227,14 @@ export default function RuleDetailScreen({
     if (!exists) return;
     setSubmitting(true);
     try {
-      const result = await window.nakiros.deleteRule(projectId, ruleName);
+      const result = isCodex(provider)
+        ? codexMutationResult(await codexResourceDriver.remove(
+            projectId,
+            'rules',
+            ruleName,
+            mtime,
+          ))
+        : await window.nakiros.deleteRule(projectId, ruleName);
       setSubmitting(false);
       setConfirmDeleteOpen(false);
       if (!result.ok) {
@@ -222,7 +258,7 @@ export default function RuleDetailScreen({
     setLaunchingMode(mode);
     try {
       await launchRules(
-        { projectId, projectPath, ruleName, mode },
+        { projectId, projectPath, ruleName, mode, provider },
         onOpenRunTab,
       );
       // After a successful audit launch, refresh audit history when the user
@@ -443,6 +479,7 @@ export default function RuleDetailScreen({
       <div className="flex-1 overflow-y-auto">
         {tab === 'edit' && (
           <EditTab
+            provider={provider}
             body={body}
             setBody={setBody}
             isDirty={isDirty}
@@ -540,6 +577,7 @@ function ScreenTabButton({
 // ── Edit tab ───────────────────────────────────────────────────────────────
 
 function EditTab({
+  provider,
   body,
   setBody,
   isDirty,
@@ -551,6 +589,7 @@ function EditTab({
   onDelete,
   t,
 }: {
+  provider: ConfigurationProvider;
   body: string;
   setBody(b: string): void;
   isDirty: boolean;
@@ -574,36 +613,19 @@ function EditTab({
 
   return (
     <div className="flex flex-1 overflow-hidden" style={{ height: '100%' }}>
-      {/* Main editor area */}
-      <div className="flex flex-1 flex-col gap-1.5 overflow-auto px-7 pb-8 pt-4">
-        {/* Save / delete toolbar */}
-        <div className="flex items-center justify-end gap-1.5">
-          {exists && (
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={submitting}
-              className="inline-flex items-center gap-1.5 rounded-n-sm border border-[oklch(0.74_0.16_25_/_0.4)] bg-transparent px-3 py-1.5 font-n-mono text-[11.5px] text-[oklch(0.50_0.16_25)] hover:bg-[oklch(0.74_0.16_25_/_0.08)] disabled:opacity-50"
-            >
-              {t('detail.editTab.delete')}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!isDirty || submitting}
-            className="inline-flex items-center gap-1.5 rounded-n-md border border-n-accent-line bg-n-accent-soft px-3 py-2 font-n-mono text-[12px] text-n-accent-strong hover:bg-n-accent-soft/80 disabled:opacity-50"
-          >
-            {t('detail.editTab.save')}
-          </button>
-        </div>
-
-        <MarkdownEditor
-          value={body}
-          onChange={setBody}
-          placeholder={t('detail.editTab.bodyPlaceholder')}
-        />
-      </div>
+      <ResourceEditorMain
+        value={body}
+        onChange={setBody}
+        editorKind={provider === 'codex' ? 'code' : 'markdown'}
+        exists={exists}
+        dirty={isDirty}
+        submitting={submitting}
+        saveLabel={t('detail.editTab.save')}
+        deleteLabel={t('detail.editTab.delete')}
+        onSave={onSave}
+        onDelete={onDelete}
+        placeholder={t('detail.editTab.bodyPlaceholder')}
+      />
 
       {/* Sidebar */}
       <aside className="hidden w-72 flex-shrink-0 flex-col gap-4 overflow-auto border-l border-n-border-subtle bg-n-surface px-4 py-4 lg:flex">

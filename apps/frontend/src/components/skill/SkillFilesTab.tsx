@@ -204,6 +204,7 @@ function FilePreview({
     identity.scope,
     identity.skillName,
     identity.scope === 'project' ? identity.projectId : '',
+    identity.scope === 'project' ? identity.provider : '',
     identity.scope === 'plugin' ? identity.marketplaceName : '',
     identity.scope === 'plugin' ? identity.pluginName : '',
     path,

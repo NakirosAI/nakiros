@@ -1,6 +1,6 @@
 ---
 name: nakiros-permissions-expert
-description: "Creates, audits, and fixes the permissions block in .claude/settings.json for any project, following Claude Code's official permissions conventions. Use when bootstrapping a new permissions config, auditing an existing block against best practices, or patching permissions based on Nakiros friction signals."
+description: "Creates, audits, and fixes approval and sandbox permissions for Claude Code (.claude/settings.json) and Codex (.codex/config.toml), following each provider's native conventions."
 user-invocable: true
 ---
 
@@ -24,6 +24,23 @@ server configuration, hooks, output styles, skills.
 **Key structural difference**: permissions are not markdown files — they live
 as nested JSON inside `settings.json`. The audit is **singleton**: one audit
 covers the entire `permissions` block. There is no per-rule granularity.
+
+## Provider dispatch
+
+Determine the provider from the target path before applying any schema:
+
+- **Claude** — edit only the `permissions` block in `.claude/settings.json`;
+  use the allow/ask/deny workflow below.
+- **Codex** — edit only permission-related keys in `.codex/config.toml`, chiefly
+  `approval_policy`, `sandbox_mode`, and the matching sandbox tables. Never
+  translate Claude permission arrays literally into TOML.
+
+For Codex, validate TOML syntax, supported enum values, consistency between
+the chosen sandbox and its table, narrowly scoped writable roots, and the
+absence of unsafe broad defaults. Preserve every unrelated config key because
+permissions share the native configuration file. In runner isolation, only
+modify the supplied `draft.toml`; Nakiros merges the permission slice and
+deploys it after confirmation.
 
 ## Output language
 

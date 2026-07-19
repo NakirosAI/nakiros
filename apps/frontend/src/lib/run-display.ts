@@ -1,4 +1,5 @@
 import type { AgentRunKind, AuditRun, ClassifyConvoRun } from '@nakiros/shared';
+import i18n from '../i18n';
 import type { AuditLikeRun } from './run-api';
 
 /**
@@ -40,7 +41,7 @@ export interface RunDisplayContext {
   /** Bare action verb localised for the current run kind. */
   actionVerb: 'Audit' | 'Fix' | 'Create' | 'Edit' | 'Eval' | 'Analyze' | 'Classify' | 'Bootstrap';
   /** What the run operates on, in user-facing prose. */
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp' | 'output style';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'AGENTS.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'Codex config' | 'mcp' | 'output style';
   /**
    * `true` when this run targets a CLAUDE.md via the bundled expert. UI
    * surfaces use this to hide skill-only actions (eval, sync-back, etc.).
@@ -71,6 +72,8 @@ export interface RunDisplayContext {
    * actions (eval, sync-back, etc.).
    */
   isPermissions: boolean;
+  /** `true` for the complete project-scoped `.codex/config.toml`. */
+  isCodexConfig: boolean;
   /**
    * `true` when this run targets the `.mcp.json` file via the bundled
    * `nakiros-mcp-expert`. UI surfaces use this to hide skill-only actions
@@ -113,19 +116,21 @@ export function runDisplayContext(
   // CLAUDE.md target — applies to audit / fix / create with claudemdTarget.
   // Only the project-root CLAUDE.md is supported (no multi-scope).
   if ('claudemdTarget' in run && run.claudemdTarget) {
+    const filename = run.claudemdTarget.provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md';
     return {
-      title: `${actionVerb} · CLAUDE.md`,
-      kindLabel: `${actionVerb} CLAUDE.md`,
+      title: `${actionVerb} · ${filename}`,
+      kindLabel: `${actionVerb} ${filename}`,
       actionVerb,
-      targetNoun: 'CLAUDE.md',
+      targetNoun: filename,
       isClaudemd: true,
       isRules: false,
       isSubagents: false,
       isHooks: false,
       isPermissions: false,
+      isCodexConfig: false,
       isMcp: false,
       isOutputStyles: false,
-      scopeLabel: 'CLAUDE.md',
+      scopeLabel: filename,
     };
   }
 
@@ -143,6 +148,7 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: false,
       isPermissions: false,
+      isCodexConfig: false,
       isMcp: false,
       isOutputStyles: false,
       scopeLabel: rt.ruleName,
@@ -163,6 +169,7 @@ export function runDisplayContext(
       isSubagents: true,
       isHooks: false,
       isPermissions: false,
+      isCodexConfig: false,
       isMcp: false,
       isOutputStyles: false,
       scopeLabel: st.subagentName,
@@ -181,6 +188,7 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: true,
       isPermissions: false,
+      isCodexConfig: false,
       isMcp: false,
       isOutputStyles: false,
       scopeLabel: 'hooks',
@@ -202,17 +210,42 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: false,
       isPermissions: true,
+      isCodexConfig: false,
       isMcp: false,
       isOutputStyles: false,
       scopeLabel: ptScope === 'local' ? 'permissions (local)' : 'permissions',
     };
   }
 
-  // MCP target — applies to audit / fix / create with mcpTarget. Singleton.
-  if ('mcpTarget' in run && run.mcpTarget) {
+  // Complete native Codex configuration — distinct from the MCP and
+  // permissions slices that happen to share the same TOML file.
+  if ('codexConfigTarget' in run && run.codexConfigTarget) {
     return {
-      title: `${actionVerb} · MCP`,
-      kindLabel: `${actionVerb} mcp`,
+      title: `${actionVerb} · Codex config`,
+      kindLabel: `${actionVerb} Codex config`,
+      actionVerb,
+      targetNoun: 'Codex config',
+      isClaudemd: false,
+      isRules: false,
+      isSubagents: false,
+      isHooks: false,
+      isPermissions: false,
+      isCodexConfig: true,
+      isMcp: false,
+      isOutputStyles: false,
+      scopeLabel: '.codex/config.toml',
+    };
+  }
+
+  // MCP target — applies to audit / fix / create with mcpTarget. Singleton.
+  // A Codex-provider target gets a " · Codex" suffix so it's distinguishable
+  // from the (default) Claude `.mcp.json` target in the run tab / runs center.
+  if ('mcpTarget' in run && run.mcpTarget) {
+    const providerSuffix =
+      run.mcpTarget.provider === 'codex' ? i18n.t('runs:titles.providerCodexSuffix') : '';
+    return {
+      title: `${actionVerb} · MCP${providerSuffix}`,
+      kindLabel: `${actionVerb} mcp${providerSuffix}`,
       actionVerb,
       targetNoun: 'mcp',
       isClaudemd: false,
@@ -220,6 +253,7 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: false,
       isPermissions: false,
+      isCodexConfig: false,
       isMcp: true,
       isOutputStyles: false,
       scopeLabel: 'mcp',
@@ -240,6 +274,7 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: false,
       isPermissions: false,
+      isCodexConfig: false,
       isMcp: false,
       isOutputStyles: true,
       scopeLabel: ost.styleName,
@@ -259,6 +294,7 @@ export function runDisplayContext(
       isSubagents: false,
       isHooks: false,
       isPermissions: false,
+      isCodexConfig: false,
       isMcp: false,
       isOutputStyles: false,
       scopeLabel: null,
@@ -278,6 +314,7 @@ export function runDisplayContext(
     isSubagents: false,
     isHooks: false,
     isPermissions: false,
+    isCodexConfig: false,
     isMcp: false,
     isOutputStyles: false,
     scopeLabel: null,

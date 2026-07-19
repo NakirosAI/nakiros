@@ -7,6 +7,7 @@ import type { FixEvalResult, FixFinding, FixTarget } from './fix-progress.js';
 import type { RecommendationArtifactType } from './recommendation.js';
 import type { ProjectAgentInstallation } from './agent.js';
 import type { AgentProvider } from './agent.js';
+import type { ConfigurationProvider } from './provider-configuration.js';
 
 /** Supported AI coding agents that Nakiros can scan for projects and skills. */
 export type ProviderType = 'claude' | 'cowork' | 'gemini' | 'cursor' | 'codex';
@@ -1144,6 +1145,8 @@ export interface AuditRun {
    * across rehydrate.
    */
   permissionsTarget?: PermissionsTargetContext;
+  /** Codex project `.codex/config.toml` as a complete native configuration. */
+  codexConfigTarget?: CodexConfigTargetContext;
   /**
    * Set when this run targets the project-root `.mcp.json` file via the bundled
    * `nakiros-mcp-expert`. Singleton per project — no sub-target name. Mutually
@@ -1331,6 +1334,8 @@ export type ClaudeMdRunMode = 'audit' | 'fix' | 'create' | 'edit';
 export interface ClaudeMdTargetContext {
   projectId: string;
   projectPath: string;
+  /** `'codex'` targets project-root AGENTS.md; absence means Claude/CLAUDE.md. */
+  provider?: ConfigurationProvider;
   /** Run mode — drives the slash-command suffix. */
   mode: ClaudeMdRunMode;
 }
@@ -1459,6 +1464,8 @@ export interface StartAuditRequest {
    * Mutually exclusive with the other `*Target` fields.
    */
   permissionsTarget?: PermissionsTargetContext;
+  /** Optional full `.codex/config.toml` target for the native configuration expert. */
+  codexConfigTarget?: CodexConfigTargetContext;
   /**
    * Optional descriptor for runs that target the project-root `.mcp.json` file
    * via the bundled `nakiros-mcp-expert`. Singleton — no name field. Mutually
@@ -1591,6 +1598,8 @@ export type RulesRunMode = 'audit' | 'fix' | 'create' | 'edit';
 export interface RulesTargetContext {
   projectId: string;
   projectPath: string;
+  /** Explicit provider; absence means Claude for persisted-run compatibility. */
+  provider?: ConfigurationProvider;
   /** Filename of the rule under .claude/rules/ (e.g. "i18n.md", "frontend/styling.md"). */
   ruleName: string;
   mode: RulesRunMode;
@@ -1617,6 +1626,8 @@ export type HooksRunMode = 'audit' | 'fix' | 'create' | 'edit';
 export interface HooksTargetContext {
   projectId: string;
   projectPath: string;
+  /** Explicit provider; Codex targets `.codex/hooks.json`. */
+  provider?: ConfigurationProvider;
   /** Run mode — drives the slash-command suffix. */
   mode: HooksRunMode;
 }
@@ -1645,10 +1656,22 @@ export type PermissionsExpertScope = 'project' | 'local';
 export interface PermissionsTargetContext {
   projectId: string;
   projectPath: string;
+  /** Explicit provider; Codex targets the permission slice of `.codex/config.toml`. */
+  provider?: ConfigurationProvider;
   /** Which settings file to target. Defaults to `'project'` when omitted. */
   scope: PermissionsExpertScope;
   /** Run mode — drives the slash-command suffix. */
   mode: PermissionsRunMode;
+}
+
+export type CodexConfigRunMode = 'audit' | 'fix' | 'create' | 'edit';
+
+/** Full project-scoped Codex configuration target, distinct from MCP/permissions slices. */
+export interface CodexConfigTargetContext {
+  projectId: string;
+  projectPath: string;
+  provider: 'codex';
+  mode: CodexConfigRunMode;
 }
 
 /**
@@ -1668,6 +1691,14 @@ export interface McpTargetContext {
   projectPath: string;
   /** Run mode — drives the slash-command suffix. */
   mode: McpRunMode;
+  /**
+   * Which agent CLI runs the `nakiros-mcp-expert` skill for this target —
+   * `'claude'` operates on `.mcp.json`, `'codex'` on `.codex/config.toml`.
+   * Explicit and never inferred from file content (see the skill's
+   * "Provider is an explicit input" section). Optional for back-compat with
+   * persisted runs predating provider-awareness — absence means `'claude'`.
+   */
+  provider?: ConfigurationProvider;
 }
 
 /**
@@ -1683,6 +1714,8 @@ export interface McpTargetContext {
 export interface SubagentsTargetContext {
   projectId: string;
   projectPath: string;
+  /** Explicit provider; Codex targets `.codex/agents/<name>.toml`. */
+  provider?: ConfigurationProvider;
   /** Filename of the subagent under .claude/agents/ (e.g. "backend.md", "team/reviewer.md"). */
   subagentName: string;
   mode: SubagentsRunMode;

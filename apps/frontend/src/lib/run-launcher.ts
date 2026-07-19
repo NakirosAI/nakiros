@@ -1,5 +1,6 @@
-import type { AuditRun, ClaudeMdRunMode, HooksRunMode, McpRunMode, OutputStylesRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode, StartAuditRequest } from '@nakiros/shared';
+import type { AuditRun, ClaudeMdRunMode, CodexConfigRunMode, ConfigurationProvider, HooksRunMode, McpRunMode, OutputStylesRunMode, PermissionsExpertScope, PermissionsRunMode, RulesRunMode, SubagentsRunMode, StartAuditRequest } from '@nakiros/shared';
 import type { SkillTabIdentity } from '../hooks/useTabs';
+import i18n from '../i18n';
 import { computeEvalRunId } from './eval-batch-key';
 
 /**
@@ -125,13 +126,16 @@ export async function launchFollowUpForTarget(
 ): Promise<boolean> {
   if (run.claudemdTarget) {
     const t = run.claudemdTarget;
-    await launchClaudemd({ projectId: t.projectId, projectPath: t.projectPath, mode }, openRunTab);
+    await launchClaudemd(
+      { projectId: t.projectId, projectPath: t.projectPath, mode, provider: t.provider },
+      openRunTab,
+    );
     return true;
   }
   if (run.rulesTarget) {
     const t = run.rulesTarget;
     await launchRules(
-      { projectId: t.projectId, projectPath: t.projectPath, ruleName: t.ruleName, mode },
+      { projectId: t.projectId, projectPath: t.projectPath, ruleName: t.ruleName, mode, provider: t.provider },
       openRunTab,
     );
     return true;
@@ -139,27 +143,38 @@ export async function launchFollowUpForTarget(
   if (run.subagentsTarget) {
     const t = run.subagentsTarget;
     await launchSubagents(
-      { projectId: t.projectId, projectPath: t.projectPath, subagentName: t.subagentName, mode },
+      { projectId: t.projectId, projectPath: t.projectPath, subagentName: t.subagentName, mode, provider: t.provider },
       openRunTab,
     );
     return true;
   }
   if (run.hooksTarget) {
     const t = run.hooksTarget;
-    await launchHooks({ projectId: t.projectId, projectPath: t.projectPath, mode }, openRunTab);
+    await launchHooks({ projectId: t.projectId, projectPath: t.projectPath, mode, provider: t.provider }, openRunTab);
     return true;
   }
   if (run.permissionsTarget) {
     const t = run.permissionsTarget;
     await launchPermissions(
-      { projectId: t.projectId, projectPath: t.projectPath, scope: t.scope, mode },
+      { projectId: t.projectId, projectPath: t.projectPath, scope: t.scope, mode, provider: t.provider },
+      openRunTab,
+    );
+    return true;
+  }
+  if (run.codexConfigTarget) {
+    const t = run.codexConfigTarget;
+    await launchCodexConfig(
+      { projectId: t.projectId, projectPath: t.projectPath, mode },
       openRunTab,
     );
     return true;
   }
   if (run.mcpTarget) {
     const t = run.mcpTarget;
-    await launchMcp({ projectId: t.projectId, projectPath: t.projectPath, mode }, openRunTab);
+    await launchMcp(
+      { projectId: t.projectId, projectPath: t.projectPath, mode, provider: t.provider },
+      openRunTab,
+    );
     return true;
   }
   if (run.outputStylesTarget) {
@@ -181,7 +196,12 @@ export async function launchFollowUpForTarget(
  * and the frontend store displays a CLAUDE.md-focused title.
  */
 export async function launchClaudemd(
-  request: { projectId: string; projectPath: string; mode: ClaudeMdRunMode },
+  request: {
+    projectId: string;
+    projectPath: string;
+    mode: ClaudeMdRunMode;
+    provider?: ConfigurationProvider;
+  },
   openRunTab: OpenRunTabCallback,
 ): Promise<void> {
   const baseRequest = {
@@ -191,22 +211,23 @@ export async function launchClaudemd(
     claudemdTarget: {
       projectId: request.projectId,
       projectPath: request.projectPath,
+      provider: request.provider,
       mode: request.mode,
     },
   };
 
   if (request.mode === 'audit') {
     const run = await window.nakiros.startAudit(baseRequest);
-    openRunTab({ runId: run.runId, runKind: 'audit', label: 'Audit · CLAUDE.md' });
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · ${request.provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md'}` });
   } else if (request.mode === 'fix') {
     const run = await window.nakiros.startFix(baseRequest);
-    openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · CLAUDE.md' });
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · ${request.provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md'}` });
   } else if (request.mode === 'edit') {
     const run = await window.nakiros.startEdit(baseRequest);
-    openRunTab({ runId: run.runId, runKind: 'edit', label: 'Edit · CLAUDE.md' });
+    openRunTab({ runId: run.runId, runKind: 'edit', label: `Edit · ${request.provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md'}` });
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
-    openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · CLAUDE.md' });
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · ${request.provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md'}` });
   }
 }
 
@@ -218,7 +239,7 @@ export async function launchClaudemd(
  * displays a rules-focused title.
  */
 export async function launchRules(
-  request: { projectId: string; projectPath: string; ruleName: string; mode: RulesRunMode },
+  request: { projectId: string; projectPath: string; ruleName: string; mode: RulesRunMode; provider?: ConfigurationProvider },
   openRunTab: OpenRunTabCallback,
 ): Promise<void> {
   const baseRequest = {
@@ -228,6 +249,7 @@ export async function launchRules(
     rulesTarget: {
       projectId: request.projectId,
       projectPath: request.projectPath,
+      provider: request.provider,
       ruleName: request.ruleName,
       mode: request.mode,
     },
@@ -257,7 +279,7 @@ export async function launchRules(
  * store displays a subagents-focused title.
  */
 export async function launchSubagents(
-  request: { projectId: string; projectPath: string; subagentName: string; mode: SubagentsRunMode },
+  request: { projectId: string; projectPath: string; subagentName: string; mode: SubagentsRunMode; provider?: ConfigurationProvider },
   openRunTab: OpenRunTabCallback,
 ): Promise<void> {
   const baseRequest = {
@@ -267,6 +289,7 @@ export async function launchSubagents(
     subagentsTarget: {
       projectId: request.projectId,
       projectPath: request.projectPath,
+      provider: request.provider,
       subagentName: request.subagentName,
       mode: request.mode,
     },
@@ -297,7 +320,7 @@ export async function launchSubagents(
  * displays a hooks-focused title.
  */
 export async function launchHooks(
-  request: { projectId: string; projectPath: string; mode: HooksRunMode },
+  request: { projectId: string; projectPath: string; mode: HooksRunMode; provider?: ConfigurationProvider },
   openRunTab: OpenRunTabCallback,
 ): Promise<void> {
   const baseRequest = {
@@ -307,6 +330,7 @@ export async function launchHooks(
     hooksTarget: {
       projectId: request.projectId,
       projectPath: request.projectPath,
+      provider: request.provider,
       mode: request.mode,
     },
   };
@@ -335,7 +359,7 @@ export async function launchHooks(
  * and the frontend store displays a permissions-focused title.
  */
 export async function launchPermissions(
-  request: { projectId: string; projectPath: string; scope: PermissionsExpertScope; mode: PermissionsRunMode },
+  request: { projectId: string; projectPath: string; scope: PermissionsExpertScope; mode: PermissionsRunMode; provider?: ConfigurationProvider },
   openRunTab: OpenRunTabCallback,
 ): Promise<void> {
   const scopeSuffix = request.scope === 'local' ? ' (local)' : '';
@@ -346,6 +370,7 @@ export async function launchPermissions(
     permissionsTarget: {
       projectId: request.projectId,
       projectPath: request.projectPath,
+      provider: request.provider,
       scope: request.scope,
       mode: request.mode,
     },
@@ -366,16 +391,49 @@ export async function launchPermissions(
   }
 }
 
+export async function launchCodexConfig(
+  request: { projectId: string; projectPath: string; mode: CodexConfigRunMode },
+  openRunTab: OpenRunTabCallback,
+): Promise<void> {
+  const baseRequest = {
+    scope: 'nakiros-bundled' as const,
+    skillName: 'nakiros-codex-config-expert',
+    projectId: request.projectId,
+    codexConfigTarget: {
+      projectId: request.projectId,
+      projectPath: request.projectPath,
+      provider: 'codex' as const,
+      mode: request.mode,
+    },
+  };
+  const run = request.mode === 'audit'
+    ? await window.nakiros.startAudit(baseRequest)
+    : request.mode === 'fix'
+      ? await window.nakiros.startFix(baseRequest)
+      : request.mode === 'edit'
+        ? await window.nakiros.startEdit(baseRequest)
+        : await window.nakiros.startCreate(baseRequest);
+  const action = request.mode === 'create'
+    ? 'Create'
+    : `${request.mode.charAt(0).toUpperCase()}${request.mode.slice(1)}`;
+  openRunTab({ runId: run.runId, runKind: request.mode, label: `${action} · Codex config` });
+}
+
 /**
  * Start an audit / fix / create run that targets the project-root `.mcp.json`
- * file via the bundled `nakiros-mcp-expert`. Singleton per project — no `name`
- * field (unlike rules or subagents). Reuses the same `startAudit` / `startFix`
- * IPC channels as skill runs — only the request carries an extra `mcpTarget` so
- * the runner switches its slash-command and the frontend store displays an
- * mcp-focused title.
+ * (Claude) or `.codex/config.toml` (Codex) file via the bundled
+ * `nakiros-mcp-expert`. Singleton per project — no `name` field (unlike rules
+ * or subagents). Reuses the same `startAudit` / `startFix` IPC channels as
+ * skill runs — only the request carries an extra `mcpTarget` so the runner
+ * switches its slash-command and the frontend store displays an mcp-focused
+ * title.
+ *
+ * `provider` is explicit and passed through as-is (never inferred) — the
+ * caller (`McpScreen`) already knows which agent CLI's configuration is being
+ * edited. Absence means `'claude'` (see `McpTargetContext.provider`).
  */
 export async function launchMcp(
-  request: { projectId: string; projectPath: string; mode: McpRunMode },
+  request: { projectId: string; projectPath: string; mode: McpRunMode; provider?: ConfigurationProvider },
   openRunTab: OpenRunTabCallback,
 ): Promise<void> {
   const baseRequest = {
@@ -386,21 +444,25 @@ export async function launchMcp(
       projectId: request.projectId,
       projectPath: request.projectPath,
       mode: request.mode,
+      provider: request.provider,
     },
   };
 
+  const providerSuffix =
+    request.provider === 'codex' ? i18n.t('runs:titles.providerCodexSuffix') : '';
+
   if (request.mode === 'audit') {
     const run = await window.nakiros.startAudit(baseRequest);
-    openRunTab({ runId: run.runId, runKind: 'audit', label: 'Audit · MCP' });
+    openRunTab({ runId: run.runId, runKind: 'audit', label: `Audit · MCP${providerSuffix}` });
   } else if (request.mode === 'fix') {
     const run = await window.nakiros.startFix(baseRequest);
-    openRunTab({ runId: run.runId, runKind: 'fix', label: 'Fix · MCP' });
+    openRunTab({ runId: run.runId, runKind: 'fix', label: `Fix · MCP${providerSuffix}` });
   } else if (request.mode === 'edit') {
     const run = await window.nakiros.startEdit(baseRequest);
-    openRunTab({ runId: run.runId, runKind: 'edit', label: 'Edit · MCP' });
+    openRunTab({ runId: run.runId, runKind: 'edit', label: `Edit · MCP${providerSuffix}` });
   } else {
     const run = await window.nakiros.startCreate(baseRequest);
-    openRunTab({ runId: run.runId, runKind: 'create', label: 'Create · MCP' });
+    openRunTab({ runId: run.runId, runKind: 'create', label: `Create · MCP${providerSuffix}` });
   }
 }
 

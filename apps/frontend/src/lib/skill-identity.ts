@@ -33,7 +33,7 @@ export async function loadSkillByIdentity(identity: SkillTabIdentity): Promise<S
 function listSkillsForScope(identity: SkillTabIdentity): Promise<Skill[]> {
   switch (identity.scope) {
     case 'project':
-      return window.nakiros.listProjectSkills(identity.projectId);
+      return window.nakiros.listProjectSkills(identity.projectId, identity.provider);
     case 'claude-global':
       return window.nakiros.listClaudeGlobalSkills();
     case 'plugin':
@@ -53,7 +53,7 @@ export function readSkillFileByIdentity(
 ): Promise<string | null> {
   switch (identity.scope) {
     case 'project':
-      return window.nakiros.readSkillFile(identity.projectId, identity.skillName, relativePath);
+      return window.nakiros.readSkillFile(identity.projectId, identity.skillName, relativePath, identity.provider);
     case 'claude-global':
       return window.nakiros.readClaudeGlobalSkillFile(identity.skillName, relativePath);
     case 'plugin':

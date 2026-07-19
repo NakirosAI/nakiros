@@ -2,6 +2,7 @@ import { homedir } from 'os';
 import { join, normalize } from 'path';
 
 import type {
+  ConfigurationProvider,
   PermissionsAuditHistoryEntry,
   PermissionsExpertMutationResult,
   PermissionsExpertScope,
@@ -64,8 +65,8 @@ export const permissionsHandlers: HandlerRegistry = {
   ),
 
   'permissions:listAudits': createTypedHandler(
-    (projectId: string, scope: unknown): PermissionsAuditHistoryEntry[] =>
-      listPermissionsAudits(projectId, toScope(scope)),
+    (projectId: string, scope: unknown, provider?: ConfigurationProvider): PermissionsAuditHistoryEntry[] =>
+      listPermissionsAudits(projectId, toScope(scope), provider),
   ),
 
   'permissions:readAudit': createTypedHandler((path: string): string | null => {

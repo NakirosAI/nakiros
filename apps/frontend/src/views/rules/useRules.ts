@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CreateRuleRequest, RuleEntry, RuleMutationResult, SaveRuleRequest } from '@nakiros/shared';
+import type { ConfigurationProvider, CreateRuleRequest, RuleEntry, RuleMutationResult, SaveRuleRequest } from '@nakiros/shared';
+import { codexResourceDriver, codexRuleEntry, isCodex } from '../../lib/hestia-provider-driver';
 
 interface UseRulesApi {
   rules: RuleEntry[];
@@ -17,7 +18,7 @@ interface UseRulesApi {
  * the discriminated `RuleMutationResult` so callers can render in-form errors
  * (conflict, invalid name, …).
  */
-export function useRules(projectId: string): UseRulesApi {
+export function useRules(projectId: string, provider: ConfigurationProvider): UseRulesApi {
   const [rules, setRules] = useState<RuleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,8 +28,15 @@ export function useRules(projectId: string): UseRulesApi {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    window.nakiros
-      .listClaudeRules(projectId)
+    const request = isCodex(provider)
+      ? codexResourceDriver.list(projectId, 'rules').then(async (summaries) => {
+          const results = await Promise.all(
+            summaries.map((summary) => codexResourceDriver.read(projectId, 'rules', summary.id)),
+          );
+          return results.flatMap((result) => result.ok ? [codexRuleEntry(result.file)] : []);
+        })
+      : window.nakiros.listClaudeRules(projectId);
+    request
       .then((items) => {
         if (cancelled) return;
         setRules(items);
@@ -44,7 +52,7 @@ export function useRules(projectId: string): UseRulesApi {
     return () => {
       cancelled = true;
     };
-  }, [projectId, reloadKey]);
+  }, [projectId, provider, reloadKey]);
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 

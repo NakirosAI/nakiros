@@ -11,7 +11,7 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import type { HooksAuditHistoryEntry, HooksRunMode, Project } from '@nakiros/shared';
+import type { ConfigurationProvider, HooksAuditHistoryEntry, HooksRunMode, Project } from '@nakiros/shared';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import type { GenericAuditEntry } from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
@@ -22,6 +22,7 @@ import HooksFormEditor from './hooks/HooksFormEditor';
 
 interface HooksScreenProps {
   project: Project;
+  provider: ConfigurationProvider;
   onBack?(): void;
   onOpenRunTab?: OpenRunTabCallback;
 }
@@ -47,8 +48,9 @@ interface AuditScore {
  * Uses `hooks:read` / `hooks:save` / `hooks:listAudits` / `hooks:readAudit`
  * IPC — distinct from the Module-6 hooks editor (`claudeHooks:read`).
  */
-export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScreenProps) {
+export default function HooksScreen({ project, provider, onBack, onOpenRunTab }: HooksScreenProps) {
   const { t } = useTranslation('hooks-runner');
+  const lifecycleRunTab = onOpenRunTab;
 
   // Audit list ─────────────────────────────────────────────────────────────
   const [audits, setAudits] = useState<HooksAuditHistoryEntry[]>([]);
@@ -58,7 +60,7 @@ export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScre
 
   const loadAudits = useCallback(async () => {
     try {
-      const result = await window.nakiros.listHooksAudits(project.id);
+      const result = await window.nakiros.listHooksAudits(project.id, provider);
       setAudits(result ?? []);
       if (result && result.length > 0 && !selectedAudit) {
         setSelectedAudit(result[0] ?? null);
@@ -66,9 +68,14 @@ export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScre
     } catch {
       setAudits([]);
     }
-  }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [project.id, provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { file, loading, error, refresh, save } = useHooksFile(project.id, loadAudits);
+  const { file, loading, error, refresh, save } = useHooksFile(
+    project.id,
+    provider,
+    project.projectPath,
+    loadAudits,
+  );
 
   useEffect(() => {
     void loadAudits();
@@ -158,13 +165,13 @@ export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScre
   };
 
   const handleLaunchRun = async (mode: HooksRunMode) => {
-    if (!onOpenRunTab || !file) return;
+    if (!lifecycleRunTab || !file) return;
     setErrorBanner(null);
     setLaunchingMode(mode);
     try {
       await launchHooks(
-        { projectId: project.id, projectPath: project.projectPath, mode },
-        onOpenRunTab,
+        { projectId: project.id, projectPath: project.projectPath, mode, provider },
+        lifecycleRunTab,
       );
     } catch (err) {
       setErrorBanner({
@@ -231,7 +238,7 @@ export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScre
         <span className="flex-1" />
         {/* CTA buttons */}
         <div className="flex gap-1.5">
-          {onOpenRunTab && file.exists && (
+          {lifecycleRunTab && file.exists && (
             <>
               <button
                 type="button"
@@ -288,7 +295,7 @@ export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScre
               </button>
             </>
           )}
-          {onOpenRunTab && (
+          {lifecycleRunTab && (
             <button
               type="button"
               disabled={launchingMode !== null}
@@ -317,7 +324,7 @@ export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScre
             <AlertTriangle size={14} className="flex-shrink-0 text-n-watch" />
             {t('missingBanner')}
           </div>
-          {onOpenRunTab && (
+          {lifecycleRunTab && (
             <button
               type="button"
               disabled={launchingMode !== null}
@@ -406,7 +413,7 @@ export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScre
             auditContent={auditContent}
             auditContentError={auditContentError}
             auditScore={auditScore}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
             launchingMode={launchingMode}
             onLaunchFix={() => void handleLaunchRun('fix')}
             t={t}
@@ -415,7 +422,7 @@ export default function HooksScreen({ project, onBack, onOpenRunTab }: HooksScre
         {tab === 'fix' && (
           <FixTab
             hasAudit={audits.length > 0}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
             launchingMode={launchingMode}
             onLaunchFix={() => void handleLaunchRun('fix')}
             t={t}

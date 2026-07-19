@@ -56,6 +56,15 @@
     "denyCount": "Refuser",
     "defaultModeLabel": "Mode par défaut",
     "additionalDirsCount": "Répertoires supplémentaires",
+    "codex": {
+      "approvalPolicy": "Politique d’approbation",
+      "sandboxMode": "Mode sandbox",
+      "workspaceAccess": "Accès au workspace",
+      "network": "Réseau",
+      "writableRoots": "Racines modifiables",
+      "enabled": "activé",
+      "disabled": "désactivé"
+    },
     "warnings": {
       "bypassMode": "Le mode par défaut est bypassPermissions — toutes les vérifications de permissions sont désactivées",
       "noDeny": "Pas de règles deny pour les commandes dangereuses (rm -rf, curl, etc.)",

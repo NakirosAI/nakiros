@@ -1,6 +1,6 @@
 ---
 name: nakiros-subagents-expert
-description: "Creates, audits, and fixes individual subagent files under .claude/agents/ for any project, following Claude Code's official subagent conventions. Use when bootstrapping a new subagent, auditing an existing subagent against best practices, or patching a subagent based on Nakiros friction signals."
+description: "Creates, audits, and fixes project subagents for Claude Code (.claude/agents/*.md) and Codex (.codex/agents/*.toml), following each provider's native conventions."
 user-invocable: true
 ---
 
@@ -20,6 +20,23 @@ handle CLAUDE.md, rules, hooks, permissions, MCP, and output styles. Stay
 within scope: this skill ONLY touches individual `.claude/agents/<name>.md`
 files (and `.claude/agents/<subdir>/<name>.md`). Out of scope: CLAUDE.md,
 rules, hooks, permissions, MCP config, output styles, skills.
+
+## Provider dispatch
+
+Determine the provider from the target path before applying any schema:
+
+- **Claude** — `.claude/agents/**/*.md`; use Markdown frontmatter and the
+  detailed Claude workflow below.
+- **Codex** — `.codex/agents/*.toml`; use native TOML. Never emit YAML
+  frontmatter or a Markdown agent body.
+
+A Codex agent must define non-empty `name`, `description`, and
+`developer_instructions`. Audit optional overrides such as `model`,
+`model_reasoning_effort`, and `sandbox_mode` only when present, and reject
+unknown or duplicated TOML keys. The description must make delegation
+boundaries discoverable; the instructions must state responsibility, expected
+outputs, constraints, and when to hand control back. In runner isolation, only
+modify the supplied `draft.toml`; Nakiros deploys it after confirmation.
 
 ## Output language
 

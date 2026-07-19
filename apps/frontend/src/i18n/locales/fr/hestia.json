@@ -1,0 +1,38 @@
+{
+  "navigation": "Hestia",
+  "title": "Hestia",
+  "subtitle": "Configure l’environnement de l’agent pour {{project}}.",
+  "agentSelector": "Agents du projet",
+  "detected": "Détecté",
+  "empty": "Aucun agent configurable n’a été détecté pour ce projet.",
+  "agentDescription": "{{provider}} est disponible dans ce projet. Hestia affiche uniquement les capacités détectées pour cet environnement.",
+  "capabilitiesTitle": "Capacités détectées",
+  "configurationTitle": "Configuration",
+  "configurationHint": "Ouvre une ressource pour consulter ou modifier sa configuration projet native.",
+  "nativeEditingPending": "L’édition native n’est pas encore disponible pour cet agent.",
+  "providerReadOnly": "Hestia a détecté {{provider}} et ses capacités. L’édition de sa configuration arrivera ici, sans utiliser la configuration Claude pour cet agent.",
+  "coherenceTitle": "Cohérence entre agents",
+  "coherenceHint": "Plusieurs agents sont actifs dans ce projet. Chacun conserve sa configuration ; une future analyse signalera les différences utiles sans imposer leur uniformité.",
+  "providers": {
+    "claude": "Claude Code",
+    "codex": "Codex",
+    "gemini": "Gemini",
+    "cursor": "Cursor"
+  },
+  "surfaces": {
+    "cli": "Agent CLI",
+    "cowork": "Cowork"
+  },
+  "capabilities": {
+    "instructions": "Instructions",
+    "skills": "Skills",
+    "rules": "Règles",
+    "subagents": "Sous-agents",
+    "hooks": "Hooks",
+    "permissions": "Permissions",
+    "mcp": "MCP",
+    "output-styles": "Styles de sortie",
+    "native-config": "Configuration native",
+    "conversations": "Conversations"
+  }
+}

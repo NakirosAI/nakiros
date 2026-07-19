@@ -10,6 +10,8 @@ import type {
   AuditRunEvent,
   AuditTimelineEntry,
   FixUsage,
+  ClaudeMdTargetContext,
+  McpTargetContext,
   StartAuditRequest,
 } from '@nakiros/shared';
 
@@ -22,6 +24,7 @@ import {
   destroyEvalSandbox,
   encodeProjectPath,
   findGitRoot,
+  getCodexRunTimeline,
   isActiveRunStatus,
   persistRunJson,
   type RehydrateResult,
@@ -30,6 +33,8 @@ import {
   writeExecutionSettings,
 } from './runner-core/index.js';
 import { buildDotClaudeSnapshot } from './dot-claude-snapshot-builder.js';
+import { resolveConfigurationAgentProvider } from './mcp-agent-provider.js';
+import { claudemdAuditArchiveDir } from './claudemd-audit-history.js';
 import { rulesAuditArchiveDir } from './rules-audit-history.js';
 import { subagentsAuditArchiveDir } from './subagents-audit-history.js';
 import { hooksAuditArchiveDir } from './hooks-audit-history.js';
@@ -43,6 +48,7 @@ const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
 const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
 const PERMISSIONS_EXPERT_SKILL_NAME = 'nakiros-permissions-expert';
+const CODEX_CONFIG_EXPERT_SKILL_NAME = 'nakiros-codex-config-expert';
 const MCP_EXPERT_SKILL_NAME = 'nakiros-mcp-expert';
 const OUTPUT_STYLES_EXPERT_SKILL_NAME = 'nakiros-output-styles-expert';
 const KIND = 'audit';
@@ -217,9 +223,21 @@ function prepareWorkdir(skillDir: string, skillName: string, runId: string): str
  * with "No conversation found with session ID …" — better to surface the run
  * as `stopped` than offer a broken Reprendre button.
  */
-function auditRunHasResumableSessionFile(blob: { sessionId?: string | null; workdir?: string; cwd?: string | null }, workdir: string): boolean {
+function auditRunHasResumableSessionFile(
+  blob: { sessionId?: string | null; workdir?: string; cwd?: string | null; mcpTarget?: McpTargetContext },
+  workdir: string,
+): boolean {
   if (!blob.sessionId) {
     console.log(`[audit-runner] Resume check: sessionId is null/missing — not resumable`);
+    return false;
+  }
+  // Codex timeline/usage/resume is a known V1 gap: a Codex run's `sessionId`
+  // is a `codex exec` thread_id, which has no corresponding file under
+  // `~/.claude/projects/`. Collapsing to "not resumable" is the correct
+  // graceful degrade (not a crash) — revisit once a Codex-native session
+  // store exists (see `codex-conversation-parser` in the ingest pipeline).
+  if (blob.mcpTarget?.provider === 'codex') {
+    console.log(`[audit-runner] Resume check: Codex run — no Claude session file to check, not resumable (V1 gap)`);
     return false;
   }
   if (!existsSync(workdir)) {
@@ -246,11 +264,10 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
   if (!existsSync(reportSrc)) {
     return { ok: false, error: 'No audit-report.md was produced' };
   }
-  // CLAUDE.md audits archive under `~/.nakiros/<projectId>/claudemd/audit/`.
-  // The bundled expert is immutable so we never write into the skill dir.
+  // Instruction audits are separated by provider (`CLAUDE.md` / `AGENTS.md`).
   if (entry.run.claudemdTarget) {
     const ct = entry.run.claudemdTarget;
-    const archiveDir = join(homedir(), '.nakiros', ct.projectId, 'claudemd', 'audit');
+    const archiveDir = claudemdAuditArchiveDir(ct.projectId, ct.provider ?? 'claude');
     mkdirSync(archiveDir, { recursive: true });
     const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
     try {
@@ -265,7 +282,7 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
   // Sub-folders per rule keep the history organised when a project has many rules.
   if (entry.run.rulesTarget) {
     const rt = entry.run.rulesTarget;
-    const archiveDir = rulesAuditArchiveDir(rt.projectId, rt.ruleName);
+    const archiveDir = rulesAuditArchiveDir(rt.projectId, rt.ruleName, rt.provider ?? 'claude');
     mkdirSync(archiveDir, { recursive: true });
     const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
     try {
@@ -281,7 +298,7 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
   // Sub-folders per subagent keep the history organised.
   if (entry.run.subagentsTarget) {
     const st = entry.run.subagentsTarget;
-    const archiveDir = subagentsAuditArchiveDir(st.projectId, st.subagentName);
+    const archiveDir = subagentsAuditArchiveDir(st.projectId, st.subagentName, st.provider ?? 'claude');
     mkdirSync(archiveDir, { recursive: true });
     const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
     try {
@@ -296,7 +313,7 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
   // Singleton — no sub-folder per target name.
   if (entry.run.hooksTarget) {
     const ht = entry.run.hooksTarget;
-    const archiveDir = hooksAuditArchiveDir(ht.projectId);
+    const archiveDir = hooksAuditArchiveDir(ht.projectId, ht.provider ?? 'claude');
     mkdirSync(archiveDir, { recursive: true });
     const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
     try {
@@ -312,7 +329,11 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
   // Sub-folder per scope so project and local histories stay independent.
   if (entry.run.permissionsTarget) {
     const pt = entry.run.permissionsTarget;
-    const archiveDir = permissionsAuditArchiveDir(pt.projectId, pt.scope ?? 'project');
+    const archiveDir = permissionsAuditArchiveDir(
+      pt.projectId,
+      pt.scope ?? 'project',
+      pt.provider ?? 'claude',
+    );
     mkdirSync(archiveDir, { recursive: true });
     const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
     try {
@@ -323,11 +344,23 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
     }
   }
 
-  // MCP audits archive under `~/.nakiros/<projectId>/mcp-audits/`.
-  // Singleton — no sub-folder per target name.
+  if (entry.run.codexConfigTarget) {
+    const archiveDir = join(homedir(), '.nakiros', entry.run.codexConfigTarget.projectId, 'codex-config', 'audit');
+    mkdirSync(archiveDir, { recursive: true });
+    const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
+    try {
+      copyFileSync(reportSrc, dest);
+      return { ok: true, reportPath: dest };
+    } catch (err) {
+      return { ok: false, error: `Failed to archive Codex config audit: ${(err as Error).message}` };
+    }
+  }
+
+  // MCP audits are separated by provider so reports for `.mcp.json` and
+  // `.codex/config.toml` never appear in each other's history.
   if (entry.run.mcpTarget) {
     const mt = entry.run.mcpTarget;
-    const archiveDir = mcpAuditArchiveDir(mt.projectId);
+    const archiveDir = mcpAuditArchiveDir(mt.projectId, mt.provider ?? 'claude');
     mkdirSync(archiveDir, { recursive: true });
     const dest = join(archiveDir, `audit-${isoSafeTimestamp()}.md`);
     try {
@@ -365,9 +398,136 @@ function archiveReport(entry: RunEntry<AuditRun, AuditEvent, AuditEntryExtras>):
   }
 }
 
+/**
+ * Build the Codex first-turn prompt for an `nakiros-mcp-expert` audit.
+ *
+ * Codex has no slash-command mechanism (see `.claude/rules/runners.md` —
+ * "Skill tool isolation"), so instead of `/${MCP_EXPERT_SKILL_NAME} audit`
+ * we inline the live `SKILL.md` content plus absolute paths into the skill
+ * directory (Codex is NOT running from `~/.claude/skills/<name>` the way a
+ * Claude subprocess would be — it lands in the git worktree of the user's
+ * project, see `prepareWorkdir`).
+ */
+export function buildCodexMcpAuditPrompt(mt: McpTargetContext, skillDir: string): string {
+  const targetPath = join(mt.projectPath, '.codex', 'config.toml');
+  const exists = existsSync(targetPath);
+  let skillMd: string;
+  try {
+    skillMd = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
+  } catch (err) {
+    console.warn(`[audit-runner] Could not read SKILL.md for Codex inline prompt: ${(err as Error).message}`);
+    skillMd = '(SKILL.md could not be read — proceed from the instructions below only.)';
+  }
+  const referencesDir = join(skillDir, 'references', 'codex');
+  const scriptPath = join(skillDir, 'scripts', 'run-static-checks.mjs');
+
+  return [
+    `You are acting as the "${MCP_EXPERT_SKILL_NAME}" skill, command: audit. Codex has no`,
+    'slash-command mechanism, so the skill instructions are inlined below (as plain text) rather',
+    'than being invoked as a slash command.',
+    '',
+    'provider: codex',
+    `Project root: ${mt.projectPath}`,
+    `Target file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+    '',
+    'You are NOT running from `~/.claude/skills/nakiros-mcp-expert` — use these ABSOLUTE',
+    'paths whenever the SKILL.md below references a path relative to the skill directory:',
+    `- Codex references: ${referencesDir}/`,
+    `- Static-check script — run exactly as:`,
+    `  node ${scriptPath} --provider codex --mcp-config ${targetPath} --output-dir outputs`,
+    '',
+    'Follow the "Auditing the MCP configuration" procedure in the SKILL.md below for',
+    'provider "codex". Produce the three artefacts it describes — outputs/audit-manifest.json,',
+    'outputs/audit-progress.jsonl, outputs/audit-report.md — written relative to your own',
+    'working directory (NOT relative to the skill directory above). Then end your turn with',
+    'the one-line chat summary the SKILL.md specifies. Do not ask clarifying questions.',
+    '',
+    '--- BEGIN SKILL.md ---',
+    skillMd,
+    '--- END SKILL.md ---',
+  ].join('\n');
+}
+
+/** Build an AGENTS.md audit prompt by inlining the bundled instruction expert. */
+export function buildCodexInstructionsAuditPrompt(
+  target: ClaudeMdTargetContext,
+  skillDir: string,
+): string {
+  const targetPath = join(target.projectPath, 'AGENTS.md');
+  const exists = existsSync(targetPath);
+  let skillMd: string;
+  try {
+    skillMd = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
+  } catch (err) {
+    console.warn(`[audit-runner] Could not read instruction expert for Codex: ${(err as Error).message}`);
+    skillMd = '(SKILL.md could not be read — proceed from the instructions below.)';
+  }
+  const scriptPath = join(skillDir, 'scripts', 'run-static-checks.mjs');
+  return [
+    `You are acting as the "${CLAUDEMD_EXPERT_SKILL_NAME}" skill, command: audit.`,
+    'Provider: codex. The target is AGENTS.md, never CLAUDE.md.',
+    `Project root: ${target.projectPath}`,
+    `Target file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+    `Run static checks with: node ${scriptPath} --claudemd ${targetPath} --output-dir outputs`,
+    '',
+    'Apply the provider-aware AGENTS.md procedure in the inlined skill. Write all audit',
+    'artefacts under outputs/ in your working directory and do not modify the target.',
+    'Do not ask clarifying questions.',
+    '',
+    '--- BEGIN SKILL.md ---',
+    skillMd,
+    '--- END SKILL.md ---',
+  ].join('\n');
+}
+
+function buildCodexResourceAuditPrompt(args: {
+  skillName: string;
+  skillDir: string;
+  projectPath: string;
+  targetPath: string;
+  resourceLabel: string;
+}): string {
+  let skillMd: string;
+  try {
+    skillMd = readFileSync(join(args.skillDir, 'SKILL.md'), 'utf8');
+  } catch (err) {
+    console.warn(`[audit-runner] Could not read ${args.skillName}: ${(err as Error).message}`);
+    skillMd = '(SKILL.md could not be read; audit the native Codex resource directly.)';
+  }
+  return [
+    `You are acting as the "${args.skillName}" skill, command: audit.`,
+    `Provider: codex. Resource: ${args.resourceLabel}.`,
+    `Project root: ${args.projectPath}`,
+    `Target file: ${args.targetPath}`,
+    '',
+    'Codex has no slash-command dispatch, so the expert instructions are inlined below.',
+    'Apply only their Codex/provider-neutral procedure. Never rewrite the target during an audit.',
+    'Write outputs/audit-manifest.json, outputs/audit-progress.jsonl and',
+    'outputs/audit-report.md relative to your current working directory. If a bundled static-check',
+    'script only accepts Claude syntax, evaluate the Codex-native checks directly instead of',
+    'feeding it the wrong format. End with the one-line score summary. Do not ask questions.',
+    '',
+    '--- BEGIN SKILL.md ---',
+    skillMd,
+    '--- END SKILL.md ---',
+  ].join('\n');
+}
+
 const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = {
   kind: KIND,
   runsRoot: auditRunsRoot,
+
+  agentProvider(entry) {
+    return resolveConfigurationAgentProvider(
+      entry.run.claudemdTarget?.provider ??
+      entry.run.rulesTarget?.provider ??
+      entry.run.subagentsTarget?.provider ??
+      entry.run.hooksTarget?.provider ??
+      entry.run.permissionsTarget?.provider ??
+      entry.run.codexConfigTarget?.provider ??
+      entry.run.mcpTarget?.provider,
+    );
+  },
 
   prepareWorkdir(req, runId) {
     const workdir = prepareWorkdir(req.skillDir, req.skillName, runId);
@@ -381,6 +541,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     else if (req.subagentsTarget) resolvedProjectPath = req.subagentsTarget.projectPath;
     else if (req.hooksTarget) resolvedProjectPath = req.hooksTarget.projectPath;
     else if (req.permissionsTarget) resolvedProjectPath = req.permissionsTarget.projectPath;
+    else if (req.codexConfigTarget) resolvedProjectPath = req.codexConfigTarget.projectPath;
     else if (req.mcpTarget) resolvedProjectPath = req.mcpTarget.projectPath;
     else if (req.outputStylesTarget) resolvedProjectPath = req.outputStylesTarget.projectPath;
     else resolvedProjectPath = req.skillDir;
@@ -391,16 +552,28 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       try {
         const result = createRunWorktree(gitRoot, runId, 'audit');
         worktreePath = result.path;
+        // Harmless for Codex too — it's a Claude Code-only settings file
+        // (`.claude/settings.local.json`) that the `codex` CLI never reads.
         writeExecutionSettings(worktreePath);
 
         // Symlink the expert skill into the worktree so the agent subprocess
         // can invoke it via /<skillName> when running from the worktree cwd.
-        const wtClaudeDir = join(worktreePath, '.claude');
-        const wtSkillsDir = join(wtClaudeDir, 'skills');
-        mkdirSync(wtSkillsDir, { recursive: true });
-        const wtLinkPath = join(wtSkillsDir, req.skillName);
-        if (!existsSync(wtLinkPath)) {
-          symlinkSync(realpathSync(req.skillDir), wtLinkPath, 'dir');
+        // Skip for Codex: there is no slash-command discovery to serve (the
+        // Codex first prompt inlines SKILL.md with absolute paths instead —
+        // see `buildCodexMcpAuditPrompt`), and Codex is never spawned with a
+        // cwd that would resolve `.claude/skills/<name>` anyway.
+        const provider = req.claudemdTarget?.provider ?? req.rulesTarget?.provider ??
+          req.subagentsTarget?.provider ?? req.hooksTarget?.provider ??
+          req.permissionsTarget?.provider ?? req.mcpTarget?.provider;
+        const effectiveProvider = provider ?? req.codexConfigTarget?.provider;
+        if (effectiveProvider !== 'codex') {
+          const wtClaudeDir = join(worktreePath, '.claude');
+          const wtSkillsDir = join(wtClaudeDir, 'skills');
+          mkdirSync(wtSkillsDir, { recursive: true });
+          const wtLinkPath = join(wtSkillsDir, req.skillName);
+          if (!existsSync(wtLinkPath)) {
+            symlinkSync(realpathSync(req.skillDir), wtLinkPath, 'dir');
+          }
         }
       } catch (err) {
         console.warn(`[audit-runner] Could not create worktree for run ${runId}: ${(err as Error).message}. Falling back to workdir-only.`);
@@ -507,7 +680,6 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         console.warn(`[audit-runner] Could not write dot-claude-snapshot.json for permissions: ${(err as Error).message}`);
       }
     }
-
     // For MCP audits, write the cross-entity snapshot so the expert agent
     // can reason about .mcp.json in the context of the full .claude/
     // configuration (CLAUDE.md, hooks, other settings, etc.).
@@ -558,8 +730,20 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
   },
 
   buildFirstPrompt(req) {
+    if (req.codexConfigTarget) {
+      return buildCodexResourceAuditPrompt({
+        skillName: CODEX_CONFIG_EXPERT_SKILL_NAME,
+        skillDir: req.skillDir,
+        projectPath: req.codexConfigTarget.projectPath,
+        targetPath: join(req.codexConfigTarget.projectPath, '.codex', 'config.toml'),
+        resourceLabel: 'complete native project configuration',
+      });
+    }
     if (req.claudemdTarget) {
       const ct = req.claudemdTarget;
+      if (ct.provider === 'codex') {
+        return buildCodexInstructionsAuditPrompt(ct, req.skillDir);
+      }
       const targetPath = join(ct.projectPath, 'CLAUDE.md');
       const exists = existsSync(targetPath);
       return [
@@ -574,6 +758,16 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     }
     if (req.rulesTarget) {
       const rt = req.rulesTarget;
+      if (rt.provider === 'codex') {
+        const name = rt.ruleName.replace(/\.rules$/i, '').replace(/\.md$/i, '');
+        return buildCodexResourceAuditPrompt({
+          skillName: RULES_EXPERT_SKILL_NAME,
+          skillDir: req.skillDir,
+          projectPath: rt.projectPath,
+          targetPath: join(rt.projectPath, '.codex', 'rules', `${name}.rules`),
+          resourceLabel: 'execution rule',
+        });
+      }
       const targetPath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
       const exists = existsSync(targetPath);
       return [
@@ -588,6 +782,16 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     }
     if (req.subagentsTarget) {
       const st = req.subagentsTarget;
+      if (st.provider === 'codex') {
+        const name = st.subagentName.replace(/\.toml$/i, '').replace(/\.md$/i, '');
+        return buildCodexResourceAuditPrompt({
+          skillName: SUBAGENTS_EXPERT_SKILL_NAME,
+          skillDir: req.skillDir,
+          projectPath: st.projectPath,
+          targetPath: join(st.projectPath, '.codex', 'agents', `${name}.toml`),
+          resourceLabel: 'custom subagent',
+        });
+      }
       const targetPath = join(st.projectPath, '.claude', 'agents', st.subagentName);
       const exists = existsSync(targetPath);
       return [
@@ -602,6 +806,15 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     }
     if (req.hooksTarget) {
       const ht = req.hooksTarget;
+      if (ht.provider === 'codex') {
+        return buildCodexResourceAuditPrompt({
+          skillName: HOOKS_EXPERT_SKILL_NAME,
+          skillDir: req.skillDir,
+          projectPath: ht.projectPath,
+          targetPath: join(ht.projectPath, '.codex', 'hooks.json'),
+          resourceLabel: 'lifecycle hooks',
+        });
+      }
       const settingsPath = join(ht.projectPath, '.claude', 'settings.json');
       const exists = existsSync(settingsPath);
       return [
@@ -616,6 +829,15 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     }
     if (req.permissionsTarget) {
       const pt = req.permissionsTarget;
+      if (pt.provider === 'codex') {
+        return buildCodexResourceAuditPrompt({
+          skillName: PERMISSIONS_EXPERT_SKILL_NAME,
+          skillDir: req.skillDir,
+          projectPath: pt.projectPath,
+          targetPath: join(pt.projectPath, '.codex', 'config.toml'),
+          resourceLabel: 'approval and sandbox permissions',
+        });
+      }
       const scope = pt.scope ?? 'project';
       const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
       const settingsPath = join(pt.projectPath, '.claude', filename);
@@ -633,6 +855,9 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
     }
     if (req.mcpTarget) {
       const mt = req.mcpTarget;
+      if (mt.provider === 'codex') {
+        return buildCodexMcpAuditPrompt(mt, req.skillDir);
+      }
       const mcpPath = join(mt.projectPath, '.mcp.json');
       const exists = existsSync(mcpPath);
       return [
@@ -691,6 +916,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       subagentsTarget: req.subagentsTarget,
       hooksTarget: req.hooksTarget,
       permissionsTarget: req.permissionsTarget,
+      codexConfigTarget: req.codexConfigTarget,
       mcpTarget: req.mcpTarget,
       outputStylesTarget: req.outputStylesTarget,
     };
@@ -782,23 +1008,27 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       if (req.claudemdTarget || run.claudemdTarget) {
         if (!req.claudemdTarget || !run.claudemdTarget) continue;
         if (req.claudemdTarget.projectPath !== run.claudemdTarget.projectPath) continue;
+        if ((req.claudemdTarget.provider ?? 'claude') !== (run.claudemdTarget.provider ?? 'claude')) continue;
       }
       // Rules audits disambiguate by projectId + ruleName.
       if (req.rulesTarget || run.rulesTarget) {
         if (!req.rulesTarget || !run.rulesTarget) continue;
         if (req.rulesTarget.projectId !== run.rulesTarget.projectId) continue;
         if (req.rulesTarget.ruleName !== run.rulesTarget.ruleName) continue;
+        if ((req.rulesTarget.provider ?? 'claude') !== (run.rulesTarget.provider ?? 'claude')) continue;
       }
       // Subagents audits disambiguate by projectId + subagentName.
       if (req.subagentsTarget || run.subagentsTarget) {
         if (!req.subagentsTarget || !run.subagentsTarget) continue;
         if (req.subagentsTarget.projectId !== run.subagentsTarget.projectId) continue;
         if (req.subagentsTarget.subagentName !== run.subagentsTarget.subagentName) continue;
+        if ((req.subagentsTarget.provider ?? 'claude') !== (run.subagentsTarget.provider ?? 'claude')) continue;
       }
       // Hooks audits: singleton per project — disambiguate by projectId only.
       if (req.hooksTarget || run.hooksTarget) {
         if (!req.hooksTarget || !run.hooksTarget) continue;
         if (req.hooksTarget.projectId !== run.hooksTarget.projectId) continue;
+        if ((req.hooksTarget.provider ?? 'claude') !== (run.hooksTarget.provider ?? 'claude')) continue;
       }
       // Permissions audits: one per (projectId, scope) — a project audit and a
       // local audit may run concurrently.
@@ -808,11 +1038,18 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
         const reqScope = req.permissionsTarget.scope ?? 'project';
         const runScope = run.permissionsTarget.scope ?? 'project';
         if (reqScope !== runScope) continue;
+        if ((req.permissionsTarget.provider ?? 'claude') !== (run.permissionsTarget.provider ?? 'claude')) continue;
+      }
+      // Native Codex configuration: singleton per project.
+      if (req.codexConfigTarget || run.codexConfigTarget) {
+        if (!req.codexConfigTarget || !run.codexConfigTarget) continue;
+        if (req.codexConfigTarget.projectId !== run.codexConfigTarget.projectId) continue;
       }
       // MCP audits: singleton per project — disambiguate by projectId only.
       if (req.mcpTarget || run.mcpTarget) {
         if (!req.mcpTarget || !run.mcpTarget) continue;
         if (req.mcpTarget.projectId !== run.mcpTarget.projectId) continue;
+        if ((req.mcpTarget.provider ?? 'claude') !== (run.mcpTarget.provider ?? 'claude')) continue;
       }
       // Output-styles audits disambiguate by projectId + styleName.
       if (req.outputStylesTarget || run.outputStylesTarget) {
@@ -896,6 +1133,7 @@ const spec: RunnerSpec<AuditRun, AuditStartReq, AuditEvent, AuditEntryExtras> = 
       // Restore the permissions target so the run keeps surfacing the right
       // permissions context across reboots.
       permissionsTarget: blob.permissionsTarget,
+      codexConfigTarget: blob.codexConfigTarget,
       // Restore the MCP target so the run keeps surfacing the right
       // .mcp.json context across reboots.
       mcpTarget: blob.mcpTarget,
@@ -1029,6 +1267,13 @@ export function getAuditTimeline(runId: string): AuditTimelineEntry[] {
   if (!entry) return [];
   const { sessionId, workdir } = entry.run;
   if (!sessionId) return [];
+  const isCodex = resolveConfigurationAgentProvider(
+    entry.run.claudemdTarget?.provider ?? entry.run.rulesTarget?.provider ??
+    entry.run.subagentsTarget?.provider ?? entry.run.hooksTarget?.provider ??
+    entry.run.permissionsTarget?.provider ?? entry.run.codexConfigTarget?.provider ??
+    entry.run.mcpTarget?.provider,
+  ) === 'codex';
+  if (isCodex) return getCodexRunTimeline(sessionId);
 
   // Claude Code indexes sessions by subprocess cwd. When a worktree was used,
   // that cwd was run.cwd (the worktree path), not workdir.
@@ -1047,6 +1292,15 @@ export function getAuditUsage(runId: string): FixUsage {
   const entry = runner.registry().get(runId);
   if (!entry) return computeSessionUsage('', null);
   const { sessionId, workdir, cwd, startedAt } = entry.run;
+  // Codex usage is a known V1 gap — same reasoning as `getAuditTimeline`
+  // above: no Claude Code session JSONL backs a `codex exec` thread_id.
+  const isCodex = resolveConfigurationAgentProvider(
+    entry.run.claudemdTarget?.provider ?? entry.run.rulesTarget?.provider ??
+    entry.run.subagentsTarget?.provider ?? entry.run.hooksTarget?.provider ??
+    entry.run.permissionsTarget?.provider ?? entry.run.codexConfigTarget?.provider ??
+    entry.run.mcpTarget?.provider,
+  ) === 'codex';
+  if (isCodex) return computeSessionUsage('', null);
   // Use run.cwd when available — Claude Code indexes sessions by subprocess cwd.
   return computeSessionUsage(cwd ?? workdir, sessionId, startedAt);
 }

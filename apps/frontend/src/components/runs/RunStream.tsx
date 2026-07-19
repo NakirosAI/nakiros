@@ -151,6 +151,8 @@ function buildItemsFromTimeline(
       out.push({ key: `tl-${i}-user`, ...base, body: <UserText text={entry.text} /> });
     } else if (entry.kind === 'assistant_text') {
       out.push({ key: `tl-${i}-text`, ...base, body: <AssistantText text={entry.text} /> });
+    } else if (entry.kind === 'thinking') {
+      out.push({ key: `tl-${i}-thinking`, ...base, body: <ThinkingText text={entry.text} /> });
     } else if (entry.kind === 'tool') {
       out.push({
         key: `tl-${i}-tool`,
@@ -277,6 +279,21 @@ function AssistantText({ text }: { text: string }) {
         <Sparkles size={13} strokeWidth={2.25} />
       </span>
       <div className="min-w-0 flex-1">
+        <ChatMarkdown content={text} />
+      </div>
+    </div>
+  );
+}
+
+function ThinkingText({ text }: { text: string }) {
+  const { t } = useTranslation('runs');
+  return (
+    <div className="rounded-n-md border border-n-border-subtle bg-n-sunken px-3.5 py-2.5">
+      <div className="mb-1.5 flex items-center gap-1.5 font-n-mono text-[10px] uppercase tracking-[0.7px] text-n-subtle">
+        <Sparkles size={11} strokeWidth={2} />
+        {t('thinking.label', { defaultValue: 'Reasoning' })}
+      </div>
+      <div className="text-[12.5px] leading-relaxed text-n-muted">
         <ChatMarkdown content={text} />
       </div>
     </div>
@@ -618,4 +635,3 @@ function tsToMs(ts?: string): number {
   const ms = new Date(ts).getTime();
   return Number.isFinite(ms) ? ms : Number.NaN;
 }
-

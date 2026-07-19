@@ -10,7 +10,7 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
-import type { Skill } from '@nakiros/shared';
+import type { ConfigurationProvider, Skill } from '@nakiros/shared';
 import type { GenericAuditEntry } from '../components/skill/AuditHistoryPicker';
 import ScoreRing from '../components/viz/ScoreRing';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
@@ -29,6 +29,7 @@ import { useActiveFixForSkill } from '../hooks/useAgentRun';
 interface Props {
   /** Cross-scope identity of the skill — drives every IPC call. */
   identity: SkillTabIdentity;
+  provider?: ConfigurationProvider;
   /** Optional Back action — when omitted (e.g. when the screen is
    *  hosted in its own tab) the breadcrumb hides the button. */
   onBack?(): void;
@@ -61,8 +62,9 @@ interface AuditScore {
  * fragile. We surface the score via a best-effort regex on the
  * Markdown so the ScoreRing has something to display when present.
  */
-export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Props) {
+export default function SkillDetailScreen({ identity, provider = 'claude', onBack, onOpenRunTab }: Props) {
   const { t } = useTranslation('skills');
+  const lifecycleRunTab = provider === 'claude' ? onOpenRunTab : undefined;
   const [skill, setSkill] = useState<Skill | null>(null);
   const [skillError, setSkillError] = useState<string | null>(null);
   const [tab, setTab] = useState<SkillTab>('audit');
@@ -106,10 +108,10 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
   const activeFix = useActiveFixForSkill(identity);
 
   const handleLaunchAudit = async () => {
-    if (!onOpenRunTab || isLaunchingAudit) return;
+    if (!lifecycleRunTab || isLaunchingAudit) return;
     setIsLaunchingAudit(true);
     try {
-      await launchAudit(identity, onOpenRunTab);
+      await launchAudit(identity, lifecycleRunTab);
     } catch (err) {
       console.error('[skill] launchAudit failed', err);
     } finally {
@@ -118,10 +120,10 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
   };
 
   const handleLaunchFix = async () => {
-    if (!onOpenRunTab || isLaunchingFix || activeFix) return;
+    if (!lifecycleRunTab || isLaunchingFix || activeFix) return;
     setIsLaunchingFix(true);
     try {
-      await launchFix(identity, onOpenRunTab);
+      await launchFix(identity, lifecycleRunTab);
     } catch (err) {
       console.error('[skill] launchFix failed', err);
     } finally {
@@ -130,10 +132,10 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
   };
 
   const handleLaunchEdit = async () => {
-    if (!onOpenRunTab || isLaunchingEdit) return;
+    if (!lifecycleRunTab || isLaunchingEdit) return;
     setIsLaunchingEdit(true);
     try {
-      await launchEdit(identity, onOpenRunTab);
+      await launchEdit(identity, lifecycleRunTab);
     } catch (err) {
       console.error('[skill] launchEdit failed', err);
     } finally {
@@ -169,11 +171,11 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
         <div className="flex gap-1.5">
           <button
             type="button"
-            disabled={!onOpenRunTab || isLaunchingAudit}
+            disabled={!lifecycleRunTab || isLaunchingAudit}
             onClick={handleLaunchAudit}
             className={
               'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
-              (onOpenRunTab && !isLaunchingAudit ? 'hover:bg-n-raised hover:text-n-fg' : 'opacity-60')
+              (lifecycleRunTab && !isLaunchingAudit ? 'hover:bg-n-raised hover:text-n-fg' : 'opacity-60')
             }
           >
             {isLaunchingAudit ? (
@@ -187,7 +189,7 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
           </button>
           <button
             type="button"
-            disabled={!onOpenRunTab || isLaunchingFix || !!activeFix}
+            disabled={!lifecycleRunTab || isLaunchingFix || !!activeFix}
             onClick={handleLaunchFix}
             title={
               activeFix
@@ -198,7 +200,7 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
             }
             className={
               'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-2.5 font-n-mono text-[11.5px] text-n-accent ' +
-              (onOpenRunTab && !isLaunchingFix && !activeFix
+              (lifecycleRunTab && !isLaunchingFix && !activeFix
                 ? 'hover:bg-n-accent-soft'
                 : 'opacity-60')
             }
@@ -216,11 +218,11 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
           </button>
           <button
             type="button"
-            disabled={!onOpenRunTab || isLaunchingEdit}
+            disabled={!lifecycleRunTab || isLaunchingEdit}
             onClick={handleLaunchEdit}
             className={
               'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
-              (onOpenRunTab && !isLaunchingEdit ? 'hover:bg-n-raised hover:text-n-fg' : 'opacity-60')
+              (lifecycleRunTab && !isLaunchingEdit ? 'hover:bg-n-raised hover:text-n-fg' : 'opacity-60')
             }
           >
             {isLaunchingEdit ? (
@@ -254,7 +256,7 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
           <AuditTab
             identity={identity}
             skill={skill}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
             activeFix={activeFix}
           />
         )}
@@ -263,13 +265,13 @@ export default function SkillDetailScreen({ identity, onBack, onOpenRunTab }: Pr
             skill={skill}
             request={evalRequest}
             identity={identity}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
           />
         )}
         {!skillError && skill && tab === 'fix' && (
           <FixTab
             identity={identity}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
             activeFix={activeFix}
           />
         )}
@@ -616,7 +618,7 @@ function FixTab({
 function identityKeyOf(identity: SkillTabIdentity): string {
   switch (identity.scope) {
     case 'project':
-      return `project:${identity.projectId}:${identity.skillName}`;
+      return `project:${identity.provider ?? 'claude'}:${identity.projectId}:${identity.skillName}`;
     case 'plugin':
       return `plugin:${identity.marketplaceName}:${identity.pluginName}:${identity.skillName}`;
     case 'claude-global':

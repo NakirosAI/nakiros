@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, normalize } from 'path';
 import { homedir } from 'os';
 
-import type { McpAuditHistoryEntry } from '@nakiros/shared';
+import type { ConfigurationProvider, McpAuditHistoryEntry } from '@nakiros/shared';
 
 /**
  * Persisted history of MCP audits for a given project, archived by
@@ -10,14 +10,18 @@ import type { McpAuditHistoryEntry } from '@nakiros/shared';
  *
  * Singleton layout (mirrors hooks-audit-history — no sub-folder per name):
  *
- *   ~/.nakiros/<projectId>/mcp-audits/audit-<ISO>.md
+ *   ~/.nakiros/<projectId>/mcp-audits/<provider>/audit-<ISO>.md
  *
  * The filename is the source of truth — we parse `<ISO>` from it instead of
  * re-reading every file.
  */
 
-function auditDirFor(projectId: string): string {
+function auditRootFor(projectId: string): string {
   return join(homedir(), '.nakiros', projectId, 'mcp-audits');
+}
+
+function auditDirFor(projectId: string, provider: ConfigurationProvider): string {
+  return join(auditRootFor(projectId), provider);
 }
 
 /**
@@ -40,17 +44,35 @@ const FILENAME_RE = /^audit-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.md$/;
  * Compute the archive directory path for `projectId`. Used by `audit-runner`
  * to locate the target directory when archiving a MCP audit report.
  */
-export function mcpAuditArchiveDir(projectId: string): string {
-  return auditDirFor(projectId);
+export function mcpAuditArchiveDir(
+  projectId: string,
+  provider: ConfigurationProvider = 'claude',
+): string {
+  return auditDirFor(projectId, provider);
 }
 
 /**
  * Scan `~/.nakiros/<projectId>/mcp-audits/` and return the archived audits
  * sorted newest-first.
  */
-export function listMcpAudits(projectId: string): McpAuditHistoryEntry[] {
-  const dir = auditDirFor(projectId);
-  if (!existsSync(dir)) return [];
+export function listMcpAudits(
+  projectId: string,
+  provider: ConfigurationProvider = 'claude',
+): McpAuditHistoryEntry[] {
+  const dirs = [auditDirFor(projectId, provider)];
+  // Before provider-aware Hestia, Claude reports lived directly in
+  // `mcp-audits/`. Keep them visible without ever mixing them into Codex.
+  if (provider === 'claude') dirs.push(auditRootFor(projectId));
+
+  const out: McpAuditHistoryEntry[] = [];
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    out.push(...listAuditFiles(dir));
+  }
+  return out.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+}
+
+function listAuditFiles(dir: string): McpAuditHistoryEntry[] {
   let entries: string[];
   try {
     entries = readdirSync(dir);
@@ -74,7 +96,7 @@ export function listMcpAudits(projectId: string): McpAuditHistoryEntry[] {
       sizeBytes,
     });
   }
-  return out.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  return out;
 }
 
 /**

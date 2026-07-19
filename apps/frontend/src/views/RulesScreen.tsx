@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Project } from '@nakiros/shared';
+import type { ConfigurationProvider, Project } from '@nakiros/shared';
 import { useRules } from './rules/useRules';
 import RulesList from './rules/RulesList';
 import RuleDetailScreen from './rules/RuleDetailScreen';
@@ -9,6 +9,7 @@ import { launchRules, type OpenRunTabCallback } from '../lib/run-launcher';
 
 interface RulesScreenProps {
   project: Project;
+  provider: ConfigurationProvider;
   onOpenRunTab?: OpenRunTabCallback;
 }
 
@@ -28,9 +29,10 @@ type ViewState =
  * + "Générer avec l'IA" — manual creation is intentionally not exposed here
  * (users who want to scaffold by hand can do so in their IDE).
  */
-export default function RulesScreen({ project, onOpenRunTab }: RulesScreenProps) {
+export default function RulesScreen({ project, provider, onOpenRunTab }: RulesScreenProps) {
   const { t } = useTranslation('rules');
-  const { rules, loading, error, refresh } = useRules(project.id);
+  const { rules, loading, error, refresh } = useRules(project.id, provider);
+  const lifecycleRunTab = onOpenRunTab;
   const [view, setView] = useState<ViewState>({ mode: 'list' });
   const [createNameInput, setCreateNameInput] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -75,6 +77,7 @@ export default function RulesScreen({ project, onOpenRunTab }: RulesScreenProps)
         {
           projectId: project.id,
           projectPath: project.projectPath,
+          provider,
           ruleName: name,
           mode: 'create',
         },
@@ -105,6 +108,7 @@ export default function RulesScreen({ project, onOpenRunTab }: RulesScreenProps)
         <RuleDetailScreen
           projectId={project.id}
           projectPath={project.projectPath}
+          provider={provider}
           ruleName={view.ruleName}
           onBack={() => {
             // Refresh the listing on return — the detail screen may have
@@ -113,7 +117,7 @@ export default function RulesScreen({ project, onOpenRunTab }: RulesScreenProps)
             refresh();
             setView({ mode: 'list' });
           }}
-          onOpenRunTab={onOpenRunTab}
+          onOpenRunTab={lifecycleRunTab}
         />
       )}
 
@@ -122,7 +126,7 @@ export default function RulesScreen({ project, onOpenRunTab }: RulesScreenProps)
           value={createNameInput}
           error={createError}
           launchingAi={launchingAi}
-          aiAvailable={Boolean(onOpenRunTab)}
+          aiAvailable={Boolean(lifecycleRunTab)}
           onChange={(v) => {
             setCreateNameInput(v);
             if (createError) setCreateError(null);

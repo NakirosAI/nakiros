@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { McpAuditHistoryEntry, McpExpertMutationResult, McpReadResult } from '@nakiros/shared';
+import type {
+  ConfigurationProvider,
+  McpAuditHistoryEntry,
+  McpExpertMutationResult,
+  McpReadResult,
+} from '@nakiros/shared';
+import { absoluteProjectPath, codexResourceDriver, isCodex } from '../../lib/hestia-provider-driver';
 
 interface UseMcpFileApi {
   file: McpReadResult | null;
@@ -20,6 +26,8 @@ interface UseMcpFileApi {
  */
 export function useMcpFile(
   projectId: string,
+  provider: ConfigurationProvider,
+  projectPath: string,
   onRefreshAudits?: () => void,
 ): UseMcpFileApi {
   const [file, setFile] = useState<McpReadResult | null>(null);
@@ -31,8 +39,18 @@ export function useMcpFile(
     let cancelled = false;
     setLoading(true);
     setError(null);
-    window.nakiros
-      .readMcp(projectId)
+    const request = isCodex(provider)
+      ? codexResourceDriver.read(projectId, 'mcp', 'mcp').then((result) => {
+          if (!result.ok) throw new Error(result.message);
+          return {
+            content: result.file.content,
+            mtime: result.file.mtime,
+            exists: result.file.exists,
+            path: absoluteProjectPath(projectPath, result.file.path),
+          } satisfies McpReadResult;
+        })
+      : window.nakiros.readMcp(projectId);
+    request
       .then((result) => {
         if (cancelled) return;
         setFile((result as McpReadResult | null) ?? null);
@@ -48,20 +66,26 @@ export function useMcpFile(
     return () => {
       cancelled = true;
     };
-  }, [projectId, reloadKey]);
+  }, [projectId, projectPath, provider, reloadKey]);
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const save = useCallback(
     async (content: string, mtimeAtRead: string): Promise<McpExpertMutationResult> => {
-      const result = await window.nakiros.saveMcp(projectId, content, mtimeAtRead);
+      const result: McpExpertMutationResult = isCodex(provider)
+        ? await codexResourceDriver.save(projectId, 'mcp', 'mcp', content, mtimeAtRead).then((saved) =>
+            saved.ok
+              ? { ok: true }
+              : { ok: false, code: saved.code, message: saved.message },
+          )
+        : await window.nakiros.saveMcp(projectId, content, mtimeAtRead);
       if (result.ok) {
         refresh();
         onRefreshAudits?.();
       }
       return result;
     },
-    [projectId, refresh, onRefreshAudits],
+    [projectId, provider, refresh, onRefreshAudits],
   );
 
   return { file, loading, error, refresh, save };

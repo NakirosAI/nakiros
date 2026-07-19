@@ -56,6 +56,15 @@
     "denyCount": "Deny",
     "defaultModeLabel": "Default mode",
     "additionalDirsCount": "Additional dirs",
+    "codex": {
+      "approvalPolicy": "Approval policy",
+      "sandboxMode": "Sandbox mode",
+      "workspaceAccess": "Workspace access",
+      "network": "Network",
+      "writableRoots": "Writable roots",
+      "enabled": "enabled",
+      "disabled": "disabled"
+    },
     "warnings": {
       "bypassMode": "Default mode is bypassPermissions — all permission checks are disabled",
       "noDeny": "No deny rules for dangerous commands (rm -rf, curl, etc.)",

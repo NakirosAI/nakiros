@@ -16,7 +16,8 @@
     "fix": "Fix",
     "create": "Create skill",
     "edit": "Edit",
-    "bootstrap": "Project Bootstrap"
+    "bootstrap": "Project Bootstrap",
+    "providerCodexSuffix": " · Codex"
   },
   "unsupported": {
     "title": "Coming soon",
@@ -89,6 +90,7 @@
     "pending": "pending"
   },
   "thinking": {
+    "label": "Codex reasoning",
     "verbs": [
       "Thinking…",
       "Reading…",

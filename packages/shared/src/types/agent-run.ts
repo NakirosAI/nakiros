@@ -1,4 +1,5 @@
-import type { ClaudeMdRunMode, RulesRunMode, SubagentsRunMode, HooksRunMode, PermissionsRunMode, PermissionsExpertScope, McpRunMode, OutputStylesRunMode, SkillScope } from './project.js';
+import type { ClaudeMdRunMode, RulesRunMode, SubagentsRunMode, HooksRunMode, PermissionsRunMode, PermissionsExpertScope, McpRunMode, OutputStylesRunMode, SkillScope, CodexConfigRunMode } from './project.js';
+import type { ConfigurationProvider } from './provider-configuration.js';
 
 export type { ClaudeMdRunMode } from './project.js';
 export type { RulesRunMode } from './project.js';
@@ -74,6 +75,8 @@ export interface ClaudeMdRunTarget {
   type: 'claudemd';
   projectId: string;
   projectPath: string;
+  /** `'codex'` targets project-root AGENTS.md; absence means Claude/CLAUDE.md. */
+  provider?: ConfigurationProvider;
   mode: ClaudeMdRunMode;
 }
 
@@ -87,6 +90,7 @@ export interface RulesRunTarget {
   type: 'rules';
   projectId: string;
   projectPath: string;
+  provider?: ConfigurationProvider;
   /** ".claude/rules/<ruleName>" — relative path from .claude/rules/ */
   ruleName: string;
   mode: RulesRunMode;
@@ -102,6 +106,7 @@ export interface SubagentsRunTarget {
   type: 'subagents';
   projectId: string;
   projectPath: string;
+  provider?: ConfigurationProvider;
   /** ".claude/agents/<subagentName>" — relative filename from .claude/agents/ */
   subagentName: string;
   mode: SubagentsRunMode;
@@ -116,6 +121,7 @@ export interface HooksRunTarget {
   type: 'hooks';
   projectId: string;
   projectPath: string;
+  provider?: ConfigurationProvider;
   mode: HooksRunMode;
 }
 
@@ -129,9 +135,18 @@ export interface PermissionsRunTarget {
   type: 'permissions';
   projectId: string;
   projectPath: string;
+  provider?: ConfigurationProvider;
   /** Which settings file is targeted (`'project'` or `'local'`). */
   scope: PermissionsExpertScope;
   mode: PermissionsRunMode;
+}
+
+export interface CodexConfigRunTarget {
+  type: 'codex-config';
+  projectId: string;
+  projectPath: string;
+  provider: 'codex';
+  mode: CodexConfigRunMode;
 }
 
 /**
@@ -144,6 +159,8 @@ export interface McpRunTarget {
   projectId: string;
   projectPath: string;
   mode: McpRunMode;
+  /** Mirrors `McpTargetContext.provider` — see `project.ts` for the full contract. */
+  provider?: ConfigurationProvider;
 }
 
 /**
@@ -179,7 +196,7 @@ export interface BootstrapRunTarget {
  * Discriminated union of every supported target shape. New target kinds
  * extend this union when their corresponding agent-run kind ships.
  */
-export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget | PermissionsRunTarget | McpRunTarget | OutputStylesRunTarget | BootstrapRunTarget;
+export type AgentRunTarget = SkillRunTarget | ConversationRunTarget | ClaudeMdRunTarget | RulesRunTarget | SubagentsRunTarget | HooksRunTarget | PermissionsRunTarget | CodexConfigRunTarget | McpRunTarget | OutputStylesRunTarget | BootstrapRunTarget;
 
 /**
  * Kind-specific opaque payload riding alongside an `AgentRun`. The store

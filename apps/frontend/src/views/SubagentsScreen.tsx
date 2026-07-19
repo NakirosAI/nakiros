@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Project } from '@nakiros/shared';
+import type { ConfigurationProvider, Project } from '@nakiros/shared';
 import { useSubagents } from './subagents/useSubagents';
 import SubagentsList from './subagents/SubagentsList';
 import SubagentDetailScreen from './subagents/SubagentDetailScreen';
@@ -9,6 +9,7 @@ import { launchSubagents, type OpenRunTabCallback } from '../lib/run-launcher';
 
 interface SubagentsScreenProps {
   project: Project;
+  provider: ConfigurationProvider;
   onOpenRunTab?: OpenRunTabCallback;
 }
 
@@ -26,9 +27,10 @@ type ViewState =
  * Manual creation is intentionally not exposed — users who want to
  * scaffold by hand can do so in their IDE.
  */
-export default function SubagentsScreen({ project, onOpenRunTab }: SubagentsScreenProps) {
+export default function SubagentsScreen({ project, provider, onOpenRunTab }: SubagentsScreenProps) {
   const { t } = useTranslation('subagents');
-  const { agents, loading, error, refresh } = useSubagents(project.id);
+  const { agents, loading, error, refresh } = useSubagents(project.id, provider);
+  const lifecycleRunTab = onOpenRunTab;
   const [view, setView] = useState<ViewState>({ mode: 'list' });
   const [createNameInput, setCreateNameInput] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -73,6 +75,7 @@ export default function SubagentsScreen({ project, onOpenRunTab }: SubagentsScre
         {
           projectId: project.id,
           projectPath: project.projectPath,
+          provider,
           subagentName: name,
           mode: 'create',
         },
@@ -99,7 +102,9 @@ export default function SubagentsScreen({ project, onOpenRunTab }: SubagentsScre
             // The legacy `listClaudeAgents` IPC returns AgentEntry whose `name`
             // field has the `.md` extension stripped by the scanner. The new
             // `subagents:*` IPC expects the filename WITH the `.md` extension.
-            const normalized = agentName.endsWith('.md') ? agentName : `${agentName}.md`;
+            const normalized = provider === 'codex'
+              ? agentName.replace(/\.toml$/i, '')
+              : agentName.endsWith('.md') ? agentName : `${agentName}.md`;
             setView({ mode: 'detail', agentName: normalized });
           }}
         />
@@ -109,6 +114,7 @@ export default function SubagentsScreen({ project, onOpenRunTab }: SubagentsScre
         <SubagentDetailScreen
           projectId={project.id}
           projectPath={project.projectPath}
+          provider={provider}
           subagentName={view.agentName}
           onBack={() => {
             // Refresh the listing on return — the detail screen may have
@@ -117,7 +123,7 @@ export default function SubagentsScreen({ project, onOpenRunTab }: SubagentsScre
             refresh();
             setView({ mode: 'list' });
           }}
-          onOpenRunTab={onOpenRunTab}
+          onOpenRunTab={lifecycleRunTab}
         />
       )}
 
@@ -126,7 +132,7 @@ export default function SubagentsScreen({ project, onOpenRunTab }: SubagentsScre
           value={createNameInput}
           error={createError}
           launchingAi={launchingAi}
-          aiAvailable={Boolean(onOpenRunTab)}
+          aiAvailable={Boolean(lifecycleRunTab)}
           onChange={(v) => {
             setCreateNameInput(v);
             if (createError) setCreateError(null);

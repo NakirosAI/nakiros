@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, normalize } from 'path';
 import { homedir } from 'os';
 
-import type { RulesAuditHistoryEntry } from '@nakiros/shared';
+import type { ConfigurationProvider, RulesAuditHistoryEntry } from '@nakiros/shared';
 
 /**
  * Persisted history of `.claude/rules/<ruleName>` audits for a given project,
@@ -31,8 +31,9 @@ function encodeRuleName(ruleName: string): string {
   return ruleName.replace(/^\/+|\/+$/g, '').replace(/\//g, '__');
 }
 
-function auditDirFor(projectId: string, ruleName: string): string {
-  return join(homedir(), '.nakiros', projectId, 'rules-audits', encodeRuleName(ruleName));
+function auditDirFor(projectId: string, ruleName: string, provider: ConfigurationProvider): string {
+  const providerSegments = provider === 'codex' ? ['codex'] : [];
+  return join(homedir(), '.nakiros', projectId, 'rules-audits', ...providerSegments, encodeRuleName(ruleName));
 }
 
 /**
@@ -61,16 +62,24 @@ function extractScore(body: string): string | null {
  * Compute the archive directory path for `(projectId, ruleName)`. Used by
  * `audit-runner` to locate the target directory when archiving.
  */
-export function rulesAuditArchiveDir(projectId: string, ruleName: string): string {
-  return auditDirFor(projectId, ruleName);
+export function rulesAuditArchiveDir(
+  projectId: string,
+  ruleName: string,
+  provider: ConfigurationProvider = 'claude',
+): string {
+  return auditDirFor(projectId, ruleName, provider);
 }
 
 /**
  * Scan `~/.nakiros/<projectId>/rules-audits/<encoded-ruleName>/` and return
  * the archived audits for that rule, sorted newest-first.
  */
-export function listRulesAudits(projectId: string, ruleName: string): RulesAuditHistoryEntry[] {
-  const dir = auditDirFor(projectId, ruleName);
+export function listRulesAudits(
+  projectId: string,
+  ruleName: string,
+  provider: ConfigurationProvider = 'claude',
+): RulesAuditHistoryEntry[] {
+  const dir = auditDirFor(projectId, ruleName, provider);
   if (!existsSync(dir)) return [];
   let entries: string[];
   try {

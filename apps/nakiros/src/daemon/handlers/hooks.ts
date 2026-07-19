@@ -1,7 +1,12 @@
 import { homedir } from 'os';
 import { join, normalize } from 'path';
 
-import type { HooksAuditHistoryEntry, HooksExpertMutationResult, HooksReadResult } from '@nakiros/shared';
+import type {
+  ConfigurationProvider,
+  HooksAuditHistoryEntry,
+  HooksExpertMutationResult,
+  HooksReadResult,
+} from '@nakiros/shared';
 
 import { getProject } from '../../services/project-scanner.js';
 import { readHooksBlock, saveHooksBlock } from '../../services/hooks-writer.js';
@@ -48,7 +53,8 @@ export const hooksHandlers: HandlerRegistry = {
   ),
 
   'hooks:listAudits': createTypedHandler(
-    (projectId: string): HooksAuditHistoryEntry[] => listHooksAudits(projectId),
+    (projectId: string, provider?: ConfigurationProvider): HooksAuditHistoryEntry[] =>
+      listHooksAudits(projectId, provider),
   ),
 
   'hooks:readAudit': createTypedHandler((path: string): string | null => {

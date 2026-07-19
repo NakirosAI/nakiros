@@ -565,16 +565,16 @@ function RunScreenBody({
   async function handleReject() {
     if (isRejecting) return;
     let message: string;
-    if (display.isClaudemd || display.isRules) {
+    if (display.isClaudemd || display.isRules || display.isSubagents || display.isHooks || display.isPermissions || display.isCodexConfig || display.isMcp || display.isOutputStyles) {
       message =
         runKind === 'create'
           ? t('prompts.rejectCreateClaudemd', {
               defaultValue:
-                'Stopper la création de ce CLAUDE.md ? Le fichier déjà écrit reste en place — c\'est un arrêt, pas un rollback.',
+                'Discard this draft? No project file will be changed.',
             })
           : t('prompts.rejectFixClaudemd', {
               defaultValue:
-                'Stopper le fix ? Les modifications déjà appliquées au CLAUDE.md restent — c\'est un arrêt, pas un rollback.',
+                'Discard the pending draft changes? No project file will be changed.',
             });
     } else {
       message =
@@ -754,7 +754,7 @@ function RunScreenBody({
           // the "Run evals" button entirely. The bundled expert isn't
           // graded here, the user's CLAUDE.md / rule file is.
           onLaunchEval={
-            (runKind === 'fix' || runKind === 'create' || runKind === 'edit') && onOpenRunTab && !display.isClaudemd && !display.isRules
+            (runKind === 'fix' || runKind === 'create' || runKind === 'edit') && onOpenRunTab && !display.isClaudemd && !display.isRules && !display.isSubagents && !display.isHooks && !display.isPermissions && !display.isCodexConfig && !display.isMcp && !display.isOutputStyles
               ? handleLaunchEval
               : undefined
           }
@@ -1998,4 +1998,3 @@ function stubSkillFor(identity: RunScreenIdentity | null): Skill {
     evals: { definitions: [], iterations: [] },
   } as unknown as Skill;
 }
-

@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join, normalize } from 'path';
 import { homedir } from 'os';
 
-import type { SubagentsAuditHistoryEntry } from '@nakiros/shared';
+import type { ConfigurationProvider, SubagentsAuditHistoryEntry } from '@nakiros/shared';
 
 /**
  * Persisted history of `.claude/agents/<subagentName>` audits for a given
@@ -31,8 +31,9 @@ function encodeSubagentName(subagentName: string): string {
   return subagentName.replace(/^\/+|\/+$/g, '').replace(/\//g, '__');
 }
 
-function auditDirFor(projectId: string, subagentName: string): string {
-  return join(homedir(), '.nakiros', projectId, 'subagents-audits', encodeSubagentName(subagentName));
+function auditDirFor(projectId: string, subagentName: string, provider: ConfigurationProvider): string {
+  const providerSegments = provider === 'codex' ? ['codex'] : [];
+  return join(homedir(), '.nakiros', projectId, 'subagents-audits', ...providerSegments, encodeSubagentName(subagentName));
 }
 
 /**
@@ -61,16 +62,24 @@ function extractScore(body: string): string | null {
  * Compute the archive directory path for `(projectId, subagentName)`. Used by
  * `audit-runner` to locate the target directory when archiving.
  */
-export function subagentsAuditArchiveDir(projectId: string, subagentName: string): string {
-  return auditDirFor(projectId, subagentName);
+export function subagentsAuditArchiveDir(
+  projectId: string,
+  subagentName: string,
+  provider: ConfigurationProvider = 'claude',
+): string {
+  return auditDirFor(projectId, subagentName, provider);
 }
 
 /**
  * Scan `~/.nakiros/<projectId>/subagents-audits/<encoded-subagentName>/` and
  * return the archived audits for that subagent, sorted newest-first.
  */
-export function listSubagentsAudits(projectId: string, subagentName: string): SubagentsAuditHistoryEntry[] {
-  const dir = auditDirFor(projectId, subagentName);
+export function listSubagentsAudits(
+  projectId: string,
+  subagentName: string,
+  provider: ConfigurationProvider = 'claude',
+): SubagentsAuditHistoryEntry[] {
+  const dir = auditDirFor(projectId, subagentName, provider);
   if (!existsSync(dir)) return [];
   let entries: string[];
   try {

@@ -11,18 +11,19 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
-import type { ClaudeMdAuditHistoryEntry, ClaudeMdRunMode, Project } from '@nakiros/shared';
+import type { ClaudeMdAuditHistoryEntry, ClaudeMdRunMode, ConfigurationProvider, Project } from '@nakiros/shared';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import type { GenericAuditEntry } from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
 import ScoreRing from '../components/viz/ScoreRing';
-import { MarkdownEditor } from '../components/markdown/MarkdownEditor';
+import { ResourceEditPane } from '../components/configuration/ResourceEditPane';
 import ConfirmModal from '../components/ConfirmModal';
 import { launchClaudemd, type OpenRunTabCallback } from '../lib/run-launcher';
 import { useClaudeMdFile, useClaudeMdList } from './claude-md/useClaudeMd';
 
 interface ClaudeMdScreenProps {
   project: Project;
+  provider: ConfigurationProvider;
   onBack?(): void;
   onOpenRunTab?: OpenRunTabCallback;
 }
@@ -44,11 +45,19 @@ interface AuditScore {
  * Scope pilules (root / .claude / local) removed — backend only exposes the
  * project-root CLAUDE.md now.
  */
-export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: ClaudeMdScreenProps) {
+export default function ClaudeMdScreen({ project, provider, onBack, onOpenRunTab }: ClaudeMdScreenProps) {
   const { t } = useTranslation('claude-md');
-  const { list, loading: listLoading, refresh: refreshList } = useClaudeMdList(project.id);
+  const instructionName = provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md';
+  const lifecycleRunTab = onOpenRunTab;
+  const { list, loading: listLoading, refresh: refreshList } = useClaudeMdList(
+    project.id,
+    provider,
+    project.projectPath,
+  );
   const { file, loading, error, refresh, save, remove } = useClaudeMdFile(
     project.id,
+    provider,
+    project.projectPath,
     refreshList,
   );
 
@@ -71,7 +80,7 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
 
   const loadAudits = useCallback(async () => {
     try {
-      const result = await window.nakiros.listClaudemdAudits(project.id);
+      const result = await window.nakiros.listClaudemdAudits(project.id, provider);
       setAudits(result ?? []);
       if (result && result.length > 0 && !selectedAudit) {
         setSelectedAudit(result[0] ?? null);
@@ -79,7 +88,7 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
     } catch {
       setAudits([]);
     }
-  }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [project.id, provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     void loadAudits();
@@ -154,13 +163,13 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
   };
 
   const handleLaunchRun = async (mode: ClaudeMdRunMode) => {
-    if (!onOpenRunTab || !file) return;
+    if (!lifecycleRunTab || !file) return;
     setErrorBanner(null);
     setLaunchingMode(mode);
     try {
       await launchClaudemd(
-        { projectId: project.id, projectPath: project.projectPath, mode },
-        onOpenRunTab,
+        { projectId: project.id, projectPath: project.projectPath, mode, provider },
+        lifecycleRunTab,
       );
     } catch (err) {
       setErrorBanner({
@@ -181,14 +190,14 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
   // ── Loading / error states ─────────────────────────────────────────────────
   if (listLoading || loading) {
     return (
-      <div className="grid flex-1 place-items-center text-n-muted">{t('loading')}</div>
+      <div className="grid flex-1 place-items-center text-n-muted">{t('loading', { instructionName })}</div>
     );
   }
   if (error || !file || !list) {
     return (
       <div className="grid flex-1 place-items-center">
         <div className="rounded-n-lg border border-n-border-default bg-n-surface px-7 py-7 text-center">
-          <h3 className="text-[14px] font-semibold text-n-fg">{t('errorTitle')}</h3>
+          <h3 className="text-[14px] font-semibold text-n-fg">{t('errorTitle', { instructionName })}</h3>
           {error && (
             <p className="mt-1 break-all font-n-mono text-[11.5px] text-n-muted">{error}</p>
           )}
@@ -224,7 +233,7 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
           </>
         )}
         <FileText size={16} strokeWidth={2} className="text-n-accent" />
-        <strong className="font-n-mono text-[14px] font-medium text-n-fg">CLAUDE.md</strong>
+        <strong className="font-n-mono text-[14px] font-medium text-n-fg">{instructionName}</strong>
         <span
           className="truncate font-n-mono text-[11px] text-n-faint"
           title={file.path}
@@ -234,11 +243,11 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
         <span className="flex-1" />
         {/* CTA buttons */}
         <div className="flex gap-1.5">
-          {onOpenRunTab && file.exists && (
+          {lifecycleRunTab && file.exists && (
             <>
               <button
                 type="button"
-                disabled={!onOpenRunTab || launchingMode !== null}
+                disabled={!lifecycleRunTab || launchingMode !== null}
                 onClick={() => void handleLaunchRun('audit')}
                 className={
                   'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
@@ -246,7 +255,7 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
                     ? 'hover:bg-n-raised hover:text-n-fg'
                     : 'opacity-60')
                 }
-                title={t('runAuditTitle')}
+                title={t('runAuditTitle', { instructionName })}
               >
                 {launchingMode === 'audit' ? (
                   <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
@@ -257,13 +266,13 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
               </button>
               <button
                 type="button"
-                disabled={!onOpenRunTab || launchingMode !== null}
+                disabled={!lifecycleRunTab || launchingMode !== null}
                 onClick={() => void handleLaunchRun('fix')}
                 className={
                   'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-2.5 font-n-mono text-[11.5px] text-n-accent ' +
                   (launchingMode === null ? 'hover:bg-n-accent-soft' : 'opacity-60')
                 }
-                title={t('runFixTitle')}
+                title={t('runFixTitle', { instructionName })}
               >
                 {launchingMode === 'fix' ? (
                   <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
@@ -274,13 +283,13 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
               </button>
               <button
                 type="button"
-                disabled={!onOpenRunTab || launchingMode !== null}
+                disabled={!lifecycleRunTab || launchingMode !== null}
                 onClick={() => void handleLaunchRun('edit')}
                 className={
                   'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
                   (launchingMode === null ? 'hover:bg-n-raised hover:text-n-fg' : 'opacity-60')
                 }
-                title={t('runEditTitle')}
+                title={t('runEditTitle', { instructionName })}
               >
                 {launchingMode === 'edit' ? (
                   <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
@@ -291,7 +300,7 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
               </button>
             </>
           )}
-          {onOpenRunTab && !file.exists && (
+          {lifecycleRunTab && !file.exists && (
             <button
               type="button"
               disabled={launchingMode !== null}
@@ -300,7 +309,7 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
                 'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-accent-line bg-n-accent-soft px-2.5 font-n-mono text-[11.5px] text-n-accent-strong ' +
                 (launchingMode === null ? 'hover:bg-n-accent-soft/80' : 'opacity-60')
               }
-              title={t('runCreateTitle')}
+              title={t('runCreateTitle', { instructionName })}
             >
               {launchingMode === 'create' ? (
                 <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
@@ -318,9 +327,9 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
         <div className="mx-7 mt-4 flex items-center justify-between gap-3 rounded-n-md border border-dashed border-n-border-default bg-n-surface px-4 py-3">
           <div className="flex items-center gap-2 text-[12.5px] text-n-muted">
             <AlertTriangle size={14} className="flex-shrink-0 text-n-watch" />
-            {t('missingBanner')}
+            {t('missingBanner', { instructionName })}
           </div>
-          {onOpenRunTab && (
+          {lifecycleRunTab && (
             <button
               type="button"
               disabled={launchingMode !== null}
@@ -409,7 +418,8 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
             auditContent={auditContent}
             auditContentError={auditContentError}
             auditScore={auditScore}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
+            instructionName={instructionName}
             launchingMode={launchingMode}
             onLaunchFix={() => void handleLaunchRun('fix')}
             t={t}
@@ -418,7 +428,8 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
         {tab === 'fix' && (
           <FixTab
             hasAudit={audits.length > 0}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
+            instructionName={instructionName}
             launchingMode={launchingMode}
             onLaunchFix={() => void handleLaunchRun('fix')}
             t={t}
@@ -428,7 +439,7 @@ export default function ClaudeMdScreen({ project, onBack, onOpenRunTab }: Claude
 
       <ConfirmModal
         open={confirmDeleteOpen}
-        title={t('confirmDeleteTitle', { defaultValue: 'Supprimer CLAUDE.md ?' })}
+        title={t('confirmDeleteTitle', { defaultValue: `Supprimer ${instructionName} ?` })}
         body={t('confirmDelete', { path: file.path })}
         confirmLabel={submitting ? t('deleting', { defaultValue: 'Suppression…' }) : t('delete', { defaultValue: 'Supprimer' })}
         cancelLabel={t('cancel', { defaultValue: 'Annuler' })}
@@ -512,48 +523,29 @@ function EditTab({
   t,
 }: EditTabProps) {
   return (
-    <div className="flex flex-1 overflow-hidden" style={{ height: '100%' }}>
-      {/* Main editor area */}
-      <div className="flex flex-1 flex-col gap-1.5 overflow-auto px-7 pb-8 pt-4">
-        {/* Save / delete toolbar */}
-        <div className="flex items-center justify-end gap-1.5">
-          {file.exists && (
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={submitting}
-              className="inline-flex items-center gap-1.5 rounded-n-sm border border-[oklch(0.74_0.16_25_/_0.4)] bg-transparent px-3 py-1.5 font-n-mono text-[11.5px] text-[oklch(0.50_0.16_25)] hover:bg-[oklch(0.74_0.16_25_/_0.08)] disabled:opacity-50"
-            >
-              {t('delete')}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!dirty || submitting}
-            className="inline-flex items-center gap-1.5 rounded-n-md border border-n-accent-line bg-n-accent-soft px-3 py-2 font-n-mono text-[12px] text-n-accent-strong hover:bg-n-accent-soft/80 disabled:opacity-50"
-          >
-            {t('save')}
-          </button>
-        </div>
-
-        <MarkdownEditor
-          value={body}
-          onChange={setBody}
-          placeholder={t('editTab.bodyPlaceholder')}
+    <ResourceEditPane
+      value={body}
+      onChange={setBody}
+      editorKind="markdown"
+      exists={file.exists}
+      dirty={dirty}
+      submitting={submitting}
+      saveLabel={t('save')}
+      deleteLabel={t('delete')}
+      onSave={onSave}
+      onDelete={onDelete}
+      placeholder={t('editTab.bodyPlaceholder')}
+      sidebar={(
+        <EditSidebar
+          file={file}
+          body={body}
+          agentsMdAtRoot={agentsMdAtRoot}
+          hasAgentsMdImport={hasAgentsMdImport}
+          onAddAgentsMd={onAddAgentsMd}
+          t={t}
         />
-      </div>
-
-      {/* Sidebar */}
-      <EditSidebar
-        file={file}
-        body={body}
-        agentsMdAtRoot={agentsMdAtRoot}
-        hasAgentsMdImport={hasAgentsMdImport}
-        onAddAgentsMd={onAddAgentsMd}
-        t={t}
-      />
-    </div>
+      )}
+    />
   );
 }
 
@@ -660,6 +652,7 @@ function AuditTab({
   onOpenRunTab,
   launchingMode,
   onLaunchFix,
+  instructionName,
   t,
 }: {
   audits: ClaudeMdAuditHistoryEntry[];
@@ -671,6 +664,7 @@ function AuditTab({
   onOpenRunTab?: OpenRunTabCallback;
   launchingMode: ClaudeMdRunMode | null;
   onLaunchFix(): void;
+  instructionName: string;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   if (audits.length === 0) {
@@ -678,7 +672,7 @@ function AuditTab({
       <div className="px-7 py-6">
         <div className="rounded-n-md border border-dashed border-n-border-default bg-n-surface p-10 text-center">
           <div className="font-n-mono text-[12.5px] text-n-muted">
-            {t('auditTab.empty')}
+            {t('auditTab.empty', { instructionName })}
           </div>
         </div>
       </div>
@@ -699,7 +693,7 @@ function AuditTab({
               />
             </div>
             <div className="font-n-mono text-[18px] text-n-fg">
-              Audit — <span className="text-n-accent">CLAUDE.md</span>
+              Audit — <span className="text-n-accent">{instructionName}</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -762,12 +756,14 @@ function FixTab({
   onOpenRunTab,
   launchingMode,
   onLaunchFix,
+  instructionName,
   t,
 }: {
   hasAudit: boolean;
   onOpenRunTab?: OpenRunTabCallback;
   launchingMode: ClaudeMdRunMode | null;
   onLaunchFix(): void;
+  instructionName: string;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   return (
@@ -778,10 +774,10 @@ function FixTab({
             <Wrench size={20} strokeWidth={2} />
           </div>
           <div className="flex-1">
-            <h3 className="m-0 text-[15px] font-semibold text-n-fg">{t('fixTab.title')}</h3>
+            <h3 className="m-0 text-[15px] font-semibold text-n-fg">{t('fixTab.title', { instructionName })}</h3>
             <p className="mt-1.5 text-[13px] leading-snug text-n-muted">
-              {t('fixTab.intro')}{' '}
-              (<span className="font-n-mono text-n-fg">CLAUDE.md</span>),{' '}
+              {t('fixTab.intro', { instructionName })}{' '}
+              (<span className="font-n-mono text-n-fg">{instructionName}</span>),{' '}
               {t('fixTab.introCont')}
             </p>
             {!hasAudit && (

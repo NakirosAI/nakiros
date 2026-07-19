@@ -15,6 +15,7 @@ import type {
   PermissionsExpertScope,
   PermissionsRunMode,
   Project,
+  ConfigurationProvider,
 } from '@nakiros/shared';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import type { GenericAuditEntry } from '../components/skill/AuditHistoryPicker';
@@ -23,9 +24,11 @@ import ScoreRing from '../components/viz/ScoreRing';
 import { launchPermissions, type OpenRunTabCallback } from '../lib/run-launcher';
 import { usePermissionsFile } from './permissions/usePermissionsFile';
 import PermissionsFormEditor from './permissions/PermissionsFormEditor';
+import { CodeEditorPane } from '../components/ui/CodeEditorPane';
 
 interface PermissionsScreenProps {
   project: Project;
+  provider: ConfigurationProvider;
   onBack?(): void;
   onOpenRunTab?: OpenRunTabCallback;
 }
@@ -54,10 +57,12 @@ interface AuditScore {
  */
 export default function PermissionsScreen({
   project,
+  provider,
   onBack,
   onOpenRunTab,
 }: PermissionsScreenProps) {
   const { t } = useTranslation('permissions-runner');
+  const lifecycleRunTab = onOpenRunTab;
 
   // Scope toggle — 'project' targets settings.json, 'local' targets settings.local.json
   const [scope, setScope] = useState<PermissionsExpertScope>('project');
@@ -74,7 +79,7 @@ export default function PermissionsScreen({
 
   const loadAudits = useCallback(async () => {
     try {
-      const result = await window.nakiros.listPermissionsAudits(project.id, scope);
+      const result = await window.nakiros.listPermissionsAudits(project.id, scope, provider);
       setAudits(result ?? []);
       if (result && result.length > 0 && !selectedAudit) {
         setSelectedAudit(result[0] ?? null);
@@ -82,10 +87,12 @@ export default function PermissionsScreen({
     } catch {
       setAudits([]);
     }
-  }, [project.id, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [project.id, provider, scope]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { file, loading, error, refresh, save } = usePermissionsFile(
     project.id,
+    provider,
+    project.projectPath,
     scope,
     loadAudits,
   );
@@ -146,6 +153,7 @@ export default function PermissionsScreen({
 
   // JSON validation ────────────────────────────────────────────────────────
   const jsonValidation = useMemo((): { valid: boolean; message?: string } => {
+    if (provider === 'codex') return { valid: true };
     if (body.trim() === '' || body.trim() === '{}') return { valid: true };
     try {
       JSON.parse(body);
@@ -156,7 +164,7 @@ export default function PermissionsScreen({
         message: err instanceof Error ? err.message : String(err),
       };
     }
-  }, [body]);
+  }, [body, provider]);
 
   // Actions ───────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -181,13 +189,13 @@ export default function PermissionsScreen({
   };
 
   const handleLaunchRun = async (mode: PermissionsRunMode) => {
-    if (!onOpenRunTab || !file) return;
+    if (!lifecycleRunTab || !file) return;
     setErrorBanner(null);
     setLaunchingMode(mode);
     try {
       await launchPermissions(
-        { projectId: project.id, projectPath: project.projectPath, scope, mode },
-        onOpenRunTab,
+        { projectId: project.id, projectPath: project.projectPath, scope, mode, provider },
+        lifecycleRunTab,
       );
     } catch (err) {
       setErrorBanner({
@@ -263,26 +271,28 @@ export default function PermissionsScreen({
           Permissions
         </strong>
         {/* ── Scope toggle (project / local) ── */}
-        <div
-          className="inline-flex overflow-hidden rounded-md border border-n-border-default bg-n-raised font-n-mono text-[11px]"
-          title={scope === 'local' ? t('scopeTooltip.local') : t('scopeTooltip.project')}
-        >
-          {(['project', 'local'] as PermissionsExpertScope[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => handleScopeChange(s)}
-              className={
-                'px-2.5 py-1 ' +
-                (scope === s
-                  ? 'bg-n-accent text-white'
-                  : 'text-n-muted hover:bg-n-canvas hover:text-n-fg')
-              }
-            >
-              {t(`scope.${s}`)}
-            </button>
-          ))}
-        </div>
+        {provider === 'claude' && (
+          <div
+            className="inline-flex overflow-hidden rounded-md border border-n-border-default bg-n-raised font-n-mono text-[11px]"
+            title={scope === 'local' ? t('scopeTooltip.local') : t('scopeTooltip.project')}
+          >
+            {(['project', 'local'] as PermissionsExpertScope[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => handleScopeChange(s)}
+                className={
+                  'px-2.5 py-1 ' +
+                  (scope === s
+                    ? 'bg-n-accent text-white'
+                    : 'text-n-muted hover:bg-n-canvas hover:text-n-fg')
+                }
+              >
+                {t(`scope.${s}`)}
+              </button>
+            ))}
+          </div>
+        )}
         <span
           className="truncate font-n-mono text-[11px] text-n-faint"
           title={file.path}
@@ -292,7 +302,7 @@ export default function PermissionsScreen({
         <span className="flex-1" />
         {/* CTA buttons */}
         <div className="flex gap-1.5">
-          {onOpenRunTab && file.exists && (
+          {lifecycleRunTab && file.exists && (
             <>
               <button
                 type="button"
@@ -455,6 +465,7 @@ export default function PermissionsScreen({
         {tab === 'edit' && (
           <EditTab
             file={file}
+            provider={provider}
             body={body}
             setBody={setBody}
             dirty={dirty}
@@ -475,7 +486,7 @@ export default function PermissionsScreen({
             auditContent={auditContent}
             auditContentError={auditContentError}
             auditScore={auditScore}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
             launchingMode={launchingMode}
             onLaunchFix={() => void handleLaunchRun('fix')}
             t={t}
@@ -484,7 +495,7 @@ export default function PermissionsScreen({
         {tab === 'fix' && (
           <FixTab
             hasAudit={audits.length > 0}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
             launchingMode={launchingMode}
             onLaunchFix={() => void handleLaunchRun('fix')}
             t={t}
@@ -542,6 +553,7 @@ function ScreenTabButton({
 
 interface EditTabProps {
   file: import('@nakiros/shared').PermissionsReadResult;
+  provider: ConfigurationProvider;
   body: string;
   setBody(b: string): void;
   dirty: boolean;
@@ -556,6 +568,7 @@ interface EditTabProps {
 
 function EditTab({
   file,
+  provider,
   body,
   setBody,
   dirty,
@@ -569,7 +582,7 @@ function EditTab({
 }: EditTabProps) {
   // If JSON becomes invalid while in form mode, we force JSON mode so the
   // user can see and fix the syntax error.
-  const effectiveMode: EditMode = !jsonValidation.valid ? 'json' : editMode;
+  const effectiveMode: EditMode = provider === 'codex' || !jsonValidation.valid ? 'json' : editMode;
 
   return (
     <div className="flex flex-1 overflow-hidden" style={{ height: '100%' }}>
@@ -582,7 +595,7 @@ function EditTab({
             {jsonValidation.valid ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[oklch(0.55_0.18_145_/_0.3)] bg-[oklch(0.55_0.18_145_/_0.08)] px-2.5 py-0.5 font-n-mono text-[11px] text-[oklch(0.42_0.18_145)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[oklch(0.55_0.18_145)]" />
-                {t('editTab.validJson')}
+                {provider === 'codex' ? 'TOML' : t('editTab.validJson')}
               </span>
             ) : (
               <span
@@ -597,7 +610,7 @@ function EditTab({
             )}
 
             {/* Form / JSON mode toggle */}
-            <div className="inline-flex rounded-n-md border border-n-border-subtle bg-n-surface p-0.5">
+            {provider === 'claude' && <div className="inline-flex rounded-n-md border border-n-border-subtle bg-n-surface p-0.5">
               <button
                 type="button"
                 disabled={!jsonValidation.valid}
@@ -628,7 +641,7 @@ function EditTab({
               >
                 {t('editTab.json')}
               </button>
-            </div>
+            </div>}
           </div>
 
           {/* Right: Save / Reset toolbar */}
@@ -656,18 +669,16 @@ function EditTab({
         {effectiveMode === 'form' ? (
           <PermissionsFormEditor value={body} onChange={setBody} />
         ) : (
-          <textarea
+          <CodeEditorPane
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={setBody}
             placeholder={t('editTab.placeholder')}
-            spellCheck={false}
             className={
-              'w-full flex-1 resize-none rounded-n-md border bg-n-surface p-4 font-n-mono text-[12.5px] leading-relaxed text-n-fg placeholder:text-n-faint focus:outline-none focus:ring-1 ' +
+              'min-h-[60vh] w-full flex-1 resize-none rounded-n-md border bg-n-surface p-4 font-n-mono text-[12.5px] leading-relaxed text-n-fg placeholder:text-n-faint focus:outline-none focus:ring-1 ' +
               (jsonValidation.valid
                 ? 'border-n-border-subtle focus:border-n-accent-line focus:ring-n-accent-line'
                 : 'border-[oklch(0.74_0.16_25_/_0.4)] focus:border-[oklch(0.74_0.16_25_/_0.6)] focus:ring-[oklch(0.74_0.16_25_/_0.3)]')
             }
-            style={{ minHeight: '60vh' }}
           />
         )}
 
@@ -679,7 +690,7 @@ function EditTab({
       </div>
 
       {/* Sidebar */}
-      <EditSidebar body={body} jsonValidation={jsonValidation} t={t} />
+      <EditSidebar body={body} jsonValidation={jsonValidation} provider={provider} t={t} />
     </div>
   );
 }
@@ -693,6 +704,28 @@ interface PermissionsMetrics {
   defaultMode: string | null;
   additionalDirs: string[];
   disableBypassPermissionsMode: string | undefined;
+}
+
+interface CodexPermissionsMetrics {
+  approvalPolicy: string | null;
+  sandboxMode: string | null;
+  networkAccess: boolean | null;
+  writableRoots: string[];
+}
+
+function parseCodexPermissionsMetrics(body: string): CodexPermissionsMetrics {
+  const stringValue = (key: string): string | null =>
+    new RegExp(`^\\s*${key}\\s*=\\s*["']([^"']+)["']`, 'm').exec(body)?.[1] ?? null;
+  const booleanMatch = /^\s*network_access\s*=\s*(true|false)/m.exec(body);
+  const rootsMatch = /^\s*writable_roots\s*=\s*\[([^\]]*)\]/m.exec(body);
+  return {
+    approvalPolicy: stringValue('approval_policy'),
+    sandboxMode: stringValue('sandbox_mode'),
+    networkAccess: booleanMatch ? booleanMatch[1] === 'true' : null,
+    writableRoots: rootsMatch
+      ? [...rootsMatch[1].matchAll(/["']([^"']+)["']/g)].map((match) => match[1] ?? '')
+      : [],
+  };
 }
 
 function parsePermissionsMetrics(body: string): PermissionsMetrics | null {
@@ -751,16 +784,59 @@ function hasDangerousDenyRules(deny: number, body: string): boolean {
 function EditSidebar({
   body,
   jsonValidation,
+  provider,
   t,
 }: {
   body: string;
   jsonValidation: { valid: boolean };
+  provider: ConfigurationProvider;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
-  const metrics = useMemo(() => {
-    if (!jsonValidation.valid) return null;
-    return parsePermissionsMetrics(body);
-  }, [body, jsonValidation.valid]);
+  const codexMetrics = useMemo(
+    () => provider === 'codex' ? parseCodexPermissionsMetrics(body) : null,
+    [body, provider],
+  );
+  const metrics = useMemo(
+    () => provider === 'claude' && jsonValidation.valid ? parsePermissionsMetrics(body) : null,
+    [body, jsonValidation.valid, provider],
+  );
+
+  if (provider === 'codex' && codexMetrics) {
+    return (
+      <aside className="hidden w-72 flex-shrink-0 flex-col gap-4 overflow-auto border-l border-n-border-subtle bg-n-surface px-4 py-4 lg:flex">
+        <SidebarSection title={t('editTab.codex.approvalPolicy')}>
+          <MetricValue value={codexMetrics.approvalPolicy} />
+        </SidebarSection>
+        <SidebarSection title={t('editTab.codex.sandboxMode')}>
+          <MetricValue value={codexMetrics.sandboxMode} />
+        </SidebarSection>
+        <SidebarSection title={t('editTab.codex.workspaceAccess')}>
+          <div className="flex flex-col gap-1">
+            <MetricValue
+              label={t('editTab.codex.network')}
+              value={codexMetrics.networkAccess === null
+                ? null
+                : codexMetrics.networkAccess
+                  ? t('editTab.codex.enabled')
+                  : t('editTab.codex.disabled')}
+            />
+            <MetricValue label={t('editTab.codex.writableRoots')} value={String(codexMetrics.writableRoots.length)} />
+          </div>
+        </SidebarSection>
+        {codexMetrics.writableRoots.length > 0 && (
+          <SidebarSection title={t('editTab.codex.writableRoots')}>
+            <div className="flex flex-col gap-0.5">
+              {codexMetrics.writableRoots.map((root) => (
+                <div key={root} className="break-all rounded-n-sm bg-n-canvas px-2 py-1 font-n-mono text-[10.5px] text-n-muted">
+                  {root}
+                </div>
+              ))}
+            </div>
+          </SidebarSection>
+        )}
+      </aside>
+    );
+  }
 
   const showBypassModeWarning =
     metrics?.defaultMode === 'bypassPermissions';
@@ -852,6 +928,15 @@ function EditSidebar({
         </>
       )}
     </aside>
+  );
+}
+
+function MetricValue({ label, value }: { label?: string; value: string | null }) {
+  return (
+    <div className="flex items-center justify-between rounded-n-sm border border-n-border-subtle bg-n-canvas px-2 py-1.5">
+      {label && <span className="font-n-mono text-[10.5px] text-n-muted">{label}</span>}
+      <span className="font-n-mono text-[12px] text-n-fg">{value ?? '—'}</span>
+    </div>
   );
 }
 

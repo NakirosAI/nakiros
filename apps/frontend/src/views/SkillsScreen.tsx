@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlaskConical, Loader2, Plus, Search, ShieldCheck, Sparkles } from 'lucide-react';
-import type { AgentRun, Project, Skill } from '@nakiros/shared';
+import type { AgentRun, ConfigurationProvider, Project, Skill } from '@nakiros/shared';
 import SkillCard, { extractSkillDescription } from '../components/skill/SkillCard';
 import { launchCreate, type OpenRunTabCallback } from '../lib/run-launcher';
 import { useActiveAgentRuns } from '../hooks/useAgentRun';
@@ -9,6 +9,7 @@ import { useActiveAgentRuns } from '../hooks/useAgentRun';
 interface Props {
   /** Project whose `.claude/skills/` directory is listed. */
   project: Project;
+  provider: ConfigurationProvider;
   /** Activated when the user picks a skill — opens the detail view. */
   onOpenSkill(skillName: string): void;
   /** Pushes a fresh run tab once a create run has started or to re-enter
@@ -26,7 +27,7 @@ interface Props {
  * "Nouveau skill" opens a name modal that refuses duplicates against
  * production skills or in-progress drafts of this project.
  */
-export default function SkillsScreen({ project, onOpenSkill, onOpenRunTab }: Props) {
+export default function SkillsScreen({ project, provider, onOpenSkill, onOpenRunTab }: Props) {
   const { t } = useTranslation('skills');
   const [skills, setSkills] = useState<Skill[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +66,7 @@ export default function SkillsScreen({ project, onOpenSkill, onOpenRunTab }: Pro
     let cancelled = false;
     setError(null);
     window.nakiros
-      .listProjectSkills(project.id)
+      .listProjectSkills(project.id, provider)
       .then((list) => {
         if (cancelled) return;
         setSkills(list);
@@ -77,7 +78,7 @@ export default function SkillsScreen({ project, onOpenSkill, onOpenRunTab }: Pro
     return () => {
       cancelled = true;
     };
-  }, [project.id, inProgressCount]);
+  }, [project.id, provider, inProgressCount]);
 
   const filteredSkills = useMemo(() => {
     if (!skills) return null;
@@ -177,8 +178,8 @@ export default function SkillsScreen({ project, onOpenSkill, onOpenRunTab }: Pro
           <ToolbarButton
             icon={creating ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} strokeWidth={2.25} />}
             label={creating ? t('creating', { defaultValue: 'Création…' }) : t('newSkill', { defaultValue: 'Nouveau skill' })}
-            onClick={openCreateModal}
-            disabled={creating}
+            onClick={provider === 'claude' ? openCreateModal : undefined}
+            disabled={provider === 'codex' || creating}
             primary
           />
         </div>

@@ -5,12 +5,18 @@ import { buildCodexArgs, handleCodexStreamEvent } from './codex-stream.js';
 
 describe('Codex runner stream', () => {
   it('builds initial and resumed non-interactive turns', () => {
-    assert.deepEqual(buildCodexArgs({ prompt: 'Analyze' }), [
+    assert.deepEqual(buildCodexArgs({ prompt: 'Analyze', addDirs: ['/tmp/nakiros-run'] }), [
       'exec', '--json', '--color', 'never', '--sandbox', 'workspace-write',
-      '--skip-git-repo-check', 'Analyze',
+      '--skip-git-repo-check', '--add-dir', '/tmp/nakiros-run', 'Analyze',
     ]);
-    assert.deepEqual(buildCodexArgs({ prompt: 'Continue', resumeSessionId: 'thread-id' }), [
-      'exec', 'resume', '--json', '--skip-git-repo-check', 'thread-id', 'Continue',
+    assert.deepEqual(buildCodexArgs({
+      prompt: 'Continue',
+      resumeSessionId: 'thread-id',
+      addDirs: ['/tmp/nakiros-run'],
+    }), [
+      'exec', '--json', '--color', 'never', '--sandbox', 'workspace-write',
+      '--skip-git-repo-check', '--add-dir', '/tmp/nakiros-run',
+      'resume', 'thread-id', 'Continue',
     ]);
   });
 

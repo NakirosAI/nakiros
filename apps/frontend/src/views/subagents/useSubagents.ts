@@ -4,7 +4,9 @@ import type {
   AgentMutationResult,
   CreateAgentRequest,
   SaveAgentRequest,
+  ConfigurationProvider,
 } from '@nakiros/shared';
+import { codexAgentEntry, codexResourceDriver, isCodex } from '../../lib/hestia-provider-driver';
 
 interface UseSubagentsApi {
   agents: AgentEntry[];
@@ -18,7 +20,7 @@ interface UseSubagentsApi {
 
 /** Fetches `.claude/agents/` for a project and exposes mutation helpers
  *  that auto-refresh the list on success. Mirror of `useRules`. */
-export function useSubagents(projectId: string): UseSubagentsApi {
+export function useSubagents(projectId: string, provider: ConfigurationProvider): UseSubagentsApi {
   const [agents, setAgents] = useState<AgentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,8 +30,15 @@ export function useSubagents(projectId: string): UseSubagentsApi {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    window.nakiros
-      .listClaudeAgents(projectId)
+    const request = isCodex(provider)
+      ? codexResourceDriver.list(projectId, 'subagents').then(async (summaries) => {
+          const results = await Promise.all(
+            summaries.map((summary) => codexResourceDriver.read(projectId, 'subagents', summary.id)),
+          );
+          return results.flatMap((result) => result.ok ? [codexAgentEntry(result.file)] : []);
+        })
+      : window.nakiros.listClaudeAgents(projectId);
+    request
       .then((items) => {
         if (cancelled) return;
         setAgents(items);
@@ -45,7 +54,7 @@ export function useSubagents(projectId: string): UseSubagentsApi {
     return () => {
       cancelled = true;
     };
-  }, [projectId, reloadKey]);
+  }, [projectId, provider, reloadKey]);
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 

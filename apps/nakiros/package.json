@@ -44,6 +44,7 @@
     "@fastify/static": "^9.1.1",
     "@fastify/websocket": "^11.2.0",
     "chokidar": "^5.0.0",
+    "confbox": "^0.1.8",
     "fastify": "^5.8.5",
     "open": "^11.0.0",
     "yaml": "^2.8.3"

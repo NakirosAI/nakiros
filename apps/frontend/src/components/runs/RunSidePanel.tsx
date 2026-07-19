@@ -70,7 +70,7 @@ interface RunSidePanelProps {
    * buttons so a CLAUDE.md or rules fix run doesn't display "Apply & deploy".
    * Defaults to `'skill'`.
    */
-  targetNoun?: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp' | 'output style';
+  targetNoun?: 'skill' | 'CLAUDE.md' | 'AGENTS.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'Codex config' | 'mcp' | 'output style';
 }
 
 /**
@@ -364,7 +364,7 @@ function FixPanel({
   onSelectDiffFile?(relativePath: string | null): void;
   onLaunchEval?: () => void;
   isLaunchingEval?: boolean;
-  targetNoun: 'skill' | 'CLAUDE.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'mcp' | 'output style';
+  targetNoun: 'skill' | 'CLAUDE.md' | 'AGENTS.md' | 'conversation' | 'rule' | 'subagent' | 'hooks' | 'permissions' | 'Codex config' | 'mcp' | 'output style';
 }) {
   const { t } = useTranslation('runs');
   const [diff, setDiff] = useState<SkillDiffEntry[] | null>(null);
@@ -435,7 +435,7 @@ function FixPanel({
   const targets = run.targets ?? [];
   const targetsDone = targets.filter((t) => t.status === 'done').length;
 
-  const isClaudemd = targetNoun === 'CLAUDE.md';
+  const isClaudemd = targetNoun === 'CLAUDE.md' || targetNoun === 'AGENTS.md';
   const isRules = targetNoun === 'rule';
   // Every non-skill target writes its file directly — no sandbox to deploy.
   // The skill flow is the only one that uses a tmp_skill copy under
@@ -856,4 +856,3 @@ function PathRow({ value }: { value: string }) {
     </div>
   );
 }
-

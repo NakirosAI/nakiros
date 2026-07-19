@@ -179,6 +179,9 @@ importers:
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
+      confbox:
+        specifier: ^0.1.8
+        version: 0.1.8
       fastify:
         specifier: ^5.8.5
         version: 5.8.5

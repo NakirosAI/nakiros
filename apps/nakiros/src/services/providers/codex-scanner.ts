@@ -12,8 +12,12 @@ const CODEX_SESSIONS_DIR = join(homedir(), '.codex', 'sessions');
 const CODEX_CAPABILITIES: AgentCapability[] = [
   'instructions',
   'skills',
+  'rules',
+  'subagents',
+  'hooks',
   'permissions',
   'mcp',
+  'native-config',
   'conversations',
 ];
 

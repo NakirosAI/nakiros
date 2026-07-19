@@ -9,6 +9,7 @@ import type { Dirent } from 'fs';
 import { join, normalize, resolve } from 'path';
 
 import type {
+  ConfigurationProvider,
   SubagentsAuditHistoryEntry,
   SubagentsListResult,
   SubagentsMutationResult,
@@ -352,8 +353,8 @@ export const subagentsHandlers: HandlerRegistry = {
   ),
 
   'subagents:listAudits': createTypedHandler(
-    (projectId: string, subagentName: string): SubagentsAuditHistoryEntry[] => {
-      return listSubagentsAudits(projectId, subagentName);
+    (projectId: string, subagentName: string, provider?: ConfigurationProvider): SubagentsAuditHistoryEntry[] => {
+      return listSubagentsAudits(projectId, subagentName, provider);
     },
   ),
 

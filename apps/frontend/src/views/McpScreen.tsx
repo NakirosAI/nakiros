@@ -11,7 +11,12 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
-import type { McpAuditHistoryEntry, McpRunMode, Project } from '@nakiros/shared';
+import type {
+  ConfigurationProvider,
+  McpAuditHistoryEntry,
+  McpRunMode,
+  Project,
+} from '@nakiros/shared';
 import AuditHistoryPicker from '../components/skill/AuditHistoryPicker';
 import type { GenericAuditEntry } from '../components/skill/AuditHistoryPicker';
 import AuditMarkdownViewer from '../components/skill/AuditMarkdownViewer';
@@ -19,9 +24,11 @@ import ScoreRing from '../components/viz/ScoreRing';
 import { launchMcp, type OpenRunTabCallback } from '../lib/run-launcher';
 import { useMcpFile } from './mcp/useMcpFile';
 import McpFormEditor from './mcp/McpFormEditor';
+import { CodeEditorPane } from '../components/ui/CodeEditorPane';
 
 interface McpScreenProps {
   project: Project;
+  provider: ConfigurationProvider;
   onBack?(): void;
   onOpenRunTab?: OpenRunTabCallback;
 }
@@ -37,18 +44,32 @@ interface AuditScore {
 /**
  * Singleton MCP screen — mirrors `HooksScreen` exactly.
  *
- * Displays and edits the project-root `.mcp.json` file as raw JSON
- * (with live validation) or via a structured form editor. Three tabs:
+ * Displays and edits the project's MCP config — `.mcp.json` for Claude or
+ * `.codex/config.toml` for Codex — as raw text (with live validation for
+ * Claude) or via a structured form editor (Claude only; Codex TOML always
+ * uses the raw editor). Copy is provider-aware via i18n interpolation
+ * (`configFile` / `agent` — see `mcp-runner` bundles). Three tabs:
  *
- * 1. **Edit** — Form or `<textarea>` JSON editor + live validation badge + sidebar metrics.
- * 2. **Audit** — `AuditHistoryPicker` + `AuditMarkdownViewer` + `ScoreRing`.
+ * 1. **Edit** — Form or `<textarea>` editor + live validation badge + sidebar metrics.
+ * 2. **Audit** — `AuditHistoryPicker` + `AuditMarkdownViewer` + `ScoreRing`. Run Audit is
+ *    available even when the config file doesn't exist yet; Fix/Edit require an existing file.
  * 3. **Fix** — Simple CTA landing.
  *
- * Uses `mcp:read` / `mcp:save` / `mcp:listAudits` / `mcp:readAudit`
- * IPC — distinct from the Module-5 form-based editor (`claudeMcp:*` channels).
+ * Uses `mcp:read` / `mcp:save` / `mcp:listAudits` / `mcp:readAudit` IPC for
+ * Claude, `codexResourceDriver` for Codex — distinct from the Module-5
+ * form-based editor (`claudeMcp:*` channels, Claude-only, currently unrouted).
  */
-export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenProps) {
+export default function McpScreen({ project, provider, onBack, onOpenRunTab }: McpScreenProps) {
   const { t } = useTranslation('mcp-runner');
+  // Audit/fix/edit are provider-neutral: the runner switches to Codex under
+  // the hood when `mcpTarget.provider === 'codex'` (increments 1-2). No gate
+  // needed here beyond `onOpenRunTab` being wired at all.
+  const lifecycleRunTab = onOpenRunTab;
+
+  // Copy is provider-aware via interpolation — see `mcp-runner` bundles.
+  const configFile = provider === 'codex' ? '.codex/config.toml' : '.mcp.json';
+  const agent = provider === 'codex' ? 'Codex' : 'Claude';
+  const cfgVars = { configFile, agent };
 
   // Audit list ─────────────────────────────────────────────────────────────
   const [audits, setAudits] = useState<McpAuditHistoryEntry[]>([]);
@@ -58,7 +79,7 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
 
   const loadAudits = useCallback(async () => {
     try {
-      const result = await window.nakiros.listMcpAudits(project.id);
+      const result = await window.nakiros.listMcpAudits(project.id, provider);
       setAudits(result ?? []);
       if (result && result.length > 0 && !selectedAudit) {
         setSelectedAudit(result[0] ?? null);
@@ -66,9 +87,14 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
     } catch {
       setAudits([]);
     }
-  }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [project.id, provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { file, loading, error, refresh, save } = useMcpFile(project.id, loadAudits);
+  const { file, loading, error, refresh, save } = useMcpFile(
+    project.id,
+    provider,
+    project.projectPath,
+    loadAudits,
+  );
 
   useEffect(() => {
     void loadAudits();
@@ -123,6 +149,7 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
 
   // JSON validation ────────────────────────────────────────────────────────
   const jsonValidation = useMemo((): { valid: boolean; message?: string } => {
+    if (provider === 'codex') return { valid: true };
     if (body.trim() === '' || body.trim() === '{}') return { valid: true };
     try {
       JSON.parse(body);
@@ -133,7 +160,7 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
         message: err instanceof Error ? err.message : String(err),
       };
     }
-  }, [body]);
+  }, [body, provider]);
 
   // Actions ───────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -158,13 +185,13 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
   };
 
   const handleLaunchRun = async (mode: McpRunMode) => {
-    if (!onOpenRunTab || !file) return;
+    if (!lifecycleRunTab || !file) return;
     setErrorBanner(null);
     setLaunchingMode(mode);
     try {
       await launchMcp(
-        { projectId: project.id, projectPath: project.projectPath, mode },
-        onOpenRunTab,
+        { projectId: project.id, projectPath: project.projectPath, mode, provider },
+        lifecycleRunTab,
       );
     } catch (err) {
       setErrorBanner({
@@ -231,27 +258,32 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
         <span className="flex-1" />
         {/* CTA buttons */}
         <div className="flex gap-1.5">
-          {onOpenRunTab && file.exists && (
+          {/* Run Audit stays available even without an existing config file —
+              the audit skill handles an absent target (structure checks
+              report N/A instead of failing). Fix / Edit need real content. */}
+          {lifecycleRunTab && (
+            <button
+              type="button"
+              disabled={launchingMode !== null}
+              onClick={() => void handleLaunchRun('audit')}
+              className={
+                'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
+                (launchingMode === null
+                  ? 'hover:bg-n-raised hover:text-n-fg'
+                  : 'opacity-60')
+              }
+              title={t('runAuditTitle')}
+            >
+              {launchingMode === 'audit' ? (
+                <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
+              ) : (
+                <ShieldCheck size={12} strokeWidth={2} />
+              )}
+              {launchingMode === 'audit' ? t('runLaunching') : t('runAudit')}
+            </button>
+          )}
+          {lifecycleRunTab && file.exists && (
             <>
-              <button
-                type="button"
-                disabled={launchingMode !== null}
-                onClick={() => void handleLaunchRun('audit')}
-                className={
-                  'inline-flex h-7 items-center gap-1.5 rounded-n-sm border border-n-border-default bg-transparent px-2.5 font-n-mono text-[11.5px] text-n-muted ' +
-                  (launchingMode === null
-                    ? 'hover:bg-n-raised hover:text-n-fg'
-                    : 'opacity-60')
-                }
-                title={t('runAuditTitle')}
-              >
-                {launchingMode === 'audit' ? (
-                  <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
-                ) : (
-                  <ShieldCheck size={12} strokeWidth={2} />
-                )}
-                {launchingMode === 'audit' ? t('runLaunching') : t('runAudit')}
-              </button>
               <button
                 type="button"
                 disabled={launchingMode !== null}
@@ -299,7 +331,7 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
         <div className="mx-7 mt-4 flex items-center justify-between gap-3 rounded-n-md border border-dashed border-n-border-default bg-n-surface px-4 py-3">
           <div className="flex items-center gap-2 text-[12.5px] text-n-muted">
             <AlertTriangle size={14} className="flex-shrink-0 text-n-watch" />
-            {t('missingBanner')}
+            {t('missingBanner', cfgVars)}
           </div>
           <button
             type="button"
@@ -366,6 +398,7 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
         {tab === 'edit' && (
           <EditTab
             file={file}
+            provider={provider}
             body={body}
             setBody={setBody}
             dirty={dirty}
@@ -375,6 +408,7 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
             setEditMode={setEditMode}
             onSave={handleSave}
             onReset={handleReset}
+            cfgVars={cfgVars}
             t={t}
           />
         )}
@@ -386,7 +420,7 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
             auditContent={auditContent}
             auditContentError={auditContentError}
             auditScore={auditScore}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
             launchingMode={launchingMode}
             onLaunchFix={() => void handleLaunchRun('fix')}
             t={t}
@@ -395,9 +429,10 @@ export default function McpScreen({ project, onBack, onOpenRunTab }: McpScreenPr
         {tab === 'fix' && (
           <FixTab
             hasAudit={audits.length > 0}
-            onOpenRunTab={onOpenRunTab}
+            onOpenRunTab={lifecycleRunTab}
             launchingMode={launchingMode}
             onLaunchFix={() => void handleLaunchRun('fix')}
+            cfgVars={cfgVars}
             t={t}
           />
         )}
@@ -449,6 +484,7 @@ function ScreenTabButton({
 
 interface EditTabProps {
   file: import('@nakiros/shared').McpReadResult;
+  provider: ConfigurationProvider;
   body: string;
   setBody(b: string): void;
   dirty: boolean;
@@ -458,11 +494,13 @@ interface EditTabProps {
   setEditMode(m: EditMode): void;
   onSave(): void;
   onReset(): void;
+  cfgVars: { configFile: string; agent: string };
   t: (key: string, opts?: Record<string, unknown>) => string;
 }
 
 function EditTab({
   file,
+  provider,
   body,
   setBody,
   dirty,
@@ -472,11 +510,12 @@ function EditTab({
   setEditMode,
   onSave,
   onReset,
+  cfgVars,
   t,
 }: EditTabProps) {
   // If JSON becomes invalid while in form mode, force JSON mode so the user
   // can see and fix the syntax error.
-  const effectiveMode: EditMode = !jsonValidation.valid ? 'json' : editMode;
+  const effectiveMode: EditMode = provider === 'codex' || !jsonValidation.valid ? 'json' : editMode;
 
   return (
     <div className="flex flex-1 overflow-hidden" style={{ height: '100%' }}>
@@ -489,7 +528,7 @@ function EditTab({
             {jsonValidation.valid ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[oklch(0.55_0.18_145_/_0.3)] bg-[oklch(0.55_0.18_145_/_0.08)] px-2.5 py-0.5 font-n-mono text-[11px] text-[oklch(0.42_0.18_145)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[oklch(0.55_0.18_145)]" />
-                {t('editTab.validJson')}
+                {provider === 'codex' ? t('editTab.validToml') : t('editTab.validJson')}
               </span>
             ) : (
               <span
@@ -504,7 +543,7 @@ function EditTab({
             )}
 
             {/* Form / JSON mode toggle */}
-            <div className="inline-flex rounded-n-md border border-n-border-subtle bg-n-surface p-0.5">
+            {provider === 'claude' && <div className="inline-flex rounded-n-md border border-n-border-subtle bg-n-surface p-0.5">
               <button
                 type="button"
                 disabled={!jsonValidation.valid}
@@ -531,7 +570,7 @@ function EditTab({
               >
                 {t('editTab.json')}
               </button>
-            </div>
+            </div>}
           </div>
 
           {/* Right: Save / Reset toolbar */}
@@ -559,30 +598,28 @@ function EditTab({
         {effectiveMode === 'form' ? (
           <McpFormEditor value={body} onChange={setBody} />
         ) : (
-          <textarea
+          <CodeEditorPane
             value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder={t('editTab.placeholder')}
-            spellCheck={false}
+            onChange={setBody}
+            placeholder={provider === 'codex' ? t('editTab.placeholderCodex') : t('editTab.placeholder')}
             className={
-              'w-full flex-1 resize-none rounded-n-md border bg-n-surface p-4 font-n-mono text-[12.5px] leading-relaxed text-n-fg placeholder:text-n-faint focus:outline-none focus:ring-1 ' +
+              'min-h-[60vh] w-full flex-1 resize-none rounded-n-md border bg-n-surface p-4 font-n-mono text-[12.5px] leading-relaxed text-n-fg placeholder:text-n-faint focus:outline-none focus:ring-1 ' +
               (jsonValidation.valid
                 ? 'border-n-border-subtle focus:border-n-accent-line focus:ring-n-accent-line'
                 : 'border-[oklch(0.74_0.16_25_/_0.4)] focus:border-[oklch(0.74_0.16_25_/_0.6)] focus:ring-[oklch(0.74_0.16_25_/_0.3)]')
             }
-            style={{ minHeight: '60vh' }}
           />
         )}
 
         {!file.exists && (
           <p className="font-n-mono text-[11px] text-n-faint">
-            {t('editTab.newFileHint')}
+            {t('editTab.newFileHint', cfgVars)}
           </p>
         )}
       </div>
 
       {/* Sidebar */}
-      <EditSidebar body={body} jsonValidation={jsonValidation} t={t} />
+      <EditSidebar body={body} jsonValidation={jsonValidation} provider={provider} t={t} />
     </div>
   );
 }
@@ -599,7 +636,8 @@ interface McpServerMetrics {
   warnPlainSecrets: boolean;
 }
 
-function parseMcpMetrics(body: string): McpServerMetrics | null {
+function parseMcpMetrics(body: string, provider: ConfigurationProvider): McpServerMetrics | null {
+  if (provider === 'codex') return parseCodexMcpMetrics(body);
   try {
     const parsed = JSON.parse(body) as Record<string, unknown>;
     const mcpServers = parsed['mcpServers'];
@@ -670,19 +708,55 @@ function parseMcpMetrics(body: string): McpServerMetrics | null {
   }
 }
 
+function parseCodexMcpMetrics(body: string): McpServerMetrics {
+  const headers = [...body.matchAll(/^\s*\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*(?:#.*)?$/gm)];
+  const servers: Array<{ name: string; type: string }> = [];
+  const byType = { stdio: 0, http: 0, sse: 0 };
+  let warnHttpNotHttps = false;
+  let warnPlainSecrets = false;
+
+  for (let index = 0; index < headers.length; index++) {
+    const header = headers[index];
+    const start = (header.index ?? 0) + header[0].length;
+    const end = headers[index + 1]?.index ?? body.length;
+    const section = body.slice(start, end);
+    const name = (header[1] ?? '').replace(/^['"]|['"]$/g, '');
+    const url = /^\s*url\s*=\s*["']([^"']+)["']/m.exec(section)?.[1] ?? '';
+    const type: 'http' | 'stdio' = url ? 'http' : 'stdio';
+    byType[type]++;
+    servers.push({ name, type });
+    if (url.startsWith('http://')) warnHttpNotHttps = true;
+    if (/^\s*(?:bearer_token|token|api_key|password)\s*=\s*["'](?!\$\{)[^"']+["']/mi.test(section)) {
+      warnPlainSecrets = true;
+    }
+  }
+
+  return {
+    totalServers: servers.length,
+    byType,
+    servers,
+    warnHttpNotHttps,
+    warnSseDeprecated: false,
+    warnAlwaysLoadOveruse: false,
+    warnPlainSecrets,
+  };
+}
+
 function EditSidebar({
   body,
   jsonValidation,
+  provider,
   t,
 }: {
   body: string;
   jsonValidation: { valid: boolean };
+  provider: ConfigurationProvider;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const metrics = useMemo(() => {
     if (!jsonValidation.valid) return null;
-    return parseMcpMetrics(body);
-  }, [body, jsonValidation.valid]);
+    return parseMcpMetrics(body, provider);
+  }, [body, jsonValidation.valid, provider]);
 
   const hasWarnings =
     metrics !== null &&
@@ -907,12 +981,14 @@ function FixTab({
   onOpenRunTab,
   launchingMode,
   onLaunchFix,
+  cfgVars,
   t,
 }: {
   hasAudit: boolean;
   onOpenRunTab?: OpenRunTabCallback;
   launchingMode: McpRunMode | null;
   onLaunchFix(): void;
+  cfgVars: { configFile: string; agent: string };
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   return (
@@ -925,7 +1001,7 @@ function FixTab({
           <div className="flex-1">
             <h3 className="m-0 text-[15px] font-semibold text-n-fg">{t('fixTab.title')}</h3>
             <p className="mt-1.5 text-[13px] leading-snug text-n-muted">
-              {t('fixTab.lead')}
+              {t('fixTab.lead', cfgVars)}
             </p>
             {!hasAudit && (
               <p className="mt-2 rounded-n-sm border border-n-border-subtle bg-n-sunken px-2 py-1.5 font-n-mono text-[11px] text-n-muted">

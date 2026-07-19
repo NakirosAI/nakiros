@@ -3,6 +3,7 @@ import type {
   ClaudeMdFileContent,
   ClaudeMdListResult,
   ClaudeMdMutationResult,
+  ConfigurationProvider,
   SaveClaudeMdRequest,
 } from '@nakiros/shared';
 
@@ -85,8 +86,8 @@ export const claudeMdHandlers: HandlerRegistry = {
   ),
 
   'claudeMd:listAudits': createTypedHandler(
-    (projectId: string): ClaudeMdAuditHistoryEntry[] => {
-      return listClaudemdAudits(projectId);
+    (projectId: string, provider: ConfigurationProvider = 'claude'): ClaudeMdAuditHistoryEntry[] => {
+      return listClaudemdAudits(projectId, provider);
     },
   ),
 

@@ -1,0 +1,25 @@
+# Template for .codex/config.toml — MCP slice (mcp_servers table).
+# Delete these leading comments before writing to production.
+#
+# Transport is INFERRED: a server with `url` is http, a server without it
+# (relying on `command`) is stdio. There is no `type`/`transport` key.
+# There is no `oauth`, `headersHelper`, or `alwaysLoad` in Codex.
+# `http_headers` is the Codex name for what Claude calls `headers`.
+# Place this file at `.codex/config.toml` — the mcp_servers table can share
+# the file with the rest of Codex's own configuration; this expert only
+# owns the `[mcp_servers.*]` slice.
+
+[mcp_servers.example-cloud-api]
+# Remote HTTP server (inferred from the presence of `url`). HTTPS only.
+url = "https://api.example.com/mcp"
+
+[mcp_servers.example-cloud-api.http_headers]
+Authorization = "Bearer <replace-with-your-own-secret-injection-mechanism>"
+
+[mcp_servers.example-local-tools]
+# Local stdio server (inferred from the absence of `url`).
+command = "${CLAUDE_PROJECT_DIR}/.claude/mcp-servers/local-tools.sh"
+args = ["--project-dir", "${CLAUDE_PROJECT_DIR}"]
+
+[mcp_servers.example-local-tools.env]
+LOG_LEVEL = "info"

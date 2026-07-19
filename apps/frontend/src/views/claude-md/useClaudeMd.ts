@@ -4,7 +4,14 @@ import type {
   ClaudeMdListResult,
   ClaudeMdMutationResult,
   SaveClaudeMdRequest,
+  ConfigurationProvider,
 } from '@nakiros/shared';
+import {
+  codexInstructionFile,
+  codexInstructionMutation,
+  codexResourceDriver,
+  isCodex,
+} from '../../lib/hestia-provider-driver';
 
 interface UseClaudeMdListApi {
   list: ClaudeMdListResult | null;
@@ -14,7 +21,11 @@ interface UseClaudeMdListApi {
 }
 
 /** Loads the summary for the project's root CLAUDE.md. */
-export function useClaudeMdList(projectId: string): UseClaudeMdListApi {
+export function useClaudeMdList(
+  projectId: string,
+  provider: ConfigurationProvider,
+  projectPath: string,
+): UseClaudeMdListApi {
   const [list, setList] = useState<ClaudeMdListResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +35,17 @@ export function useClaudeMdList(projectId: string): UseClaudeMdListApi {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    window.nakiros
-      .listClaudeMd(projectId)
+    const request = isCodex(provider)
+      ? codexResourceDriver.read(projectId, 'instructions', 'AGENTS.md').then((result) => {
+          if (!result.ok) throw new Error(result.message);
+          return {
+            file: codexInstructionFile(projectPath, result.file),
+            agentsMdAtRoot: false,
+            projectPath,
+          } satisfies ClaudeMdListResult;
+        })
+      : window.nakiros.listClaudeMd(projectId);
+    request
       .then((result) => {
         if (cancelled) return;
         setList(result as ClaudeMdListResult);
@@ -41,7 +61,7 @@ export function useClaudeMdList(projectId: string): UseClaudeMdListApi {
     return () => {
       cancelled = true;
     };
-  }, [projectId, reloadKey]);
+  }, [projectId, projectPath, provider, reloadKey]);
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
   return { list, loading, error, refresh };
@@ -60,6 +80,8 @@ interface UseClaudeMdFileApi {
  *  delete helpers that auto-refresh on success. */
 export function useClaudeMdFile(
   projectId: string,
+  provider: ConfigurationProvider,
+  projectPath: string,
   onListChange: () => void,
 ): UseClaudeMdFileApi {
   const [file, setFile] = useState<ClaudeMdFileContent | null>(null);
@@ -71,8 +93,13 @@ export function useClaudeMdFile(
     let cancelled = false;
     setLoading(true);
     setError(null);
-    window.nakiros
-      .readClaudeMd(projectId)
+    const request = isCodex(provider)
+      ? codexResourceDriver.read(projectId, 'instructions', 'AGENTS.md').then((result) => {
+          if (!result.ok) throw new Error(result.message);
+          return codexInstructionFile(projectPath, result.file);
+        })
+      : window.nakiros.readClaudeMd(projectId);
+    request
       .then((result) => {
         if (cancelled) return;
         setFile((result as ClaudeMdFileContent | null) ?? null);
@@ -88,30 +115,46 @@ export function useClaudeMdFile(
     return () => {
       cancelled = true;
     };
-  }, [projectId, reloadKey]);
+  }, [projectId, projectPath, provider, reloadKey]);
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 
   const save = useCallback(
     async (request: SaveClaudeMdRequest): Promise<ClaudeMdMutationResult> => {
-      const result = await window.nakiros.saveClaudeMdFile(projectId, request);
+      const result = isCodex(provider)
+        ? codexInstructionMutation(
+            await codexResourceDriver.save(
+              projectId,
+              'instructions',
+              'AGENTS.md',
+              request.body,
+              request.mtimeAtRead,
+            ),
+            projectPath,
+          )
+        : await window.nakiros.saveClaudeMdFile(projectId, request);
       if (result.ok) {
         refresh();
         onListChange();
       }
       return result;
     },
-    [projectId, refresh, onListChange],
+    [projectId, projectPath, provider, refresh, onListChange],
   );
 
   const remove = useCallback(async (): Promise<ClaudeMdMutationResult> => {
-    const result = await window.nakiros.deleteClaudeMd(projectId);
+    const result = isCodex(provider)
+      ? codexInstructionMutation(
+          await codexResourceDriver.remove(projectId, 'instructions', 'AGENTS.md'),
+          projectPath,
+        )
+      : await window.nakiros.deleteClaudeMd(projectId);
     if (result.ok) {
       refresh();
       onListChange();
     }
     return result;
-  }, [projectId, refresh, onListChange]);
+  }, [projectId, projectPath, provider, refresh, onListChange]);
 
   return { file, loading, error, refresh, save, remove };
 }

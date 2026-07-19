@@ -19,6 +19,7 @@ import {
   type RecommendationPattern,
   type StartRecommendationAnalyzeRequest,
   type StartAnalyzeConvoRequest,
+  type ConfigurationProvider,
 } from '@nakiros/shared';
 
 const HTTP_BASE = typeof window !== 'undefined' ? window.location.origin : '';
@@ -238,14 +239,14 @@ const client = {
     invoke(C['project:getConversationDigest'], projectId, sessionId),
   listConversationDigests: (projectId: string) =>
     invoke(C['project:listConversationDigests'], projectId),
-  listProjectSkills: (projectId: string) => invoke(C['project:listSkills'], projectId),
-  getProjectSkill: (projectId: string, skillName: string) => invoke(C['project:getSkill'], projectId, skillName),
-  saveProjectSkill: (projectId: string, skillName: string, content: string) =>
-    invoke(C['project:saveSkill'], projectId, skillName, content),
-  readSkillFile: (projectId: string, skillName: string, relativePath: string) =>
-    invoke(C['project:readSkillFile'], projectId, skillName, relativePath),
-  saveSkillFile: (projectId: string, skillName: string, relativePath: string, content: string) =>
-    invoke(C['project:saveSkillFile'], projectId, skillName, relativePath, content),
+  listProjectSkills: (projectId: string, provider?: 'claude' | 'codex') => invoke(C['project:listSkills'], projectId, provider),
+  getProjectSkill: (projectId: string, skillName: string, provider?: 'claude' | 'codex') => invoke(C['project:getSkill'], projectId, skillName, provider),
+  saveProjectSkill: (projectId: string, skillName: string, content: string, provider?: 'claude' | 'codex') =>
+    invoke(C['project:saveSkill'], projectId, skillName, content, provider),
+  readSkillFile: (projectId: string, skillName: string, relativePath: string, provider?: 'claude' | 'codex') =>
+    invoke(C['project:readSkillFile'], projectId, skillName, relativePath, provider),
+  saveSkillFile: (projectId: string, skillName: string, relativePath: string, content: string, provider?: 'claude' | 'codex') =>
+    invoke(C['project:saveSkillFile'], projectId, skillName, relativePath, content, provider),
   onScanProgress: (cb: (progress: unknown) => void) => subscribe(C['project:scanProgress'], cb),
 
   // Nakiros bundled skills
@@ -577,8 +578,8 @@ const client = {
   onAnalyzeConvoEvent: (cb: (event: unknown) => void) => subscribe(C['analyzeConvo:event'], cb),
 
   // CLAUDE.md audit history — archived runs under ~/.nakiros/<projectId>/claudemd/audit/
-  listClaudemdAudits: (projectId: string) =>
-    invoke(C['claudeMd:listAudits'], projectId),
+  listClaudemdAudits: (projectId: string, provider?: ConfigurationProvider) =>
+    invoke(C['claudeMd:listAudits'], projectId, provider),
   readClaudemdAudit: (path: string) => invoke(C['claudeMd:readAudit'], path),
 
   // Rules CRUD — project-scoped, recursive discovery under .claude/rules/
@@ -590,8 +591,8 @@ const client = {
   deleteRule: (projectId: string, ruleName: string) =>
     invoke(C['rules:delete'], projectId, ruleName),
   // Rules audit history — archived runs under ~/.nakiros/<projectId>/rules-audits/
-  listRulesAudits: (projectId: string, ruleName: string) =>
-    invoke(C['rules:listAudits'], projectId, ruleName),
+  listRulesAudits: (projectId: string, ruleName: string, provider?: ConfigurationProvider) =>
+    invoke(C['rules:listAudits'], projectId, ruleName, provider),
   readRulesAudit: (path: string) => invoke(C['rules:readAudit'], path),
 
   // Subagents CRUD — project-scoped, recursive discovery under .claude/agents/
@@ -608,8 +609,8 @@ const client = {
     invoke(C['subagents:delete'], projectId, subagentName),
   // Subagents audit history — archived runs under
   // ~/.nakiros/<projectId>/subagents-audits/
-  listSubagentsAudits: (projectId: string, subagentName: string) =>
-    invoke(C['subagents:listAudits'], projectId, subagentName),
+  listSubagentsAudits: (projectId: string, subagentName: string, provider?: ConfigurationProvider) =>
+    invoke(C['subagents:listAudits'], projectId, subagentName, provider),
   readSubagentsAudit: (path: string) => invoke(C['subagents:readAudit'], path),
 
   // Hooks expert (nakiros-hooks-expert) — read/save the hooks block + audit
@@ -617,7 +618,8 @@ const client = {
   readHooks: (projectId: string) => invoke(C['hooks:read'], projectId),
   saveHooks: (projectId: string, content: string, mtimeAtRead: string) =>
     invoke(C['hooks:save'], projectId, content, mtimeAtRead),
-  listHooksAudits: (projectId: string) => invoke(C['hooks:listAudits'], projectId),
+  listHooksAudits: (projectId: string, provider?: ConfigurationProvider) =>
+    invoke(C['hooks:listAudits'], projectId, provider),
   readHooksAudit: (path: string) => invoke(C['hooks:readAudit'], path),
 
   // Permissions expert (nakiros-permissions-expert) — read/save the permissions
@@ -628,8 +630,8 @@ const client = {
     invoke(C['permissions:read'], projectId, scope),
   savePermissions: (projectId: string, scope: string, content: string, mtimeAtRead: string) =>
     invoke(C['permissions:save'], projectId, scope, content, mtimeAtRead),
-  listPermissionsAudits: (projectId: string, scope: string) =>
-    invoke(C['permissions:listAudits'], projectId, scope),
+  listPermissionsAudits: (projectId: string, scope: string, provider?: ConfigurationProvider) =>
+    invoke(C['permissions:listAudits'], projectId, scope, provider),
   readPermissionsAudit: (path: string) => invoke(C['permissions:readAudit'], path),
 
   // MCP expert (nakiros-mcp-expert) — read/save the entire .mcp.json file +
@@ -637,8 +639,30 @@ const client = {
   readMcp: (projectId: string) => invoke(C['mcp:read'], projectId),
   saveMcp: (projectId: string, content: string, mtimeAtRead: string) =>
     invoke(C['mcp:save'], projectId, content, mtimeAtRead),
-  listMcpAudits: (projectId: string) => invoke(C['mcp:listAudits'], projectId),
+  listMcpAudits: (projectId: string, provider?: ConfigurationProvider) =>
+    invoke(C['mcp:listAudits'], projectId, provider),
   readMcpAudit: (path: string) => invoke(C['mcp:readAudit'], path),
+
+  // Codex project-native configuration (.codex/config.toml).
+  readCodexConfig: (projectId: string) => invoke(C['codexConfig:read'], projectId),
+  saveCodexConfig: (projectId: string, content: string, mtimeAtRead: string) =>
+    invoke(C['codexConfig:save'], projectId, content, mtimeAtRead),
+
+  // Provider-native Codex resources (AGENTS.md, rules, agents, skills and
+  // hooks). Kept separate from all Claude configuration channels.
+  listCodexResources: (projectId: string, kind: string) =>
+    invoke(C['codexResources:list'], projectId, kind),
+  readCodexResource: (projectId: string, kind: string, id: string) =>
+    invoke(C['codexResources:read'], projectId, kind, id),
+  saveCodexResource: (
+    projectId: string,
+    kind: string,
+    id: string,
+    content: string,
+    mtimeAtRead: string,
+  ) => invoke(C['codexResources:save'], projectId, kind, id, content, mtimeAtRead),
+  deleteCodexResource: (projectId: string, kind: string, id: string, mtimeAtRead?: string) =>
+    invoke(C['codexResources:delete'], projectId, kind, id, mtimeAtRead),
 
   // Output styles expert (nakiros-output-styles-expert) — CRUD on
   // .claude/output-styles/ files + audit history. Distinct from Module 3 V2

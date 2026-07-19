@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, normalize } from 'path';
 import { homedir } from 'os';
 
-import type { HooksAuditHistoryEntry } from '@nakiros/shared';
+import type { ConfigurationProvider, HooksAuditHistoryEntry } from '@nakiros/shared';
 
 /**
  * Persisted history of hooks audits for a given project, archived by
@@ -16,8 +16,9 @@ import type { HooksAuditHistoryEntry } from '@nakiros/shared';
  * re-reading every file.
  */
 
-function auditDirFor(projectId: string): string {
-  return join(homedir(), '.nakiros', projectId, 'hooks-audits');
+function auditDirFor(projectId: string, provider: ConfigurationProvider): string {
+  const providerSegments = provider === 'codex' ? ['codex'] : [];
+  return join(homedir(), '.nakiros', projectId, 'hooks-audits', ...providerSegments);
 }
 
 /**
@@ -40,16 +41,22 @@ const FILENAME_RE = /^audit-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.md$/;
  * Compute the archive directory path for `projectId`. Used by `audit-runner`
  * to locate the target directory when archiving a hooks audit report.
  */
-export function hooksAuditArchiveDir(projectId: string): string {
-  return auditDirFor(projectId);
+export function hooksAuditArchiveDir(
+  projectId: string,
+  provider: ConfigurationProvider = 'claude',
+): string {
+  return auditDirFor(projectId, provider);
 }
 
 /**
  * Scan `~/.nakiros/<projectId>/hooks-audits/` and return the archived
  * audits sorted newest-first.
  */
-export function listHooksAudits(projectId: string): HooksAuditHistoryEntry[] {
-  const dir = auditDirFor(projectId);
+export function listHooksAudits(
+  projectId: string,
+  provider: ConfigurationProvider = 'claude',
+): HooksAuditHistoryEntry[] {
+  const dir = auditDirFor(projectId, provider);
   if (!existsSync(dir)) return [];
   let entries: string[];
   try {

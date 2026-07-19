@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "skillName": "nakiros-mcp-expert",
+  "provider": "codex",
+  "totalChecks": 14,
+  "sections": [
+    { "id": "structure",  "label": "Structure",      "checks": ["structure.valid_toml", "structure.mcp_servers_table", "structure.no_unknown_server_keys"] },
+    { "id": "server",     "label": "Server Config",  "checks": ["server.transport_resolvable", "server.required_fields", "server.no_sse", "server.env_no_plain_secrets"] },
+    { "id": "security",   "label": "Security",       "checks": ["security.https_for_remote_servers", "security.no_alwaysLoad_overuse", "security.oauth_or_auth_documented"] },
+    { "id": "crossref",   "label": "Cross-entity",   "checks": ["crossref.referenced_in_hooks", "crossref.referenced_in_subagents", "crossref.referenced_in_permissions", "crossref.unused_servers"] }
+  ],
+  "checks": [
+    { "id": "structure.valid_toml",              "section": "structure", "label": ".codex/config.toml is valid TOML and its MCP slice has no unrelated root key",   "severityIfFail": "critical", "findingCode": "INVALID_TOML" },
+    { "id": "structure.mcp_servers_table",        "section": "structure", "label": "mcp_servers key present and is a table",                                        "severityIfFail": "warn",     "findingCode": "MCP_SERVERS_MISSING_OR_INVALID" },
+    { "id": "structure.no_unknown_server_keys",   "section": "structure", "label": "Each server only has recognised keys (command, args, env, url, http_headers)",  "severityIfFail": "warn",     "findingCode": "UNKNOWN_SERVER_KEY" },
+
+    { "id": "server.transport_resolvable",        "section": "server",    "label": "Server declares exactly one of url (http) / command (stdio), not both/neither", "severityIfFail": "warn",     "findingCode": "AMBIGUOUS_TRANSPORT" },
+    { "id": "server.required_fields",             "section": "server",    "label": "url for inferred http, command for inferred stdio — present and non-empty",     "severityIfFail": "warn",     "findingCode": "MISSING_REQUIRED_SERVER_FIELD" },
+    { "id": "server.no_sse",                      "section": "server",    "label": "No server requests the unrepresentable sse transport",                          "severityIfFail": "warn",     "findingCode": "SSE_UNSUPPORTED" },
+    { "id": "server.env_no_plain_secrets",        "section": "server",    "label": "Secrets in env/http_headers do not look like literal hardcoded values",         "severityIfFail": "warn",     "findingCode": "PLAIN_SECRET_IN_ENV" },
+
+    { "id": "security.https_for_remote_servers",  "section": "security",  "label": "Servers with a url use https://",                                               "severityIfFail": "critical", "findingCode": "HTTP_NOT_HTTPS" },
+    { "id": "security.no_alwaysLoad_overuse",      "section": "security",  "label": "alwaysLoad has no Codex equivalent",                                            "severityIfFail": "info",     "findingCode": "N_A_ALWAYS_LOAD", "alwaysNa": true, "alwaysNaReason": "alwaysLoad has no Codex equivalent — nothing to check" },
+    { "id": "security.oauth_or_auth_documented",  "section": "security",  "label": "oauth/headersHelper have no Codex equivalent",                                  "severityIfFail": "warn",     "findingCode": "N_A_OAUTH", "alwaysNa": true, "alwaysNaReason": "oauth/headersHelper have no Codex equivalent — auth is a plain http_headers entry, covered by server.env_no_plain_secrets" },
+
+    { "id": "crossref.referenced_in_hooks",       "section": "crossref",  "label": "mcp_tool hooks reference servers that exist in mcp_servers",                    "severityIfFail": "warn",     "findingCode": "HOOK_REFS_MISSING_SERVER", "alwaysNa": true, "alwaysNaReason": "No dot-codex-snapshot.json yet — known V1 limitation for Codex" },
+    { "id": "crossref.referenced_in_subagents",   "section": "crossref",  "label": "MCP servers referenced by Codex agent config exist in mcp_servers",            "severityIfFail": "warn",     "findingCode": "SUBAGENT_REFS_MISSING_SERVER", "alwaysNa": true, "alwaysNaReason": "No dot-codex-snapshot.json yet — known V1 limitation for Codex" },
+    { "id": "crossref.referenced_in_permissions", "section": "crossref",  "label": "mcp__server__* permission-style rules reference real servers",                  "severityIfFail": "warn",     "findingCode": "PERMISSION_REFS_MISSING_SERVER", "alwaysNa": true, "alwaysNaReason": "No dot-codex-snapshot.json yet — known V1 limitation for Codex" },
+    { "id": "crossref.unused_servers",            "section": "crossref",  "label": "No servers configured but never referenced elsewhere (dead config)",           "severityIfFail": "info",     "findingCode": "UNUSED_SERVER", "alwaysNa": true, "alwaysNaReason": "No dot-codex-snapshot.json yet — known V1 limitation for Codex" }
+  ]
+}

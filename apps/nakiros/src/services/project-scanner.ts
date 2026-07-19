@@ -31,8 +31,12 @@ const CLAUDE_CAPABILITIES: AgentCapability[] = [
 const CODEX_CAPABILITIES: AgentCapability[] = [
   'instructions',
   'skills',
+  'rules',
+  'subagents',
+  'hooks',
   'permissions',
   'mcp',
+  'native-config',
   'conversations',
 ];
 
@@ -56,6 +60,7 @@ function isCapability(value: unknown): value is AgentCapability {
     value === 'permissions' ||
     value === 'mcp' ||
     value === 'output-styles' ||
+    value === 'native-config' ||
     value === 'conversations'
   );
 }
@@ -91,12 +96,65 @@ function legacyInstallation(
   return installationFor(project.provider, project.providerProjectDir);
 }
 
-function normalizeProject<T extends Pick<StoredProject, 'provider' | 'providerProjectDir'> & { agents?: ProjectAgentInstallation[] }>(
+function hasProjectCodexSignal(projectPath: string): boolean {
+  return (
+    existsSync(resolve(projectPath, '.codex', 'config.toml')) ||
+    existsSync(resolve(projectPath, '.codex', 'rules')) ||
+    existsSync(resolve(projectPath, '.codex', 'agents')) ||
+    existsSync(resolve(projectPath, '.codex', 'hooks.json')) ||
+    existsSync(resolve(projectPath, '.agents', 'skills')) ||
+    existsSync(resolve(projectPath, 'AGENTS.md'))
+  );
+}
+
+/**
+ * Add or refresh the Codex installation inferred from project-native files.
+ * This lets projects without rollout sessions expose native Codex settings.
+ */
+export function enrichProjectCodexInstallation<
+  T extends { projectPath: string; agents?: ProjectAgentInstallation[] },
+>(project: T): T {
+  const agents = project.agents ?? [];
+  const hasCodexInstallation = agents.some((agent) => agent.provider === 'codex');
+
+  if (hasCodexInstallation) {
+    return {
+      ...project,
+      agents: agents.map((agent) =>
+        agent.provider === 'codex'
+          ? { ...agent, capabilities: Array.from(new Set([...agent.capabilities, ...CODEX_CAPABILITIES])) }
+          : agent,
+      ),
+    };
+  }
+
+  if (!hasProjectCodexSignal(project.projectPath)) return project;
+  return {
+    ...project,
+    agents: [
+      ...agents,
+      {
+        provider: 'codex',
+        surface: 'cli',
+        providerProjectDir: resolve(project.projectPath, '.codex'),
+        capabilities: CODEX_CAPABILITIES,
+      },
+    ],
+  };
+}
+
+function normalizeProject<
+  T extends Pick<StoredProject, 'projectPath' | 'provider' | 'providerProjectDir'> & {
+    agents?: ProjectAgentInstallation[];
+  },
+>(
   project: T,
 ): T {
-  if (project.agents?.length) return project;
+  if (project.agents?.length) return enrichProjectCodexInstallation(project);
   const installation = legacyInstallation(project);
-  return installation ? { ...project, agents: [installation] } : project;
+  return enrichProjectCodexInstallation(
+    installation ? { ...project, agents: [installation] } : project,
+  );
 }
 
 /**

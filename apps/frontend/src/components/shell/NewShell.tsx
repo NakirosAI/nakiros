@@ -6,6 +6,8 @@ import { PreferencesProvider } from '../../hooks/usePreferences';
 import { ProjectProvider } from '../../hooks/useProject';
 import HomeScreen from '../../views/HomeScreen';
 import ProjectOverviewScreen from '../../views/ProjectOverviewScreen';
+import HestiaScreen from '../../views/HestiaScreen';
+import CodexConfigScreen from '../../views/CodexConfigScreen';
 import SkillsScreen from '../../views/SkillsScreen';
 import SkillDetailScreen from '../../views/SkillDetailScreen';
 import RulesScreen from '../../views/RulesScreen';
@@ -198,6 +200,9 @@ export default function NewShell({
           // next view's render.
           const setView = (next: ProjectTabView) =>
             updateTab(tab.id, { view: next, skillId: null });
+          const configurationProvider = tab.hestiaAgentKey?.startsWith('codex:')
+            ? 'codex' as const
+            : 'claude' as const;
           return (
             <PreferencesProvider
               preferences={preferences}
@@ -217,15 +222,34 @@ export default function NewShell({
                   if (projectTab) closeTab(projectTab.id);
                 }}
               >
-                <NewShellSidebar active={view} onNavigate={setView} />
+                <NewShellSidebar
+                  active={view === 'codexConfig' ? 'hestia' : view}
+                  onNavigate={setView}
+                />
                 <section className="flex flex-1 flex-col overflow-hidden">
                   {view === 'overview' && (
                     <ProjectOverviewScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} onNavigate={setView} />
                   )}
-                  {view === 'skills' && !tab.skillId && (
-                    <SkillsScreen
+                  {view === 'hestia' && (
+                    <HestiaScreen
                       key={project.id}
                       project={project}
+                      selectedAgentKey={tab.hestiaAgentKey}
+                      onSelectedAgentChange={(hestiaAgentKey) => updateTab(tab.id, { hestiaAgentKey })}
+                      onNavigate={(next, hestiaAgentKey) => updateTab(
+                        tab.id,
+                        { view: next, skillId: null, hestiaAgentKey },
+                      )}
+                    />
+                  )}
+                  {view === 'codexConfig' && (
+                    <CodexConfigScreen key={project.id} project={project} onBack={() => setView('hestia')} onOpenRunTab={handleOpenRunByIds} />
+                  )}
+                  {view === 'skills' && !tab.skillId && (
+                    <SkillsScreen
+                      key={`${project.id}/${configurationProvider}`}
+                      project={project}
+                      provider={configurationProvider}
                       onOpenSkill={(skillName) => updateTab(tab.id, { skillId: skillName })}
                       onOpenRunTab={handleOpenRunByIds}
                     />
@@ -237,7 +261,9 @@ export default function NewShell({
                         scope: 'project',
                         projectId: project.id,
                         skillName: tab.skillId,
+                        provider: configurationProvider,
                       }}
+                      provider={configurationProvider}
                       onBack={() => updateTab(tab.id, { skillId: null })}
                       onOpenRunTab={handleOpenRunByIds}
                     />
@@ -246,39 +272,43 @@ export default function NewShell({
                     <ConversationsScreen key={project.id} project={project} />
                   )}
                   {view === 'rules' && (
-                    <RulesScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
+                    <RulesScreen key={`${project.id}/${configurationProvider}`} project={project} provider={configurationProvider} onOpenRunTab={handleOpenRunByIds} />
                   )}
                   {view === 'subagents' && (
-                    <SubagentsScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
+                    <SubagentsScreen key={`${project.id}/${configurationProvider}`} project={project} provider={configurationProvider} onOpenRunTab={handleOpenRunByIds} />
                   )}
                   {view === 'outputStyles' && (
                     <OutputStylesScreen key={project.id} project={project} onOpenRunTab={handleOpenRunByIds} />
                   )}
                   {view === 'permissions' && (
                     <PermissionsScreen
-                      key={project.id}
+                      key={`${project.id}/${configurationProvider}`}
                       project={project}
+                      provider={configurationProvider}
                       onOpenRunTab={handleOpenRunByIds}
                     />
                   )}
                   {view === 'mcp' && (
                     <McpScreen
-                      key={project.id}
+                      key={`${project.id}/${configurationProvider}`}
                       project={project}
+                      provider={configurationProvider}
                       onOpenRunTab={handleOpenRunByIds}
                     />
                   )}
                   {view === 'hooks' && (
                     <HooksScreen
-                      key={project.id}
+                      key={`${project.id}/${configurationProvider}`}
                       project={project}
+                      provider={configurationProvider}
                       onOpenRunTab={handleOpenRunByIds}
                     />
                   )}
                   {view === 'claudeMd' && (
                     <ClaudeMdScreen
-                      key={project.id}
+                      key={`${project.id}/${configurationProvider}`}
                       project={project}
+                      provider={configurationProvider}
                       onOpenRunTab={handleOpenRunByIds}
                     />
                   )}
@@ -304,6 +334,8 @@ export default function NewShell({
                   )}
                   {view === 'settings' && <SettingsScreen />}
                   {view !== 'overview' &&
+                    view !== 'hestia' &&
+                    view !== 'codexConfig' &&
                     view !== 'skills' &&
                     view !== 'convs' &&
                     view !== 'rules' &&

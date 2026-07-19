@@ -9,13 +9,25 @@ import type {
 
 /** Build one non-interactive Codex turn with a machine-readable event stream. */
 export function buildCodexArgs(opts: BuildArgsOptions): string[] {
-  if (opts.resumeSessionId) {
-    const resume = ['exec', 'resume', '--json', '--skip-git-repo-check'];
-    if (opts.model) resume.push('--model', opts.model);
-    return [...resume, opts.resumeSessionId, opts.prompt];
+  const common = [
+    '--json',
+    '--color', 'never',
+    '--sandbox', 'workspace-write',
+    '--skip-git-repo-check',
+  ];
+  if (opts.addDirs) {
+    for (const dir of opts.addDirs) {
+      common.push('--add-dir', dir);
+    }
   }
-  const common = ['--json', '--color', 'never', '--sandbox', 'workspace-write', '--skip-git-repo-check'];
   if (opts.model) common.push('--model', opts.model);
+
+  if (opts.resumeSessionId) {
+    // Keep exec-level sandbox options before the `resume` subcommand. In
+    // particular, `--add-dir` is not a resume-specific flag, but the writable
+    // root must remain available on every resumed turn.
+    return ['exec', ...common, 'resume', opts.resumeSessionId, opts.prompt];
+  }
   return ['exec', ...common, opts.prompt];
 }
 

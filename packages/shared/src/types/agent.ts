@@ -18,6 +18,7 @@ export type AgentCapability =
   | 'permissions'
   | 'mcp'
   | 'output-styles'
+  | 'native-config'
   | 'conversations';
 
 /** One agent environment detected for a project. */

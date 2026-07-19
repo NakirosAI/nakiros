@@ -411,7 +411,7 @@ function IdeRunScreenBody({
         // which have no eval suite). Visible once the sandbox is settled
         // (completed or waiting for input) and evals/evals.json is present.
         onLaunchEval={
-          !display.isClaudemd && !display.isRules && onOpenRunTab
+          !display.isClaudemd && !display.isRules && !display.isSubagents && !display.isHooks && !display.isPermissions && !display.isCodexConfig && !display.isMcp && !display.isOutputStyles && onOpenRunTab
             ? handleLaunchEval
             : undefined
         }

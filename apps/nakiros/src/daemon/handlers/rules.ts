@@ -10,6 +10,7 @@ import type { Dirent } from 'fs';
 import { join, normalize, resolve } from 'path';
 
 import type {
+  ConfigurationProvider,
   RulesAuditHistoryEntry,
   RulesListResult,
   RulesMutationResult,
@@ -323,8 +324,8 @@ export const rulesHandlers: HandlerRegistry = {
   ),
 
   'rules:listAudits': createTypedHandler(
-    (projectId: string, ruleName: string): RulesAuditHistoryEntry[] => {
-      return listRulesAudits(projectId, ruleName);
+    (projectId: string, ruleName: string, provider?: ConfigurationProvider): RulesAuditHistoryEntry[] => {
+      return listRulesAudits(projectId, ruleName, provider);
     },
   ),
 

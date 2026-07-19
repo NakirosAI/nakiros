@@ -4,7 +4,9 @@ import type {
   PermissionsExpertMutationResult,
   PermissionsExpertScope,
   PermissionsReadResult,
+  ConfigurationProvider,
 } from '@nakiros/shared';
+import { absoluteProjectPath, codexResourceDriver, isCodex } from '../../lib/hestia-provider-driver';
 
 interface UsePermissionsFileApi {
   file: PermissionsReadResult | null;
@@ -29,6 +31,8 @@ interface UsePermissionsFileApi {
  */
 export function usePermissionsFile(
   projectId: string,
+  provider: ConfigurationProvider,
+  projectPath: string,
   scope: PermissionsExpertScope,
   onRefreshAudits?: () => void,
 ): UsePermissionsFileApi {
@@ -41,8 +45,18 @@ export function usePermissionsFile(
     let cancelled = false;
     setLoading(true);
     setError(null);
-    window.nakiros
-      .readPermissions(projectId, scope)
+    const request = isCodex(provider)
+      ? codexResourceDriver.read(projectId, 'permissions', 'permissions').then((result) => {
+          if (!result.ok) throw new Error(result.message);
+          return {
+            content: result.file.content,
+            mtime: result.file.mtime,
+            exists: result.file.exists,
+            path: absoluteProjectPath(projectPath, result.file.path),
+          } satisfies PermissionsReadResult;
+        })
+      : window.nakiros.readPermissions(projectId, scope);
+    request
       .then((result) => {
         if (cancelled) return;
         setFile((result as PermissionsReadResult | null) ?? null);
@@ -58,7 +72,7 @@ export function usePermissionsFile(
     return () => {
       cancelled = true;
     };
-  }, [projectId, scope, reloadKey]);
+  }, [projectId, projectPath, provider, scope, reloadKey]);
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -67,19 +81,24 @@ export function usePermissionsFile(
       content: string,
       mtimeAtRead: string,
     ): Promise<PermissionsExpertMutationResult> => {
-      const result = await window.nakiros.savePermissions(
-        projectId,
-        scope,
-        content,
-        mtimeAtRead,
-      );
+      const result = isCodex(provider)
+        ? await codexResourceDriver.save(
+            projectId,
+            'permissions',
+            'permissions',
+            content,
+            mtimeAtRead,
+          ).then((saved) => saved.ok
+            ? { ok: true }
+            : { ok: false, code: saved.code, message: saved.message })
+        : await window.nakiros.savePermissions(projectId, scope, content, mtimeAtRead);
       if (result.ok) {
         refresh();
         onRefreshAudits?.();
       }
       return result;
     },
-    [projectId, scope, refresh, onRefreshAudits],
+    [projectId, provider, scope, refresh, onRefreshAudits],
   );
 
   return { file, loading, error, refresh, save };

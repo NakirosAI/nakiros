@@ -1,18 +1,30 @@
 ---
 name: nakiros-claudemd-expert
-description: "Creates, audits, and fixes CLAUDE.md files for any project, following Claude Code's official memory conventions. Use when bootstrapping a new project's CLAUDE.md, auditing an existing CLAUDE.md against best practices, or patching CLAUDE.md based on Nakiros friction signals from real conversations."
+description: "Creates, audits, and fixes project instruction files for Claude Code (CLAUDE.md) and Codex (AGENTS.md), following each provider's official conventions. Use when bootstrapping, auditing, or patching agent instructions from project evidence or Nakiros friction signals."
 user-invocable: true
 ---
 
-# CLAUDE.md Expert — Nakiros
+# Agent Instructions Expert — Nakiros
 
 > Two modes:
 > - **Interactive** (user invokes `/nakiros-claudemd-expert` with a question) — discover with the user.
 > - **Non-interactive** (user invokes with `<apply-recommendation>` block) — execute directly, see the section at the bottom.
 
-You create, audit, fix, and improve CLAUDE.md files (project memory) for any project. Every CLAUDE.md must follow Claude Code's official memory conventions and be calibrated for real agent execution, not theory.
+You create, audit, fix, and improve project instruction files for any project. The provider is an explicit input: Claude Code uses `CLAUDE.md`; Codex uses `AGENTS.md`. Never infer or convert providers from file content.
 
-This is one of seven `.claude/` experts shipped by Nakiros. Sister experts handle rules, subagents, hooks, permissions, MCP, output styles, and skills (the last is `nakiros-skill-factory`). Stay within scope: this skill ONLY touches `CLAUDE.md` files. Out of scope: rules under `.claude/rules/`, subagents, hooks, permissions, MCP config, output styles, skills.
+Stay within scope: this skill ONLY touches the selected provider's instruction Markdown file. Out of scope: rules, subagents, hooks, permissions, MCP config, output styles, skills, and native TOML settings.
+
+## Provider contract
+
+| Provider | Root target | Provider reference |
+|----------|-------------|--------------------|
+| `claude` | `{project}/CLAUDE.md` | `references/claudemd-spec.md` |
+| `codex` | `{project}/AGENTS.md` | `references/codex/agents-md-spec.md` |
+
+- Nakiros supplies `provider: claude | codex`; use it as the source of truth.
+- For Codex, preserve nested `AGENTS.md` and `AGENTS.override.md` files. The runner currently targets the root `AGENTS.md` only.
+- Never write the other provider's file as a side effect.
+- When Nakiros supplies an isolated draft path, read and write only that draft. Nakiros owns deployment to the final target.
 
 ## Output language
 
@@ -27,8 +39,8 @@ If the user explicitly asks for artefacts in another language (e.g. "écris le C
 |-------|--------|------|
 | Command + arguments | User chat | Always |
 | Target project path | User specifies or current working directory | Always |
-| Existing CLAUDE.md | `{project}/CLAUDE.md` (project) or `~/.claude/CLAUDE.md` (user) or `{project}/{app}/CLAUDE.md` (monorepo apps) | On `audit`, `fix`, `improve` |
-| CLAUDE.md spec | `references/claudemd-spec.md` | Always |
+| Existing instructions | Provider root target from the table above | On `audit`, `fix`, `improve` |
+| Provider spec | Claude spec or Codex spec from the table above | Always |
 | Audit checklist | `references/claudemd-checklist.md` | On `audit` |
 | Friction mapping | `references/friction-mapping.md` | On `fix` |
 | Aggregated frictions | `{project}/.nakiros/frictions/aggregate.json` (Nakiros classifier output) | On `fix` |
@@ -39,10 +51,10 @@ If the user explicitly asks for artefacts in another language (e.g. "écris le C
 
 | Command | Files produced | Chat output |
 |---------|---------------|-------------|
-| `create` | `{project}/CLAUDE.md` (or specified path) | Brief summary + path written |
+| `create` | Selected provider instruction file (or isolated draft) | Brief summary + path written |
 | `audit` | `outputs/audit-manifest.json` + `outputs/audit-progress.jsonl` + `outputs/audit-report.md` | One-line score |
-| `fix` | Modified `{project}/CLAUDE.md` + `outputs/fix-targets.jsonl` + `outputs/fix-findings.jsonl` | Diff |
-| `improve` | Modified `{project}/CLAUDE.md` | Root cause + diff |
+| `fix` | Modified provider instruction draft + `outputs/fix-targets.jsonl` + `outputs/fix-findings.jsonl` | Diff |
+| `improve` | Modified provider instruction draft | Root cause + diff |
 | `sync` | Modified `{project}/CLAUDE.md` (markers-only) or no-op | One-line status |
 | `eval create` | `evals/evals.json` + fixtures in `evals/files/` | Summary of test cases |
 | `eval run` | `evals/workspace/iteration-{N}/` | Pass rate + delta |
@@ -50,29 +62,31 @@ If the user explicitly asks for artefacts in another language (e.g. "écris le C
 ## Example flows
 
 ```
-Input:   "create" (in project /Users/foo/my-app)
-Reads:   /Users/foo/my-app/{package.json, tsconfig.json, README.md} + top-level dir listing
-Output:  /Users/foo/my-app/CLAUDE.md
-Chat:    "CLAUDE.md created (87 lines). See /Users/foo/my-app/CLAUDE.md"
+Input:   "create" (in project {project})
+Reads:   {project}/{package.json, tsconfig.json, README.md} + top-level dir listing
+Output:  {project}/CLAUDE.md
+Chat:    "CLAUDE.md created (87 lines). See {project}/CLAUDE.md"
 ```
 
 ```
-Input:   "audit" (in project /Users/foo/my-app)
-Reads:   /Users/foo/my-app/CLAUDE.md + references/claudemd-checklist.md
+Input:   "audit" (in project {project})
+Reads:   {project}/CLAUDE.md + references/claudemd-checklist.md
 Output:  outputs/audit-{manifest.json, progress.jsonl, report.md}
 Chat:    "Score 14/18 — full report saved to outputs/audit-report.md"
 ```
 
 ```
-Input:   "fix" (in project /Users/foo/my-app)
-Reads:   /Users/foo/my-app/CLAUDE.md + latest audit + .nakiros/frictions/aggregate.json
+Input:   "fix" (in project {project})
+Reads:   {project}/CLAUDE.md + latest audit + .nakiros/frictions/aggregate.json
 Output:  Modified CLAUDE.md + outputs/fix-targets.jsonl + outputs/fix-findings.jsonl
 Chat:    Diff of changes
 ```
 
 ## Cross-entity context
 
-Nakiros writes a `dot-claude-snapshot.json` file at the root of your working directory before invoking you. **Read it at the start of every `audit` and `fix` run** (it is a small JSON file — one `Read` call suffices).
+For Claude, Nakiros writes a `dot-claude-snapshot.json` file at the root of your working directory. Read it at the start of every `audit` and `fix` run when the provider is `claude`.
+
+For Codex, do not treat that Claude snapshot as authoritative. Inspect only the relevant native inventory when coherence evidence is needed: root/nested `AGENTS.md`, `.codex/rules/`, `.codex/agents/`, `.codex/hooks.json`, `.codex/config.toml`, and `.agents/skills/`. Audits are read-only.
 
 ```
 Read: dot-claude-snapshot.json
@@ -97,15 +111,16 @@ The snapshot gives you the full `.claude/` ecosystem in one pass: all rules, sub
 | # | File | When |
 |---|------|------|
 | 1 | `dot-claude-snapshot.json` (cwd root) | On `audit`, `fix` — read first |
-| 2 | `references/claudemd-spec.md` | Always |
-| 3 | `references/claudemd-checklist.md` | On `audit`, `create` (validation step) |
-| 4 | `references/friction-mapping.md` | On `fix` |
-| 5 | `assets/templates/claudemd-template.md` | Before `create` |
-| 6 | `assets/outputs/audit-report.md` | Before `audit` — EXACT format to follow |
-| 7 | `assets/outputs/audit-manifest.json` | Before `audit` — taxonomy template |
-| 8 | `{project}/.nakiros/frictions/aggregate.json` | On `fix` (if exists) |
+| 2 | Provider spec (`references/claudemd-spec.md` or `references/codex/agents-md-spec.md`) | Always |
+| 3 | `references/codex/agents-md-checklist.md` | Codex `audit`, `create` |
+| 4 | `references/claudemd-checklist.md` | Claude `audit`, `create` |
+| 5 | `references/friction-mapping.md` | On `fix` |
+| 6 | `assets/templates/claudemd-template.md` | Before `create` when available |
+| 7 | `assets/outputs/audit-report.md` | Before `audit` when available |
+| 8 | `assets/outputs/audit-manifest.json` | Before `audit` when available |
+| 9 | `{project}/.nakiros/frictions/aggregate.json` | On `fix` (if exists) |
 
-## CLAUDE.md quality checklist
+## Instruction-file quality checklist
 
 The full checklist with rubrics is in `references/claudemd-checklist.md`. Summary (18 checks):
 
@@ -139,15 +154,16 @@ The full checklist with rubrics is in `references/claudemd-checklist.md`. Summar
 
 **Total: 18 checks.** Same N/A semantics as skill-factory: a check that doesn't apply to the file (e.g., monorepo-specific check on a single-app repo) is `na` and counts as a pass.
 
-## Creating a new CLAUDE.md
+## Creating a new instruction file
 
 ### Step 1 — Detect scope and target path
-Resolve which CLAUDE.md to create:
+Resolve the target from the explicit provider:
 - **Project root**: `{project}/CLAUDE.md` — default for single-package projects
 - **App-scoped (monorepo)**: `{project}/apps/{app}/CLAUDE.md` — when the user names a sub-app
 - **User-global**: `~/.claude/CLAUDE.md` — only if user explicitly says "global" or "user"
+- **Codex project root**: `{project}/AGENTS.md` — current Nakiros Codex lifecycle target
 
-If a CLAUDE.md already exists at the target path, ASK before overwriting.
+If the target already exists, ASK before overwriting in a direct interactive invocation. In a Nakiros isolated run, edit only the supplied draft and follow the requested mode.
 
 ### Step 2 — Scan the project
 Read in this order, stop early if you have enough:
@@ -155,7 +171,7 @@ Read in this order, stop early if you have enough:
 2. `tsconfig.json` / `pyproject.toml` / `Cargo.toml` / `go.mod` — language + config
 3. Top-level directories (`ls -d */`) — apps, packages, src, tests
 4. `README.md` — project description (skim, do not copy verbatim)
-5. Existing `.claude/` directory — rules, skills, hooks already in place
+5. Existing provider directory and agent skills — `.claude/` for Claude; `.codex/` and `.agents/skills/` for Codex
 
 Detect: language(s), runtime, monorepo or not, test/build/typecheck commands, key directories.
 
@@ -171,9 +187,9 @@ Read `assets/templates/claudemd-template.md` and fill in based on the scan. Requ
 Walk the 18 checks above. Fix any ❌ before delivering. Do NOT proceed to deliver while ❌ remains.
 
 ### Step 5 — Deliver
-Write the file. Chat output: one line — `"CLAUDE.md created ({N} lines). See {path}"`. Do NOT paste the content in chat.
+Write the target or supplied draft. Chat output: one line — `"{filename} created ({N} lines). See {path}"`. Do NOT paste the content in chat.
 
-## Auditing CLAUDE.md
+## Auditing an instruction file
 
 **Every audit MUST produce three artefacts** (same pattern as skill-factory):
 - `outputs/audit-manifest.json` — static taxonomy of the 18 checks
@@ -190,7 +206,7 @@ Write the file. Chat output: one line — `"CLAUDE.md created ({N} lines). See {
    ```
    This writes `audit-manifest.json` + seeds `audit-progress.jsonl` with deterministic checks (line count, heading depth, bullet depth, frontmatter presence, etc.). Read the JSONL after — do not re-evaluate already-done checks.
 
-2. **Read the CLAUDE.md** being audited in full.
+2. **Read the selected provider instruction file** being audited in full.
 
 3. **Append one JSONL line per remaining (judgement-based) check.** Use the `Write` tool (read first, append, write back). Each line:
    ```json
@@ -209,7 +225,7 @@ Write the file. Chat output: one line — `"CLAUDE.md created ({N} lines). See {
 
 5. **Chat summary** — one line only: `"Score X/18 — full report saved to outputs/audit-report.md"`. Do NOT paste the report.
 
-## Fixing CLAUDE.md from frictions
+## Fixing instructions from frictions
 
 The unique value of this expert: turning real conversation frictions (from Nakiros V1.1 classifier) into precise CLAUDE.md edits.
 
@@ -229,13 +245,13 @@ The unique value of this expert: turning real conversation frictions (from Nakir
      }
    }
    ```
-3. **Existing CLAUDE.md** — read to see what's already there before adding.
+3. **Existing provider instruction draft** — read to see what's already there before adding.
 
 If `aggregate.json` doesn't exist, ASK the user: *"No friction aggregate found at `{path}`. Want me to fix from audit findings only, or do you want to run the friction classifier first?"*
 
-### Map frictions to CLAUDE.md edits
+### Map frictions to instruction edits
 
-Use `references/friction-mapping.md` as the rule book. Every friction type maps to a specific CLAUDE.md edit pattern. Examples:
+Use `references/friction-mapping.md` as the rule book. Every friction type maps to a specific instruction edit pattern. Examples:
 - `missing_context` (high recurrence) → add to "Architecture pointers" or "Quick pointers"
 - `wrong_path` → add path constraint in "Mandatory constraints"
 - `tool_misuse` → add validation command or constraint
@@ -359,6 +375,8 @@ Do NOT auto-create evals on `create`. Propose at the end: *"CLAUDE.md created. W
 ## Gotchas
 
 - CLAUDE.md is loaded into EVERY conversation in the project — every line costs context budget. Cut anything not load-bearing.
+- Codex composes an instruction chain from the root toward the current working directory; nested `AGENTS.md` and `AGENTS.override.md` files can refine or override root guidance.
+- Never add Claude `@import` syntax to Codex `AGENTS.md`.
 - A CLAUDE.md that mostly says "be careful" or "consider edge cases" is worse than no CLAUDE.md at all — it consumes context for zero signal.
 - Nested `CLAUDE.md` files (root + per-app) compose, they don't override. Audit each one for redundancy with parent.
 - Never invent constraints. If you didn't read it in the codebase or hear it from frictions/user, don't write it.
@@ -382,11 +400,11 @@ Do NOT auto-create evals on `create`. Propose at the end: *"CLAUDE.md created. W
 
 ## Edit mode
 
-Triggered by `/nakiros-claudemd-expert edit`. The user wants to **modify the existing `CLAUDE.md` conversationally**, without an audit driving the changes.
+Triggered by an edit run. The user wants to modify the selected provider instruction file conversationally, without an audit driving the changes.
 
-1. Read the target `CLAUDE.md` at its project-root path to understand what currently exists.
+1. Read the isolated draft supplied by Nakiros to understand what currently exists.
 2. Wait for the user's first message describing what to change.
-3. Propose changes (Write/Edit tools directly on the target file — Nakiros runs you with project-tree permissions), explain trade-offs, iterate.
+3. Propose changes, write only the isolated draft, explain trade-offs, and iterate.
 4. Re-read the file after each substantive change to confirm the in-context view is current.
 5. Stop and request user feedback when in doubt — edit is interactive, not autonomous.
 

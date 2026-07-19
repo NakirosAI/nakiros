@@ -2,7 +2,11 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, normalize } from 'path';
 import { homedir } from 'os';
 
-import type { PermissionsAuditHistoryEntry, PermissionsExpertScope } from '@nakiros/shared';
+import type {
+  ConfigurationProvider,
+  PermissionsAuditHistoryEntry,
+  PermissionsExpertScope,
+} from '@nakiros/shared';
 
 /**
  * Persisted history of permissions audits for a given project, archived by
@@ -22,8 +26,13 @@ import type { PermissionsAuditHistoryEntry, PermissionsExpertScope } from '@naki
  * no migration is performed.
  */
 
-function auditDirFor(projectId: string, scope: PermissionsExpertScope): string {
-  return join(homedir(), '.nakiros', projectId, 'permissions-audits', scope);
+function auditDirFor(
+  projectId: string,
+  scope: PermissionsExpertScope,
+  provider: ConfigurationProvider,
+): string {
+  const providerSegments = provider === 'codex' ? ['codex'] : [];
+  return join(homedir(), '.nakiros', projectId, 'permissions-audits', ...providerSegments, scope);
 }
 
 /**
@@ -47,16 +56,24 @@ const FILENAME_RE = /^audit-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.md$/;
  * `audit-runner` to locate the target directory when archiving a permissions
  * audit report.
  */
-export function permissionsAuditArchiveDir(projectId: string, scope: PermissionsExpertScope): string {
-  return auditDirFor(projectId, scope);
+export function permissionsAuditArchiveDir(
+  projectId: string,
+  scope: PermissionsExpertScope,
+  provider: ConfigurationProvider = 'claude',
+): string {
+  return auditDirFor(projectId, scope, provider);
 }
 
 /**
  * Scan `~/.nakiros/<projectId>/permissions-audits/<scope>/` and return the
  * archived audits sorted newest-first.
  */
-export function listPermissionsAudits(projectId: string, scope: PermissionsExpertScope): PermissionsAuditHistoryEntry[] {
-  const dir = auditDirFor(projectId, scope);
+export function listPermissionsAudits(
+  projectId: string,
+  scope: PermissionsExpertScope,
+  provider: ConfigurationProvider = 'claude',
+): PermissionsAuditHistoryEntry[] {
+  const dir = auditDirFor(projectId, scope, provider);
   if (!existsSync(dir)) return [];
   let entries: string[];
   try {

@@ -14,6 +14,7 @@ export {
   handleCodexStreamEvent,
   spawnCodexTurn,
 } from './codex-stream.js';
+export { getCodexRunTimeline, parseCodexRunTimeline } from './codex-timeline.js';
 export { EventLog, type EventLogOptions } from './event-log.js';
 export { persistRunJson, loadRunJson } from './run-store.js';
 export {

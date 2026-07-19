@@ -291,39 +291,39 @@ export const projectHandlers: HandlerRegistry = {
     return listDigestsForProject(project.projectPath);
   }),
 
-  'project:listSkills': createTypedHandler((projectId: string) => {
+  'project:listSkills': createTypedHandler((projectId: string, provider: 'claude' | 'codex' = 'claude') => {
     const project = getProject(projectId);
     if (!project) return [];
-    return listSkills(project.projectPath, projectId);
+    return listSkills(project.projectPath, projectId, provider);
   }),
 
-  'project:getSkill': createTypedHandler((projectId: string, skillName: string) => {
+  'project:getSkill': createTypedHandler((projectId: string, skillName: string, provider: 'claude' | 'codex' = 'claude') => {
     const project = getProject(projectId);
     if (!project) return null;
-    return getSkill(project.projectPath, projectId, skillName);
+    return getSkill(project.projectPath, projectId, skillName, provider);
   }),
 
   'project:saveSkill': createTypedHandler(
-    (projectId: string, skillName: string, content: string) => {
+    (projectId: string, skillName: string, content: string, provider: 'claude' | 'codex' = 'claude') => {
       const project = getProject(projectId);
       if (!project) return;
-      saveSkill(project.projectPath, skillName, content);
+      saveSkill(project.projectPath, skillName, content, provider);
     },
   ),
 
   'project:readSkillFile': createTypedHandler(
-    (projectId: string, skillName: string, relativePath: string) => {
+    (projectId: string, skillName: string, relativePath: string, provider: 'claude' | 'codex' = 'claude') => {
       const project = getProject(projectId);
       if (!project) return null;
-      return readSkillFile(project.projectPath, skillName, relativePath);
+      return readSkillFile(project.projectPath, skillName, relativePath, provider);
     },
   ),
 
   'project:saveSkillFile': createTypedHandler(
-    (projectId: string, skillName: string, relativePath: string, content: string) => {
+    (projectId: string, skillName: string, relativePath: string, content: string, provider: 'claude' | 'codex' = 'claude') => {
       const project = getProject(projectId);
       if (!project) return;
-      saveSkillFile(project.projectPath, skillName, relativePath, content);
+      saveSkillFile(project.projectPath, skillName, relativePath, content, provider);
     },
   ),
 

@@ -13,6 +13,7 @@ import type {
 
 import { agentRunStore } from '../lib/agent-run-store';
 import { computeEvalBatchKey } from '../lib/eval-batch-key';
+import i18n from '../i18n';
 import { usePolling } from './usePolling';
 
 // ── Status maps ─────────────────────────────────────────────────────────────
@@ -133,14 +134,16 @@ function auditLikeToAgentRun(
   // pipeline reuses without modification.
   if (run.claudemdTarget) {
     const ct = run.claudemdTarget;
+    const filename = ct.provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md';
     return {
       id: run.runId,
       kind,
-      title: `${titlePrefix} · CLAUDE.md`,
+      title: `${titlePrefix} · ${filename}`,
       target: {
         type: 'claudemd',
         projectId: ct.projectId,
         projectPath: ct.projectPath,
+        provider: ct.provider,
         mode: ct.mode,
       },
       status: AUDIT_STATUS_MAP[run.status],
@@ -168,6 +171,7 @@ function auditLikeToAgentRun(
         type: 'rules',
         projectId: rt.projectId,
         projectPath: rt.projectPath,
+        provider: rt.provider,
         ruleName: rt.ruleName,
         mode: rt.mode,
       },
@@ -196,6 +200,7 @@ function auditLikeToAgentRun(
         type: 'subagents',
         projectId: st.projectId,
         projectPath: st.projectPath,
+        provider: st.provider,
         subagentName: st.subagentName,
         mode: st.mode,
       },
@@ -207,6 +212,27 @@ function auditLikeToAgentRun(
         canApprove: false,
         canStop: true,
       },
+      tokensUsed: run.tokensUsed,
+    };
+  }
+
+  if (run.codexConfigTarget) {
+    const target = run.codexConfigTarget;
+    return {
+      id: run.runId,
+      kind,
+      title: `${titlePrefix} · Codex config`,
+      target: {
+        type: 'codex-config',
+        projectId: target.projectId,
+        projectPath: target.projectPath,
+        provider: 'codex',
+        mode: target.mode,
+      },
+      status: AUDIT_STATUS_MAP[run.status],
+      startedAt: run.startedAt,
+      endedAt: run.finishedAt ?? undefined,
+      capabilities: { canSendMessage: true, canApprove: false, canStop: true },
       tokensUsed: run.tokensUsed,
     };
   }
@@ -223,6 +249,7 @@ function auditLikeToAgentRun(
         type: 'hooks',
         projectId: ht.projectId,
         projectPath: ht.projectPath,
+        provider: ht.provider,
         mode: ht.mode,
       },
       status: AUDIT_STATUS_MAP[run.status],
@@ -252,6 +279,7 @@ function auditLikeToAgentRun(
         type: 'permissions',
         projectId: pt.projectId,
         projectPath: pt.projectPath,
+        provider: pt.provider,
         scope: pt.scope ?? 'project',
         mode: pt.mode,
       },
@@ -267,19 +295,24 @@ function auditLikeToAgentRun(
     };
   }
 
-  // Runs that target the .mcp.json file (via `nakiros-mcp-expert`) surface
-  // with an mcp-focused title and an `mcp` target type. Singleton — no sub-name.
+  // Runs that target the .mcp.json (Claude) / config.toml (Codex) file (via
+  // `nakiros-mcp-expert`) surface with an mcp-focused title and an `mcp`
+  // target type. Singleton — no sub-name. A Codex-provider run gets a
+  // " · Codex" suffix so it's distinguishable from a Claude one in the dock.
   if (run.mcpTarget) {
     const mt = run.mcpTarget;
+    const providerSuffix =
+      mt.provider === 'codex' ? i18n.t('runs:titles.providerCodexSuffix') : '';
     return {
       id: run.runId,
       kind,
-      title: `${titlePrefix} · MCP`,
+      title: `${titlePrefix} · MCP${providerSuffix}`,
       target: {
         type: 'mcp',
         projectId: mt.projectId,
         projectPath: mt.projectPath,
         mode: mt.mode,
+        provider: mt.provider,
       },
       status: AUDIT_STATUS_MAP[run.status],
       startedAt: run.startedAt,

@@ -1,6 +1,6 @@
 ---
 name: nakiros-rules-expert
-description: "Creates, audits, and fixes individual rule files under .claude/rules/ for any project, following Claude Code's official rules conventions. Use when bootstrapping a new rule, auditing an existing rule against best practices, or patching a rule based on Nakiros friction signals."
+description: "Creates, audits, and fixes project execution rules for Claude Code (.claude/rules/*.md) and Codex (.codex/rules/*.rules), following each provider's native conventions."
 user-invocable: true
 ---
 
@@ -19,6 +19,22 @@ handle CLAUDE.md, subagents, hooks, permissions, MCP, and output styles. Stay
 within scope: this skill ONLY touches individual `.claude/rules/*.md` files
 (and `.claude/rules/<subdir>/*.md`). Out of scope: CLAUDE.md, subagents,
 hooks, permissions, MCP config, output styles, skills.
+
+## Provider dispatch
+
+Determine the provider from the target path before applying any schema:
+
+- **Claude** — `.claude/rules/**/*.md`; use the Markdown/frontmatter workflow
+  and the detailed checklist below.
+- **Codex** — `.codex/rules/*.rules`; use native Starlark `prefix_rule(...)`
+  declarations. Never emit Markdown frontmatter or Claude tool patterns.
+
+For Codex, validate that the file parses as Starlark, each declaration has a
+non-empty token `pattern`, uses a supported `decision` (`allow`, `prompt`, or
+`forbidden`), gives an actionable `justification`, and does not grant a broader
+command prefix than the stated need. Prefer several narrow declarations over a
+single permissive prefix. In runner isolation, only modify the supplied
+`draft.rules`; Nakiros deploys it after confirmation.
 
 ## Output language
 

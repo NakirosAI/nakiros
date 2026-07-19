@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import type { AgentRunKind } from '@nakiros/shared';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import type { AgentRunKind, ConfigurationProvider } from '@nakiros/shared';
 
 /*
  * Multi-tab shell state — Phase 1 PR2a of the new-design integration
@@ -29,6 +29,8 @@ import type { AgentRunKind } from '@nakiros/shared';
  */
 export type ProjectTabView =
   | 'overview'
+  | 'hestia'
+  | 'codexConfig'
   | 'convs'
   | 'claudeMd'
   | 'rules'
@@ -56,6 +58,8 @@ interface ProjectTab {
   view: ProjectTabView;
   /** When `view === 'skills'`, the focused skill id (null = list view). */
   skillId?: string | null;
+  /** Provider installation selected inside Hestia, preserved across its editors. */
+  hestiaAgentKey?: string;
 }
 
 interface RunTab {
@@ -74,7 +78,7 @@ interface RunTab {
  * (projectId / pluginName / marketplaceName).
  */
 export type SkillTabIdentity =
-  | { scope: 'project'; projectId: string; skillName: string }
+  | { scope: 'project'; projectId: string; skillName: string; provider?: ConfigurationProvider }
   | { scope: 'claude-global'; skillName: string }
   | { scope: 'plugin'; marketplaceName: string; pluginName: string; skillName: string }
   | { scope: 'nakiros-bundled'; skillName: string };
@@ -169,6 +173,40 @@ function makeHomeTab(): Tab {
   return { id: newId(), kind: 'home', label: 'Home' };
 }
 
+/** Resolve tab deduplication synchronously, independently from React's state
+ * scheduling. Exported to keep the focus/new-tab contract regression-tested. */
+export function resolveTabOpen(
+  current: Tab[],
+  input: OpenTabInput,
+  createId: () => string = newId,
+): { tabs: Tab[]; focusedId: string } {
+  let existing: Tab | undefined;
+  if (input.kind === 'project') {
+    existing = current.find(
+      (tab): tab is ProjectTab => tab.kind === 'project' && tab.projectId === input.projectId,
+    );
+  } else if (input.kind === 'run') {
+    existing = current.find(
+      (tab): tab is RunTab => tab.kind === 'run' && tab.runId === input.runId,
+    );
+  } else if (input.kind === 'skill') {
+    existing = current.find(
+      (tab): tab is SkillTab => tab.kind === 'skill' && sameSkillIdentity(tab.identity, input.identity),
+    );
+  } else if (input.kind === 'marketplace') {
+    existing = current.find(
+      (tab): tab is MarketplaceTab =>
+        tab.kind === 'marketplace' && tab.marketplaceName === input.marketplaceName,
+    );
+  } else if (input.kind === 'settings') {
+    existing = current.find((tab): tab is SettingsTab => tab.kind === 'settings');
+  }
+
+  if (existing) return { tabs: current, focusedId: existing.id };
+  const focusedId = createId();
+  return { tabs: [...current, { ...input, id: focusedId } as Tab], focusedId };
+}
+
 /**
  * React hook owning the tab strip state for the new shell. See module
  * doc-comment for the model and dedup behavior.
@@ -178,59 +216,25 @@ export function useTabs(initial?: Tab[]): UseTabsApi {
     if (initial && initial.length > 0) return initial;
     return [makeHomeTab()];
   });
+  // `openTab` must return and focus the chosen tab synchronously. A value
+  // assigned from inside React's deferred `setTabs(prev => …)` updater is not
+  // available reliably on the next line (notably with concurrent rendering),
+  // which used to leave the previously active run visible while the new run
+  // started in the background. Keep an eagerly updated mirror for decisions
+  // made within the same click/event turn.
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
   const [activeTabId, setActiveTabId] = useState<string>(() => (initial?.[0]?.id ?? tabs[0]!.id));
 
   const openTab = useCallback((input: OpenTabInput): string => {
-    let focusedId = '';
-    setTabs((prev) => {
-      // Dedup by domain key for project/run tabs.
-      if (input.kind === 'project') {
-        const existing = prev.find(
-          (t): t is ProjectTab => t.kind === 'project' && t.projectId === input.projectId,
-        );
-        if (existing) {
-          focusedId = existing.id;
-          return prev;
-        }
-      } else if (input.kind === 'run') {
-        const existing = prev.find(
-          (t): t is RunTab => t.kind === 'run' && t.runId === input.runId,
-        );
-        if (existing) {
-          focusedId = existing.id;
-          return prev;
-        }
-      } else if (input.kind === 'skill') {
-        const existing = prev.find(
-          (t): t is SkillTab => t.kind === 'skill' && sameSkillIdentity(t.identity, input.identity),
-        );
-        if (existing) {
-          focusedId = existing.id;
-          return prev;
-        }
-      } else if (input.kind === 'marketplace') {
-        const existing = prev.find(
-          (t): t is MarketplaceTab =>
-            t.kind === 'marketplace' && t.marketplaceName === input.marketplaceName,
-        );
-        if (existing) {
-          focusedId = existing.id;
-          return prev;
-        }
-      } else if (input.kind === 'settings') {
-        // Settings is a singleton — reuse any existing settings tab.
-        const existing = prev.find((t): t is SettingsTab => t.kind === 'settings');
-        if (existing) {
-          focusedId = existing.id;
-          return prev;
-        }
-      }
-      const id = newId();
-      focusedId = id;
-      return [...prev, { ...input, id } as Tab];
-    });
-    if (focusedId) setActiveTabId(focusedId);
-    return focusedId;
+    const current = tabsRef.current;
+    const resolved = resolveTabOpen(current, input);
+    if (resolved.tabs !== current) {
+      tabsRef.current = resolved.tabs;
+      setTabs(resolved.tabs);
+    }
+    setActiveTabId(resolved.focusedId);
+    return resolved.focusedId;
   }, []);
 
   const closeTab = useCallback((id: string) => {

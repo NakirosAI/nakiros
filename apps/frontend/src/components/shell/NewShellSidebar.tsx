@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Bot,
   FileText,
+  Flame,
   Home,
   Layers,
   Lightbulb,
@@ -18,7 +19,7 @@ import {
 import nakirosLogo from '../../assets/icon.svg';
 import type { ProjectTabView } from '../../hooks/useTabs';
 import { useProject } from '../../hooks/useProject';
-import type { ProviderType } from '@nakiros/shared';
+import type { AgentCapability, AgentProvider } from '@nakiros/shared';
 
 interface SidebarItem {
   id: ProjectTabView;
@@ -28,11 +29,8 @@ interface SidebarItem {
   disabled: boolean;
   /** Tooltip suffix shown after the label (e.g. "Module 2"). */
   comingIn?: string;
-  /**
-   * Allowlist of providers on which this item is visible.
-   * Omitting the field means the item is visible for all providers.
-   */
-  providers?: ProviderType[];
+  /** Required adapter capabilities. Omit for provider-neutral navigation. */
+  capabilities?: AgentCapability[];
 }
 
 interface SidebarSection {
@@ -49,59 +47,75 @@ interface NewShellSidebarProps {
  *
  * Three logical sections separated by thin dividers:
  * - **Project domain**: Overview, Conversations
- * - **`.claude/` configuration**: CLAUDE.md, Rules, Subagents, Skills,
- *   Output styles, MCP, Hooks. One tab per category. Modules not yet
- *   shipped are disabled with a tooltip pointing at the target module.
+ * - **Agent configuration**: only the tools implemented by the detected
+ *   provider adapter. Claude keeps its complete existing surface.
  * - **Nakiros**: Recommendations (placeholder), Settings (bottom).
  *
  * Tooltips appear on hover with a slight delay to avoid flicker.
  */
-/** Providers that support the full .claude/ config surface. */
-const CLAUDE_ONLY_PROVIDERS: ProviderType[] = ['claude'];
-
 export default function NewShellSidebar({ active, onNavigate }: NewShellSidebarProps) {
   const { project } = useProject();
-  const provider = project.provider;
-  // Only the "Bootstrap" item is translated here — the rest of this file
-  // predates the i18n rule for this screen and is left untouched to avoid
-  // an unrelated refactor of every existing label in the same change.
-  const { t } = useTranslation('bootstrap');
+  const installations = project.agents?.length
+    ? project.agents
+    : project.provider === 'cowork'
+      ? []
+      : [{
+          provider: project.provider as AgentProvider,
+          surface: 'cli' as const,
+          providerProjectDir: project.providerProjectDir,
+          capabilities: project.provider === 'claude'
+            ? ['instructions', 'skills', 'rules', 'subagents', 'hooks', 'permissions', 'mcp', 'output-styles', 'conversations'] as AgentCapability[]
+            : ['conversations'] as AgentCapability[],
+        }];
+  // The current configuration editors are implemented by the Claude adapter.
+  // Keep other agents visible without routing their files through Claude IPC.
+  const capabilities = new Set(
+    installations
+      .filter((installation) => installation.provider === 'claude')
+      .flatMap((installation) => installation.capabilities),
+  );
+  const { t } = useTranslation('hestia');
+  const { t: tBootstrap } = useTranslation('bootstrap');
 
   const allSections: SidebarSection[] = [
     {
       items: [
         { id: 'overview', label: 'Overview', icon: <Home size={18} strokeWidth={2} />, disabled: false },
+        { id: 'hestia', label: t('navigation'), icon: <Flame size={18} strokeWidth={2} />, disabled: false },
         { id: 'convs', label: 'Conversations', icon: <MessageSquare size={18} strokeWidth={2} />, disabled: false },
         {
           id: 'bootstrap',
-          label: t('sidebar.label', { defaultValue: 'Bootstrap' }),
+          label: tBootstrap('sidebar.label', { defaultValue: 'Bootstrap' }),
           icon: <Rocket size={18} strokeWidth={2} />,
           disabled: false,
+          capabilities: ['instructions'],
         },
       ],
     },
     {
       items: [
-        { id: 'claudeMd', label: 'CLAUDE.md', icon: <FileText size={18} strokeWidth={2} />, disabled: false },
-        { id: 'rules', label: 'Rules', icon: <Layers size={18} strokeWidth={2} />, disabled: false, providers: CLAUDE_ONLY_PROVIDERS },
-        { id: 'subagents', label: 'Subagents', icon: <Bot size={18} strokeWidth={2} />, disabled: false },
-        { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false },
-        { id: 'outputStyles', label: 'Output styles', icon: <Sliders size={18} strokeWidth={2} />, disabled: false, providers: CLAUDE_ONLY_PROVIDERS },
-        { id: 'permissions', label: 'Permissions', icon: <ShieldCheck size={18} strokeWidth={2} />, disabled: false },
-        { id: 'mcp', label: 'MCP', icon: <Plug size={18} strokeWidth={2} />, disabled: false, providers: CLAUDE_ONLY_PROVIDERS },
-        { id: 'hooks', label: 'Hooks', icon: <Zap size={18} strokeWidth={2} />, disabled: false, providers: CLAUDE_ONLY_PROVIDERS },
+        { id: 'claudeMd', label: 'CLAUDE.md', icon: <FileText size={18} strokeWidth={2} />, disabled: false, capabilities: ['instructions'] },
+        { id: 'rules', label: 'Rules', icon: <Layers size={18} strokeWidth={2} />, disabled: false, capabilities: ['rules'] },
+        { id: 'subagents', label: 'Subagents', icon: <Bot size={18} strokeWidth={2} />, disabled: false, capabilities: ['subagents'] },
+        { id: 'skills', label: 'Skills', icon: <Sparkles size={18} strokeWidth={2} />, disabled: false, capabilities: ['skills'] },
+        { id: 'outputStyles', label: 'Output styles', icon: <Sliders size={18} strokeWidth={2} />, disabled: false, capabilities: ['output-styles'] },
+        { id: 'permissions', label: 'Permissions', icon: <ShieldCheck size={18} strokeWidth={2} />, disabled: false, capabilities: ['permissions'] },
+        { id: 'mcp', label: 'MCP', icon: <Plug size={18} strokeWidth={2} />, disabled: false, capabilities: ['mcp'] },
+        { id: 'hooks', label: 'Hooks', icon: <Zap size={18} strokeWidth={2} />, disabled: false, capabilities: ['hooks'] },
       ],
     },
     {
       items: [
-        { id: 'recs', label: 'Recommendations', icon: <Lightbulb size={18} strokeWidth={2} />, disabled: false },
+        { id: 'recs', label: 'Recommendations', icon: <Lightbulb size={18} strokeWidth={2} />, disabled: false, capabilities: ['instructions'] },
       ],
     },
   ];
 
-  // Filter items by provider: if `providers` is set, the item is only shown for listed providers.
+  // Capabilities, rather than provider names, decide which project tools exist.
   const sections: SidebarSection[] = allSections.map((section) => ({
-    items: section.items.filter((item) => !item.providers || item.providers.includes(provider)),
+    items: section.items.filter(
+      (item) => !item.capabilities || item.capabilities.some((capability) => capabilities.has(capability)),
+    ),
   }));
 
   const settingsItem: SidebarItem = {

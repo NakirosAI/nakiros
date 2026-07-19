@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
-import type { ClaudeMdAuditHistoryEntry } from '@nakiros/shared';
+import type { ClaudeMdAuditHistoryEntry, ConfigurationProvider } from '@nakiros/shared';
 
 /**
  * Persisted history of CLAUDE.md audits for a given project, archived by
@@ -17,8 +17,19 @@ import type { ClaudeMdAuditHistoryEntry } from '@nakiros/shared';
  * body via a single regex over the first ~50 lines.
  */
 
-function auditDirFor(projectId: string): string {
+function legacyAuditDirFor(projectId: string): string {
   return join(homedir(), '.nakiros', projectId, 'claudemd', 'audit');
+}
+
+function auditDirFor(projectId: string, provider: ConfigurationProvider): string {
+  return join(homedir(), '.nakiros', projectId, 'instructions', provider, 'audit');
+}
+
+export function claudemdAuditArchiveDir(
+  projectId: string,
+  provider: ConfigurationProvider = 'claude',
+): string {
+  return auditDirFor(projectId, provider);
 }
 
 /**
@@ -52,8 +63,17 @@ function extractScore(body: string): string | null {
  * Scan `~/.nakiros/<projectId>/claudemd/audit/` and return the archived
  * audits sorted newest-first.
  */
-export function listClaudemdAudits(projectId: string): ClaudeMdAuditHistoryEntry[] {
-  const dir = auditDirFor(projectId);
+export function listClaudemdAudits(
+  projectId: string,
+  provider: ConfigurationProvider = 'claude',
+): ClaudeMdAuditHistoryEntry[] {
+  const dirs = [auditDirFor(projectId, provider)];
+  if (provider === 'claude') dirs.push(legacyAuditDirFor(projectId));
+  const out = dirs.flatMap((dir) => listAuditFiles(dir));
+  return out.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+}
+
+function listAuditFiles(dir: string): ClaudeMdAuditHistoryEntry[] {
   if (!existsSync(dir)) return [];
   let entries: string[];
   try {
@@ -79,7 +99,7 @@ export function listClaudemdAudits(projectId: string): ClaudeMdAuditHistoryEntry
       score,
     });
   }
-  return out.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  return out;
 }
 
 /**

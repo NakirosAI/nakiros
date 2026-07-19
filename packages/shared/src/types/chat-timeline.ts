@@ -16,6 +16,8 @@ export type ChatTimelineEntry =
   | { kind: 'user'; ts: string; text: string }
   /** Assistant free-form text reply. */
   | { kind: 'assistant_text'; ts: string; text: string }
+  /** Provider-visible reasoning summary or progress commentary. */
+  | { kind: 'thinking'; ts: string; text: string }
   /**
    * Assistant generic `tool_use` (Bash, Read, Glob, Grep, …). Renders as
    * the generic tool box. Run-specific renderers may intercept some

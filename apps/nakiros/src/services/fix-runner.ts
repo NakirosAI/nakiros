@@ -28,6 +28,8 @@ import type {
   FixTargetEntry,
   FixTimelineEntry,
   FixUsage,
+  ClaudeMdTargetContext,
+  McpTargetContext,
   SkillDiffEntry,
   SkillDiffFilePayload,
   StartAuditRequest,
@@ -37,6 +39,7 @@ import { IPC_CHANNELS } from '@nakiros/shared';
 import { eventBus } from '../daemon/event-bus.js';
 import { getRun as getEvalRun } from './eval-runner.js';
 import { getEffectiveLanguage } from './preferences.js';
+import { resolveConfigurationAgentProvider } from './mcp-agent-provider.js';
 
 import { formatTool } from './runner-core/tool-format.js';
 
@@ -48,6 +51,7 @@ import {
   destroyEvalSandbox,
   encodeProjectPath,
   findGitRoot,
+  getCodexRunTimeline,
   isActiveRunStatus,
   persistRunJson,
   type RehydrateResult,
@@ -66,6 +70,8 @@ import { mcpAuditArchiveDir, listMcpAudits } from './mcp-audit-history.js';
 import { listOutputStylesAudits } from './output-styles-audit-history.js';
 import { readHooksBlock, saveHooksBlock } from './hooks-writer.js';
 import { readPermissionsBlock, savePermissionsBlock } from './permissions-writer.js';
+import { readMcpConfig, saveMcpConfig } from './mcp-writer.js';
+import { readCodexResource, saveCodexResource } from './codex-resource-writer.js';
 
 const FACTORY_SKILL_NAME = 'nakiros-skill-factory';
 const CLAUDEMD_EXPERT_SKILL_NAME = 'nakiros-claudemd-expert';
@@ -73,8 +79,37 @@ const RULES_EXPERT_SKILL_NAME = 'nakiros-rules-expert';
 const SUBAGENTS_EXPERT_SKILL_NAME = 'nakiros-subagents-expert';
 const HOOKS_EXPERT_SKILL_NAME = 'nakiros-hooks-expert';
 const PERMISSIONS_EXPERT_SKILL_NAME = 'nakiros-permissions-expert';
+const CODEX_CONFIG_EXPERT_SKILL_NAME = 'nakiros-codex-config-expert';
 const MCP_EXPERT_SKILL_NAME = 'nakiros-mcp-expert';
 const OUTPUT_STYLES_EXPERT_SKILL_NAME = 'nakiros-output-styles-expert';
+
+function mcpDraftName(target: McpTargetContext): 'draft.toml' | 'draft.json' {
+  return target.provider === 'codex' ? 'draft.toml' : 'draft.json';
+}
+
+function mcpFinalPath(target: McpTargetContext): string {
+  return target.provider === 'codex'
+    ? join(target.projectPath, '.codex', 'config.toml')
+    : join(target.projectPath, '.mcp.json');
+}
+
+function instructionsFinalPath(target: ClaudeMdTargetContext): string {
+  return join(target.projectPath, target.provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md');
+}
+
+function configurationTargetProvider(run: Pick<AuditRun,
+  'claudemdTarget' | 'rulesTarget' | 'subagentsTarget' | 'hooksTarget' | 'permissionsTarget' | 'codexConfigTarget' | 'mcpTarget'
+>): 'claude' | 'codex' {
+  return resolveConfigurationAgentProvider(
+    run.claudemdTarget?.provider ?? run.rulesTarget?.provider ??
+    run.subagentsTarget?.provider ?? run.hooksTarget?.provider ??
+    run.permissionsTarget?.provider ?? run.codexConfigTarget?.provider ?? run.mcpTarget?.provider,
+  );
+}
+
+function codexEntityName(name: string): string {
+  return name.replace(/\.md$/i, '').replace(/\.toml$/i, '').replace(/\.rules$/i, '');
+}
 
 /**
  * Three flavors of skill-factory-driven runs:
@@ -236,17 +271,53 @@ function copyLatestAudit(realSkillDir: string, destSkillDir: string): string | n
 function copyLatestNonSkillAudit(req: SkillAgentStartReq, workdir: string): string | null {
   let auditPath: string | null = null;
   if (req.claudemdTarget) {
-    auditPath = listClaudemdAudits(req.claudemdTarget.projectId)[0]?.path ?? null;
+    auditPath = listClaudemdAudits(
+      req.claudemdTarget.projectId,
+      req.claudemdTarget.provider ?? 'claude',
+    )[0]?.path ?? null;
   } else if (req.rulesTarget) {
-    auditPath = listRulesAudits(req.rulesTarget.projectId, req.rulesTarget.ruleName)[0]?.path ?? null;
+    auditPath = listRulesAudits(
+      req.rulesTarget.projectId,
+      req.rulesTarget.ruleName,
+      req.rulesTarget.provider ?? 'claude',
+    )[0]?.path ?? null;
   } else if (req.subagentsTarget) {
-    auditPath = listSubagentsAudits(req.subagentsTarget.projectId, req.subagentsTarget.subagentName)[0]?.path ?? null;
+    auditPath = listSubagentsAudits(
+      req.subagentsTarget.projectId,
+      req.subagentsTarget.subagentName,
+      req.subagentsTarget.provider ?? 'claude',
+    )[0]?.path ?? null;
   } else if (req.hooksTarget) {
-    auditPath = listHooksAudits(req.hooksTarget.projectId)[0]?.path ?? null;
+    auditPath = listHooksAudits(
+      req.hooksTarget.projectId,
+      req.hooksTarget.provider ?? 'claude',
+    )[0]?.path ?? null;
   } else if (req.permissionsTarget) {
-    auditPath = listPermissionsAudits(req.permissionsTarget.projectId, req.permissionsTarget.scope ?? 'project')[0]?.path ?? null;
+    auditPath = listPermissionsAudits(
+      req.permissionsTarget.projectId,
+      req.permissionsTarget.scope ?? 'project',
+      req.permissionsTarget.provider ?? 'claude',
+    )[0]?.path ?? null;
+  } else if (req.codexConfigTarget) {
+    const auditDir = join(
+      homedir(),
+      '.nakiros',
+      req.codexConfigTarget.projectId,
+      'codex-config',
+      'audit',
+    );
+    if (existsSync(auditDir)) {
+      const audits = readdirSync(auditDir)
+        .filter((name) => name.startsWith('audit-') && name.endsWith('.md'))
+        .sort();
+      const latest = audits.at(-1);
+      auditPath = latest ? join(auditDir, latest) : null;
+    }
   } else if (req.mcpTarget) {
-    auditPath = listMcpAudits(req.mcpTarget.projectId)[0]?.path ?? null;
+    auditPath = listMcpAudits(
+      req.mcpTarget.projectId,
+      req.mcpTarget.provider ?? 'claude',
+    )[0]?.path ?? null;
   } else if (req.outputStylesTarget) {
     auditPath = listOutputStylesAudits(req.outputStylesTarget.projectId, req.outputStylesTarget.styleName)[0]?.path ?? null;
   }
@@ -369,33 +440,48 @@ function getNonSkillTargetDiffSpec(run: AuditRun): NonSkillTargetDiffSpec | null
 
   if (run.claudemdTarget) {
     return {
-      displayPath: 'CLAUDE.md',
-      snapshotPath: snapAt('CLAUDE.md'),
-      modifiedPath: join(run.claudemdTarget.projectPath, 'CLAUDE.md'),
+      displayPath: run.claudemdTarget.provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md',
+      snapshotPath: snapAt('draft.md'),
+      modifiedPath: join(workdir, 'draft.md'),
     };
   }
   if (run.rulesTarget) {
+    const codex = run.rulesTarget.provider === 'codex';
     return {
-      displayPath: `.claude/rules/${run.rulesTarget.ruleName}`,
-      snapshotPath: snapAt('draft.md'),
-      modifiedPath: join(workdir, 'draft.md'),
+      displayPath: codex
+        ? `.codex/rules/${codexEntityName(run.rulesTarget.ruleName)}.rules`
+        : `.claude/rules/${run.rulesTarget.ruleName}`,
+      snapshotPath: snapAt(codex ? 'draft.rules' : 'draft.md'),
+      modifiedPath: join(workdir, codex ? 'draft.rules' : 'draft.md'),
     };
   }
   if (run.subagentsTarget) {
+    const codex = run.subagentsTarget.provider === 'codex';
     return {
-      displayPath: `.claude/agents/${run.subagentsTarget.subagentName}`,
-      snapshotPath: snapAt('draft.md'),
-      modifiedPath: join(workdir, 'draft.md'),
+      displayPath: codex
+        ? `.codex/agents/${codexEntityName(run.subagentsTarget.subagentName)}.toml`
+        : `.claude/agents/${run.subagentsTarget.subagentName}`,
+      snapshotPath: snapAt(codex ? 'draft.toml' : 'draft.md'),
+      modifiedPath: join(workdir, codex ? 'draft.toml' : 'draft.md'),
     };
   }
   if (run.hooksTarget) {
     return {
-      displayPath: '.claude/settings.json (hooks)',
+      displayPath: run.hooksTarget.provider === 'codex'
+        ? '.codex/hooks.json'
+        : '.claude/settings.json (hooks)',
       snapshotPath: snapAt('draft.json'),
       modifiedPath: join(workdir, 'draft.json'),
     };
   }
   if (run.permissionsTarget) {
+    if (run.permissionsTarget.provider === 'codex') {
+      return {
+        displayPath: '.codex/config.toml (permissions)',
+        snapshotPath: snapAt('draft.toml'),
+        modifiedPath: join(workdir, 'draft.toml'),
+      };
+    }
     const scope = run.permissionsTarget.scope ?? 'project';
     const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
     return {
@@ -404,11 +490,19 @@ function getNonSkillTargetDiffSpec(run: AuditRun): NonSkillTargetDiffSpec | null
       modifiedPath: join(workdir, 'draft.json'),
     };
   }
-  if (run.mcpTarget) {
+  if (run.codexConfigTarget) {
     return {
-      displayPath: '.mcp.json',
-      snapshotPath: snapAt('.mcp.json'),
-      modifiedPath: join(run.mcpTarget.projectPath, '.mcp.json'),
+      displayPath: '.codex/config.toml',
+      snapshotPath: snapAt('draft.toml'),
+      modifiedPath: join(workdir, 'draft.toml'),
+    };
+  }
+  if (run.mcpTarget) {
+    const draftName = mcpDraftName(run.mcpTarget);
+    return {
+      displayPath: run.mcpTarget.provider === 'codex' ? '.codex/config.toml (MCP)' : '.mcp.json',
+      snapshotPath: snapAt(draftName),
+      modifiedPath: join(workdir, draftName),
     };
   }
   if (run.outputStylesTarget) {
@@ -669,20 +763,20 @@ function resolveApplyTarget(
   /**
    * `'draft-md'`   — Claude Code blocks `.claude/**`; agent writes ./draft.md
    * `'draft-json'` — Claude Code blocks `.claude/**`; agent writes ./draft.json
+   * `'draft-toml'` — provider config is merged from an isolated TOML slice
    * `'direct'`     — agent may write the target file directly (no .claude/** constraint)
    */
-  writeMode: 'draft-md' | 'draft-json' | 'direct';
+  writeMode: 'draft-md' | 'draft-json' | 'draft-toml' | 'direct';
   /** Short label describing what is being edited (for the prompt). */
   label: string;
 } | null {
   if (req.claudemdTarget) {
-    const targetPath = join(req.claudemdTarget.projectPath, 'CLAUDE.md');
     return {
       skillName: CLAUDEMD_EXPERT_SKILL_NAME,
       slashCmd: `/${CLAUDEMD_EXPERT_SKILL_NAME} edit`,
-      writePath: targetPath,
-      writeMode: 'direct',
-      label: 'CLAUDE.md',
+      writePath: join(workdir, 'draft.md'),
+      writeMode: 'draft-md',
+      label: req.claudemdTarget.provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md',
     };
   }
   if (req.rulesTarget) {
@@ -723,13 +817,13 @@ function resolveApplyTarget(
     };
   }
   if (req.mcpTarget) {
-    const mcpPath = join(req.mcpTarget.projectPath, '.mcp.json');
+    const draftPath = join(workdir, mcpDraftName(req.mcpTarget));
     return {
       skillName: MCP_EXPERT_SKILL_NAME,
       slashCmd: `/${MCP_EXPERT_SKILL_NAME} edit`,
-      writePath: mcpPath,
-      writeMode: 'direct',
-      label: '.mcp.json',
+      writePath: draftPath,
+      writeMode: req.mcpTarget.provider === 'codex' ? 'draft-toml' : 'draft-json',
+      label: req.mcpTarget.provider === 'codex' ? '.codex/config.toml MCP configuration' : '.mcp.json',
     };
   }
   if (req.outputStylesTarget) {
@@ -794,7 +888,7 @@ function buildNonInteractiveApplyPrompt(
 
   const writeConstraintLine = target.writeMode === 'direct'
     ? `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`
-    : `- IMPORTANT: Claude Code blocks every write under \`.claude/**\`. Write/Edit ONLY at \`${target.writePath}\`. Nakiros will sync it to the final destination when the user clicks "Apply & Deploy".`;
+    : `- Write/Edit ONLY at \`${target.writePath}\`. This is an isolated draft; Nakiros will validate and sync it to the final destination when the user clicks "Apply & Deploy".`;
 
   return [
     target.slashCmd,
@@ -818,18 +912,216 @@ function buildNonInteractiveApplyPrompt(
   ].join('\n');
 }
 
+// ─── Codex support (Hestia multi-agent effort, increment 2) ────────────────
+
+/**
+ * Build the Codex first-turn prompt for an `nakiros-mcp-expert` fix / create
+ * / edit run. Codex has no slash-command mechanism (`.claude/rules/runners.md`
+ * — "Skill tool isolation"), so instead of `/${MCP_EXPERT_SKILL_NAME} <mode>`
+ * we inline the live `SKILL.md` content plus absolute paths into the skill
+ * directory (Codex is NOT running from `~/.claude/skills/<name>` — it lands
+ * in the git worktree of the user's project, see `prepareWorkdir`).
+ */
+export function buildCodexMcpPrompt(
+  mt: McpTargetContext,
+  skillDir: string,
+  mode: SkillAgentMode,
+  workdir: string,
+  recommendation?: NonNullable<StartAuditRequest['applyRecommendation']>,
+): string {
+  const targetPath = join(mt.projectPath, '.codex', 'config.toml');
+  const exists = existsSync(targetPath);
+  const draftPath = join(workdir, mcpDraftName(mt));
+  let skillMd: string;
+  try {
+    skillMd = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
+  } catch (err) {
+    console.warn(`[fix-runner] Could not read SKILL.md for Codex inline prompt: ${(err as Error).message}`);
+    skillMd = '(SKILL.md could not be read — proceed from the instructions below only.)';
+  }
+  const referencesDir = join(skillDir, 'references', 'codex');
+  const scriptPath = join(skillDir, 'scripts', 'run-static-checks.mjs');
+
+  const modeLines = mode === 'edit'
+    ? [
+      'You are in **edit mode**: the user wants to modify the existing MCP configuration',
+      'conversationally, without an audit driving the changes. Read the draft file first',
+      '(if it exists), then reply with one short sentence asking what to change and WAIT for',
+      'the user\'s first message — do not invent changes. See the SKILL.md "Edit mode" section below.',
+    ]
+    : [
+      `Follow the "${mode === 'create' ? 'Creating' : 'Fixing'} the MCP configuration" procedure`,
+      'in the SKILL.md below for provider "codex".',
+    ];
+  const recommendationLines = recommendation ? [
+    '',
+    'Apply this recommendation non-interactively. Do not ask follow-up questions:',
+    '<apply-recommendation>',
+    `artifactType: ${recommendation.artifactType}`,
+    `action: ${recommendation.action}`,
+    `target: ${recommendation.target}`,
+    `title: ${recommendation.title}`,
+    `recId: ${recommendation.recId}`,
+    `patternId: ${recommendation.patternId}`,
+    '',
+    recommendation.brief,
+    '</apply-recommendation>',
+  ] : [];
+
+  return [
+    `You are acting as the "${MCP_EXPERT_SKILL_NAME}" skill, command: ${mode}. Codex has no`,
+    'slash-command mechanism, so the skill instructions are inlined below (as plain text) rather',
+    'than being invoked as a slash command.',
+    '',
+    'provider: codex',
+    `Project root: ${mt.projectPath}`,
+    `Final target: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
+    `Isolated MCP draft: ${draftPath}`,
+    '',
+    'You are NOT running from `~/.claude/skills/nakiros-mcp-expert` — use these ABSOLUTE',
+    'paths whenever the SKILL.md below references a path relative to the skill directory:',
+    `- Codex references: ${referencesDir}/`,
+    '- Static-check script (only needed if you re-audit before fixing) — run exactly as:',
+    `  node ${scriptPath} --provider codex --mcp-config ${draftPath} --output-dir outputs`,
+    '',
+    ...modeLines,
+    '',
+    `Write/Edit ONLY the isolated draft at ${draftPath}. It contains only the MCP TOML slice,`,
+    'not the rest of config.toml. Nakiros validates and merges it into the final target only',
+    'when the user clicks Apply & Deploy. Do not edit the final target directly. Do not ask',
+    'clarifying questions beyond what the SKILL.md itself directs for this mode.',
+    ...recommendationLines,
+    '',
+    '--- BEGIN SKILL.md ---',
+    skillMd,
+    '--- END SKILL.md ---',
+  ].join('\n');
+}
+
+/** Build a Codex AGENTS.md fix/create/edit prompt with an isolated draft. */
+export function buildCodexInstructionsPrompt(
+  target: ClaudeMdTargetContext,
+  skillDir: string,
+  mode: SkillAgentMode,
+  workdir: string,
+  recommendation?: NonNullable<StartAuditRequest['applyRecommendation']>,
+): string {
+  const finalPath = instructionsFinalPath(target);
+  const draftPath = join(workdir, 'draft.md');
+  let skillMd: string;
+  try {
+    skillMd = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
+  } catch (err) {
+    console.warn(`[fix-runner] Could not read instruction expert for Codex: ${(err as Error).message}`);
+    skillMd = '(SKILL.md could not be read — proceed from the instructions below.)';
+  }
+  const firstTurn = mode === 'edit'
+    ? [
+      'Read the draft, then ask the user in one short sentence what they want to change.',
+      'Wait for their answer before editing; their conversation is the specification.',
+    ]
+    : [
+      `Follow the provider-aware "${mode}" procedure immediately.`,
+      'Use any copied audit report and project evidence; do not invent constraints.',
+    ];
+  const recommendationLines = recommendation ? [
+    '',
+    'Apply this recommendation non-interactively. Do not ask follow-up questions:',
+    '<apply-recommendation>',
+    `artifactType: ${recommendation.artifactType}`,
+    `action: ${recommendation.action}`,
+    `target: ${recommendation.target}`,
+    `title: ${recommendation.title}`,
+    `recId: ${recommendation.recId}`,
+    `patternId: ${recommendation.patternId}`,
+    '',
+    recommendation.brief,
+    '</apply-recommendation>',
+  ] : [];
+  return [
+    `You are acting as the "${CLAUDEMD_EXPERT_SKILL_NAME}" skill, command: ${mode}.`,
+    'Provider: codex. The target is AGENTS.md, never CLAUDE.md.',
+    `Project root: ${target.projectPath}`,
+    `Final target: ${finalPath}`,
+    `Isolated draft: ${draftPath}`,
+    '',
+    ...firstTurn,
+    `Write/Edit ONLY ${draftPath}. Do not edit ${finalPath} directly.`,
+    'Nakiros deploys the draft only after Apply & Deploy.',
+    `Write run artefacts under ${join(workdir, 'outputs')}/.`,
+    ...recommendationLines,
+    '',
+    '--- BEGIN SKILL.md ---',
+    skillMd,
+    '--- END SKILL.md ---',
+  ].join('\n');
+}
+
+function buildCodexEntityPrompt(args: {
+  skillName: string;
+  skillDir: string;
+  mode: 'fix' | 'create' | 'edit';
+  projectPath: string;
+  finalPath: string;
+  draftPath: string;
+  resourceLabel: string;
+  workdir: string;
+}): string {
+  let skillMd: string;
+  try {
+    skillMd = readFileSync(join(args.skillDir, 'SKILL.md'), 'utf8');
+  } catch (err) {
+    console.warn(`[skill-agent-runner] Could not read ${args.skillName}: ${(err as Error).message}`);
+    skillMd = '(SKILL.md could not be read; follow the provider-native instructions below.)';
+  }
+  const common = [
+    `You are acting as the "${args.skillName}" skill, command: ${args.mode}.`,
+    `Provider: codex. Resource: ${args.resourceLabel}.`,
+    `Project root: ${args.projectPath}`,
+    `Final target: ${args.finalPath}`,
+    `Isolated draft: ${args.draftPath}`,
+    `Run outputs: ${join(args.workdir, 'outputs')}`,
+    '',
+    `Read and write ONLY the isolated draft. Never edit ${args.finalPath} directly.`,
+    'Use Codex-native syntax; ignore Claude-only paths, frontmatter, fields, and validators',
+    'from the shared expert instructions. Keep provider-specific fields intact.',
+  ];
+  if (args.mode === 'edit') {
+    common.push(
+      `Read ${args.draftPath}, then reply with one short sentence saying you are ready to edit`,
+      `${args.resourceLabel} and ask what the user wants to change. Do not modify the draft yet.`,
+    );
+  } else {
+    common.push(
+      `Execute the ${args.mode} now. Write fix-targets.jsonl and fix-findings.jsonl under`,
+      `${join(args.workdir, 'outputs')} when applicable, then summarize the draft changes.`,
+    );
+  }
+  return [
+    ...common,
+    '',
+    '--- BEGIN SKILL.md ---',
+    skillMd,
+    '--- END SKILL.md ---',
+  ].join('\n');
+}
+
 // ─── Spec ──────────────────────────────────────────────────────────────────
 
 const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras> = {
   kind: 'skill-agent',
   runsRoot: tempRoot,
 
+  agentProvider(entry) {
+    return configurationTargetProvider(entry.run);
+  },
+
   runIdPrefix(req) {
     return req.mode;
   },
 
   prepareWorkdir(req, runId) {
-    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget && !req.hooksTarget && !req.permissionsTarget && !req.mcpTarget && !req.outputStylesTarget) {
+    if (req.mode === 'create' && existsSync(req.skillDir) && !req.claudemdTarget && !req.rulesTarget && !req.subagentsTarget && !req.hooksTarget && !req.permissionsTarget && !req.codexConfigTarget && !req.mcpTarget && !req.outputStylesTarget) {
       throw new Error(
         `Cannot create skill "${req.skillName}": target directory already exists (${req.skillDir}). ` +
           `Pick a different name or run "fix" on the existing skill instead.`,
@@ -867,6 +1159,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     else if (req.subagentsTarget) resolvedProjectPath = req.subagentsTarget.projectPath;
     else if (req.hooksTarget) resolvedProjectPath = req.hooksTarget.projectPath;
     else if (req.permissionsTarget) resolvedProjectPath = req.permissionsTarget.projectPath;
+    else if (req.codexConfigTarget) resolvedProjectPath = req.codexConfigTarget.projectPath;
     else if (req.mcpTarget) resolvedProjectPath = req.mcpTarget.projectPath;
     else if (req.outputStylesTarget) resolvedProjectPath = req.outputStylesTarget.projectPath;
     else {
@@ -882,7 +1175,9 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         const result = createRunWorktree(gitRoot, runId, kind);
         worktreePath = result.path;
         // Write the daemon's execution settings into the worktree .claude/ dir
-        // so the Claude subprocess picks them up from its cwd.
+        // so the Claude subprocess picks them up from its cwd. Harmless for a
+        // Codex run too — `.claude/settings.local.json` is a Claude Code-only
+        // file the `codex` CLI never reads.
         writeExecutionSettings(worktreePath);
         console.log(`[skill-agent-runner] Created worktree at ${worktreePath} (gitRoot=${gitRoot})`);
       } catch (err) {
@@ -893,7 +1188,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       }
     }
 
-    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget || req.permissionsTarget || req.mcpTarget || req.outputStylesTarget) {
+    if (req.claudemdTarget || req.rulesTarget || req.subagentsTarget || req.hooksTarget || req.permissionsTarget || req.codexConfigTarget || req.mcpTarget || req.outputStylesTarget) {
       // For CLAUDE.md, rules, subagents, hooks, permissions, and mcp runs we
       // don't copy the bundled expert into the workdir — it's immutable. We only
       // symlink it under `.claude/skills/<name>` so the slash-command resolves
@@ -903,18 +1198,31 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       // When a worktree is available, symlink inside the worktree's .claude/ so
       // Claude can resolve the slash-command from its actual cwd. We also keep a
       // symlink in the Nakiros workdir as a fallback / for consistency.
-      const symlinkTargets: string[] = worktreePath
-        ? [worktreePath, workdir]
-        : [workdir];
-      for (const base of symlinkTargets) {
-        const claudeSkillsDir = join(base, '.claude', 'skills');
-        mkdirSync(claudeSkillsDir, { recursive: true });
-        const linkPath = join(claudeSkillsDir, req.skillName);
-        if (!existsSync(linkPath)) {
-          try {
-            symlinkSync(realpathSync(req.skillDir), linkPath, 'dir');
-          } catch (err) {
-            console.warn(`[skill-agent-runner] Failed to symlink expert in ${base}: ${(err as Error).message}`);
+      //
+      // Skip entirely for a Codex mcpTarget: Codex never invokes a
+      // slash-command (there is no discovery mechanism for it), the first
+      // prompt inlines SKILL.md with absolute paths instead — see
+      // `buildCodexMcpPrompt`.
+      const provider = resolveConfigurationAgentProvider(
+        req.claudemdTarget?.provider ?? req.rulesTarget?.provider ??
+        req.subagentsTarget?.provider ?? req.hooksTarget?.provider ??
+        req.permissionsTarget?.provider ?? req.codexConfigTarget?.provider ??
+        req.mcpTarget?.provider,
+      );
+      if (provider !== 'codex') {
+        const symlinkTargets: string[] = worktreePath
+          ? [worktreePath, workdir]
+          : [workdir];
+        for (const base of symlinkTargets) {
+          const claudeSkillsDir = join(base, '.claude', 'skills');
+          mkdirSync(claudeSkillsDir, { recursive: true });
+          const linkPath = join(claudeSkillsDir, req.skillName);
+          if (!existsSync(linkPath)) {
+            try {
+              symlinkSync(realpathSync(req.skillDir), linkPath, 'dir');
+            } catch (err) {
+              console.warn(`[skill-agent-runner] Failed to symlink expert in ${base}: ${(err as Error).message}`);
+            }
           }
         }
       }
@@ -975,9 +1283,12 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json: ${(err as Error).message}`);
       }
-      // Snapshot the live CLAUDE.md so the workspace diff panel can show a
-      // clean before/after — the agent edits the project file in place.
-      seedDiffSnapshot(workdir, 'CLAUDE.md', join(req.claudemdTarget.projectPath, 'CLAUDE.md'));
+      // Work on an isolated draft for both providers; deployment happens only
+      // when the user confirms Apply & Deploy.
+      const targetPath = instructionsFinalPath(req.claudemdTarget);
+      const draftPath = join(workdir, 'draft.md');
+      if (existsSync(targetPath)) copyFileSync(targetPath, draftPath);
+      seedDiffSnapshot(workdir, 'draft.md', targetPath);
     }
 
     // For rules fix/create runs, write the same cross-entity snapshot so the
@@ -1054,9 +1365,17 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       }
     }
 
-    // For MCP fix/create runs, write the cross-entity snapshot so the expert
-    // agent can reason about .mcp.json in context of the full .claude/
-    // configuration (CLAUDE.md, hooks, other settings, etc.).
+    if (req.codexConfigTarget) {
+      const result = readCodexResource(req.codexConfigTarget.projectPath, 'native-config', 'config');
+      if (!result.ok) throw new Error(`Unable to seed Codex config draft: ${result.message}`);
+      const draftPath = join(workdir, 'draft.toml');
+      writeFileSync(draftPath, result.file.content, 'utf8');
+      seedDiffSnapshot(workdir, 'draft.toml', draftPath);
+    }
+
+    // MCP always uses an isolated workdir draft. Claude gets the complete
+    // `.mcp.json`; Codex gets only the `mcp_servers` slice extracted from
+    // `.codex/config.toml`, so unrelated project settings stay untouched.
     if (req.mcpTarget) {
       try {
         const snapshot = buildDotClaudeSnapshot({
@@ -1071,9 +1390,20 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not write dot-claude-snapshot.json for mcp: ${(err as Error).message}`);
       }
-      // Snapshot the live .mcp.json so the workspace diff panel can show a
-      // clean before/after — the agent edits the project file in place.
-      seedDiffSnapshot(workdir, '.mcp.json', join(req.mcpTarget.projectPath, '.mcp.json'));
+      const draftName = mcpDraftName(req.mcpTarget);
+      const draftPath = join(workdir, draftName);
+      let draftContent = req.mcpTarget.provider === 'codex'
+        ? ''
+        : readMcpConfig(req.mcpTarget.projectPath).content;
+      if (req.mcpTarget.provider === 'codex') {
+        const result = readCodexResource(req.mcpTarget.projectPath, 'mcp', 'mcp');
+        if (!result.ok) {
+          throw new Error(`Unable to seed Codex MCP draft: ${result.message}`);
+        }
+        draftContent = result.file.content;
+      }
+      writeFileSync(draftPath, draftContent, 'utf8');
+      seedDiffSnapshot(workdir, draftName, draftPath);
     }
 
     // For rules fix/create runs, seed `<workdir>/draft.md` from the existing
@@ -1083,12 +1413,21 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     if (req.rulesTarget) {
       try {
         const rt = req.rulesTarget;
+        if (rt.provider === 'codex') {
+          const name = codexEntityName(rt.ruleName);
+          const result = readCodexResource(rt.projectPath, 'rules', name);
+          if (!result.ok) throw new Error(result.message);
+          const draftPath = join(workdir, 'draft.rules');
+          writeFileSync(draftPath, result.file.content, 'utf8');
+          seedDiffSnapshot(workdir, 'draft.rules', draftPath);
+        } else {
         const sourcePath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
         const draftPath = join(workdir, 'draft.md');
         if (existsSync(sourcePath)) {
           copyFileSync(sourcePath, draftPath);
         }
         seedDiffSnapshot(workdir, 'draft.md', sourcePath);
+        }
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not seed rules draft: ${(err as Error).message}`);
       }
@@ -1100,12 +1439,21 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     if (req.subagentsTarget) {
       try {
         const st = req.subagentsTarget;
+        if (st.provider === 'codex') {
+          const name = codexEntityName(st.subagentName);
+          const result = readCodexResource(st.projectPath, 'subagents', name);
+          if (!result.ok) throw new Error(result.message);
+          const draftPath = join(workdir, 'draft.toml');
+          writeFileSync(draftPath, result.file.content, 'utf8');
+          seedDiffSnapshot(workdir, 'draft.toml', draftPath);
+        } else {
         const sourcePath = join(st.projectPath, '.claude', 'agents', st.subagentName);
         const draftPath = join(workdir, 'draft.md');
         if (existsSync(sourcePath)) {
           copyFileSync(sourcePath, draftPath);
         }
         seedDiffSnapshot(workdir, 'draft.md', sourcePath);
+        }
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not seed subagents draft: ${(err as Error).message}`);
       }
@@ -1118,7 +1466,13 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     if (req.hooksTarget) {
       try {
         const ht = req.hooksTarget;
-        const { content } = readHooksBlock(ht.projectPath);
+        const content = ht.provider === 'codex'
+          ? (() => {
+              const result = readCodexResource(ht.projectPath, 'hooks', 'hooks');
+              if (!result.ok) throw new Error(result.message);
+              return result.file.content || '{\n  "hooks": {}\n}\n';
+            })()
+          : readHooksBlock(ht.projectPath).content;
         writeFileSync(join(workdir, 'draft.json'), content, 'utf8');
         seedDiffSnapshot(workdir, 'draft.json', join(workdir, 'draft.json'));
       } catch (err) {
@@ -1132,10 +1486,17 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     if (req.permissionsTarget) {
       try {
         const pt = req.permissionsTarget;
-        const scope = pt.scope ?? 'project';
-        const { content } = readPermissionsBlock(pt.projectPath, scope);
-        writeFileSync(join(workdir, 'draft.json'), content, 'utf8');
-        seedDiffSnapshot(workdir, 'draft.json', join(workdir, 'draft.json'));
+        const codex = pt.provider === 'codex';
+        const draftName = codex ? 'draft.toml' : 'draft.json';
+        const content = codex
+          ? (() => {
+              const result = readCodexResource(pt.projectPath, 'permissions', 'permissions');
+              if (!result.ok) throw new Error(result.message);
+              return result.file.content;
+            })()
+          : readPermissionsBlock(pt.projectPath, pt.scope ?? 'project').content;
+        writeFileSync(join(workdir, draftName), content, 'utf8');
+        seedDiffSnapshot(workdir, draftName, join(workdir, draftName));
       } catch (err) {
         console.warn(`[skill-agent-runner] Could not seed permissions draft: ${(err as Error).message}`);
       }
@@ -1185,6 +1546,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         req.subagentsTarget ||
         req.hooksTarget ||
         req.permissionsTarget ||
+        req.codexConfigTarget ||
         req.mcpTarget ||
         req.outputStylesTarget)
     ) {
@@ -1234,6 +1596,72 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
       return lines;
     };
 
+    // Codex has no slash-command dispatch, including for recommendation runs.
+    if (req.claudemdTarget?.provider === 'codex') {
+      return buildCodexInstructionsPrompt(
+        req.claudemdTarget,
+        req.skillDir,
+        req.mode,
+        workdir,
+        req.applyRecommendation,
+      );
+    }
+    if (req.mcpTarget?.provider === 'codex') {
+      return buildCodexMcpPrompt(
+        req.mcpTarget,
+        req.skillDir,
+        req.mode,
+        workdir,
+        req.applyRecommendation,
+      );
+    }
+    if (req.rulesTarget?.provider === 'codex') {
+      const name = codexEntityName(req.rulesTarget.ruleName);
+      return buildCodexEntityPrompt({
+        skillName: RULES_EXPERT_SKILL_NAME, skillDir: req.skillDir, mode: req.mode,
+        projectPath: req.rulesTarget.projectPath,
+        finalPath: join(req.rulesTarget.projectPath, '.codex', 'rules', `${name}.rules`),
+        draftPath: join(workdir, 'draft.rules'), resourceLabel: `execution rule ${name}`,
+        workdir,
+      });
+    }
+    if (req.subagentsTarget?.provider === 'codex') {
+      const name = codexEntityName(req.subagentsTarget.subagentName);
+      return buildCodexEntityPrompt({
+        skillName: SUBAGENTS_EXPERT_SKILL_NAME, skillDir: req.skillDir, mode: req.mode,
+        projectPath: req.subagentsTarget.projectPath,
+        finalPath: join(req.subagentsTarget.projectPath, '.codex', 'agents', `${name}.toml`),
+        draftPath: join(workdir, 'draft.toml'), resourceLabel: `custom subagent ${name}`,
+        workdir,
+      });
+    }
+    if (req.hooksTarget?.provider === 'codex') {
+      return buildCodexEntityPrompt({
+        skillName: HOOKS_EXPERT_SKILL_NAME, skillDir: req.skillDir, mode: req.mode,
+        projectPath: req.hooksTarget.projectPath,
+        finalPath: join(req.hooksTarget.projectPath, '.codex', 'hooks.json'),
+        draftPath: join(workdir, 'draft.json'), resourceLabel: 'lifecycle hooks', workdir,
+      });
+    }
+    if (req.permissionsTarget?.provider === 'codex') {
+      return buildCodexEntityPrompt({
+        skillName: PERMISSIONS_EXPERT_SKILL_NAME, skillDir: req.skillDir, mode: req.mode,
+        projectPath: req.permissionsTarget.projectPath,
+        finalPath: join(req.permissionsTarget.projectPath, '.codex', 'config.toml'),
+        draftPath: join(workdir, 'draft.toml'), resourceLabel: 'approval and sandbox permissions',
+        workdir,
+      });
+    }
+    if (req.codexConfigTarget) {
+      return buildCodexEntityPrompt({
+        skillName: CODEX_CONFIG_EXPERT_SKILL_NAME, skillDir: req.skillDir, mode: req.mode,
+        projectPath: req.codexConfigTarget.projectPath,
+        finalPath: join(req.codexConfigTarget.projectPath, '.codex', 'config.toml'),
+        draftPath: join(workdir, 'draft.toml'), resourceLabel: 'complete native project configuration',
+        workdir,
+      });
+    }
+
     // Non-interactive apply-recommendation: skip the interactive first-turn
     // protocol entirely and embed the <apply-recommendation> block directly
     // so the expert skill executes without waiting for user input.
@@ -1243,7 +1671,8 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
 
     if (req.claudemdTarget) {
       const ct = req.claudemdTarget;
-      const targetPath = join(ct.projectPath, 'CLAUDE.md');
+      const targetPath = instructionsFinalPath(ct);
+      const draftPath = join(workdir, 'draft.md');
       const exists = existsSync(targetPath);
       if (req.mode === 'edit') {
         return [
@@ -1256,12 +1685,12 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           '',
           `**First-turn protocol — do these in order before asking the user anything:**`,
           exists
-            ? `1. Read \`${targetPath}\` so you have the current CLAUDE.md content in context.`
-            : `1. Note that \`${targetPath}\` does not exist yet — you will create it from scratch.`,
+            ? `1. Read \`${draftPath}\` so you have the current CLAUDE.md content in context.`
+            : `1. Note that \`${draftPath}\` does not exist yet — you will create it from scratch.`,
           `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit \`CLAUDE.md\`. What would you like to change?" / "Prêt à éditer \`CLAUDE.md\`. Que veux-tu modifier ?"`,
-          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read the file after each substantive change.`,
+          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read the draft after each substantive change.`,
           '',
-          `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+          `- Write/Edit ONLY the isolated draft at \`${draftPath}\`. Nakiros deploys it to \`${targetPath}\` after Apply & Deploy.`,
           `- No findings file, no audit manifest. The user's chat is the spec.`,
           `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- Reference: \`/${CLAUDEMD_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
@@ -1276,8 +1705,8 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         `- Project root: ${ct.projectPath}`,
         `- Target file: ${targetPath} (${exists ? 'exists' : 'does not exist yet'})`,
         '',
-        `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
-        `- Follow the procedure for the "${command}" command in your SKILL.md.`,
+        `- Write/Edit ONLY the isolated draft at \`${draftPath}\`. Nakiros deploys it to \`${targetPath}\` after Apply & Deploy.`,
+        `- Follow the procedure for the "${command}" command in your SKILL.md, treating the draft as the target.`,
         ...nonSkillArtefactLines(command),
       ].join('\n');
     }
@@ -1461,6 +1890,7 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
     if (req.mcpTarget) {
       const mt = req.mcpTarget;
       const mcpPath = join(mt.projectPath, '.mcp.json');
+      const draftPath = join(workdir, mcpDraftName(mt));
       const exists = existsSync(mcpPath);
       if (req.mode === 'edit') {
         return [
@@ -1469,16 +1899,17 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
           languageLine,
           `- You are in **edit mode** for the MCP configuration.`,
           `- Project root: ${mt.projectPath}`,
-          `- Target file: ${mcpPath} (${exists ? 'exists' : 'does not exist yet'})`,
+          `- Final target: ${mcpPath} (${exists ? 'exists' : 'does not exist yet'})`,
+          `- Isolated draft: ${draftPath}`,
           '',
           `**First-turn protocol — do these in order before asking the user anything:**`,
           exists
-            ? `1. Read \`${mcpPath}\` so you have the current MCP configuration in context.`
-            : `1. Note that \`${mcpPath}\` does not exist yet — you will create it from scratch.`,
+            ? `1. Read \`${draftPath}\` so you have the current MCP configuration in context.`
+            : `1. Read the empty draft at \`${draftPath}\`; the final file does not exist yet.`,
           `2. Reply with ONE short sentence in the chat (use the language from the language directive above): "Ready to edit \`.mcp.json\`. What would you like to change?" / "Prêt à éditer \`.mcp.json\`. Que veux-tu modifier ?"`,
-          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read the file after each substantive change.`,
+          `3. Then wait for the user's instructions. Once they reply, propose edits, iterate, and re-read the draft after each substantive change.`,
           '',
-          `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+          `- Write/Edit ONLY \`${draftPath}\`. Nakiros validates and deploys it when the user clicks Apply & Deploy. Do not edit \`${mcpPath}\` directly.`,
           `- No findings file, no audit manifest. The user's chat is the spec.`,
           `- When the user is satisfied, they will Apply & Deploy from the UI; you do not need to call \`finish\` yourself.`,
           `- Reference: \`/${MCP_EXPERT_SKILL_NAME} edit\` — see SKILL.md "Edit mode" section for the procedure.`,
@@ -1491,9 +1922,10 @@ const spec: RunnerSpec<AuditRun, SkillAgentStartReq, FixEvent, SkillAgentExtras>
         languageLine,
         `- Operate on the project MCP configuration file.`,
         `- Project root: ${mt.projectPath}`,
-        `- Target file: ${mcpPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `- Final target: ${mcpPath} (${exists ? 'exists' : 'does not exist yet'})`,
+        `- Isolated draft: ${draftPath}`,
         '',
-        `- You may edit the target file directly with your Write/Edit tools (Nakiros runs you with permissions on the project tree).`,
+        `- Write/Edit ONLY \`${draftPath}\`. Nakiros validates and deploys it when the user clicks Apply & Deploy. Do not edit \`${mcpPath}\` directly.`,
         `- Follow the procedure for the "${command}" command in your SKILL.md.`,
         ...nonSkillArtefactLines(command),
       ].join('\n');
@@ -1639,6 +2071,7 @@ ${languageLine}
       subagentsTarget: req.subagentsTarget,
       hooksTarget: req.hooksTarget,
       permissionsTarget: req.permissionsTarget,
+      codexConfigTarget: req.codexConfigTarget,
       mcpTarget: req.mcpTarget,
       outputStylesTarget: req.outputStylesTarget,
     };
@@ -1648,6 +2081,11 @@ ${languageLine}
     return {
       prompt,
       resumeSessionId: isFirstTurn ? undefined : (entry.run.sessionId ?? undefined),
+      // The subprocess cwd is normally the isolated project worktree, while
+      // drafts and generated artefacts live under ~/.nakiros/tmp-skills/.
+      // Codex workspace-write therefore needs that second root explicitly;
+      // the real provider configuration remains outside the writable set.
+      addDirs: [entry.run.workdir],
       // Fix/create runs are user-initiated and explicitly modify the skill directory.
       // The workdir is scoped (nothing else is reachable); .claude/** files stay blocked
       // by Claude Code's hard rule even with `acceptEdits`.
@@ -1759,8 +2197,12 @@ ${languageLine}
     // Rules: workdir-draft pattern — copy draft.md back to .claude/rules/<name>.
     if (run.rulesTarget) {
       const rt = run.rulesTarget;
-      const draftPath = join(run.workdir, 'draft.md');
-      const finalPath = join(rt.projectPath, '.claude', 'rules', rt.ruleName);
+      const codex = rt.provider === 'codex';
+      const name = codexEntityName(rt.ruleName);
+      const draftPath = join(run.workdir, codex ? 'draft.rules' : 'draft.md');
+      const finalPath = codex
+        ? join(rt.projectPath, '.codex', 'rules', `${name}.rules`)
+        : join(rt.projectPath, '.claude', 'rules', rt.ruleName);
       try {
         if (!existsSync(draftPath)) {
           run.status = 'failed';
@@ -1770,8 +2212,14 @@ ${languageLine}
           opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
           return;
         }
-        mkdirSync(dirname(finalPath), { recursive: true });
-        copyFileSync(draftPath, finalPath);
+        if (codex) {
+          const mtime = existsSync(finalPath) ? statSync(finalPath).mtime.toISOString() : '';
+          const result = saveCodexResource(rt.projectPath, 'rules', name, readFileSync(draftPath, 'utf8'), mtime);
+          if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+        } else {
+          mkdirSync(dirname(finalPath), { recursive: true });
+          copyFileSync(draftPath, finalPath);
+        }
       } catch (err) {
         run.status = 'failed';
         run.error = `Sync-back vers ${finalPath} a échoué: ${(err as Error).message}`;
@@ -1791,8 +2239,12 @@ ${languageLine}
     // Subagents: workdir-draft pattern — copy draft.md back to .claude/agents/<name>.
     if (run.subagentsTarget) {
       const st = run.subagentsTarget;
-      const draftPath = join(run.workdir, 'draft.md');
-      const finalPath = join(st.projectPath, '.claude', 'agents', st.subagentName);
+      const codex = st.provider === 'codex';
+      const name = codexEntityName(st.subagentName);
+      const draftPath = join(run.workdir, codex ? 'draft.toml' : 'draft.md');
+      const finalPath = codex
+        ? join(st.projectPath, '.codex', 'agents', `${name}.toml`)
+        : join(st.projectPath, '.claude', 'agents', st.subagentName);
       try {
         if (!existsSync(draftPath)) {
           run.status = 'failed';
@@ -1802,8 +2254,14 @@ ${languageLine}
           opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
           return;
         }
-        mkdirSync(dirname(finalPath), { recursive: true });
-        copyFileSync(draftPath, finalPath);
+        if (codex) {
+          const mtime = existsSync(finalPath) ? statSync(finalPath).mtime.toISOString() : '';
+          const result = saveCodexResource(st.projectPath, 'subagents', name, readFileSync(draftPath, 'utf8'), mtime);
+          if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+        } else {
+          mkdirSync(dirname(finalPath), { recursive: true });
+          copyFileSync(draftPath, finalPath);
+        }
       } catch (err) {
         run.status = 'failed';
         run.error = `Sync-back vers ${finalPath} a échoué: ${(err as Error).message}`;
@@ -1837,7 +2295,9 @@ ${languageLine}
         const draftContent = readFileSync(draftPath, 'utf8');
         // Use the current mtime for the optimistic-lock — if the file was
         // modified externally during the run we still proceed (best-effort).
-        const settingsPath = join(ht.projectPath, '.claude', 'settings.json');
+        const settingsPath = ht.provider === 'codex'
+          ? join(ht.projectPath, '.codex', 'hooks.json')
+          : join(ht.projectPath, '.claude', 'settings.json');
         let mtimeAtRead = '';
         try {
           if (existsSync(settingsPath)) {
@@ -1846,7 +2306,9 @@ ${languageLine}
         } catch {
           // ignore — proceed without lock
         }
-        const result = saveHooksBlock(ht.projectPath, draftContent, mtimeAtRead);
+        const result = ht.provider === 'codex'
+          ? saveCodexResource(ht.projectPath, 'hooks', 'hooks', draftContent, mtimeAtRead)
+          : saveHooksBlock(ht.projectPath, draftContent, mtimeAtRead);
         if (!result.ok) {
           run.status = 'failed';
           run.error = `Merge hooks échoué (${result.code}): ${result.message}`;
@@ -1875,8 +2337,9 @@ ${languageLine}
     if (run.permissionsTarget) {
       const pt = run.permissionsTarget;
       const scope = pt.scope ?? 'project';
-      const filename = scope === 'local' ? 'settings.local.json' : 'settings.json';
-      const draftPath = join(run.workdir, 'draft.json');
+      const codex = pt.provider === 'codex';
+      const filename = codex ? 'config.toml' : scope === 'local' ? 'settings.local.json' : 'settings.json';
+      const draftPath = join(run.workdir, codex ? 'draft.toml' : 'draft.json');
       try {
         if (!existsSync(draftPath)) {
           run.status = 'failed';
@@ -1888,7 +2351,9 @@ ${languageLine}
         }
         const draftContent = readFileSync(draftPath, 'utf8');
         // Use the current mtime for the optimistic-lock (best-effort).
-        const settingsPath = join(pt.projectPath, '.claude', filename);
+        const settingsPath = codex
+          ? join(pt.projectPath, '.codex', 'config.toml')
+          : join(pt.projectPath, '.claude', filename);
         let mtimeAtRead = '';
         try {
           if (existsSync(settingsPath)) {
@@ -1897,7 +2362,9 @@ ${languageLine}
         } catch {
           // ignore — proceed without lock
         }
-        const result = savePermissionsBlock(pt.projectPath, scope, draftContent, mtimeAtRead);
+        const result = codex
+          ? saveCodexResource(pt.projectPath, 'permissions', 'permissions', draftContent, mtimeAtRead)
+          : savePermissionsBlock(pt.projectPath, scope, draftContent, mtimeAtRead);
         if (!result.ok) {
           run.status = 'failed';
           run.error = `Merge permissions échoué (${result.code}): ${result.message}`;
@@ -1921,13 +2388,105 @@ ${languageLine}
       return;
     }
 
-    // CLAUDE.md and MCP targets write outside `.claude/**` so direct edits
-    // by the agent are permitted — no workdir-draft sync-back needed.
-    if (run.claudemdTarget || run.mcpTarget) {
+    if (run.codexConfigTarget) {
+      const target = run.codexConfigTarget;
+      const draftPath = join(run.workdir, 'draft.toml');
+      const finalPath = join(target.projectPath, '.codex', 'config.toml');
+      try {
+        if (!existsSync(draftPath)) throw new Error('draft.toml is missing from the run workdir.');
+        const mtime = existsSync(finalPath) ? statSync(finalPath).mtime.toISOString() : '';
+        const result = saveCodexResource(
+          target.projectPath,
+          'native-config',
+          'config',
+          readFileSync(draftPath, 'utf8'),
+          mtime,
+        );
+        if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+      } catch (err) {
+        run.status = 'failed';
+        run.error = `Codex config sync-back failed: ${(err as Error).message}`;
+        run.finishedAt = new Date().toISOString();
+        opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+        return;
+      }
       run.status = 'completed';
       run.finishedAt = new Date().toISOString();
       run.error = null;
-      console.log(`[skill-agent-runner] ${extras.mode} ${run.runId} completed (direct edit — no sync-back)`);
+      opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
+      opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+      return;
+    }
+
+    // MCP: validate and deploy the isolated draft. For Codex the writer
+    // merges only `mcp_servers` back into config.toml, preserving every
+    // unrelated setting.
+    if (run.mcpTarget) {
+      const mt = run.mcpTarget;
+      const draftPath = join(run.workdir, mcpDraftName(mt));
+      try {
+        if (!existsSync(draftPath)) {
+          throw new Error(`${mcpDraftName(mt)} is missing from the run workdir.`);
+        }
+        const draftContent = readFileSync(draftPath, 'utf8');
+        const finalPath = mcpFinalPath(mt);
+        let mtimeAtRead = '';
+        if (existsSync(finalPath)) mtimeAtRead = statSync(finalPath).mtime.toISOString();
+        const result = mt.provider === 'codex'
+          ? saveCodexResource(mt.projectPath, 'mcp', 'mcp', draftContent, mtimeAtRead)
+          : saveMcpConfig(mt.projectPath, draftContent, mtimeAtRead);
+        if (!result.ok) {
+          throw new Error(`${result.code}: ${result.message}`);
+        }
+      } catch (err) {
+        run.status = 'failed';
+        run.error = `MCP sync-back failed: ${(err as Error).message}`;
+        run.finishedAt = new Date().toISOString();
+        opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+        return;
+      }
+      run.status = 'completed';
+      run.finishedAt = new Date().toISOString();
+      run.error = null;
+      opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
+      opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
+      return;
+    }
+
+    // Provider instructions use the same isolated draft and explicit deploy
+    // contract as every other Hestia expert target.
+    if (run.claudemdTarget) {
+      const target = run.claudemdTarget;
+      const draftPath = join(run.workdir, 'draft.md');
+      const finalPath = instructionsFinalPath(target);
+      try {
+        if (!existsSync(draftPath)) throw new Error('draft.md is missing from the run workdir.');
+        if (target.provider === 'codex') {
+          let mtimeAtRead = '';
+          if (existsSync(finalPath)) mtimeAtRead = statSync(finalPath).mtime.toISOString();
+          const result = saveCodexResource(
+            target.projectPath,
+            'instructions',
+            'AGENTS.md',
+            readFileSync(draftPath, 'utf8'),
+            mtimeAtRead,
+          );
+          if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+        } else {
+          mkdirSync(dirname(finalPath), { recursive: true });
+          copyFileSync(draftPath, finalPath);
+        }
+      } catch (err) {
+        run.status = 'failed';
+        run.error = `Instructions sync-back failed: ${(err as Error).message}`;
+        run.finishedAt = new Date().toISOString();
+        opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 1, error: run.error } });
+        return;
+      }
+      run.status = 'completed';
+      run.finishedAt = new Date().toISOString();
+      run.error = null;
+      console.log(`[skill-agent-runner] ${extras.mode} ${run.runId} completed (instructions draft → ${finalPath})`);
       opts.onEvent({ runId: run.runId, event: { type: 'status', status: 'completed' } });
       opts.onEvent({ runId: run.runId, event: { type: 'done', exitCode: 0 } });
       return;
@@ -1984,22 +2543,26 @@ ${languageLine}
       if (req.claudemdTarget || run.claudemdTarget) {
         if (!req.claudemdTarget || !run.claudemdTarget) continue;
         if (req.claudemdTarget.projectPath !== run.claudemdTarget.projectPath) continue;
+        if ((req.claudemdTarget.provider ?? 'claude') !== (run.claudemdTarget.provider ?? 'claude')) continue;
       }
       if (req.rulesTarget || run.rulesTarget) {
         if (!req.rulesTarget || !run.rulesTarget) continue;
         if (req.rulesTarget.projectId !== run.rulesTarget.projectId) continue;
         if (req.rulesTarget.ruleName !== run.rulesTarget.ruleName) continue;
+        if ((req.rulesTarget.provider ?? 'claude') !== (run.rulesTarget.provider ?? 'claude')) continue;
       }
       // Subagents runs disambiguate by projectId + subagentName.
       if (req.subagentsTarget || run.subagentsTarget) {
         if (!req.subagentsTarget || !run.subagentsTarget) continue;
         if (req.subagentsTarget.projectId !== run.subagentsTarget.projectId) continue;
         if (req.subagentsTarget.subagentName !== run.subagentsTarget.subagentName) continue;
+        if ((req.subagentsTarget.provider ?? 'claude') !== (run.subagentsTarget.provider ?? 'claude')) continue;
       }
       // Hooks runs: singleton per project — disambiguate by projectId only.
       if (req.hooksTarget || run.hooksTarget) {
         if (!req.hooksTarget || !run.hooksTarget) continue;
         if (req.hooksTarget.projectId !== run.hooksTarget.projectId) continue;
+        if ((req.hooksTarget.provider ?? 'claude') !== (run.hooksTarget.provider ?? 'claude')) continue;
       }
       // Permissions runs: one per (projectId, scope) — a project fix and a local
       // fix may run concurrently.
@@ -2009,11 +2572,18 @@ ${languageLine}
         const reqScope = req.permissionsTarget.scope ?? 'project';
         const runScope = run.permissionsTarget.scope ?? 'project';
         if (reqScope !== runScope) continue;
+        if ((req.permissionsTarget.provider ?? 'claude') !== (run.permissionsTarget.provider ?? 'claude')) continue;
+      }
+      // Native Codex configuration: singleton per project and mode.
+      if (req.codexConfigTarget || run.codexConfigTarget) {
+        if (!req.codexConfigTarget || !run.codexConfigTarget) continue;
+        if (req.codexConfigTarget.projectId !== run.codexConfigTarget.projectId) continue;
       }
       // MCP runs: singleton per project — disambiguate by projectId only.
       if (req.mcpTarget || run.mcpTarget) {
         if (!req.mcpTarget || !run.mcpTarget) continue;
         if (req.mcpTarget.projectId !== run.mcpTarget.projectId) continue;
+        if ((req.mcpTarget.provider ?? 'claude') !== (run.mcpTarget.provider ?? 'claude')) continue;
       }
       // Output-styles runs disambiguate by projectId + styleName.
       if (req.outputStylesTarget || run.outputStylesTarget) {
@@ -2077,6 +2647,12 @@ ${languageLine}
           `${recoveredSessionId}.jsonl`,
         )
       : null;
+    // Codex resumability is a known V1 gap: a Codex `mcpTarget` run's
+    // `sessionId` is a `codex exec` thread_id, which never matches a file
+    // under `~/.claude/projects/`. `existsSync(sessionFile)` naturally (and
+    // safely, no throw) evaluates to `false` for those runs — a Codex 'fix'
+    // run collapses to `stopped` on reboot exactly like a Claude run whose
+    // session file went missing; 'create'/'edit' are unaffected (see below).
     const canResume =
       !wasActive ||
       (Boolean(recoveredSessionId) && sessionFile !== null && existsSync(sessionFile));
@@ -2117,6 +2693,7 @@ ${languageLine}
       subagentsTarget: blob.subagentsTarget,
       hooksTarget: blob.hooksTarget,
       permissionsTarget: blob.permissionsTarget,
+      codexConfigTarget: blob.codexConfigTarget,
       mcpTarget: blob.mcpTarget,
       outputStylesTarget: blob.outputStylesTarget,
     };
@@ -2419,6 +2996,8 @@ export function getFixTimeline(runId: string): FixTimelineEntry[] {
   // runs that predate the worktree feature.
   const sessionCwd = entry.run.cwd ?? workdir;
   if (!sessionId) return [];
+  const isCodex = configurationTargetProvider(entry.run) === 'codex';
+  if (isCodex) return getCodexRunTimeline(sessionId);
 
   const sessionFile = join(
     homedir(),
@@ -2552,6 +3131,9 @@ export function getFixUsage(runId: string): FixUsage {
   const entry = runner.registry().get(runId);
   if (!entry) return computeSessionUsage('', null);
   const { sessionId, workdir, startedAt } = entry.run;
+  // Codex usage is a known V1 gap — same reasoning as `getFixTimeline` above:
+  // no Claude Code session JSONL backs a `codex exec` thread_id.
+  if (configurationTargetProvider(entry.run) === 'codex') return computeSessionUsage('', null);
   // Use run.cwd when available — that's where Claude Code wrote the session JSONL.
   const sessionCwd = entry.run.cwd ?? workdir;
   return computeSessionUsage(sessionCwd, sessionId, startedAt);

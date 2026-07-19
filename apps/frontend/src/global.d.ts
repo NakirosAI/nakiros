@@ -13,6 +13,13 @@ import type {
   McpReadResult,
   McpExpertMutationResult,
   McpAuditHistoryEntry,
+  CodexConfigReadResult,
+  CodexConfigMutationResult,
+  CodexResourceKind,
+  CodexResourceSummary,
+  CodexResourceReadResult,
+  CodexResourceMutationResult,
+  ConfigurationProvider,
   OutputStyleSummary,
   OutputStylesExpertListResult,
   OutputStylesReadResult,
@@ -256,11 +263,11 @@ declare global {
       getAnalyzeConvoBufferedEvents(runId: string): Promise<AnalyzeConvoRunEvent['event'][]>;
       onAnalyzeConvoEvent(cb: (event: AnalyzeConvoRunEvent) => void): () => void;
 
-      listProjectSkills(projectId: string): Promise<Skill[]>;
-      getProjectSkill(projectId: string, skillName: string): Promise<Skill | null>;
-      saveProjectSkill(projectId: string, skillName: string, content: string): Promise<void>;
-      readSkillFile(projectId: string, skillName: string, relativePath: string): Promise<string | null>;
-      saveSkillFile(projectId: string, skillName: string, relativePath: string, content: string): Promise<void>;
+      listProjectSkills(projectId: string, provider?: ConfigurationProvider): Promise<Skill[]>;
+      getProjectSkill(projectId: string, skillName: string, provider?: ConfigurationProvider): Promise<Skill | null>;
+      saveProjectSkill(projectId: string, skillName: string, content: string, provider?: ConfigurationProvider): Promise<void>;
+      readSkillFile(projectId: string, skillName: string, relativePath: string, provider?: ConfigurationProvider): Promise<string | null>;
+      saveSkillFile(projectId: string, skillName: string, relativePath: string, content: string, provider?: ConfigurationProvider): Promise<void>;
 
       // Nakiros bundled skills
       listBundledSkills(): Promise<Skill[]>;
@@ -494,7 +501,10 @@ declare global {
       // CLAUDE.md audit history — archived reports under
       // ~/.nakiros/<projectId>/claudemd/audit/, populated by audit runs whose
       // request carried `claudemdTarget`.
-      listClaudemdAudits(projectId: string): Promise<ClaudeMdAuditHistoryEntry[]>;
+      listClaudemdAudits(
+        projectId: string,
+        provider?: ConfigurationProvider,
+      ): Promise<ClaudeMdAuditHistoryEntry[]>;
       readClaudemdAudit(path: string): Promise<string | null>;
 
       // Rules CRUD — recursive discovery under .claude/rules/
@@ -510,7 +520,7 @@ declare global {
       // Rules audit history — archived reports under
       // ~/.nakiros/<projectId>/rules-audits/<ruleName>/, populated by audit
       // runs whose request carried `rulesTarget`.
-      listRulesAudits(projectId: string, ruleName: string): Promise<RulesAuditHistoryEntry[]>;
+      listRulesAudits(projectId: string, ruleName: string, provider?: ConfigurationProvider): Promise<RulesAuditHistoryEntry[]>;
       readRulesAudit(path: string): Promise<string | null>;
 
       // Subagents CRUD — recursive discovery under .claude/agents/
@@ -526,7 +536,7 @@ declare global {
       // Subagents audit history — archived reports under
       // ~/.nakiros/<projectId>/subagents-audits/<subagentName>/, populated by
       // audit runs whose request carried `subagentsTarget`.
-      listSubagentsAudits(projectId: string, subagentName: string): Promise<SubagentsAuditHistoryEntry[]>;
+      listSubagentsAudits(projectId: string, subagentName: string, provider?: ConfigurationProvider): Promise<SubagentsAuditHistoryEntry[]>;
       readSubagentsAudit(path: string): Promise<string | null>;
 
       // Hooks expert (nakiros-hooks-expert) — read/save the hooks block + audit
@@ -534,7 +544,7 @@ declare global {
       // V2 editor) which expose a structured view per scope.
       readHooks(projectId: string): Promise<HooksReadResult>;
       saveHooks(projectId: string, content: string, mtimeAtRead: string): Promise<HooksExpertMutationResult>;
-      listHooksAudits(projectId: string): Promise<HooksAuditHistoryEntry[]>;
+      listHooksAudits(projectId: string, provider?: ConfigurationProvider): Promise<HooksAuditHistoryEntry[]>;
       readHooksAudit(path: string): Promise<string | null>;
 
       // Permissions expert (nakiros-permissions-expert) — read/save the
@@ -544,7 +554,7 @@ declare global {
       // or settings.local.json (local).
       readPermissions(projectId: string, scope: PermissionsExpertScope): Promise<PermissionsReadResult>;
       savePermissions(projectId: string, scope: PermissionsExpertScope, content: string, mtimeAtRead: string): Promise<PermissionsExpertMutationResult>;
-      listPermissionsAudits(projectId: string, scope: PermissionsExpertScope): Promise<PermissionsAuditHistoryEntry[]>;
+      listPermissionsAudits(projectId: string, scope: PermissionsExpertScope, provider?: ConfigurationProvider): Promise<PermissionsAuditHistoryEntry[]>;
       readPermissionsAudit(path: string): Promise<string | null>;
 
       // MCP expert (nakiros-mcp-expert) — read/save the entire .mcp.json file
@@ -552,8 +562,41 @@ declare global {
       // (claudeMcp:* channels) which manages individual MCP servers.
       readMcp(projectId: string): Promise<McpReadResult>;
       saveMcp(projectId: string, content: string, mtimeAtRead: string): Promise<McpExpertMutationResult>;
-      listMcpAudits(projectId: string): Promise<McpAuditHistoryEntry[]>;
+      listMcpAudits(
+        projectId: string,
+        provider?: ConfigurationProvider,
+      ): Promise<McpAuditHistoryEntry[]>;
       readMcpAudit(path: string): Promise<string | null>;
+
+      // Codex project-native configuration (.codex/config.toml).
+      readCodexConfig(projectId: string): Promise<CodexConfigReadResult>;
+      saveCodexConfig(
+        projectId: string,
+        content: string,
+        mtimeAtRead: string,
+      ): Promise<CodexConfigMutationResult>;
+
+      // Provider-native Codex project resources. These methods never route
+      // through the similarly named Claude configuration handlers.
+      listCodexResources(projectId: string, kind: CodexResourceKind): Promise<CodexResourceSummary[]>;
+      readCodexResource(
+        projectId: string,
+        kind: CodexResourceKind,
+        id: string,
+      ): Promise<CodexResourceReadResult>;
+      saveCodexResource(
+        projectId: string,
+        kind: CodexResourceKind,
+        id: string,
+        content: string,
+        mtimeAtRead: string,
+      ): Promise<CodexResourceMutationResult>;
+      deleteCodexResource(
+        projectId: string,
+        kind: CodexResourceKind,
+        id: string,
+        mtimeAtRead?: string,
+      ): Promise<CodexResourceMutationResult>;
 
       // Output styles expert (nakiros-output-styles-expert) — CRUD on
       // .claude/output-styles/ files + audit history. NOTE: distinct from the
